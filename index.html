@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hitzkopf 🔥 FINAL 50</title>
+    <style>
+        /* --- CSS --- */
+        * { box-sizing: border-box; }
+        body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; margin: 0; padding-bottom: 80px; }
+        
+        /* SCREENS */
+        .screen { display: none; }
+        .screen.active { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+        /* CARDS & UI */
+        .card { background: #1e1e1e; padding: 20px; border-radius: 16px; max-width: 450px; margin: 0 auto 20px auto; border: 1px solid #333; }
+        .hidden { display: none !important; }
+        
+        input, select { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #2c2c2c; color: white; font-size: 16px; text-align: center; }
+        button { width: 100%; padding: 16px; margin: 8px 0; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
+        button:active { transform: scale(0.98); }
+        
+        .btn-primary { background: linear-gradient(135deg, #ff4500, #ff8c00); color: white; }
+        .btn-secondary { background: #333; color: #ccc; }
+        .btn-danger { background: #dc3545; color: white; font-size: 0.9rem; padding: 12px; }
+        .btn-oil { background: #ffaa00; color: black; font-weight: 900; border: 2px solid #fff; }
+        .btn-ready { background: #28a745; color: white; margin-top: 20px; }
+        
+        /* THERMOMETER */
+        .thermo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; }
+        .thermo-item { background: #252525; padding: 8px; border-radius: 8px; text-align: left; border: 1px solid #333; }
+        .thermo-top { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; }
+        .thermo-bar { height: 6px; background: #444; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+        .thermo-fill { height: 100%; width: 0%; transition: width 0.5s; }
+        
+        /* ADMIN DRAWER (FIXED) */
+        .menu-btn { position: fixed; top: 15px; right: 15px; width: 45px; height: 45px; background: #333; border-radius: 50%; border: 1px solid #555; z-index: 3000; display: flex; justify-content: center; align-items: center; font-size: 1.5rem; cursor: pointer; }
+        .admin-drawer { position: fixed; top: 0; right: -300px; width: 280px; height: 100%; background: #111; border-left: 2px solid #ff4500; z-index: 3001; transition: right 0.3s; padding: 20px; text-align: left; box-shadow: -10px 0 30px rgba(0,0,0,0.8); }
+        .admin-drawer.open { right: 0; }
+        .overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); z-index: 3000; display: none; }
+        .overlay.open { display: block; }
+
+        .option-row { display: flex; gap: 10px; margin-top: 15px; }
+        .btn-option { flex: 1; background: #2a2a2a; border: 2px solid #444; padding: 25px 10px; }
+        .btn-option.selected { border-color: #ff4500; background: #3e2e2e; color: #ff4500; }
+        
+        .log-box { background: #000; height: 150px; overflow-y: auto; padding: 10px; text-align: left; font-size: 0.8rem; border: 1px solid #333; margin-top:10px;}
+        .log-entry { padding: 4px; border-bottom: 1px solid #222; }
+    </style>
+</head>
+<body>
+
+    <div class="menu-btn" onclick="toggleMenu()">⚙️</div>
+    <div class="overlay" id="menuOverlay" onclick="toggleMenu()"></div>
+    <div class="admin-drawer" id="adminDrawer">
+        <h3 style="color:#ff4500; border-bottom:1px solid #333; padding-bottom:10px;">Menü</h3>
+        
+        <div id="hostControls" style="display:none;">
+            <p style="font-size:0.7rem; color:#666;">HOST:</p>
+            <button style="padding:10px; font-size:0.8rem; background:#333;" onclick="forceNextRound()">⏩ Runde erzwingen</button>
+            <button style="padding:10px; font-size:0.8rem; background:#550000;" onclick="restartGame()">🔄 Reset</button>
+            <button style="padding:10px; font-size:0.8rem; background:#880000;" onclick="killLobby()">🧨 LOBBY KILL</button>
+            <hr style="border-color:#333; margin:15px 0;">
+        </div>
+        
+        <button style="padding:10px; font-size:0.8rem; background:#444;" onclick="leaveLobby()">👋 Lobby verlassen</button>
+        <button style="padding:10px; background:transparent; border:1px solid #666;" onclick="toggleMenu()">Schließen</button>
+    </div>
+
+    <h1>🔥 Hitzkopf</h1>
+
+    <div id="screen-start" class="screen active card">
+        <h3>Wer bist du?</h3>
+        <input type="text" id="inpName" placeholder="Name">
+        <div style="font-size:0.8rem; color:#888; margin-top:10px;">
+            Schaden: <select id="inpDmg"><option value="10">10°C</option><option value="60">60°C (Speed)</option></select>
+        </div>
+        <button class="btn-primary" onclick="createGame()">Erstellen</button>
+        <p>- ODER -</p>
+        <input type="text" id="inpCode" placeholder="CODE" style="text-transform:uppercase;">
+        <button class="btn-secondary" onclick="joinGame()">Beitreten</button>
+        <div id="rejoinMsg" class="hidden" style="color:#0f0; margin-top:10px;">Lade Sitzung...</div>
+    </div>
+
+    <div id="screen-lobby" class="screen card">
+        <h2>Code: <span id="lblCode" style="color:#ff8c00;">...</span></h2>
+        <div id="lobbyList" style="margin:20px 0; font-weight:bold;"></div>
+        <button id="btnHostStart" class="btn-primary" style="display:none;" onclick="startGame()">🔥 Starten</button>
+        <p id="lblWait" style="color:#666;">Warte auf Host...</p>
+    </div>
+
+    <div id="screen-game" class="screen card">
+        <div id="gameThermometers" class="thermo-grid"></div>
+        <hr style="border-color:#333;">
+        <div style="margin-bottom:15px;">
+            <span style="font-size:1.5rem;">🥵</span>
+            <div id="lblHotseat" style="font-weight:bold; color:#ff4500;">...</div>
+        </div>
+        <h3 id="lblQuestion">Lade...</h3>
+        <div class="option-row">
+            <button id="btnA" class="btn-option" onclick="vote('A')">A</button>
+            <button id="btnB" class="btn-option" onclick="vote('B')">B</button>
+        </div>
+        <div id="stratSection" style="margin-top:15px;">
+            <p style="font-size:0.8rem; color:#666;">WENN RICHTIG:</p>
+            <select id="inpStrat">
+                <option value="attack">🔴 Angriff</option>
+                <option value="invest">🃏 Taktik</option>
+            </select>
+        </div>
+        <button id="btnLock" class="btn-primary" style="margin-top:20px;" onclick="submitVote()">🔒 Einloggen</button>
+        <div id="lblVoteStatus" style="font-size:0.8rem; color:#888; margin-top:10px;"></div>
+    </div>
+
+    <div id="screen-result" class="screen card">
+        <div id="resultThermometers" class="thermo-grid"></div>
+        <h3>Wahrheit: <span id="lblTruth" style="color:#fff;">?</span></h3>
+        <h2 id="lblResultStatus">...</h2>
+
+        <div id="boxAttack" class="hidden" style="background:#3a1a1a; padding:10px; border-radius:10px; margin-bottom:15px;">
+            <h4 style="margin:0 0 10px 0;">🔥 Bestrafen:</h4>
+            
+            <div id="divTargets" style="display:grid; grid-template-columns:1fr 1fr; gap:5px;"></div>
+            
+            <div style="margin-top:15px; border-top:1px solid #555; padding-top:10px;">
+                <p style="font-size:0.7rem; margin:0; color:#aaa;">Falls Buttons fehlen:</p>
+                <div style="display:flex; gap:5px;">
+                    <input type="text" id="manualTarget" placeholder="Name..." style="padding:5px; margin:0;">
+                    <button style="width:auto; padding:5px 10px; margin:0;" onclick="manualAttack()">Go</button>
+                </div>
+            </div>
+
+            <button style="background:transparent; border:1px solid #666; font-size:0.7rem; margin-top:10px; padding:5px;" onclick="skipAttack()">Überspringen</button>
+        </div>
+
+        <div id="boxShop" class="hidden" style="background:#1a2a3a; padding:10px; border-radius:10px; margin-bottom:15px;">
+            <h4>🃏 Karte wählen:</h4>
+            <button onclick="takeCard('card_oil')">🛢️ Öl</button>
+            <button onclick="takeCard('card_mirror')">🛡️ Spiegel</button>
+            <button onclick="takeCard('card_ice')">🧊 Eis</button>
+        </div>
+
+        <div style="text-align:left; font-size:0.7rem; color:#666;">LOG:</div>
+        <div id="divLog" class="log-box"></div>
+        <button id="btnReady" class="btn-ready" onclick="setReady()">👍 Bereit</button>
+        <div id="lblReady" style="font-size:0.8rem; color:#666;"></div>
+    </div>
+
+    <div id="screen-gameover" class="screen card">
+        <h1 style="font-size:4rem;">☠️</h1>
+        <h2>GAME OVER</h2>
+        <h3 id="lblLoser" style="color:red;"></h3>
+        <p>Gewinner: <span id="lblWinner" style="color:#0f0;"></span></p>
+        <button style="background:#444;" onclick="leaveLobby()">Verlassen</button>
+    </div>
+
+    <script type="module">
+        window.onerror = function(msg, url, line) { alert("FEHLER: " + msg + " Zeile: " + line); };
+
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // ⚠️ CONFIG HIER REIN ⚠️
+const firebaseConfig = {
+  apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
+  authDomain: "hitzkopf-f0ea6.firebaseapp.com",
+  projectId: "hitzkopf-f0ea6",
+  storageBucket: "hitzkopf-f0ea6.firebasestorage.app",
+  messagingSenderId: "828164655874",
+  appId: "1:828164655874:web:1cab759bdb03bfb736101b"
+};
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // STATE
+        let myName = sessionStorage.getItem("hk_name") || "";
+        let roomId = sessionStorage.getItem("hk_room") || "";
+        let isHost = false;
+        let localActionDone = false;
+        let mySelection = null;
+        let globalData = null;
+        let renderInterval = null;
+
+        const questions = [
+            { q: "Hund oder Katze?", a: "Hund", b: "Katze" },
+            { q: "Pizza oder Döner?", a: "Pizza", b: "Döner" },
+            { q: "Sommer oder Winter?", a: "Sommer", b: "Winter" }
+        ];
+
+        // AUTO LOGIN
+        if(myName && roomId) {
+            document.getElementById('inpName').value = myName;
+            document.getElementById('inpCode').value = roomId;
+            document.getElementById('rejoinMsg').classList.remove('hidden');
+            setTimeout(() => joinGame(), 500);
+        }
+
+        // --- CORE ---
+        window.toggleMenu = () => {
+            document.getElementById('adminDrawer').classList.toggle('open');
+            document.getElementById('menuOverlay').classList.toggle('open');
+        };
+
+        window.createGame = async () => {
+            const name = document.getElementById('inpName').value.trim();
+            const dmg = parseInt(document.getElementById('inpDmg').value);
+            if(!name) return alert("Name?");
+            
+            const code = Math.random().toString(36).substring(2,6).toUpperCase();
+            myName = name; roomId = code;
+            sessionStorage.setItem("hk_name", name);
+            sessionStorage.setItem("hk_room", code);
+
+            await setDoc(doc(db, "lobbies", code), {
+                host: name, status: "lobby",
+                players: { [name]: { temp: 0, inventory: [] } },
+                config: { dmg: dmg },
+                votes: {}, ready: [], log: []
+            });
+            connect();
+        };
+
+        window.joinGame = async () => {
+            const name = document.getElementById('inpName').value.trim() || myName;
+            const code = document.getElementById('inpCode').value.trim().toUpperCase() || roomId;
+            if(!name || !code) return alert("Daten?");
+            
+            myName = name; roomId = code;
+            sessionStorage.setItem("hk_name", name);
+            sessionStorage.setItem("hk_room", code);
+
+            const ref = doc(db, "lobbies", code);
+            const snap = await getDoc(ref);
+            if(!snap.exists()) return alert("Nicht gefunden");
+
+            if(!snap.data().players[name]) {
+                await updateDoc(ref, { [`players.${name}`]: { temp: 0, inventory: [] } });
+            }
+            connect();
+        };
+
+        function connect() {
+            onSnapshot(doc(db, "lobbies", roomId), (snap) => {
+                if(!snap.exists()) { sessionStorage.clear(); location.reload(); return; }
+                const data = snap.data();
+                globalData = data;
+                const players = Object.keys(data.players);
+                
+                isHost = (data.host === myName);
+                if(isHost) {
+                    document.getElementById('hostControls').style.display = 'block';
+                    document.getElementById('btnHostStart').style.display = 'block';
+                    document.getElementById('lblWait').style.display = 'none';
+                }
+
+                // RENDER
+                renderThermos(data.players);
+                renderLog(data.log);
+
+                // DEATH CHECK
+                let dead = null;
+                players.forEach(p => { if(data.players[p].temp >= 100) dead = p; });
+                
+                if(dead) {
+                    if(isHost && data.status !== 'finished') updateDoc(doc(db, "lobbies", roomId), { status: 'finished', loser: dead });
+                    showScreen('screen-gameover');
+                    document.getElementById('lblLoser').innerText = dead + " IST RAUS!";
+                    return;
+                }
+
+                // ROUTING
+                if(data.status === 'lobby') {
+                    showScreen('screen-lobby');
+                    document.getElementById('lblCode').innerText = roomId;
+                    document.getElementById('lobbyList').innerHTML = players.join("<br>");
+                }
+                else if(data.status === 'game') {
+                    showScreen('screen-game');
+                    renderGame(data);
+                    if(isHost && Object.keys(data.votes).length >= players.length) {
+                        updateDoc(doc(db, "lobbies", roomId), { status: 'result' });
+                    }
+                }
+                else if(data.status === 'result') {
+                    showScreen('screen-result');
+                    renderResult(data);
+                    if(isHost && data.ready.length >= players.length) {
+                        nextRound();
+                    }
+                }
+            });
+        }
+
+        function renderGame(data) {
+            if(document.getElementById('lblQuestion').innerText !== data.currentQ.q) {
+                localActionDone = false;
+                mySelection = null;
+                document.getElementById('btnLock').classList.remove('hidden');
+                if(renderInterval) clearInterval(renderInterval);
+            }
+
+            document.getElementById('lblQuestion').innerText = data.currentQ.q;
+            document.getElementById('btnA').innerText = data.currentQ.a;
+            document.getElementById('btnB').innerText = data.currentQ.b;
+            
+            if(myName === data.hotseat) {
+                document.getElementById('lblHotseat').innerText = "DU bist dran!";
+                document.getElementById('stratSection').classList.add('hidden');
+            } else {
+                document.getElementById('lblHotseat').innerText = data.hotseat;
+                document.getElementById('stratSection').classList.remove('hidden');
+            }
+            document.getElementById('lblVoteStatus').innerText = `Gewählt: ${Object.keys(data.votes).length}/${Object.keys(data.players).length}`;
+        }
+
+        function renderResult(data) {
+            const truth = data.votes[data.hotseat]?.choice;
+            const truthText = truth === 'A' ? data.currentQ.a : data.currentQ.b;
+            document.getElementById('lblTruth').innerText = truthText;
+
+            const myVote = data.votes[myName];
+            const boxAttack = document.getElementById('boxAttack');
+            const boxShop = document.getElementById('boxShop');
+            const btnReady = document.getElementById('btnReady');
+
+            // Default hide
+            boxAttack.classList.add('hidden');
+            boxShop.classList.add('hidden');
+
+            document.getElementById('lblReady').innerText = `Bereit: ${data.ready.length}/${Object.keys(data.players).length}`;
+
+            if(data.ready.includes(myName)) {
+                btnReady.disabled = true;
+                btnReady.innerText = "Warte...";
+            } else {
+                btnReady.disabled = false;
+                btnReady.innerText = "👍 Weiter";
+            }
+
+            if(myName !== data.hotseat && myVote) {
+                if(myVote.choice === truth) {
+                    document.getElementById('lblResultStatus').innerText = "RICHTIG! 🎉";
+                    if(!localActionDone) {
+                        btnReady.disabled = true;
+                        if(myVote.strategy === 'invest') {
+                            boxShop.classList.remove('hidden');
+                        } else {
+                            boxAttack.classList.remove('hidden');
+                            renderTargets(data.players); // FORCE RENDER
+                        }
+                    }
+                } else {
+                    document.getElementById('lblResultStatus').innerText = "FALSCH ❌";
+                    localActionDone = true;
+                }
+            } else {
+                document.getElementById('lblResultStatus').innerText = "Warte...";
+                localActionDone = true;
+            }
+        }
+
+        window.renderTargets = (players) => {
+            const div = document.getElementById('divTargets');
+            if(div.innerHTML !== "") return;
+            Object.keys(players).forEach(p => {
+                if(p !== myName) {
+                    const b = document.createElement('button');
+                    b.className = 'btn-danger';
+                    b.innerText = p;
+                    b.onclick = () => doAttack(p);
+                    div.appendChild(b);
+                }
+            });
+        };
+
+        window.doAttack = async (target) => {
+            localActionDone = true;
+            document.getElementById('boxAttack').classList.add('hidden');
+            document.getElementById('btnReady').disabled = false;
+            const dmg = globalData.config.dmg || 10;
+            await updateDoc(doc(db, "lobbies", roomId), {
+                [`players.${target}.temp`]: increment(dmg),
+                log: arrayUnion(`🔥 ${myName} trifft ${target} (+${dmg})`)
+            });
+        };
+
+        window.manualAttack = () => {
+            const t = document.getElementById('manualTarget').value.trim();
+            if(t) window.doAttack(t);
+        };
+
+        window.takeCard = async (card) => {
+            localActionDone = true;
+            document.getElementById('boxShop').classList.add('hidden');
+            document.getElementById('btnReady').disabled = false;
+            await updateDoc(doc(db, "lobbies", roomId), {
+                [`players.${myName}.inventory`]: arrayUnion(card)
+            });
+        };
+
+        window.skipAttack = () => {
+            localActionDone = true;
+            document.getElementById('boxAttack').classList.add('hidden');
+            document.getElementById('btnReady').disabled = false;
+        };
+
+        window.vote = (opt) => mySelection = opt;
+        window.submitVote = async () => {
+            if(!mySelection) return alert("Wähle!");
+            const strat = document.getElementById('inpStrat').value;
+            document.getElementById('btnLock').classList.add('hidden');
+            await updateDoc(doc(db, "lobbies", roomId), { [`votes.${myName}`]: { choice: mySelection, strategy: strat } });
+        };
+
+        window.setReady = async () => {
+            await updateDoc(doc(db, "lobbies", roomId), { ready: arrayUnion(myName) });
+        };
+
+        window.startGame = async () => {
+            const players = Object.keys(globalData.players);
+            await updateDoc(doc(db, "lobbies", roomId), { status: 'game', hotseat: players[0], currentQ: questions[0] });
+        };
+
+        window.nextRound = async () => {
+            const players = Object.keys(globalData.players);
+            const next = players[(players.indexOf(globalData.hotseat)+1)%players.length];
+            const q = questions[Math.floor(Math.random()*questions.length)];
+            await updateDoc(doc(db, "lobbies", roomId), { status: 'game', hotseat: next, currentQ: q, votes: {}, ready: [] });
+        };
+
+        window.restartGame = async () => {
+            const pClean = {};
+            Object.keys(globalData.players).forEach(p => pClean[p] = {temp:0, inventory:[]});
+            await updateDoc(doc(db, "lobbies", roomId), { status: 'lobby', players: pClean, votes: {}, ready: [], log: [] });
+        };
+        
+        window.killLobby = async () => { await deleteDoc(doc(db, "lobbies", roomId)); };
+        window.leaveLobby = () => { sessionStorage.clear(); location.reload(); };
+        window.adminForceNext = window.nextRound;
+
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function renderThermos(players) {
+             const div1 = document.getElementById('gameThermometers');
+             const div2 = document.getElementById('resultThermometers');
+             if(!div1 || !div2) return;
+             let html = "";
+             Object.keys(players).forEach(p => {
+                 const d = players[p];
+                 let col = d.temp >= 100 ? 'red' : '#0f0';
+                 html += `<div class="thermo-item"><div class="thermo-top"><span>${p}</span><span>${d.temp}°C</span></div><div class="thermo-bar"><div class="thermo-fill" style="width:${Math.min(d.temp, 100)}%; background:${col}"></div></div></div>`;
+             });
+             div1.innerHTML = html;
+             div2.innerHTML = html;
+        }
+
+        function renderLog(log) {
+            const el = document.getElementById('divLog');
+            if(el && log) el.innerHTML = log.map(l => `<div class="log-entry">${l}</div>`).join('');
+        }
+    </script>
+</body>
+</html>
