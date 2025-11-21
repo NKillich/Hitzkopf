@@ -9,245 +9,740 @@
         * { box-sizing: border-box; }
         body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; margin: 0; padding-bottom: 80px; }
         
-        /* SCREENS */
-        .screen { display: none; }
-        .screen.active { display: block; animation: fadeIn 0.3s; }
-        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+        .btn-primary { 
+            background: linear-gradient(135deg, #ff4500, #ff8c00); 
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 69, 0, 0.4);
+        }
+        .btn-secondary { background: linear-gradient(135deg, #333, #444); color: #fff; }
+        .btn-danger { 
+            background: linear-gradient(135deg, #dc3545, #c82333); 
+            color: white; 
+            font-size: 0.95rem; 
+            padding: 12px;
+        }
+        .btn-ready { 
+            background: linear-gradient(135deg, #28a745, #20c997); 
+            color: white; 
+            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4);
+        }
+        .btn-ready:disabled { 
+            background: #1e5e28; 
+            opacity: 0.5; 
+            cursor: not-allowed;
+            box-shadow: none;
+        }
 
-        /* CARDS & UI */
-        .card { background: #1e1e1e; padding: 20px; border-radius: 16px; max-width: 450px; margin: 0 auto 20px auto; border: 1px solid #333; }
-        .hidden { display: none !important; }
+        .thermo-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 12px; 
+            margin-bottom: 20px;
+        }
+        .thermo-item { 
+            background: linear-gradient(145deg, #1a1a1a, #252525);
+            padding: 12px; 
+            border-radius: 12px; 
+            text-align: left; 
+            border: 1px solid #333;
+            transition: transform 0.2s;
+        }
+        .thermo-item:hover { transform: translateY(-3px); }
+        .thermo-item.top-hot { border-color: #ff8c00; box-shadow: 0 0 12px rgba(255,140,0,0.4); }
+        .thermo-item.is-hotseat { border-color: #ff4d4d; box-shadow: 0 0 15px rgba(255,77,77,0.6); }
+        .thermo-top { 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 0.9rem; 
+            font-weight: bold; 
+            margin-bottom: 8px;
+            color: #fff;
+        }
+        .thermo-bar { 
+            height: 8px; 
+            background: #333; 
+            border-radius: 4px; 
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .thermo-fill { 
+            height: 100%; 
+            width: 0%; 
+            transition: width 0.6s ease-out;
+            box-shadow: 0 0 10px currentColor;
+        }
         
-        input, select { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #2c2c2c; color: white; font-size: 16px; text-align: center; }
-        button { width: 100%; padding: 16px; margin: 8px 0; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
-        button:active { transform: scale(0.98); }
+        .option-row { display: flex; gap: 12px; margin-top: 20px; }
+        .btn-option { 
+            flex: 1; 
+            background: linear-gradient(145deg, #2a2a2a, #1f1f1f);
+            border: 3px solid #444; 
+            padding: 30px 10px; 
+            font-size: 1.2rem; 
+            color: #eee;
+            transition: all 0.3s;
+        }
+        .btn-option:hover { 
+            border-color: #666;
+            background: linear-gradient(145deg, #333, #2a2a2a);
+        }
+        .btn-option.selected { 
+            border-color: #ff4500; 
+            background: linear-gradient(145deg, #3e2e2e, #2a1a1a);
+            color: #ff4500;
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.5);
+        }
+
+        .log-box { 
+            background: #0a0a0a; 
+            border: 1px solid #333; 
+            border-radius: 10px; 
+            height: 160px; 
+            overflow-y: auto; 
+            padding: 12px; 
+            margin-top: 15px; 
+            text-align: left; 
+            font-size: 0.85rem; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px;
+        }
+        .log-box::-webkit-scrollbar { width: 6px; }
+        .log-box::-webkit-scrollbar-track { background: #1a1a1a; }
+        .log-box::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
         
-        .btn-primary { background: linear-gradient(135deg, #ff4500, #ff8c00); color: white; }
-        .btn-secondary { background: #333; color: #ccc; }
-        .btn-danger { background: #dc3545; color: white; font-size: 0.9rem; padding: 12px; }
-        .btn-oil { background: #ffaa00; color: black; font-weight: 900; border: 2px solid #fff; }
-        .btn-ready { background: #28a745; color: white; margin-top: 20px; }
+        .log-entry { 
+            padding: 8px 10px; 
+            border-radius: 6px; 
+            background: #1f1f1f; 
+            border-left: 3px solid #555;
+            animation: slideIn 0.3s ease-out;
+        }
+        .log-entry.attack { border-left-color: #dc3545; }
         
-        /* THERMOMETER */
-        .thermo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; }
-        .thermo-item { background: #252525; padding: 8px; border-radius: 8px; text-align: left; border: 1px solid #333; }
-        .thermo-top { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; }
-        .thermo-bar { height: 6px; background: #444; border-radius: 3px; overflow: hidden; margin-top: 5px; }
-        .thermo-fill { height: 100%; width: 0%; transition: width 0.5s; }
+        .menu-btn { 
+            position: fixed; 
+            top: 15px; 
+            right: 15px; 
+            width: 50px; 
+            height: 50px; 
+            background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+            border-radius: 50%; 
+            border: 2px solid #444; 
+            z-index: 2000; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            font-size: 1.4rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+        }
+        .menu-btn:hover { transform: rotate(90deg); border-color: #ff4500; }
         
-        /* ADMIN DRAWER (FIXED) */
-        .menu-btn { position: fixed; top: 15px; right: 15px; width: 45px; height: 45px; background: #333; border-radius: 50%; border: 1px solid #555; z-index: 3000; display: flex; justify-content: center; align-items: center; font-size: 1.5rem; cursor: pointer; }
-        .admin-drawer { position: fixed; top: 0; right: -300px; width: 280px; height: 100%; background: #111; border-left: 2px solid #ff4500; z-index: 3001; transition: right 0.3s; padding: 20px; text-align: left; box-shadow: -10px 0 30px rgba(0,0,0,0.8); }
+        .admin-drawer { 
+            position: fixed; 
+            top: 0; 
+            right: -280px; 
+            width: 280px; 
+            height: 100%; 
+            background: linear-gradient(180deg, #111, #0a0a0a);
+            border-left: 2px solid #ff4500; 
+            z-index: 2001; 
+            transition: right 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            padding: 25px; 
+            text-align: left; 
+            box-shadow: -8px 0 32px rgba(0,0,0,0.9);
+            overflow-y: auto;
+        }
         .admin-drawer.open { right: 0; }
-        .overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); z-index: 3000; display: none; }
+        
+        .overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.85); 
+            z-index: 1999; 
+            display: none;
+            backdrop-filter: blur(4px);
+        }
         .overlay.open { display: block; }
 
-        .option-row { display: flex; gap: 10px; margin-top: 15px; }
-        .btn-option { flex: 1; background: #2a2a2a; border: 2px solid #444; padding: 25px 10px; }
-        .btn-option.selected { border-color: #ff4500; background: #3e2e2e; color: #ff4500; }
-        
-        .log-box { background: #000; height: 150px; overflow-y: auto; padding: 10px; text-align: left; font-size: 0.8rem; border: 1px solid #333; margin-top:10px;}
-        .log-entry { padding: 4px; border-bottom: 1px solid #222; }
+        .hidden { display: none !important; }
+
+        .card-select-btn {
+            font-size: 1rem;
+            padding: 15px;
+            background: linear-gradient(145deg, #2a2a2a, #1f1f1f);
+            border: 2px solid #444;
+            border-radius: 12px;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            color: #fff;
+        }
+        .card-select-btn strong { font-size: 1.2rem; }
+        .card-select-btn span { font-size: 0.85rem; color: #ddd; }
+        .card-select-btn:hover { border-color: #ff8c00; transform: translateY(-2px); }
+
+        .start-actions { display:flex; gap:12px; margin-top:15px; }
+        .start-actions button { flex:1; }
+        .start-panel { margin-top:15px; padding:15px; border:1px solid #2f2f2f; border-radius:12px; background:rgba(0,0,0,0.2); }
+        .share-btn { margin-top:15px; background:linear-gradient(135deg,#1f1f1f,#2e2e2e); color:#fff; font-size:0.95rem; }
+        .toast { position:fixed; bottom:-80px; left:50%; transform:translateX(-50%); background:#222; padding:12px 20px; border-radius:20px; color:#fff; box-shadow:0 10px 30px rgba(0,0,0,0.5); transition:bottom 0.3s; z-index:3000; }
+        .toast.show { bottom:25px; }
+        .attack-alert {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-120%);
+            background: #ff4500;
+            border: 1px solid #ff9a6b;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 999px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.5);
+            transition: transform 0.4s ease, opacity 0.4s ease;
+            opacity: 0;
+            z-index: 2500;
+        }
+        .attack-alert.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        body.viewport-shake {
+            animation: screenShake 0.6s cubic-bezier(.36,.07,.19,.97);
+        }
+        @keyframes screenShake {
+            10%, 90% { transform: translate3d(-4px, 0, 0); }
+            20%, 80% { transform: translate3d(5px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+            40%, 60% { transform: translate3d(8px, 0, 0); }
+            100% { transform: translate3d(0,0,0); }
+        }
+        .joker-panel {
+            margin-top: 20px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid #2e2e2e;
+            border-radius: 12px;
+            padding: 12px;
+        }
+        .joker-panel h4 {
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            color: #ffa45c;
+        }
+        .joker-strip {
+            display: flex;
+            gap: 8px;
+            justify-content: space-between;
+        }
+        .joker-chip {
+            flex: 1;
+            border: 1px dashed #555;
+            border-radius: 12px;
+            padding: 10px;
+            font-size: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            color: #888;
+            opacity: 0.4;
+        }
+        .joker-chip strong {
+            font-size: 1.2rem;
+        }
+        .joker-chip.has {
+            border-style: solid;
+            border-color: #ff8c00;
+            color: #fff;
+            opacity: 1;
+            box-shadow: 0 6px 16px rgba(255,140,0,0.25);
+        }
+        .joker-chip span {
+            font-size: 0.75rem;
+            text-align: center;
+            color: inherit;
+        }
+        .countdown-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 4000;
+        }
+        .countdown-overlay.show { display: flex; }
+        .countdown-text {
+            font-size: 6rem;
+            font-weight: 900;
+            color: #ff3b00;
+            text-shadow: 0 0 30px rgba(255,59,0,0.7);
+            animation: pulse 1s infinite;
+        }
+        .countdown-sub {
+            margin-top: 10px;
+            font-size: 1.2rem;
+            color: #fff;
+            letter-spacing: 0.2rem;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        body.final-mode {
+            animation: finalPulse 1.2s infinite;
+            background: radial-gradient(circle at center, rgba(255,69,0,0.15), #0a0a0a 70%);
+        }
+        @keyframes finalPulse {
+            0%,100% { background-color: #1a0a0a; }
+            50% { background-color: #2d0505; }
+        }
+        .final-card {
+            background: radial-gradient(circle at top, rgba(255,69,0,0.2), #120202);
+            border: 2px solid #ff3b00;
+        }
+        .final-hero {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .final-emoji {
+            font-size: 5rem;
+            animation: sweatShake 0.9s infinite;
+        }
+        @keyframes sweatShake {
+            0%,100% { transform: translateY(0); }
+            25% { transform: translateY(-4px); }
+            50% { transform: translateY(3px); }
+            75% { transform: translateY(-2px); }
+        }
+        .final-name {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #ffae00;
+            text-shadow: 0 0 18px rgba(255,174,0,0.6);
+        }
+        .final-caption {
+            margin-top: 8px;
+            font-size: 1rem;
+            color: #ffd6c1;
+        }
+        .final-thermo {
+            margin: 20px auto;
+            width: 80%;
+        }
+        .final-thermo-track {
+            height: 20px;
+            border-radius: 10px;
+            background: #280000;
+            overflow: hidden;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.7);
+        }
+        .final-thermo-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #ffae00, #ff0000);
+            box-shadow: 0 0 20px rgba(255,0,0,0.7);
+            transition: width 1.2s ease-out;
+        }
+        .final-ranking {
+            margin-top: 25px;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .final-rank-item {
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid #2d2d2d;
+            display: flex;
+            justify-content: space-between;
+            background: rgba(0,0,0,0.35);
+            font-size: 0.95rem;
+        }
+        .final-rank-item.coolest {
+            border-color: #00d1ff;
+            box-shadow: 0 0 15px rgba(0,209,255,0.3);
+            color: #c8f4ff;
+        }
+        .final-rank-item span {
+            color: #aaa;
+        }
+
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(20px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 
+            10%, 90% { transform: translate3d(-2px, 0, 0); } 
+            20%, 80% { transform: translate3d(3px, 0, 0); } 
+            30%, 50%, 70% { transform: translate3d(-5px, 0, 0); } 
+            40%, 60% { transform: translate3d(5px, 0, 0); } 
+        }
     </style>
 </head>
 <body>
-
     <div class="menu-btn" onclick="toggleMenu()">⚙️</div>
+    <div id="attackAlert" class="attack-alert"></div>
+    <div id="countdownOverlay" class="countdown-overlay">
+        <div id="countdownText" class="countdown-text">3</div>
+        <div class="countdown-sub">Bereit machen...</div>
+    </div>
     <div class="overlay" id="menuOverlay" onclick="toggleMenu()"></div>
     <div class="admin-drawer" id="adminDrawer">
-        <h3 style="color:#ff4500; border-bottom:1px solid #333; padding-bottom:10px;">Menü</h3>
+        <h3 style="color:#ff4500; border-bottom:2px solid #333; padding-bottom:12px; margin-bottom:15px;">⚙️ Menü</h3>
         
         <div id="hostControls" style="display:none;">
-            <p style="font-size:0.7rem; color:#666;">HOST:</p>
-            <button style="padding:10px; font-size:0.8rem; background:#333;" onclick="forceNextRound()">⏩ Runde erzwingen</button>
-            <button style="padding:10px; font-size:0.8rem; background:#550000;" onclick="restartGame()">🔄 Reset</button>
-            <button style="padding:10px; font-size:0.8rem; background:#880000;" onclick="killLobby()">🧨 LOBBY KILL</button>
-            <hr style="border-color:#333; margin:15px 0;">
+            <p style="font-size:0.75rem; color:#888; margin-bottom:8px; text-transform:uppercase;">Host-Steuerung:</p>
+            <button style="padding:12px; font-size:0.85rem; margin:8px 0; background:#333; border-radius:8px;" onclick="forceNextRound()">⏩ Runde erzwingen</button>
+            <button style="padding:12px; font-size:0.85rem; margin:8px 0; background:#550000; border-radius:8px;" onclick="resetGame()">🔄 Spiel neustarten</button>
+            <button style="padding:12px; font-size:0.85rem; margin:8px 0; background:#880000; border-radius:8px;" onclick="killLobby()">🧨 Lobby löschen</button>
+            <hr style="border:none; border-top:1px solid #333; margin:20px 0;">
         </div>
-        
-        <button style="padding:10px; font-size:0.8rem; background:#444;" onclick="leaveLobby()">👋 Lobby verlassen</button>
-        <button style="padding:10px; background:transparent; border:1px solid #666;" onclick="toggleMenu()">Schließen</button>
+
+        <button style="padding:12px; font-size:0.85rem; margin:8px 0; background:#444; border-radius:8px;" onclick="leaveLobby()">👋 Lobby verlassen</button>
     </div>
 
     <h1>🔥 Hitzkopf</h1>
 
+    <!-- START SCREEN -->
     <div id="screen-start" class="screen active card">
-        <h3>Wer bist du?</h3>
-        <input type="text" id="inpName" placeholder="Name">
-        <div style="font-size:0.8rem; color:#888; margin-top:10px;">
-            Schaden: <select id="inpDmg"><option value="10">10°C</option><option value="60">60°C (Speed)</option></select>
+        <h3 style="margin-bottom:10px; color:#ff8c00;">Wie heißt du?</h3>
+        <input type="text" id="inpName" placeholder="Dein Name" maxlength="20" autocomplete="off">
+        
+        <div class="start-actions">
+            <button class="btn-primary" onclick="openHostSettings()">🔥 Hosten</button>
+            <button class="btn-secondary" onclick="openJoinPanel()">🤝 Beitreten</button>
         </div>
-        <button class="btn-primary" onclick="createGame()">Erstellen</button>
-        <p>- ODER -</p>
-        <input type="text" id="inpCode" placeholder="CODE" style="text-transform:uppercase;">
-        <button class="btn-secondary" onclick="joinGame()">Beitreten</button>
-        <div id="rejoinMsg" class="hidden" style="color:#0f0; margin-top:10px;">Lade Sitzung...</div>
+
+        <div id="hostSettings" class="start-panel hidden">
+            <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px;">Host-Einstellungen</p>
+            <label style="display:block; font-size:0.8rem; color:#888;">Schaden pro Angriff:</label>
+            <select id="inpDmg">
+                <option value="10">10°C (Normal)</option>
+                <option value="20">20°C (Intensiv)</option>
+                <option value="60">60°C (Speed-Modus)</option>
+            </select>
+            <button class="btn-primary" onclick="createGame()">🎮 Spiel erstellen</button>
+        </div>
+
+        <div id="joinPanel" class="start-panel hidden">
+            <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px;">Beitreten</p>
+            <input type="text" id="inpCode" placeholder="Raum-Code" style="text-transform:uppercase;" maxlength="6" autocomplete="off" oninput="this.value = this.value.toUpperCase();">
+            <button class="btn-secondary" onclick="joinGame()">🚪 Beitreten</button>
+        </div>
     </div>
 
+    <!-- LOBBY SCREEN -->
     <div id="screen-lobby" class="screen card">
-        <h2>Code: <span id="lblCode" style="color:#ff8c00;">...</span></h2>
-        <div id="lobbyList" style="margin:20px 0; font-weight:bold;"></div>
-        <button id="btnHostStart" class="btn-primary" style="display:none;" onclick="startGame()">🔥 Starten</button>
+        <p style="color:#aaa; margin-bottom:8px; font-size:0.9rem;">Raum-Code:</p>
+        <div id="lblCode" style="font-size:3.5rem; color:#ff8c00; font-weight:900; line-height:1; letter-spacing:8px;">...</div>
+        <div id="lobbyList" style="margin:25px 0; font-weight:bold; font-size:1.15rem; color:#fff;"></div>
+        <div id="lobbyReadyList" style="font-size:0.9rem; color:#aaa; margin-bottom:15px;"></div>
+        <button id="btnLobbyReady" class="btn-secondary" onclick="toggleLobbyReady()">✅ Bereit</button>
+        <div id="lobbyReadyStatus" style="font-size:0.85rem; color:#777; margin-top:5px;"></div>
+        <button id="btnHostStart" class="btn-primary" style="display:none;" onclick="startCountdown()">🔥 Spiel starten</button>
+        <button id="btnShare" class="share-btn" style="display:none;" onclick="shareLobby()">📤 Link teilen</button>
         <p id="lblWait" style="color:#666;">Warte auf Host...</p>
     </div>
 
+    <!-- GAME SCREEN -->
     <div id="screen-game" class="screen card">
-        <div id="gameThermometers" class="thermo-grid"></div>
-        <hr style="border-color:#333;">
+        <div id="gridGame" class="thermo-grid"></div>
+        <hr style="border-color:#333; margin:15px 0;">
+        
         <div style="margin-bottom:15px;">
-            <span style="font-size:1.5rem;">🥵</span>
-            <div id="lblHotseat" style="font-weight:bold; color:#ff4500;">...</div>
+            <span style="font-size:2rem;">🥵</span>
+            <div id="lblHotseat" style="font-weight:bold; font-size:1.3rem; color:#ff4500;">...</div>
+            <p id="lblHotseatSub" style="font-size:0.85rem; color:#aaa; margin-top:4px;"></p>
         </div>
-        <h3 id="lblQuestion">Lade...</h3>
+        
+        <h3 id="lblQuestion" style="margin:20px 0;">Lade...</h3>
+
         <div class="option-row">
             <button id="btnA" class="btn-option" onclick="vote('A')">A</button>
             <button id="btnB" class="btn-option" onclick="vote('B')">B</button>
         </div>
+
         <div id="stratSection" style="margin-top:15px;">
-            <p style="font-size:0.8rem; color:#666;">WENN RICHTIG:</p>
+            <p style="font-size:0.8rem; color:#666; margin-bottom:5px;">WENN DU RICHTIG LIEGST:</p>
             <select id="inpStrat">
                 <option value="attack">🔴 Angriff</option>
-                <option value="invest">🃏 Taktik</option>
+                <option value="invest">🃏 Joker ziehen</option>
             </select>
         </div>
+
         <button id="btnLock" class="btn-primary" style="margin-top:20px;" onclick="submitVote()">🔒 Einloggen</button>
         <div id="lblVoteStatus" style="font-size:0.8rem; color:#888; margin-top:10px;"></div>
+        <div class="joker-panel">
+            <h4>Deine Joker</h4>
+            <div id="myJokerListGame" class="joker-strip"></div>
+        </div>
     </div>
 
+    <!-- RESULT SCREEN -->
     <div id="screen-result" class="screen card">
-        <div id="resultThermometers" class="thermo-grid"></div>
+        <div id="gridResult" class="thermo-grid"></div>
+        
         <h3>Wahrheit: <span id="lblTruth" style="color:#fff;">?</span></h3>
-        <h2 id="lblResultStatus">...</h2>
+        <h2 id="lblResultStatus" style="margin:10px 0;">...</h2>
 
-        <div id="boxAttack" class="hidden" style="background:#3a1a1a; padding:10px; border-radius:10px; margin-bottom:15px;">
-            <h4 style="margin:0 0 10px 0;">🔥 Bestrafen:</h4>
-            
+        <div id="boxAttack" style="display:none; background:#3a1a1a; padding:10px; border-radius:10px; margin-bottom:15px;">
+            <h4 style="margin:0 0 10px 0;">🔥 Wen bestrafen?</h4>
             <div id="divTargets" style="display:grid; grid-template-columns:1fr 1fr; gap:5px;"></div>
-            
-            <div style="margin-top:15px; border-top:1px solid #555; padding-top:10px;">
-                <p style="font-size:0.7rem; margin:0; color:#aaa;">Falls Buttons fehlen:</p>
-                <div style="display:flex; gap:5px;">
-                    <input type="text" id="manualTarget" placeholder="Name..." style="padding:5px; margin:0;">
-                    <button style="width:auto; padding:5px 10px; margin:0;" onclick="manualAttack()">Go</button>
-                </div>
-            </div>
-
-            <button style="background:transparent; border:1px solid #666; font-size:0.7rem; margin-top:10px; padding:5px;" onclick="skipAttack()">Überspringen</button>
+            <button style="background:transparent; border:1px solid #666; color:#aaa; font-size:0.7rem; margin-top:10px; padding:8px;" onclick="skipAttack()">Überspringen</button>
         </div>
 
-        <div id="boxShop" class="hidden" style="background:#1a2a3a; padding:10px; border-radius:10px; margin-bottom:15px;">
-            <h4>🃏 Karte wählen:</h4>
-            <button onclick="takeCard('card_oil')">🛢️ Öl</button>
-            <button onclick="takeCard('card_mirror')">🛡️ Spiegel</button>
-            <button onclick="takeCard('card_ice')">🧊 Eis</button>
+        <div id="boxShop" style="display:none; background:#1a2a3a; padding:10px; border-radius:10px; margin-bottom:15px;">
+            <h4 style="margin:0 0 10px 0;">🃏 Karte wählen:</h4>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                <button class="card-select-btn" onclick="takeCard('card_oil')">
+                    <strong>🛢️ Ölfass</strong>
+                    <span>Verdoppelt deinen nächsten Angriff.</span>
+                </button>
+                <button class="card-select-btn" onclick="takeCard('card_mirror')">
+                    <strong>🪞 Spiegel</strong>
+                    <span>Der nächste Angriff prallt zurück.</span>
+                </button>
+                <button class="card-select-btn" onclick="takeCard('card_ice')">
+                    <strong>🧊 Eiswürfel</strong>
+                    <span>Kühlt dich in der nächsten Runde automatisch ab.</span>
+                </button>
+            </div>
         </div>
 
         <div style="text-align:left; font-size:0.7rem; color:#666;">LOG:</div>
         <div id="divLog" class="log-box"></div>
+
         <button id="btnReady" class="btn-ready" onclick="setReady()">👍 Bereit</button>
-        <div id="lblReady" style="font-size:0.8rem; color:#666;"></div>
+        <div id="lblReady" style="font-size:0.8rem; color:#666; margin-top:5px;"></div>
+        <div class="joker-panel" style="margin-top:20px;">
+            <h4>Deine Joker</h4>
+            <div id="myJokerListResult" class="joker-strip"></div>
+        </div>
     </div>
 
-    <div id="screen-gameover" class="screen card">
-        <h1 style="font-size:4rem;">☠️</h1>
-        <h2>GAME OVER</h2>
-        <h3 id="lblLoser" style="color:red;"></h3>
-        <p>Gewinner: <span id="lblWinner" style="color:#0f0;"></span></p>
-        <button style="background:#444;" onclick="leaveLobby()">Verlassen</button>
+    <!-- GAMEOVER SCREEN -->
+    <div id="screen-gameover" class="screen card final-card">
+        <div class="final-hero">
+            <div id="finalEmoji" class="final-emoji">🥵</div>
+            <div>
+                <div id="lblLoser" class="final-name">...</div>
+                <div id="lblFinalText" class="final-caption">...</div>
+            </div>
+        </div>
+        <div class="final-thermo">
+            <div class="final-thermo-track">
+                <div id="finalThermoFill" class="final-thermo-fill"></div>
+            </div>
+        </div>
+        <div id="finalRanking" class="final-ranking"></div>
+        <button id="btnRematch" style="background:#ff4500; margin-top:25px;" onclick="rematchGame()">♻️ Revanche</button>
+        <button style="background:#444; margin-top:10px;" onclick="leaveLobby()">Verlassen</button>
     </div>
-
+    <div id="toast" class="toast"></div>
     <script type="module">
-        window.onerror = function(msg, url, line) { alert("FEHLER: " + msg + " Zeile: " + line); };
-
+        // --- FIREBASE SETUP ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        // ⚠️ CONFIG HIER REIN ⚠️
-const firebaseConfig = {
-  apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
-  authDomain: "hitzkopf-f0ea6.firebaseapp.com",
-  projectId: "hitzkopf-f0ea6",
-  storageBucket: "hitzkopf-f0ea6.firebasestorage.app",
-  messagingSenderId: "828164655874",
-  appId: "1:828164655874:web:1cab759bdb03bfb736101b"
-};
+        const firebaseConfig = {
+            apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
+            authDomain: "hitzkopf-f0ea6.firebaseapp.com",
+            projectId: "hitzkopf-f0ea6",
+            storageBucket: "hitzkopf-f0ea6.firebasestorage.app",
+            messagingSenderId: "828164655874",
+            appId: "1:828164655874:web:1cab759bdb03bfb736101b"
+        };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // STATE
+        // --- STATE ---
         let myName = sessionStorage.getItem("hk_name") || "";
         let roomId = sessionStorage.getItem("hk_room") || "";
         let isHost = false;
         let localActionDone = false;
         let mySelection = null;
         let globalData = null;
-        let renderInterval = null;
+        let lastRoundId = null;
+        let loggedRoundResult = null;
+        let lobbyClosedHandled = false;
+        let lastTemps = {};
+        let lastMyTemp = null;
+        let attackAlertTimer = null;
+        let countdownInterval = null;
+        let countdownTarget = null;
+
+        const sleep = (ms = 0) => new Promise(res => setTimeout(res, ms));
 
         const questions = [
-            { q: "Hund oder Katze?", a: "Hund", b: "Katze" },
-            { q: "Pizza oder Döner?", a: "Pizza", b: "Döner" },
-            { q: "Sommer oder Winter?", a: "Sommer", b: "Winter" }
+            { q: "Hund oder Katze?", a: "Hund 🐶", b: "Katze 🐱" },
+            { q: "Pizza oder Döner?", a: "Pizza 🍕", b: "Döner 🥙" },
+            { q: "Sommer oder Winter?", a: "Sommer ☀️", b: "Winter ❄️" },
+            { q: "Kaffee oder Tee?", a: "Kaffee ☕", b: "Tee 🍵" },
+            { q: "Berge oder Meer?", a: "Berge 🏔️", b: "Meer 🌊" },
+            { q: "Film oder Serie?", a: "Film 🎬", b: "Serie 📺" }
         ];
+        const cardInfo = {
+            card_oil: { label: "🛢️ Ölfass", desc: "Verdoppelt deinen nächsten Angriff." },
+            card_mirror: { label: "🪞 Spiegel", desc: "Der nächste Angriff prallt zurück." },
+            card_ice: { label: "🧊 Eiswürfel", desc: "Kühlt dich in der nächsten Runde automatisch ab." }
+        };
 
-        // AUTO LOGIN
+        // --- AUTO LOGIN ---
         if(myName && roomId) {
             document.getElementById('inpName').value = myName;
             document.getElementById('inpCode').value = roomId;
-            document.getElementById('rejoinMsg').classList.remove('hidden');
             setTimeout(() => joinGame(), 500);
         }
 
-        // --- CORE ---
+        // --- MENU / START CONTROLS ---
         window.toggleMenu = () => {
             document.getElementById('adminDrawer').classList.toggle('open');
             document.getElementById('menuOverlay').classList.toggle('open');
         };
+        function ensureName() {
+            const name = document.getElementById('inpName').value.trim();
+            if(!name) {
+                showToast("Bitte gib zuerst deinen Namen ein.");
+                document.getElementById('inpName').focus();
+                return false;
+            }
+            return true;
+        }
 
+        window.openHostSettings = () => {
+            if(!ensureName()) return;
+            const panel = document.getElementById('hostSettings');
+            const join = document.getElementById('joinPanel');
+            join.classList.add('hidden');
+            panel.classList.toggle('hidden');
+            if(!panel.classList.contains('hidden')) {
+                document.getElementById('inpDmg').focus();
+            }
+        };
+        window.openJoinPanel = () => {
+            if(!ensureName()) return;
+            const panel = document.getElementById('joinPanel');
+            const host = document.getElementById('hostSettings');
+            host.classList.add('hidden');
+            panel.classList.toggle('hidden');
+            if(!panel.classList.contains('hidden')) {
+                document.getElementById('inpCode').focus();
+            }
+        };
+        window.toggleLobbyReady = async () => {
+            if(!roomId) return;
+            const current = !!(globalData?.lobbyReady?.[myName]);
+            await updateDoc(doc(db, "lobbies", roomId), {
+                [`lobbyReady.${myName}`]: !current
+            });
+        };
+
+        // --- CREATE GAME ---
         window.createGame = async () => {
             const name = document.getElementById('inpName').value.trim();
             const dmg = parseInt(document.getElementById('inpDmg').value);
-            if(!name) return alert("Name?");
+            if(!name) return alert("Bitte Namen eingeben!");
             
             const code = Math.random().toString(36).substring(2,6).toUpperCase();
-            myName = name; roomId = code;
+            myName = name; 
+            roomId = code;
             sessionStorage.setItem("hk_name", name);
             sessionStorage.setItem("hk_room", code);
 
             await setDoc(doc(db, "lobbies", code), {
-                host: name, status: "lobby",
+                host: name,
+                status: "lobby",
                 players: { [name]: { temp: 0, inventory: [] } },
                 config: { dmg: dmg },
-                votes: {}, ready: [], log: []
+                votes: {},
+                ready: [],
+                log: [],
+                hotseat: "",
+                currentQ: questions[0],
+                roundId: 0,
+                lobbyReady: {},
+                countdownEnds: null
             });
-            connect();
+            connectToLobby();
         };
 
+        // --- JOIN GAME ---
         window.joinGame = async () => {
-            const name = document.getElementById('inpName').value.trim() || myName;
-            const code = document.getElementById('inpCode').value.trim().toUpperCase() || roomId;
-            if(!name || !code) return alert("Daten?");
+            const name = document.getElementById('inpName').value.trim();
+            const code = document.getElementById('inpCode').value.trim().toUpperCase();
+            if(!name || !code) return alert("Name und Code erforderlich!");
             
-            myName = name; roomId = code;
+            myName = name; 
+            roomId = code;
             sessionStorage.setItem("hk_name", name);
             sessionStorage.setItem("hk_room", code);
 
             const ref = doc(db, "lobbies", code);
             const snap = await getDoc(ref);
-            if(!snap.exists()) return alert("Nicht gefunden");
+            if(!snap.exists()) return alert("Lobby nicht gefunden!");
 
             if(!snap.data().players[name]) {
                 await updateDoc(ref, { [`players.${name}`]: { temp: 0, inventory: [] } });
             }
-            connect();
+            connectToLobby();
         };
 
-        function connect() {
+        // --- CONNECT TO LOBBY ---
+        function connectToLobby() {
             onSnapshot(doc(db, "lobbies", roomId), (snap) => {
-                if(!snap.exists()) { sessionStorage.clear(); location.reload(); return; }
+                if(!snap.exists()) { 
+                    sessionStorage.clear(); 
+                    location.reload(); 
+                    return; 
+                }
                 const data = snap.data();
                 globalData = data;
-                const players = Object.keys(data.players);
+
+                const meState = data.players?.[myName];
+                if(meState) {
+                    if(lastMyTemp != null && meState.temp > lastMyTemp) {
+                        const delta = meState.temp - lastMyTemp;
+                        const latestAttack = findLatestAttackOnMe(data.log);
+                        const attacker = latestAttack?.attacker || "Jemand";
+                        const dmgShown = latestAttack?.dmg || delta;
+                        triggerAttackFeedback(attacker, dmgShown);
+                    }
+                    lastMyTemp = meState.temp;
+                } else {
+                    lastMyTemp = null;
+                }
+
+                if(data.status === 'closed') {
+                    if(!lobbyClosedHandled) {
+                        lobbyClosedHandled = true;
+                        alert("🛑 Host hat die Lobby beendet.");
+                    }
+                    sessionStorage.clear();
+                    setTimeout(() => location.reload(), 200);
+                    return;
+                }
                 
                 isHost = (data.host === myName);
                 if(isHost) {
@@ -257,213 +752,736 @@ const firebaseConfig = {
                 }
 
                 // RENDER
-                renderThermos(data.players);
+                renderThermos(data.players, 'gridGame');
+                renderThermos(data.players, 'gridResult');
                 renderLog(data.log);
 
                 // DEATH CHECK
                 let dead = null;
-                players.forEach(p => { if(data.players[p].temp >= 100) dead = p; });
-                
+                let winner = null;
+                let minTemp = 999;
+                Object.keys(data.players).forEach(p => {
+                    if(data.players[p].temp >= 100) dead = p;
+                    if(data.players[p].temp < minTemp) { 
+                        minTemp = data.players[p].temp; 
+                        winner = p; 
+                    }
+                });
+
                 if(dead) {
-                    if(isHost && data.status !== 'finished') updateDoc(doc(db, "lobbies", roomId), { status: 'finished', loser: dead });
-                    showScreen('screen-gameover');
-                    document.getElementById('lblLoser').innerText = dead + " IST RAUS!";
+                    renderGameOver(dead, data.players);
                     return;
+                } else {
+                    document.body.classList.remove('final-mode');
                 }
 
-                // ROUTING
+                // ROUTER
+                const shareBtn = document.getElementById('btnShare');
+                const readyBtn = document.getElementById('btnLobbyReady');
+                const readyStatus = document.getElementById('lobbyReadyStatus');
+                const readyList = document.getElementById('lobbyReadyList');
+                const hostStartBtn = document.getElementById('btnHostStart');
                 if(data.status === 'lobby') {
                     showScreen('screen-lobby');
                     document.getElementById('lblCode').innerText = roomId;
-                    document.getElementById('lobbyList').innerHTML = players.join("<br>");
+                    const players = Object.keys(data.players);
+                    document.getElementById('lobbyList').innerHTML = players.map(p => 
+                        `<div>${p}${p === data.host ? ' 👑' : ''}</div>`
+                    ).join('');
+                    const readyObj = data.lobbyReady || {};
+                    if(readyList) {
+                        readyList.innerHTML = players.map(p => {
+                            const ready = readyObj[p];
+                            const icon = ready ? '✅' : '⏳';
+                            return `<div>${icon} ${p}</div>`;
+                        }).join('');
+                    }
+                    const readyCount = players.filter(p => readyObj[p]).length;
+                    if(readyStatus) readyStatus.innerText = `Bereit: ${readyCount}/${players.length}`;
+                    if(readyBtn) {
+                        readyBtn.style.display = 'block';
+                        readyBtn.innerText = readyObj[myName] ? "❌ Nicht bereit" : "✅ Bereit";
+                        readyBtn.classList.toggle('btn-primary', !readyObj[myName]);
+                        readyBtn.classList.toggle('btn-secondary', !!readyObj[myName]);
+                    }
+                    if(hostStartBtn) {
+                        hostStartBtn.style.display = isHost ? 'block' : 'none';
+                        hostStartBtn.disabled = !(isHost && readyCount === players.length && players.length >= 2);
+                    }
+                    lastTemps = {};
+                    if(shareBtn) shareBtn.style.display = 'block';
+                }
+                else if(data.status === 'countdown') {
+                    showScreen('screen-lobby');
+                    if(readyBtn) readyBtn.style.display = 'none';
+                    if(readyStatus) readyStatus.innerText = "";
+                    if(readyList) readyList.innerHTML = "";
+                    if(shareBtn) shareBtn.style.display = 'none';
+                    if(hostStartBtn) {
+                        hostStartBtn.disabled = true;
+                        hostStartBtn.style.display = 'none';
+                    }
                 }
                 else if(data.status === 'game') {
+                    if(readyBtn) readyBtn.style.display = 'none';
+                    if(readyStatus) readyStatus.innerText = "";
+                    if(readyList) readyList.innerHTML = "";
                     showScreen('screen-game');
                     renderGame(data);
-                    if(isHost && Object.keys(data.votes).length >= players.length) {
-                        updateDoc(doc(db, "lobbies", roomId), { status: 'result' });
+                    if(shareBtn) shareBtn.style.display = 'none';
+                    if(hostStartBtn) hostStartBtn.style.display = 'none';
+                    // Host Auto-Advance
+                    if(isHost && Object.keys(data.votes).length >= Object.keys(data.players).length) {
+                        setTimeout(() => {
+                            updateDoc(doc(db, "lobbies", roomId), { status: 'result' });
+                        }, 500);
                     }
                 }
                 else if(data.status === 'result') {
+                    if(readyBtn) readyBtn.style.display = 'none';
+                    if(readyStatus) readyStatus.innerText = "";
+                    if(readyList) readyList.innerHTML = "";
                     showScreen('screen-result');
                     renderResult(data);
-                    if(isHost && data.ready.length >= players.length) {
-                        nextRound();
+                    if(shareBtn) shareBtn.style.display = 'none';
+                    if(hostStartBtn) hostStartBtn.style.display = 'none';
+                    // Host Auto-Next
+                    if(isHost && data.ready.length >= Object.keys(data.players).length) {
+                        setTimeout(() => nextRound(), 1000);
                     }
                 }
+                handleCountdownOverlay(data);
             });
         }
-
+        // --- RENDER GAME ---
         function renderGame(data) {
-            if(document.getElementById('lblQuestion').innerText !== data.currentQ.q) {
+            const roundId = data.roundId ?? 0;
+            const btnLock = document.getElementById('btnLock');
+            const btnA = document.getElementById('btnA');
+            const btnB = document.getElementById('btnB');
+            const lblHotseat = document.getElementById('lblHotseat');
+            const lblHotseatSub = document.getElementById('lblHotseatSub');
+
+            if(lastRoundId !== roundId) {
+                lastRoundId = roundId;
                 localActionDone = false;
                 mySelection = null;
-                document.getElementById('btnLock').classList.remove('hidden');
-                if(renderInterval) clearInterval(renderInterval);
+                btnA.classList.remove('selected');
+                btnB.classList.remove('selected');
+                btnLock.disabled = true;
+            }
+
+            if(data.votes[myName]) {
+                btnLock.classList.add('hidden');
+            } else {
+                btnLock.classList.remove('hidden');
+                btnLock.disabled = !mySelection;
             }
 
             document.getElementById('lblQuestion').innerText = data.currentQ.q;
-            document.getElementById('btnA').innerText = data.currentQ.a;
-            document.getElementById('btnB').innerText = data.currentQ.b;
+            btnA.innerText = data.currentQ.a;
+            btnB.innerText = data.currentQ.b;
             
-            if(myName === data.hotseat) {
-                document.getElementById('lblHotseat').innerText = "DU bist dran!";
+            if(!data.hotseat) {
+                lblHotseat.innerText = "Hotseat wird vorbereitet...";
+                lblHotseatSub.innerText = "Bitte kurz warten.";
+                document.getElementById('stratSection').classList.remove('hidden');
+            } else if(myName === data.hotseat) {
+                lblHotseat.innerText = "Du bist der Hitzkopf!";
+                lblHotseatSub.innerText = "Antworte ehrlich – die anderen versuchen dich zu lesen.";
                 document.getElementById('stratSection').classList.add('hidden');
             } else {
-                document.getElementById('lblHotseat').innerText = data.hotseat;
+                lblHotseat.innerText = `${data.hotseat} ist der Hitzkopf!`;
+                lblHotseatSub.innerText = "Errate seine Wahl, um zu bestrafen oder Karten zu ziehen.";
                 document.getElementById('stratSection').classList.remove('hidden');
             }
-            document.getElementById('lblVoteStatus').innerText = `Gewählt: ${Object.keys(data.votes).length}/${Object.keys(data.players).length}`;
+            
+            const players = Object.keys(data.players);
+            const voted = players.filter(p => data.votes[p]);
+            const pending = players.filter(p => !data.votes[p]);
+            const voteStatusEl = document.getElementById('lblVoteStatus');
+            const voteText = voted.length ? voted.join(', ') : 'Niemand';
+            const pendingText = pending.length ? pending.join(', ') : 'Niemand';
+            voteStatusEl.innerHTML = `✅ Eingeloggt: ${voteText}<br>🤔 Überlegen: ${pendingText}`;
+            if(data.players[myName]) {
+                renderMyJokers('myJokerListGame', data.players[myName]);
+            }
         }
 
+        // --- RENDER RESULT ---
         function renderResult(data) {
             const truth = data.votes[data.hotseat]?.choice;
-            const truthText = truth === 'A' ? data.currentQ.a : data.currentQ.b;
+            const truthText = truth ? (truth === 'A' ? data.currentQ.a : data.currentQ.b) : '?';
             document.getElementById('lblTruth').innerText = truthText;
 
             const myVote = data.votes[myName];
+            const statusEl = document.getElementById('lblResultStatus');
             const boxAttack = document.getElementById('boxAttack');
             const boxShop = document.getElementById('boxShop');
             const btnReady = document.getElementById('btnReady');
 
-            // Default hide
-            boxAttack.classList.add('hidden');
-            boxShop.classList.add('hidden');
-
-            document.getElementById('lblReady').innerText = `Bereit: ${data.ready.length}/${Object.keys(data.players).length}`;
-
+            // Reset Boxes
+            boxAttack.style.display = 'none';
+            boxShop.style.display = 'none';
+            
+            // Ready Status
+            document.getElementById('lblReady').innerText = 
+                `Bereit: ${data.ready.length}/${Object.keys(data.players).length}`;
+            
             if(data.ready.includes(myName)) {
                 btnReady.disabled = true;
-                btnReady.innerText = "Warte...";
+                btnReady.innerText = "⏳ Warte...";
+                return;
             } else {
                 btnReady.disabled = false;
-                btnReady.innerText = "👍 Weiter";
+                btnReady.innerText = "👍 Bereit";
             }
 
-            if(myName !== data.hotseat && myVote) {
-                if(myVote.choice === truth) {
-                    document.getElementById('lblResultStatus').innerText = "RICHTIG! 🎉";
+            if(isHost) {
+                maybeLogRoundSummary(data, truthText, truth);
+            }
+
+            if(myName === data.hotseat) {
+                statusEl.innerText = "Du warst am Zug.";
+                statusEl.style.color = "#aaa";
+            } else {
+                if(myVote && myVote.choice === truth) {
+                    statusEl.innerText = "✅ RICHTIG!";
+                    statusEl.style.color = "#0f0";
+
                     if(!localActionDone) {
                         btnReady.disabled = true;
+                        btnReady.innerText = "⚡ Belohnung wählen!";
+                        
                         if(myVote.strategy === 'invest') {
-                            boxShop.classList.remove('hidden');
+                            boxShop.style.display = 'block';
                         } else {
-                            boxAttack.classList.remove('hidden');
-                            renderTargets(data.players); // FORCE RENDER
+                            boxAttack.style.display = 'block';
+                            renderTargets(data.players);
                         }
                     }
                 } else {
-                    document.getElementById('lblResultStatus').innerText = "FALSCH ❌";
+                    if(!myVote) {
+                        statusEl.innerText = "⌛ Kein Tipp abgegeben.";
+                        statusEl.style.color = "#ccc";
+                    } else {
+                        statusEl.innerText = "❌ FALSCH";
+                        statusEl.style.color = "#f00";
+                    }
                     localActionDone = true;
                 }
-            } else {
-                document.getElementById('lblResultStatus').innerText = "Warte...";
-                localActionDone = true;
+            }
+            if(data.players[myName]) {
+                renderMyJokers('myJokerListResult', data.players[myName]);
             }
         }
 
+        // --- RENDER TARGETS ---
         window.renderTargets = (players) => {
             const div = document.getElementById('divTargets');
-            if(div.innerHTML !== "") return;
+            div.innerHTML = "";
+            const dmg = globalData?.config?.dmg || 10;
             Object.keys(players).forEach(p => {
                 if(p !== myName) {
                     const b = document.createElement('button');
                     b.className = 'btn-danger';
-                    b.innerText = p;
+                    b.innerText = `${p} (+${dmg}°C)`;
                     b.onclick = () => doAttack(p);
                     div.appendChild(b);
                 }
             });
         };
 
-        window.doAttack = async (target) => {
-            localActionDone = true;
-            document.getElementById('boxAttack').classList.add('hidden');
-            document.getElementById('btnReady').disabled = false;
-            const dmg = globalData.config.dmg || 10;
-            await updateDoc(doc(db, "lobbies", roomId), {
-                [`players.${target}.temp`]: increment(dmg),
-                log: arrayUnion(`🔥 ${myName} trifft ${target} (+${dmg})`)
-            });
+        // --- VOTE ---
+        window.vote = (opt) => {
+            mySelection = opt;
+            document.getElementById('btnA').classList.toggle('selected', opt === 'A');
+            document.getElementById('btnB').classList.toggle('selected', opt === 'B');
+            const lockBtn = document.getElementById('btnLock');
+            lockBtn.disabled = false;
         };
 
-        window.manualAttack = () => {
-            const t = document.getElementById('manualTarget').value.trim();
-            if(t) window.doAttack(t);
-        };
-
-        window.takeCard = async (card) => {
-            localActionDone = true;
-            document.getElementById('boxShop').classList.add('hidden');
-            document.getElementById('btnReady').disabled = false;
-            await updateDoc(doc(db, "lobbies", roomId), {
-                [`players.${myName}.inventory`]: arrayUnion(card)
-            });
-        };
-
-        window.skipAttack = () => {
-            localActionDone = true;
-            document.getElementById('boxAttack').classList.add('hidden');
-            document.getElementById('btnReady').disabled = false;
-        };
-
-        window.vote = (opt) => mySelection = opt;
+        // --- SUBMIT VOTE ---
         window.submitVote = async () => {
-            if(!mySelection) return alert("Wähle!");
+            if(!mySelection) return alert("Bitte A oder B wählen!");
             const strat = document.getElementById('inpStrat').value;
             document.getElementById('btnLock').classList.add('hidden');
-            await updateDoc(doc(db, "lobbies", roomId), { [`votes.${myName}`]: { choice: mySelection, strategy: strat } });
+            
+            await updateDoc(doc(db, "lobbies", roomId), {
+                [`votes.${myName}`]: { choice: mySelection, strategy: strat }
+            });
         };
 
+        // --- ATTACK ---
+        window.doAttack = async (target) => {
+            localActionDone = true;
+            document.getElementById('boxAttack').style.display = 'none';
+            document.getElementById('btnReady').disabled = false;
+            
+            const baseDmg = globalData?.config?.dmg || 10;
+            const ref = doc(db, "lobbies", roomId);
+            const attackerState = globalData?.players?.[myName] || {};
+            const targetState = globalData?.players?.[target] || {};
+            const hasOil = attackerState.inventory?.includes('card_oil');
+            const targetHasMirror = targetState.inventory?.includes('card_mirror');
+            const dmg = baseDmg * (hasOil ? 2 : 1);
+            const attackMsg = hasOil 
+                ? `🔥 ${myName} greift ${target} mit dem Ölfass an (+${dmg}°C)`
+                : `🔥 ${myName} greift ${target} an (+${dmg}°C)`;
+
+            await updateDoc(ref, { log: arrayUnion(attackMsg) });
+
+            if(hasOil) {
+                await updateDoc(ref, { [`players.${myName}.inventory`]: arrayRemove('card_oil') });
+            }
+
+            if(targetHasMirror) {
+                await updateDoc(ref, {
+                    [`players.${target}.inventory`]: arrayRemove('card_mirror'),
+                    log: arrayUnion(`🪞 ${target} spiegelt den Angriff auf ${myName} zurück! (+${dmg}°C)`)
+                });
+                await sleep(400);
+                await updateDoc(ref, {
+                    [`players.${myName}.temp`]: increment(dmg)
+                });
+                return;
+            }
+
+            await sleep(700);
+            await updateDoc(ref, {
+                [`players.${target}.temp`]: increment(dmg)
+            });
+        };
+
+        // --- TAKE CARD ---
+        window.takeCard = async (card) => {
+            localActionDone = true;
+            document.getElementById('boxShop').style.display = 'none';
+            document.getElementById('btnReady').disabled = false;
+
+            const inventory = globalData?.players?.[myName]?.inventory || [];
+            if(inventory.includes(card)) {
+                showToast("Du besitzt diesen Joker bereits!");
+                return;
+            }
+
+            await updateDoc(doc(db, "lobbies", roomId), {
+                [`players.${myName}.inventory`]: arrayUnion(card),
+                log: arrayUnion(`🃏 ${myName} zieht eine geheime Karte.`)
+            });
+            showToast(`${cardInfo[card].label} gesichert – ${cardInfo[card].desc}`);
+        };
+
+        // --- SKIP ATTACK ---
+        window.skipAttack = async () => {
+            localActionDone = true;
+            document.getElementById('boxAttack').style.display = 'none';
+            document.getElementById('btnReady').disabled = false;
+            document.getElementById('btnReady').innerText = "👍 Bereit";
+            await updateDoc(doc(db, "lobbies", roomId), {
+                log: arrayUnion(`🕊️ ${myName} verzichtet auf eine Bestrafung.`)
+            });
+        };
+
+        // --- SET READY ---
         window.setReady = async () => {
-            await updateDoc(doc(db, "lobbies", roomId), { ready: arrayUnion(myName) });
+            await updateDoc(doc(db, "lobbies", roomId), { 
+                ready: arrayUnion(myName) 
+            });
         };
-
-        window.startGame = async () => {
+        // --- START GAME (COUNTDOWN) ---
+        window.startCountdown = async () => {
+            if(!isHost || !globalData) return;
             const players = Object.keys(globalData.players);
-            await updateDoc(doc(db, "lobbies", roomId), { status: 'game', hotseat: players[0], currentQ: questions[0] });
+            if(players.length < 2) return alert("Mindestens 2 Spieler benötigt!");
+            const readyObj = globalData.lobbyReady || {};
+            const unready = players.filter(p => !readyObj[p]);
+            if(unready.length) {
+                alert("Noch nicht alle bereit: " + unready.join(', '));
+                return;
+            }
+            await applyIceCooling(globalData.players);
+            const q = questions[Math.floor(Math.random() * questions.length)];
+            const nextRoundId = (globalData?.roundId ?? 0) + 1;
+            const countdownEnds = Date.now() + 3000;
+            await updateDoc(doc(db, "lobbies", roomId), {
+                status: 'countdown',
+                hotseat: players[0],
+                currentQ: q,
+                votes: {},
+                ready: [],
+                roundId: nextRoundId,
+                countdownEnds,
+                lobbyReady: {}
+            });
+            setTimeout(() => {
+                updateDoc(doc(db, "lobbies", roomId), { status: 'game', countdownEnds: null });
+            }, 3300);
         };
 
+        // --- NEXT ROUND ---
         window.nextRound = async () => {
             const players = Object.keys(globalData.players);
-            const next = players[(players.indexOf(globalData.hotseat)+1)%players.length];
-            const q = questions[Math.floor(Math.random()*questions.length)];
-            await updateDoc(doc(db, "lobbies", roomId), { status: 'game', hotseat: next, currentQ: q, votes: {}, ready: [] });
+            const curr = globalData.hotseat;
+            const nextIdx = (players.indexOf(curr) + 1) % players.length;
+            const q = questions[Math.floor(Math.random() * questions.length)];
+            const nextRoundId = (globalData?.roundId ?? 0) + 1;
+            await applyIceCooling(globalData.players);
+            await updateDoc(doc(db, "lobbies", roomId), {
+                status: 'game',
+                hotseat: players[nextIdx],
+                currentQ: q,
+                votes: {},
+                ready: [],
+                roundId: nextRoundId
+            });
         };
 
-        window.restartGame = async () => {
+        // --- FORCE NEXT ROUND ---
+        window.forceNextRound = async () => {
+            if(!isHost) return;
+            if(!confirm("Runde überspringen?")) return;
+            await nextRound();
+            toggleMenu();
+        };
+
+        // --- RESET GAME ---
+        window.resetGame = async () => {
+            if(!isHost) return;
+            if(!confirm("Spiel wirklich neustarten?")) return;
+            
             const pClean = {};
-            Object.keys(globalData.players).forEach(p => pClean[p] = {temp:0, inventory:[]});
-            await updateDoc(doc(db, "lobbies", roomId), { status: 'lobby', players: pClean, votes: {}, ready: [], log: [] });
+            Object.keys(globalData.players).forEach(p => {
+                pClean[p] = {temp: 0, inventory: []};
+            });
+            
+            await updateDoc(doc(db, "lobbies", roomId), {
+                status: 'lobby', 
+                players: pClean, 
+                votes: {}, 
+                ready: [], 
+                log: [],
+                hotseat: "",
+                roundId: 0,
+                lobbyReady: {},
+                countdownEnds: null
+            });
+            toggleMenu();
+            document.body.classList.remove('final-mode');
+        };
+
+        // --- KILL LOBBY ---
+        window.killLobby = async () => {
+            if(!isHost) return;
+            if(!confirm("Lobby wirklich löschen? Alle Spieler werden rausgeworfen!")) return;
+            const ref = doc(db, "lobbies", roomId);
+            await updateDoc(ref, {
+                status: 'closed',
+                log: arrayUnion(`🛑 ${myName} hat die Lobby geschlossen.`)
+            });
+            setTimeout(() => deleteDoc(ref), 1200);
+        };
+
+        // --- LEAVE LOBBY ---
+        window.leaveLobby = () => {
+            if(confirm("Lobby verlassen?")) {
+                document.body.classList.remove('final-mode');
+                sessionStorage.clear();
+                location.reload();
+            }
         };
         
-        window.killLobby = async () => { await deleteDoc(doc(db, "lobbies", roomId)); };
-        window.leaveLobby = () => { sessionStorage.clear(); location.reload(); };
-        window.adminForceNext = window.nextRound;
+        window.shareLobby = async () => {
+            if(!roomId) {
+                showToast("Kein aktiver Raum zum Teilen.");
+                return;
+            }
+            const text = `🔥 Hitzkopf-Code: ${roomId} – komm in meine Lobby!`;
+            try {
+                if(navigator.share) {
+                    await navigator.share({ title: "Hitzkopf Lobby", text, url: location.href });
+                    showToast("Link verschickt!");
+                } else if(navigator.clipboard) {
+                    await navigator.clipboard.writeText(text);
+                    showToast("Link kopiert – schick ihn deinen Freunden!");
+                } else {
+                    prompt("Code kopieren:", text);
+                }
+            } catch (err) {
+                console.warn(err);
+                showToast("Teilen abgebrochen.");
+            }
+        };
 
+        window.rematchGame = async () => {
+            if(!globalData) return;
+            if(globalData.host !== myName) {
+                showToast("Nur der Host kann eine Revanche starten.");
+                return;
+            }
+            if(!confirm("Neue Revanche starten?")) return;
+            const pClean = {};
+            Object.keys(globalData.players).forEach(p => {
+                pClean[p] = { temp: 0, inventory: [] };
+            });
+            await updateDoc(doc(db, "lobbies", roomId), {
+                status: 'lobby',
+                players: pClean,
+                votes: {},
+                ready: [],
+                log: arrayUnion("♻️ Revanche! Alle Temperaturen wurden zurückgesetzt."),
+                hotseat: "",
+                roundId: (globalData.roundId ?? 0) + 1,
+                lobbyReady: {},
+                countdownEnds: null
+            });
+            document.body.classList.remove('final-mode');
+            showToast("Revanche gestartet – alle zurück in die Lobby!");
+        };
+
+        // --- RENDER HELPERS ---
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
         }
 
-        function renderThermos(players) {
-             const div1 = document.getElementById('gameThermometers');
-             const div2 = document.getElementById('resultThermometers');
-             if(!div1 || !div2) return;
-             let html = "";
-             Object.keys(players).forEach(p => {
-                 const d = players[p];
-                 let col = d.temp >= 100 ? 'red' : '#0f0';
-                 html += `<div class="thermo-item"><div class="thermo-top"><span>${p}</span><span>${d.temp}°C</span></div><div class="thermo-bar"><div class="thermo-fill" style="width:${Math.min(d.temp, 100)}%; background:${col}"></div></div></div>`;
-             });
-             div1.innerHTML = html;
-             div2.innerHTML = html;
+        function renderGameOver(loser, players) {
+            showScreen('screen-gameover');
+            document.body.classList.add('final-mode');
+            const nameEl = document.getElementById('lblLoser');
+            const captionEl = document.getElementById('lblFinalText');
+            const fillEl = document.getElementById('finalThermoFill');
+            const emojiEl = document.getElementById('finalEmoji');
+            const btnRematch = document.getElementById('btnRematch');
+            nameEl.innerText = loser;
+            captionEl.innerText = `${loser} ist die Birne geplatzt – er ist ein richtiger Hitzkopf!`;
+            if(emojiEl) emojiEl.innerText = '🥵';
+            if(fillEl) {
+                fillEl.style.width = '0%';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        const temp = Math.min(players[loser]?.temp ?? 120, 120);
+                        fillEl.style.width = `${Math.min(temp, 120)}%`;
+                    });
+                });
+            }
+            const rankingEl = document.getElementById('finalRanking');
+            if(rankingEl) {
+                const survivors = Object.keys(players).filter(p => p !== loser)
+                    .sort((a,b) => players[a].temp - players[b].temp);
+                if(!survivors.length) {
+                    rankingEl.innerHTML = `<div class="final-rank-item">Keine weiteren Spieler.</div>`;
+                } else {
+                    const coolest = survivors[0];
+                    rankingEl.innerHTML = survivors.map((p, idx) => `
+                        <div class="final-rank-item ${p === coolest ? 'coolest' : ''}">
+                            <span>${idx + 1}. ${p}</span>
+                            <span>${players[p].temp}°C ${p === coolest ? '🧊' : ''}</span>
+                        </div>
+                    `).join('');
+                }
+            if(btnRematch) {
+                if(isHost) {
+                    btnRematch.disabled = false;
+                    btnRematch.innerText = "♻️ Revanche starten";
+                } else {
+                    btnRematch.disabled = true;
+                    btnRematch.innerText = "⏳ Host entscheidet...";
+                }
+            }
+            }
+        }
+
+        function renderThermos(players, targetId) {
+            const div = document.getElementById(targetId);
+            if(!div) return;
+            
+            const order = Object.keys(players).sort((a,b) => players[b].temp - players[a].temp);
+            let html = "";
+            const newTemps = {};
+            order.forEach((p, idx) => {
+                const d = players[p];
+                const percent = Math.min(d.temp, 100);
+                let color = '#0f0';
+                if(d.temp >= 80) color = '#ff4500';
+                else if(d.temp >= 50) color = '#ff8c00';
+                else if(d.temp >= 30) color = '#ffa500';
+                
+                const inventory = d.inventory?.length > 0 ? 
+                    ` <span style="font-size:0.7rem;">🎴${d.inventory.length}</span>` : '';
+                const classes = ['thermo-item'];
+                const isHotseat = globalData?.hotseat === p;
+                if(idx === 0) classes.push('top-hot');
+                if(isHotseat) classes.push('is-hotseat');
+                if(targetId === 'gridGame' && lastTemps[p] != null && d.temp > lastTemps[p]) {
+                    classes.push('shake');
+                }
+                const prefix = isHotseat ? '🥵 ' : (idx === 0 ? '🔥 ' : '');
+                const nameLabel = `${prefix}${p}${inventory}`;
+                
+                html += `
+                    <div class="${classes.join(' ')}">
+                        <div class="thermo-top">
+                            <span>${nameLabel}</span>
+                            <span>${d.temp}°C</span>
+                        </div>
+                        <div class="thermo-bar">
+                            <div class="thermo-fill" style="width:${percent}%; background:${color}"></div>
+                        </div>
+                    </div>
+                `;
+                newTemps[p] = d.temp;
+            });
+            div.innerHTML = html;
+            if(targetId === 'gridGame') {
+                lastTemps = newTemps;
+            }
         }
 
         function renderLog(log) {
             const el = document.getElementById('divLog');
-            if(el && log) el.innerHTML = log.map(l => `<div class="log-entry">${l}</div>`).join('');
+            if(!el || !log) return;
+            
+            el.innerHTML = log.slice(-10).reverse().map(l => {
+                let className = 'log-entry';
+                if(l.includes('🔥')) className += ' attack';
+                return `<div class="${className}">${l}</div>`;
+            }).join('');
+            
+            // Auto-scroll to top (newest)
+            el.scrollTop = 0;
         }
+
+        async function maybeLogRoundSummary(data, truthText, truthKey) {
+            if(!isHost) return;
+            if(data.roundId == null) return;
+            if(loggedRoundResult === data.roundId) return;
+            if(!truthKey) return;
+
+            loggedRoundResult = data.roundId;
+            const players = Object.keys(data.players).filter(p => p !== data.hotseat);
+            const correct = players.filter(p => data.votes[p]?.choice === truthKey);
+            const wrong = players.filter(p => !correct.includes(p));
+            const entries = [
+                `🧠 Wahrheit (${data.hotseat}): ${truthText}`
+            ];
+
+            if(correct.length) {
+                entries.push(`✅ Richtige Spieler: ${correct.join(', ')}`);
+                if(wrong.length) entries.push(`❌ Daneben: ${wrong.join(', ')}`);
+            } else {
+                entries.push('⚪ Niemand lag richtig – nichts ist passiert.');
+            }
+
+            await updateDoc(doc(db, "lobbies", roomId), {
+                log: arrayUnion(...entries)
+            });
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            if(!toast) return;
+            toast.innerText = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+
+        function renderMyJokers(targetId, playerData) {
+            const container = document.getElementById(targetId);
+            if(!container) return;
+            const inventory = playerData?.inventory || [];
+            const cards = Object.keys(cardInfo);
+            container.innerHTML = cards.map(key => {
+                const info = cardInfo[key];
+                const has = inventory.includes(key);
+                return `
+                    <div class="joker-chip ${has ? 'has' : ''}">
+                        <strong>${info.label}</strong>
+                        <span>${info.desc}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function applyIceCooling(players) {
+            if(!players) return;
+            const ref = doc(db, "lobbies", roomId);
+            const coolValue = globalData?.config?.dmg || 10;
+            for(const name of Object.keys(players)) {
+                if(players[name].inventory?.includes('card_ice')) {
+                    const reduction = Math.min(coolValue, players[name].temp);
+                    await updateDoc(ref, {
+                        [`players.${name}.temp`]: increment(-reduction),
+                        [`players.${name}.inventory`]: arrayRemove('card_ice'),
+                        log: arrayUnion(`🧊 ${name} kühlt sich ab (-${reduction}°C)`)
+                    });
+                }
+            }
+        }
+
+        function findLatestAttackOnMe(log = []) {
+            if(!log || !Array.isArray(log)) return null;
+            for(let i = log.length - 1; i >= 0; i--) {
+                const entry = log[i];
+                const match = entry?.match(/🔥\s(.+?)\s+greift\s+(.+?)\san\s\(\+(\d+)°C\)/);
+                if(match && match[2] === myName) {
+                    return { attacker: match[1], dmg: parseInt(match[3], 10) || null };
+                }
+            }
+            return null;
+        }
+
+        function triggerAttackFeedback(attacker, dmg) {
+            const body = document.body;
+            body.classList.add('viewport-shake');
+            setTimeout(() => body.classList.remove('viewport-shake'), 600);
+
+            const alert = document.getElementById('attackAlert');
+            if(!alert) return;
+            alert.innerText = `🔥 ${attacker} hat dich aufgeheizt (+${dmg}°C)`;
+            alert.classList.add('show');
+            if(attackAlertTimer) clearTimeout(attackAlertTimer);
+            attackAlertTimer = setTimeout(() => alert.classList.remove('show'), 2600);
+        }
+
+        function handleCountdownOverlay(data) {
+            const overlay = document.getElementById('countdownOverlay');
+            if(!overlay) return;
+            if(data.status === 'countdown' && data.countdownEnds) {
+                countdownTarget = data.countdownEnds;
+                overlay.classList.add('show');
+                startCountdownTicker();
+            } else {
+                overlay.classList.remove('show');
+                stopCountdownTicker();
+            }
+        }
+
+        function startCountdownTicker() {
+            updateCountdownText();
+            if(countdownInterval) clearInterval(countdownInterval);
+            countdownInterval = setInterval(updateCountdownText, 250);
+        }
+
+        function stopCountdownTicker() {
+            if(countdownInterval) clearInterval(countdownInterval);
+            countdownInterval = null;
+            countdownTarget = null;
+        }
+
+        function updateCountdownText() {
+            if(!countdownTarget) return;
+            const textEl = document.getElementById('countdownText');
+            if(!textEl) return;
+            const remainingMs = countdownTarget - Date.now();
+            const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
+            if(seconds > 0) {
+                textEl.innerText = seconds;
+            } else {
+                textEl.innerText = "HITZKOPF!";
+            }
+        }
+
     </script>
 </body>
 </html>
