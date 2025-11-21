@@ -3,11 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥 FINAL 50</title>
+    <title>Hitzkopf 🔥 RELOADED 4</title>
     <style>
-        /* --- CSS --- */
-        * { box-sizing: border-box; }
-        body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; margin: 0; padding-bottom: 80px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            color: #ffffff; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            padding: 15px; 
+            padding-bottom: 80px;
+            min-height: 100vh;
+        }
+        h1 { 
+            color: #ff4500; 
+            margin: 0 0 15px 0; 
+            text-shadow: 0 0 15px rgba(255, 69, 0, 0.7); 
+            font-size: 2.2rem; 
+            font-weight: 900;
+        }
+        
+        .screen { display: none; animation: fadeIn 0.4s ease-out; }
+        .screen.active { display: block; }
+        
+        .card { 
+            background: linear-gradient(145deg, #1e1e1e, #252525);
+            padding: 25px; 
+            border-radius: 20px; 
+            max-width: 480px; 
+            margin: 0 auto 20px auto; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.8); 
+            border: 1px solid #333;
+        }
+        
+        input, select { 
+            width: 100%; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 10px; 
+            border: 2px solid #444; 
+            background: #2c2c2c; 
+            color: white; 
+            font-size: 16px; 
+            text-align: center;
+            transition: border-color 0.3s, background 0.3s;
+        }
+        input:focus, select:focus { 
+            outline: none; 
+            border-color: #ff4500; 
+            background: #333;
+        }
+        
+        button { 
+            width: 100%; 
+            padding: 16px; 
+            margin: 10px 0; 
+            border: none; 
+            border-radius: 12px; 
+            font-size: 18px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: transform 0.15s, box-shadow 0.3s, opacity 0.3s;
+        }
+        button:hover:not(:disabled) { 
+            transform: translateY(-2px); 
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+        }
+        button:active:not(:disabled) { transform: scale(0.97); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         
         .btn-primary { 
             background: linear-gradient(135deg, #ff4500, #ff8c00); 
