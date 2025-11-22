@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥 Webversion 4</title>
+    <title>Hitzkopf 🔥 V5</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -502,16 +502,17 @@
         <div id="countdownText" class="countdown-text" style="font-size:4rem; line-height:1.2;">Hitz<br>kopf</div>
         <div class="countdown-sub">Bereit machen...</div>
     </div>
+    <!-- ANLEITUNG OVERLAY -->
     <div id="rulesOverlay" class="countdown-overlay" style="display:none;">
         <div style="background:linear-gradient(145deg, #1e1e1e, #252525); padding:30px; border-radius:20px; max-width:500px; margin:20px; border:2px solid #ff4500; box-shadow:0 8px 32px rgba(0,0,0,0.8);">
-            <h2 style="color:#ff4500; margin-bottom:20px; font-size:1.8rem;">📖 Spielregeln</h2>
+            <h2 style="color:#ff4500; margin-bottom:20px; font-size:1.8rem;">📖 Anleitung</h2>
             <div style="text-align:left; font-size:1rem; line-height:1.6; color:#fff; margin-bottom:25px;">
                 <p style="margin-bottom:12px;">🎯 <strong>Ziel:</strong> Errate die Antworten deiner Freunde und bringe sie zum kochen!</p>
                 <p style="margin-bottom:12px;">🔥 <strong>Verlierer:</strong> Wer als erstes 100° erreicht, fliegt raus.</p>
                 <p style="margin-bottom:12px;">🧊 <strong>Gewinner:</strong> Bewahrst du einen kühlen Kopf, entscheidest du das Spiel für dich.</p>
                 <p style="margin-bottom:0;">💡 <strong>Tipp:</strong> Bei richtigem Raten kannst du Gegner aufheizen oder Joker ziehen!</p>
             </div>
-            <button onclick="closeRulesOverlay()" class="btn-primary" style="width:100%; padding:15px; font-size:1.1rem;">Verstanden, los geht's! 🚀</button>
+            <button onclick="closeRulesOverlay()" class="btn-primary" style="width:100%; padding:15px; font-size:1.1rem;">Verstanden ✓</button>
         </div>
     </div>
     <div class="overlay" id="menuOverlay" onclick="toggleMenu()"></div>
@@ -535,12 +536,12 @@
     <div id="screen-start" class="screen active card">
         <h3 style="margin-bottom:15px; color:#ff8c00;">Wie heißt du?</h3>
         <input type="text" id="inpName" placeholder="Dein Name" maxlength="20" autocomplete="off">
-        <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:15px; margin-bottom:8px; font-weight:500;">Wähle dein Emoji:</label>
+        <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:15px; margin-bottom:8px; font-weight:500;">Wähle deinen Charakter:</label>
         <div style="position:relative; margin-bottom:15px;">
             <div id="emojiCarousel" style="display:flex; align-items:center; gap:15px; overflow:hidden; position:relative; justify-content:center;">
-                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:transparent; border:none; color:#fff; font-size:2rem; cursor:pointer; flex-shrink:0; padding:5px; display:flex; align-items:center; justify-content:center;">⬅️</button>
+                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:transparent; border:none; color:#fff; font-size:2.5rem; cursor:pointer; flex-shrink:0; padding:10px; display:flex; align-items:center; justify-content:center; min-width:50px; min-height:50px;">⬅️</button>
                 <div id="emojiDisplay" style="text-align:center; font-size:4rem; min-height:80px; min-width:80px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border-radius:15px; padding:10px;">😊</div>
-                <button id="emojiNext" onclick="changeEmoji(1)" style="background:transparent; border:none; color:#fff; font-size:2rem; cursor:pointer; flex-shrink:0; padding:5px; display:flex; align-items:center; justify-content:center;">➡️</button>
+                <button id="emojiNext" onclick="changeEmoji(1)" style="background:transparent; border:none; color:#fff; font-size:2.5rem; cursor:pointer; flex-shrink:0; padding:10px; display:flex; align-items:center; justify-content:center; min-width:50px; min-height:50px;">➡️</button>
             </div>
             <input type="hidden" id="inpEmoji" value="😊">
         </div>
@@ -549,6 +550,12 @@
             <button class="btn-primary" onclick="openHostSettings()">🎮 Spiel erstellen</button>
             <button class="btn-secondary" onclick="openJoinPanel()">🚪 Spiel beitreten</button>
         </div>
+    </div>
+    
+    <!-- ANLEITUNG BUTTON (außerhalb des Kastens) -->
+    <div style="max-width:480px; margin:20px auto 0 auto;">
+        <button onclick="openRulesOverlay()" class="btn-secondary" style="width:100%; padding:12px; font-size:0.95rem; margin-top:10px;">📖 Anleitung</button>
+    </div>
 
         <div id="hostSettings" class="start-panel hidden">
             <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px; font-weight:600;">⚙️ Host-Einstellungen</p>
@@ -800,14 +807,18 @@
         let rulesShown = false;
         
         // --- EMOJI SELECTION ---
-        const availableEmojis = ['😊', '😎', '🤠', '🥳', '😄', '🤩', '😇', '🧐', '🤓', '😋', '🐷', '👻', '🐄', '🐶', '🐱', '🐼', '🦁', '🐸', '🦊', '🐨'];
+        const baseEmojis = ['😊', '😎', '🤠', '🥳', '😄', '🤩', '😇', '🧐', '🤓', '😋', '🐷', '👻', '🐄', '🐶', '🐱', '🐼', '🦁', '🐸', '🦊', '🐨'];
+        // Zufällige Reihenfolge der Emojis
+        const availableEmojis = [...baseEmojis].sort(() => Math.random() - 0.5);
         let currentEmojiIndex = 0;
         
         window.changeEmoji = (direction) => {
             currentEmojiIndex = (currentEmojiIndex + direction + availableEmojis.length) % availableEmojis.length;
             const emoji = availableEmojis[currentEmojiIndex];
-            document.getElementById('emojiDisplay').innerText = emoji;
-            document.getElementById('inpEmoji').value = emoji;
+            const emojiDisplay = document.getElementById('emojiDisplay');
+            const inpEmoji = document.getElementById('inpEmoji');
+            if(emojiDisplay) emojiDisplay.innerText = emoji;
+            if(inpEmoji) inpEmoji.value = emoji;
             myEmoji = emoji;
         };
         
@@ -838,10 +849,19 @@
             const emojiDisplay = document.getElementById('emojiDisplay');
             const inpEmoji = document.getElementById('inpEmoji');
             if(emojiDisplay && inpEmoji) {
+                // Wenn kein Emoji gespeichert, nimm das erste aus der zufälligen Liste
+                if(!myEmoji || myEmoji === '😊') {
+                    myEmoji = availableEmojis[0];
+                    currentEmojiIndex = 0;
+                } else {
+                    currentEmojiIndex = availableEmojis.indexOf(myEmoji);
+                    if(currentEmojiIndex === -1) {
+                        currentEmojiIndex = 0;
+                        myEmoji = availableEmojis[0];
+                    }
+                }
                 emojiDisplay.innerText = myEmoji;
                 inpEmoji.value = myEmoji;
-                currentEmojiIndex = availableEmojis.indexOf(myEmoji);
-                if(currentEmojiIndex === -1) currentEmojiIndex = 0;
             }
         }
         
@@ -1805,16 +1825,6 @@
                 return;
             }
             
-            // Zeige Regeln beim ersten Start (für alle Spieler)
-            if(!rulesShown) {
-                const rulesOverlay = document.getElementById('rulesOverlay');
-                if(rulesOverlay) {
-                    rulesOverlay.style.display = 'flex';
-                    // Warte auf Schließen der Regeln
-                    return;
-                }
-            }
-            
             await applyIceCooling(globalData.players);
             const usedQuestions = globalData.usedQuestions || [];
             const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions);
@@ -1837,39 +1847,21 @@
         };
         
         // Starte Spiel nach Schließen der Regeln
+        // --- OPEN RULES OVERLAY ---
+        window.openRulesOverlay = () => {
+            const overlay = document.getElementById('rulesOverlay');
+            if(overlay) {
+                overlay.style.display = 'flex';
+            }
+        };
+
+        // --- CLOSE RULES OVERLAY ---
         window.closeRulesOverlay = () => {
             const overlay = document.getElementById('rulesOverlay');
             if(overlay) {
                 overlay.style.display = 'none';
-                rulesShown = true;
-                // Starte das Spiel nach Schließen der Regeln
-                if(isHost && globalData) {
-                    startCountdownAfterRules();
-                }
             }
         };
-        
-        async function startCountdownAfterRules() {
-            await applyIceCooling(globalData.players);
-            const usedQuestions = globalData.usedQuestions || [];
-            const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions);
-            const nextRoundId = (globalData?.roundId ?? 0) + 1;
-            const countdownEnds = Date.now() + 3000;
-            await updateDoc(doc(db, "lobbies", roomId), {
-                status: 'countdown',
-                hotseat: Object.keys(globalData.players)[0],
-                currentQ: q,
-                votes: {},
-                ready: [],
-                roundId: nextRoundId,
-                countdownEnds,
-                lobbyReady: {},
-                usedQuestions: [...usedQuestions, qIdx]
-            });
-            setTimeout(() => {
-                updateDoc(doc(db, "lobbies", roomId), { status: 'game', countdownEnds: null });
-            }, 3300);
-        }
 
         // --- NEXT ROUND ---
         window.nextRound = async () => {
