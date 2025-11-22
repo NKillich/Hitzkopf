@@ -538,9 +538,9 @@
         <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:15px; margin-bottom:8px; font-weight:500;">Wähle dein Emoji:</label>
         <div style="position:relative; margin-bottom:15px;">
             <div id="emojiCarousel" style="display:flex; align-items:center; gap:10px; overflow:hidden; position:relative;">
-                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:#2a2a2a; border:2px solid #444; border-radius:50%; width:40px; height:40px; color:#fff; font-size:1.2rem; cursor:pointer; flex-shrink:0;">‹</button>
+                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:transparent; border:none; color:#fff; font-size:2rem; cursor:pointer; flex-shrink:0; padding:5px;">⬅️</button>
                 <div id="emojiDisplay" style="flex:1; text-align:center; font-size:3rem; min-height:60px; display:flex; align-items:center; justify-content:center;">😊</div>
-                <button id="emojiNext" onclick="changeEmoji(1)" style="background:#2a2a2a; border:2px solid #444; border-radius:50%; width:40px; height:40px; color:#fff; font-size:1.2rem; cursor:pointer; flex-shrink:0;">›</button>
+                <button id="emojiNext" onclick="changeEmoji(1)" style="background:transparent; border:none; color:#fff; font-size:2rem; cursor:pointer; flex-shrink:0; padding:5px;">➡️</button>
             </div>
             <input type="hidden" id="inpEmoji" value="😊">
         </div>
@@ -696,6 +696,18 @@
                 </div>
                 <div id="animTemp" style="font-size:1.5rem; font-weight:bold; color:#ff4500; margin-top:10px;">0°C</div>
             </div>
+            <div id="animCounter" style="font-size:0.9rem; color:#888; margin-top:15px; display:none;">Angriff 1 von 3</div>
+        </div>
+    </div>
+
+    <!-- ROUND RECAP OVERLAY -->
+    <div id="roundRecapOverlay" class="countdown-overlay" style="display:none;">
+        <div style="background:linear-gradient(145deg, #1e1e1e, #252525); padding:40px; border-radius:20px; max-width:700px; margin:20px; border:2px solid #ff4500; box-shadow:0 8px 32px rgba(0,0,0,0.8); text-align:center;">
+            <h2 style="color:#ff4500; margin-bottom:30px; font-size:2rem;">📊 Runden-Rekapitulation</h2>
+            <div id="recapContent" style="min-height:400px;">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
+            <button onclick="closeRoundRecap()" class="btn-primary" style="margin-top:20px; padding:15px 30px; font-size:1.1rem;">Weiter ⏭️</button>
         </div>
     </div>
 
@@ -788,7 +800,7 @@
         let rulesShown = false;
         
         // --- EMOJI SELECTION ---
-        const availableEmojis = ['😊', '😎', '🤠', '🥳', '😄', '🤩', '😇', '🧐', '🤓', '😋'];
+        const availableEmojis = ['😊', '😎', '🤠', '🥳', '😄', '🤩', '😇', '🧐', '🤓', '😋', '🐷', '👻', '🐄', '🐶', '🐱', '🐼', '🦁', '🐸', '🦊', '🐨'];
         let currentEmojiIndex = 0;
         
         window.changeEmoji = (direction) => {
@@ -1541,6 +1553,17 @@
                 maybeLogRoundSummary(data, truthText, truth);
             }
 
+            // Zeige Rekapitulation wenn alle bereit sind (nur einmal pro Runde)
+            if(data.ready.length >= Object.keys(data.players).length && !data.roundRecapShown) {
+                if(isHost) {
+                    updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
+                }
+                // Zeige Rekapitulation nach kurzer Verzögerung
+                setTimeout(() => {
+                    showRoundRecap(data);
+                }, 1500);
+            }
+
             if(myName === data.hotseat) {
                 statusEl.innerText = "Du hast die Frage beantwortet.";
                 statusEl.style.color = "#aaa";
@@ -1887,7 +1910,8 @@
                 votes: {},
                 ready: [],
                 roundId: nextRoundId,
-                usedQuestions: [...usedQuestions, qIdx]
+                usedQuestions: [...usedQuestions, qIdx],
+                roundRecapShown: false
             });
         };
 
