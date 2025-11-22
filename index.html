@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥 Webversion 2</title>
+    <title>Hitzkopf 🔥 Webversion 3</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -537,10 +537,10 @@
         <input type="text" id="inpName" placeholder="Dein Name" maxlength="20" autocomplete="off">
         <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:15px; margin-bottom:8px; font-weight:500;">Wähle dein Emoji:</label>
         <div style="position:relative; margin-bottom:15px;">
-            <div id="emojiCarousel" style="display:flex; align-items:center; gap:10px; overflow:hidden; position:relative;">
-                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:transparent; border:none; color:#fff; font-size:2rem; cursor:pointer; flex-shrink:0; padding:5px;">⬅️</button>
-                <div id="emojiDisplay" style="flex:1; text-align:center; font-size:3rem; min-height:60px; display:flex; align-items:center; justify-content:center;">😊</div>
-                <button id="emojiNext" onclick="changeEmoji(1)" style="background:transparent; border:none; color:#fff; font-size:2rem; cursor:pointer; flex-shrink:0; padding:5px;">➡️</button>
+            <div id="emojiCarousel" style="display:flex; align-items:center; gap:15px; overflow:hidden; position:relative; justify-content:center;">
+                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:transparent; border:none; color:#fff; font-size:2rem; cursor:pointer; flex-shrink:0; padding:5px; display:flex; align-items:center; justify-content:center;">⬅️</button>
+                <div id="emojiDisplay" style="text-align:center; font-size:4rem; min-height:80px; min-width:80px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border-radius:15px; padding:10px;">😊</div>
+                <button id="emojiNext" onclick="changeEmoji(1)" style="background:transparent; border:none; color:#fff; font-size:2rem; cursor:pointer; flex-shrink:0; padding:5px; display:flex; align-items:center; justify-content:center;">➡️</button>
             </div>
             <input type="hidden" id="inpEmoji" value="😊">
         </div>
@@ -1232,8 +1232,8 @@
                     showEliminationAnimation(eliminated, data.players[eliminated].temp);
                 });
 
-                // Prüfe ob nur noch ein Spieler übrig ist (Gewinner)
-                if(activePlayers.length === 1 && data.status !== 'winner' && data.status !== 'voting') {
+                // Prüfe ob nur noch ein Spieler übrig ist (Gewinner) - NUR während des Spiels
+                if((data.status === 'game' || data.status === 'result') && activePlayers.length === 1 && data.status !== 'winner' && data.status !== 'voting') {
                     const winner = activePlayers[0];
                     if(isHost) {
                         updateDoc(doc(db, "lobbies", roomId), {
@@ -1241,7 +1241,7 @@
                             winner: winner
                         }).catch(console.error);
                     }
-                } else if(activePlayers.length === 0 && data.status !== 'voting') {
+                } else if((data.status === 'game' || data.status === 'result') && activePlayers.length === 0 && data.status !== 'voting') {
                     // Fallback: Wenn alle raus sind, gewinnt der mit niedrigster Temperatur
                     let minTemp = 999;
                     let winner = null;
@@ -1883,15 +1883,18 @@
                 activePlayers.push(...Object.keys(globalData.players));
             }
             
-            if(activePlayers.length === 1) {
-                // Nur noch ein Spieler übrig - Gewinner!
-                if(isHost) {
-                    await updateDoc(doc(db, "lobbies", roomId), {
-                        status: 'winner',
-                        winner: activePlayers[0]
-                    });
+            // Prüfe nur während des Spiels, nicht in der Lobby
+            if(globalData?.status === 'game' || globalData?.status === 'result') {
+                if(activePlayers.length === 1) {
+                    // Nur noch ein Spieler übrig - Gewinner!
+                    if(isHost) {
+                        await updateDoc(doc(db, "lobbies", roomId), {
+                            status: 'winner',
+                            winner: activePlayers[0]
+                        });
+                    }
+                    return;
                 }
-                return;
             }
             
             const curr = globalData.hotseat;
