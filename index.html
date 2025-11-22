@@ -659,7 +659,6 @@
         const sleep = (ms = 0) => new Promise(res => setTimeout(res, ms));
 
         const questions = [
-        [
             { q: "Lieber Butter oder Margarine?", a: "Butter 🧈", b: "Margarine 🥄" },
             { q: "Lieber Kaffee oder Tee?", a: "Kaffee ☕", b: "Tee 🍵" },
             { q: "Lieber Film oder Serie?", a: "Film 🎬", b: "Serie 📺" },
@@ -761,7 +760,6 @@
             { q: "Lieber Nudeln al dente oder weich?", a: "Al Dente 👌🍝", b: "Weich 😴🍜" },
             { q: "Lieber Musik mit oder ohne Text?", a: "Mit Text 🗣️🎵", b: "Instrumental 🎼🎧" },
             { q: "Lieber Füller oder Kugelschreiber?", a: "Füller 🖋️✨", b: "Kugelschreiber 🖊️💪" }
-]
         ];
         
         function getRandomUnusedQuestion(usedQuestions = []) {
@@ -994,6 +992,18 @@
                     }
                 }
                 else if(data.status === 'game') {
+                    // Sicherstellen, dass currentQ gesetzt ist
+                    if(!data.currentQ || !data.currentQ.q) {
+                        if(isHost) {
+                            const usedQuestions = data.usedQuestions || [];
+                            const { question: q } = getRandomUnusedQuestion(usedQuestions);
+                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q });
+                            data.currentQ = q;
+                        } else {
+                            // Fallback für Nicht-Hosts
+                            data.currentQ = questions[0] || { q: "Lade Frage...", a: "A", b: "B" };
+                        }
+                    }
                     if(readyBtn) readyBtn.style.display = 'none';
                     if(readyStatus) readyStatus.innerText = "";
                     if(readyList) readyList.innerHTML = "";
@@ -1009,6 +1019,18 @@
                     }
                 }
                 else if(data.status === 'result') {
+                    // Sicherstellen, dass currentQ gesetzt ist
+                    if(!data.currentQ || !data.currentQ.q) {
+                        if(isHost) {
+                            const usedQuestions = data.usedQuestions || [];
+                            const { question: q } = getRandomUnusedQuestion(usedQuestions);
+                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q });
+                            data.currentQ = q;
+                        } else {
+                            // Fallback für Nicht-Hosts
+                            data.currentQ = questions[0] || { q: "Lade Frage...", a: "A", b: "B" };
+                        }
+                    }
                     if(readyBtn) readyBtn.style.display = 'none';
                     if(readyStatus) readyStatus.innerText = "";
                     if(readyList) readyList.innerHTML = "";
@@ -1049,9 +1071,17 @@
                 btnLock.disabled = !mySelection;
             }
 
-            document.getElementById('lblQuestion').innerText = data.currentQ.q;
-            btnA.innerText = data.currentQ.a;
-            btnB.innerText = data.currentQ.b;
+            if(data.currentQ && data.currentQ.q) {
+                document.getElementById('lblQuestion').innerText = data.currentQ.q;
+                btnA.innerText = data.currentQ.a || 'A';
+                btnB.innerText = data.currentQ.b || 'B';
+            } else {
+                // Fallback falls currentQ fehlt
+                const fallbackQ = questions[0] || { q: "Lade Frage...", a: "A", b: "B" };
+                document.getElementById('lblQuestion').innerText = fallbackQ.q;
+                btnA.innerText = fallbackQ.a;
+                btnB.innerText = fallbackQ.b;
+            }
             
             if(!data.hotseat) {
                 lblHotseat.innerText = "Hotseat wird vorbereitet...";
@@ -1082,7 +1112,10 @@
         // --- RENDER RESULT ---
         function renderResult(data) {
             const truth = data.votes[data.hotseat]?.choice;
-            const truthText = truth ? (truth === 'A' ? data.currentQ.a : data.currentQ.b) : '?';
+            let truthText = '?';
+            if(truth && data.currentQ) {
+                truthText = truth === 'A' ? (data.currentQ.a || 'A') : (data.currentQ.b || 'B');
+            }
             document.getElementById('lblTruth').innerText = truthText;
 
             const myVote = data.votes[myName];
