@@ -470,6 +470,18 @@
         <div id="countdownText" class="countdown-text">3</div>
         <div class="countdown-sub">Bereit machen...</div>
     </div>
+    <div id="rulesOverlay" class="countdown-overlay" style="display:none;">
+        <div style="background:linear-gradient(145deg, #1e1e1e, #252525); padding:30px; border-radius:20px; max-width:500px; margin:20px; border:2px solid #ff4500; box-shadow:0 8px 32px rgba(0,0,0,0.8);">
+            <h2 style="color:#ff4500; margin-bottom:20px; font-size:1.8rem;">📖 Spielregeln</h2>
+            <div style="text-align:left; font-size:1rem; line-height:1.6; color:#fff; margin-bottom:25px;">
+                <p style="margin-bottom:12px;">🎯 <strong>Ziel:</strong> Errate die Antworten deiner Freunde und bringe sie zum kochen!</p>
+                <p style="margin-bottom:12px;">🔥 <strong>Verlierer:</strong> Wer als erstes 100° erreicht, fliegt raus.</p>
+                <p style="margin-bottom:12px;">🧊 <strong>Gewinner:</strong> Bewahrst du einen kühlen Kopf, entscheidest du das Spiel für dich.</p>
+                <p style="margin-bottom:0;">💡 <strong>Tipp:</strong> Bei richtigem Raten kannst du Gegner aufheizen oder Joker ziehen!</p>
+            </div>
+            <button onclick="closeRulesOverlay()" class="btn-primary" style="width:100%; padding:15px; font-size:1.1rem;">Verstanden, los geht's! 🚀</button>
+        </div>
+    </div>
     <div class="overlay" id="menuOverlay" onclick="toggleMenu()"></div>
     <div class="admin-drawer" id="adminDrawer">
         <h3 style="color:#ff4500; border-bottom:2px solid #333; padding-bottom:12px; margin-bottom:15px;">⚙️ Menü</h3>
@@ -491,6 +503,12 @@
     <div id="screen-start" class="screen active card">
         <h3 style="margin-bottom:15px; color:#ff8c00;">Wie heißt du?</h3>
         <input type="text" id="inpName" placeholder="Dein Name" maxlength="20" autocomplete="off">
+        <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:10px; margin-bottom:5px; font-weight:500;">Geschlecht (für korrekte Texte):</label>
+        <select id="inpGender" style="margin-bottom:15px;">
+            <option value="divers">Divers</option>
+            <option value="männlich">Männlich</option>
+            <option value="weiblich">Weiblich</option>
+        </select>
         
         <div class="start-actions">
             <button class="btn-primary" onclick="openHostSettings()">🔥 Hosten</button>
@@ -505,7 +523,26 @@
                 <option value="20">20°C (Intensiv) 🔥</option>
                 <option value="60">60°C (Speed-Modus) ⚡</option>
             </select>
-            <button class="btn-primary" onclick="createGame()">🎮 Spiel erstellen</button>
+            <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:12px; margin-bottom:5px; font-weight:500;">Spielgeschwindigkeit (Multiplikator):</label>
+            <select id="inpSpeed">
+                <option value="1.0">1.0x (Normal) ⏱️</option>
+                <option value="0.5">0.5x (Langsam) 🐌</option>
+                <option value="1.5">1.5x (Schnell) ⚡</option>
+                <option value="2.0">2.0x (Sehr schnell) 🚀</option>
+            </select>
+            <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:12px; margin-bottom:5px; font-weight:500;">Starttemperatur:</label>
+            <select id="inpStartTemp">
+                <option value="0">0°C (Standard) ❄️</option>
+                <option value="10">10°C (Warm starten) 🔥</option>
+                <option value="20">20°C (Heiß starten) 🌡️</option>
+            </select>
+            <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:12px; margin-bottom:5px; font-weight:500;">Maximale Temperatur:</label>
+            <select id="inpMaxTemp">
+                <option value="100">100°C (Standard) 🔥</option>
+                <option value="80">80°C (Kürzer) ⚡</option>
+                <option value="120">120°C (Länger) 🕐</option>
+            </select>
+            <button class="btn-primary" onclick="createGame()" style="margin-top:15px;">🎮 Spiel erstellen</button>
         </div>
 
         <div id="joinPanel" class="start-panel hidden">
@@ -542,11 +579,12 @@
         <h3 id="lblQuestion" style="margin:20px 0; min-height:60px; display:flex; align-items:center; justify-content:center;">Lade Frage...</h3>
 
         <div id="stratSection" style="margin-top:15px;">
-            <p style="font-size:0.85rem; color:#888; margin-bottom:8px; font-weight:600;">WENN DU RICHTIG LIEGST:</p>
+            <p style="font-size:0.85rem; color:#888; margin-bottom:8px; font-weight:600;">WENN DU RICHTIG LIEGST (Vorauswahl):</p>
             <div class="option-row" style="gap:12px; margin-top:10px;">
                 <button id="btnStratAttack" class="btn-option" onclick="selectStrategy('attack')" style="flex:1; padding:20px 10px; font-size:1.1rem; font-weight:bold;">🔴 Angriff</button>
                 <button id="btnStratInvest" class="btn-option" onclick="selectStrategy('invest')" style="flex:1; padding:20px 10px; font-size:1.1rem; font-weight:bold;">🃏 Joker ziehen</button>
             </div>
+            <p style="font-size:0.75rem; color:#666; margin-top:8px; font-style:italic;">💡 Du kannst deine Entscheidung später noch ändern!</p>
         </div>
 
         <div class="option-row" id="optionRow" style="margin-top:15px; opacity:0.5; pointer-events:none;">
@@ -568,6 +606,18 @@
         
         <h3>Die Wahrheit: <span id="lblTruth" style="color:#fff;">?</span></h3>
         <h2 id="lblResultStatus" style="margin:10px 0;">...</h2>
+
+        <div id="boxReward" style="display:none; background:#2a3a1a; padding:15px; border-radius:10px; margin-bottom:15px; border:2px solid #4a6a2a;">
+            <h4 style="margin:0 0 12px 0; color:#8fef8f;">🎁 Belohnung wählen:</h4>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <button onclick="chooseReward('attack')" style="background:linear-gradient(135deg, #dc3545, #c82333); color:white; padding:20px; border-radius:10px; border:none; font-size:1.1rem; font-weight:bold; cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    🔴 Gegner aufheizen
+                </button>
+                <button onclick="chooseReward('invest')" style="background:linear-gradient(135deg, #1a2a3a, #2a3a4a); color:white; padding:20px; border-radius:10px; border:none; font-size:1.1rem; font-weight:bold; cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    🃏 Joker ziehen
+                </button>
+            </div>
+        </div>
 
         <div id="boxAttack" style="display:none; background:#3a1a1a; padding:10px; border-radius:10px; margin-bottom:15px;">
             <h4 style="margin:0 0 10px 0;">🔥 Wen angreifen?</h4>
@@ -642,6 +692,7 @@
 
         // --- STATE ---
         let myName = sessionStorage.getItem("hk_name") || "";
+        let myGender = sessionStorage.getItem("hk_gender") || "divers";
         let roomId = sessionStorage.getItem("hk_room") || "";
         let isHost = false;
         let localActionDone = false;
@@ -656,6 +707,33 @@
         let attackAlertTimer = null;
         let countdownInterval = null;
         let countdownTarget = null;
+        let rulesShown = false;
+        
+        // --- GENDERING FUNCTION ---
+        function genderText(text, gender = myGender) {
+            if(!text || typeof text !== 'string') return text;
+            const patterns = {
+                männlich: { 'er/ihn': 'er', 'ihn': 'ihn', 'sein': 'sein', 'seine': 'seine', 'seinen': 'seinen', 'seiner': 'seiner' },
+                weiblich: { 'er/ihn': 'sie', 'ihn': 'sie', 'sein': 'ihr', 'seine': 'ihre', 'seinen': 'ihren', 'seiner': 'ihrer' },
+                divers: { 'er/ihn': 'sie', 'ihn': 'sie', 'sein': 'ihr', 'seine': 'ihre', 'seinen': 'ihren', 'seiner': 'ihrer' }
+            };
+            const replacements = patterns[gender] || patterns.divers;
+            let result = text;
+            Object.keys(replacements).forEach(key => {
+                const regex = new RegExp(`\\b${key}\\b`, 'gi');
+                result = result.replace(regex, replacements[key]);
+            });
+            return result;
+        }
+        
+        function getGenderPronoun(gender = myGender) {
+            const pronouns = {
+                männlich: { subject: 'er', object: 'ihn', possessive: 'sein', possessiveAdj: 'seine' },
+                weiblich: { subject: 'sie', object: 'sie', possessive: 'ihr', possessiveAdj: 'ihre' },
+                divers: { subject: 'sie', object: 'sie', possessive: 'ihr', possessiveAdj: 'ihre' }
+            };
+            return pronouns[gender] || pronouns.divers;
+        }
 
         const sleep = (ms = 0) => new Promise(res => setTimeout(res, ms));
 
@@ -794,6 +872,7 @@
         // --- AUTO LOGIN ---
         if(myName && roomId) {
             document.getElementById('inpName').value = myName;
+            document.getElementById('inpGender').value = myGender;
             document.getElementById('inpCode').value = roomId;
             setTimeout(() => joinGame(), 500);
         }
@@ -844,23 +923,29 @@
         // --- CREATE GAME ---
         window.createGame = async () => {
             const name = document.getElementById('inpName').value.trim();
+            const gender = document.getElementById('inpGender').value;
             const dmg = parseInt(document.getElementById('inpDmg').value);
+            const speed = parseFloat(document.getElementById('inpSpeed').value);
+            const startTemp = parseInt(document.getElementById('inpStartTemp').value);
+            const maxTemp = parseInt(document.getElementById('inpMaxTemp').value);
             if(!name) {
                 showToast("Bitte gib einen Namen ein!");
                 return;
             }
             
             const code = Math.random().toString(36).substring(2,6).toUpperCase();
-            myName = name; 
+            myName = name;
+            myGender = gender;
             roomId = code;
             sessionStorage.setItem("hk_name", name);
+            sessionStorage.setItem("hk_gender", gender);
             sessionStorage.setItem("hk_room", code);
 
             await setDoc(doc(db, "lobbies", code), {
                 host: name,
                 status: "lobby",
-                players: { [name]: { temp: 0, inventory: [] } },
-                config: { dmg: dmg },
+                players: { [name]: { temp: startTemp, inventory: [], gender: gender } },
+                config: { dmg: dmg, speed: speed, startTemp: startTemp, maxTemp: maxTemp },
                 votes: {},
                 ready: [],
                 log: [],
@@ -877,15 +962,18 @@
         // --- JOIN GAME ---
         window.joinGame = async () => {
             const name = document.getElementById('inpName').value.trim();
+            const gender = document.getElementById('inpGender').value;
             const code = document.getElementById('inpCode').value.trim().toUpperCase();
             if(!name || !code) {
                 showToast("Bitte gib Name und Code ein!");
                 return;
             }
             
-            myName = name; 
+            myName = name;
+            myGender = gender;
             roomId = code;
             sessionStorage.setItem("hk_name", name);
+            sessionStorage.setItem("hk_gender", gender);
             sessionStorage.setItem("hk_room", code);
 
             const ref = doc(db, "lobbies", code);
@@ -895,8 +983,13 @@
                 return;
             }
 
-            if(!snap.data().players[name]) {
-                await updateDoc(ref, { [`players.${name}`]: { temp: 0, inventory: [] } });
+            const data = snap.data();
+            const startTemp = data.config?.startTemp || 0;
+            if(!data.players[name]) {
+                await updateDoc(ref, { [`players.${name}`]: { temp: startTemp, inventory: [], gender: gender } });
+            } else {
+                // Geschlecht aktualisieren falls bereits vorhanden
+                await updateDoc(ref, { [`players.${name}.gender`]: gender });
             }
             connectToLobby();
         };
@@ -952,8 +1045,9 @@
                 let dead = null;
                 let winner = null;
                 let minTemp = 999;
+                const maxTemp = data.config?.maxTemp || 100;
                 Object.keys(data.players).forEach(p => {
-                    if(data.players[p].temp >= 100) dead = p;
+                    if(data.players[p].temp >= maxTemp) dead = p;
                     if(data.players[p].temp < minTemp) { 
                         minTemp = data.players[p].temp; 
                         winner = p; 
@@ -1099,18 +1193,13 @@
                 btnA.classList.remove('selected');
                 btnB.classList.remove('selected');
                 btnLock.disabled = true;
-                // Strategie zurücksetzen
+                // Strategie zurücksetzen (nur Vorauswahl)
                 myStrategy = null;
                 const btnAttack = document.getElementById('btnStratAttack');
                 const btnInvest = document.getElementById('btnStratInvest');
                 if(btnAttack) btnAttack.classList.remove('selected');
                 if(btnInvest) btnInvest.classList.remove('selected');
-                // A/B Buttons deaktivieren
-                const optionRow = document.getElementById('optionRow');
-                if(optionRow) {
-                    optionRow.style.opacity = '0.5';
-                    optionRow.style.pointerEvents = 'none';
-                }
+                // A/B Buttons werden später aktiviert, wenn hotseat gesetzt ist
             }
 
             if(data.votes[myName]) {
@@ -1137,12 +1226,8 @@
                 if(btnAttack) btnAttack.disabled = false;
                 if(btnInvest) btnInvest.disabled = false;
                 
-                // Für Hotseat: nur mySelection prüfen, für andere: beides prüfen
-                if(isHotseat) {
-                    btnLock.disabled = !mySelection;
-                } else {
-                    btnLock.disabled = !mySelection || !myStrategy;
-                }
+                // Strategie ist nur eine Vorauswahl, nicht mehr zwingend
+                btnLock.disabled = !mySelection;
             }
 
             // Robustere Behandlung von currentQ (Firebase kann Objekte anders serialisieren)
@@ -1177,11 +1262,11 @@
                 lblHotseat.innerText = "Runde wird vorbereitet...";
                 lblHotseatSub.innerText = "Bitte kurz warten.";
                 document.getElementById('stratSection').classList.remove('hidden');
-                // A/B Buttons deaktivieren, bis Strategie gewählt
+                // A/B Buttons aktivieren (Strategie ist nur Vorauswahl)
                 const optionRow = document.getElementById('optionRow');
-                if(optionRow && !myStrategy) {
-                    optionRow.style.opacity = '0.5';
-                    optionRow.style.pointerEvents = 'none';
+                if(optionRow) {
+                    optionRow.style.opacity = '1';
+                    optionRow.style.pointerEvents = 'auto';
                 }
             } else if(myName === data.hotseat) {
                 lblHotseat.innerText = "Du bist der Hitzkopf!";
@@ -1197,11 +1282,11 @@
                 lblHotseat.innerText = `${data.hotseat} ist der Hitzkopf!`;
                 lblHotseatSub.innerText = "Errate die Wahl des Hitzkopfs, um anzugreifen oder Joker zu ziehen.";
                 document.getElementById('stratSection').classList.remove('hidden');
-                // A/B Buttons deaktivieren, bis Strategie gewählt
+                // A/B Buttons aktivieren (Strategie ist nur Vorauswahl)
                 const optionRow = document.getElementById('optionRow');
-                if(optionRow && !myStrategy) {
-                    optionRow.style.opacity = '0.5';
-                    optionRow.style.pointerEvents = 'none';
+                if(optionRow) {
+                    optionRow.style.opacity = '1';
+                    optionRow.style.pointerEvents = 'auto';
                 }
             }
             
@@ -1271,18 +1356,17 @@
                 statusEl.style.color = "#aaa";
             } else {
                 if(myVote && myVote.choice === truth) {
-                    statusEl.innerText = "✅ RICHTIG!";
+                    statusEl.innerHTML = "✅ <strong>RICHTIG GERATEN!</strong><br><span style='font-size:0.9rem; font-weight:normal;'>Hier ist deine Belohnung, wie möchtest du vorgehen?</span>";
                     statusEl.style.color = "#0f0";
 
                     if(!localActionDone) {
                         btnReady.disabled = true;
                         btnReady.innerText = "⚡ Wähle deine Belohnung!";
                         
-                        if(myVote.strategy === 'invest') {
-                            boxShop.style.display = 'block';
-                        } else {
-                            boxAttack.style.display = 'block';
-                            renderTargets(data.players);
+                        // Zeige immer beide Optionen an, unabhängig von der vorherigen Strategie
+                        const rewardBoxEl = document.getElementById('boxReward');
+                        if(rewardBoxEl) {
+                            rewardBoxEl.style.display = 'block';
                         }
                     }
                 } else {
@@ -1322,21 +1406,14 @@
             myStrategy = strat;
             const btnAttack = document.getElementById('btnStratAttack');
             const btnInvest = document.getElementById('btnStratInvest');
-            const optionRow = document.getElementById('optionRow');
             const lockBtn = document.getElementById('btnLock');
             
-            // Buttons markieren
+            // Buttons markieren (nur visuelle Vorauswahl)
             if(btnAttack) {
                 btnAttack.classList.toggle('selected', strat === 'attack');
             }
             if(btnInvest) {
                 btnInvest.classList.toggle('selected', strat === 'invest');
-            }
-            
-            // A/B Buttons aktivieren
-            if(optionRow) {
-                optionRow.style.opacity = '1';
-                optionRow.style.pointerEvents = 'auto';
             }
             
             // Lock-Button aktivieren, wenn bereits A/B gewählt wurde
@@ -1347,17 +1424,7 @@
 
         // --- VOTE ---
         window.vote = (opt) => {
-            // Prüfe ob Hotseat (dann keine Strategie nötig)
-            const stratSection = document.getElementById('stratSection');
-            const isHotseat = stratSection && stratSection.classList.contains('hidden');
-            
-            if(!isHotseat) {
-                if(!myStrategy) {
-                    showToast("Bitte wähle zuerst eine Strategie!");
-                    return;
-                }
-            }
-            
+            // Strategie ist nur eine Vorauswahl, nicht mehr zwingend erforderlich
             mySelection = opt;
             document.getElementById('btnA').classList.toggle('selected', opt === 'A');
             document.getElementById('btnB').classList.toggle('selected', opt === 'B');
@@ -1371,15 +1438,14 @@
             const stratSection = document.getElementById('stratSection');
             const isHotseat = stratSection && stratSection.classList.contains('hidden');
             
-            let strat = myStrategy;
-            if(!isHotseat && !strat) {
-                showToast("Bitte wähle zuerst eine Strategie!");
-                return;
-            }
             if(!mySelection) {
                 showToast("Bitte wähle zuerst eine Antwort (A oder B)!");
                 return;
             }
+            
+            // Strategie ist nur eine Vorauswahl, wird nicht mehr bindend gespeichert
+            // Die finale Entscheidung wird im Result-Screen getroffen
+            let strat = myStrategy || 'none'; // Vorauswahl oder 'none' als Fallback
             
             // Hotseat braucht keine Strategie (wird ignoriert)
             if(isHotseat) {
@@ -1393,9 +1459,27 @@
             });
         };
 
+        // --- CHOOSE REWARD ---
+        window.chooseReward = (rewardType) => {
+            const rewardBox = document.getElementById('boxReward');
+            if(rewardBox) rewardBox.style.display = 'none';
+            
+            const boxAttack = document.getElementById('boxAttack');
+            const boxShop = document.getElementById('boxShop');
+            
+            if(rewardType === 'attack') {
+                boxAttack.style.display = 'block';
+                renderTargets(globalData.players);
+            } else if(rewardType === 'invest') {
+                boxShop.style.display = 'block';
+            }
+        };
+
         // --- ATTACK ---
         window.doAttack = async (target) => {
             localActionDone = true;
+            const rewardBox = document.getElementById('boxReward');
+            if(rewardBox) rewardBox.style.display = 'none';
             document.getElementById('boxAttack').style.display = 'none';
             document.getElementById('btnReady').disabled = false;
             
@@ -1437,6 +1521,8 @@
         // --- TAKE CARD ---
         window.takeCard = async (card) => {
             localActionDone = true;
+            const rewardBox = document.getElementById('boxReward');
+            if(rewardBox) rewardBox.style.display = 'none';
             document.getElementById('boxShop').style.display = 'none';
             document.getElementById('btnReady').disabled = false;
 
@@ -1456,6 +1542,8 @@
         // --- SKIP ATTACK ---
         window.skipAttack = async () => {
             localActionDone = true;
+            const rewardBox = document.getElementById('boxReward');
+            if(rewardBox) rewardBox.style.display = 'none';
             document.getElementById('boxAttack').style.display = 'none';
             document.getElementById('btnReady').disabled = false;
             document.getElementById('btnReady').innerText = "👍 Bereit";
@@ -1484,6 +1572,17 @@
                 showToast(`Noch nicht alle bereit: ${unready.join(', ')}`);
                 return;
             }
+            
+            // Zeige Regeln beim ersten Start
+            if(!rulesShown) {
+                const rulesOverlay = document.getElementById('rulesOverlay');
+                if(rulesOverlay) {
+                    rulesOverlay.style.display = 'flex';
+                    // Warte auf Schließen der Regeln
+                    return;
+                }
+            }
+            
             await applyIceCooling(globalData.players);
             const usedQuestions = globalData.usedQuestions || [];
             const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions);
@@ -1504,6 +1603,41 @@
                 updateDoc(doc(db, "lobbies", roomId), { status: 'game', countdownEnds: null });
             }, 3300);
         };
+        
+        // Starte Spiel nach Schließen der Regeln
+        window.closeRulesOverlay = () => {
+            const overlay = document.getElementById('rulesOverlay');
+            if(overlay) {
+                overlay.style.display = 'none';
+                rulesShown = true;
+                // Starte das Spiel nach Schließen der Regeln
+                if(isHost && globalData) {
+                    startCountdownAfterRules();
+                }
+            }
+        };
+        
+        async function startCountdownAfterRules() {
+            await applyIceCooling(globalData.players);
+            const usedQuestions = globalData.usedQuestions || [];
+            const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions);
+            const nextRoundId = (globalData?.roundId ?? 0) + 1;
+            const countdownEnds = Date.now() + 3000;
+            await updateDoc(doc(db, "lobbies", roomId), {
+                status: 'countdown',
+                hotseat: Object.keys(globalData.players)[0],
+                currentQ: q,
+                votes: {},
+                ready: [],
+                roundId: nextRoundId,
+                countdownEnds,
+                lobbyReady: {},
+                usedQuestions: [...usedQuestions, qIdx]
+            });
+            setTimeout(() => {
+                updateDoc(doc(db, "lobbies", roomId), { status: 'game', countdownEnds: null });
+            }, 3300);
+        }
 
         // --- NEXT ROUND ---
         window.nextRound = async () => {
