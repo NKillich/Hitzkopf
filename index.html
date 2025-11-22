@@ -489,7 +489,7 @@
 
     <!-- START SCREEN -->
     <div id="screen-start" class="screen active card">
-        <h3 style="margin-bottom:10px; color:#ff8c00;">Wie heißt du?</h3>
+        <h3 style="margin-bottom:15px; color:#ff8c00;">Wie heißt du?</h3>
         <input type="text" id="inpName" placeholder="Dein Name" maxlength="20" autocomplete="off">
         
         <div class="start-actions">
@@ -498,18 +498,18 @@
         </div>
 
         <div id="hostSettings" class="start-panel hidden">
-            <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px;">Host-Einstellungen</p>
-            <label style="display:block; font-size:0.8rem; color:#888;">Schaden pro Angriff:</label>
+            <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px; font-weight:600;">⚙️ Host-Einstellungen</p>
+            <label style="display:block; font-size:0.85rem; color:#aaa; margin-bottom:5px; font-weight:500;">Schaden pro Angriff:</label>
             <select id="inpDmg">
-                <option value="10">10°C (Normal)</option>
-                <option value="20">20°C (Intensiv)</option>
-                <option value="60">60°C (Speed-Modus)</option>
+                <option value="10">10°C (Normal) ⚖️</option>
+                <option value="20">20°C (Intensiv) 🔥</option>
+                <option value="60">60°C (Speed-Modus) ⚡</option>
             </select>
             <button class="btn-primary" onclick="createGame()">🎮 Spiel erstellen</button>
         </div>
 
         <div id="joinPanel" class="start-panel hidden">
-            <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px;">Beitreten</p>
+            <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px; font-weight:600;">🤝 Lobby beitreten</p>
             <input type="text" id="inpCode" placeholder="Raum-Code" style="text-transform:uppercase;" maxlength="6" autocomplete="off" oninput="this.value = this.value.toUpperCase();">
             <button class="btn-secondary" onclick="joinGame()">🚪 Beitreten</button>
         </div>
@@ -525,7 +525,7 @@
         <div id="lobbyReadyStatus" style="font-size:0.85rem; color:#777; margin-top:5px;"></div>
         <button id="btnHostStart" class="btn-primary" style="display:none;" onclick="startCountdown()">🔥 Spiel starten</button>
         <button id="btnShare" class="share-btn" style="display:none;" onclick="shareLobby()">📤 Link teilen</button>
-        <p id="lblWait" style="color:#666;">Warte auf Host...</p>
+        <p id="lblWait" style="color:#666; font-size:0.9rem;">⏳ Warte auf Host...</p>
     </div>
 
     <!-- GAME SCREEN -->
@@ -539,10 +539,10 @@
             <p id="lblHotseatSub" style="font-size:0.85rem; color:#aaa; margin-top:4px;"></p>
         </div>
         
-        <h3 id="lblQuestion" style="margin:20px 0;">Lade...</h3>
+        <h3 id="lblQuestion" style="margin:20px 0; min-height:60px; display:flex; align-items:center; justify-content:center;">Lade Frage...</h3>
 
         <div id="stratSection" style="margin-top:15px;">
-            <p style="font-size:0.8rem; color:#666; margin-bottom:8px;">WENN DU RICHTIG LIEGST:</p>
+            <p style="font-size:0.85rem; color:#888; margin-bottom:8px; font-weight:600;">WENN DU RICHTIG LIEGST:</p>
             <div class="option-row" style="gap:12px; margin-top:10px;">
                 <button id="btnStratAttack" class="btn-option" onclick="selectStrategy('attack')" style="flex:1; padding:20px 10px; font-size:1.1rem; font-weight:bold;">🔴 Angriff</button>
                 <button id="btnStratInvest" class="btn-option" onclick="selectStrategy('invest')" style="flex:1; padding:20px 10px; font-size:1.1rem; font-weight:bold;">🃏 Joker ziehen</button>
@@ -554,7 +554,7 @@
             <button id="btnB" class="btn-option" onclick="vote('B')">B</button>
         </div>
 
-        <button id="btnLock" class="btn-primary" style="margin-top:20px;" onclick="submitVote()">🔒 Einloggen</button>
+        <button id="btnLock" class="btn-primary" style="margin-top:20px;" onclick="submitVote()">🔒 Antwort absenden</button>
         <div id="lblVoteStatus" style="font-size:0.8rem; color:#888; margin-top:10px;"></div>
         <div class="joker-panel">
             <h4>Deine Joker</h4>
@@ -566,17 +566,17 @@
     <div id="screen-result" class="screen card">
         <div id="gridResult" class="thermo-grid"></div>
         
-        <h3>Wahrheit: <span id="lblTruth" style="color:#fff;">?</span></h3>
+        <h3>Die Wahrheit: <span id="lblTruth" style="color:#fff;">?</span></h3>
         <h2 id="lblResultStatus" style="margin:10px 0;">...</h2>
 
         <div id="boxAttack" style="display:none; background:#3a1a1a; padding:10px; border-radius:10px; margin-bottom:15px;">
-            <h4 style="margin:0 0 10px 0;">🔥 Wen bestrafen?</h4>
+            <h4 style="margin:0 0 10px 0;">🔥 Wen angreifen?</h4>
             <div id="divTargets" style="display:grid; grid-template-columns:1fr 1fr; gap:5px;"></div>
-            <button style="background:transparent; border:1px solid #666; color:#aaa; font-size:0.7rem; margin-top:10px; padding:8px;" onclick="skipAttack()">Überspringen</button>
+            <button style="background:transparent; border:1px solid #666; color:#aaa; font-size:0.7rem; margin-top:10px; padding:8px;" onclick="skipAttack()">Angriff überspringen</button>
         </div>
 
         <div id="boxShop" style="display:none; background:#1a2a3a; padding:10px; border-radius:10px; margin-bottom:15px;">
-            <h4 style="margin:0 0 10px 0;">🃏 Karte wählen:</h4>
+            <h4 style="margin:0 0 10px 0;">🃏 Joker-Karte wählen:</h4>
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
                 <button class="card-select-btn" onclick="takeCard('card_oil')">
                     <strong>🛢️ Ölfass</strong>
@@ -593,7 +593,7 @@
             </div>
         </div>
 
-        <div style="text-align:left; font-size:0.7rem; color:#666;">LOG:</div>
+        <div style="text-align:left; font-size:0.7rem; color:#666; margin-bottom:5px;">📋 Spielverlauf:</div>
         <div id="divLog" class="log-box"></div>
 
         <button id="btnReady" class="btn-ready" onclick="setReady()">👍 Bereit</button>
@@ -619,8 +619,8 @@
             </div>
         </div>
         <div id="finalRanking" class="final-ranking"></div>
-        <button id="btnRematch" style="background:#ff4500; margin-top:25px;" onclick="rematchGame()">♻️ Revanche</button>
-        <button style="background:#444; margin-top:10px;" onclick="leaveLobby()">Verlassen</button>
+        <button id="btnRematch" style="background:#ff4500; margin-top:25px;" onclick="rematchGame()">♻️ Revanche starten</button>
+        <button style="background:#444; margin-top:10px;" onclick="leaveLobby()">🚪 Lobby verlassen</button>
     </div>
     <div id="toast" class="toast"></div>
     <script type="module">
@@ -732,7 +732,7 @@
             { q: "Lieber in der ersten oder letzten Reihe sitzen (Kino/Theater)?", a: "Erste Reihe 🥇", b: "Letzte Reihe 🔚" },
             { q: "Lieber Videospiele spielen oder Brettspiele?", a: "Video 🎮", b: "Brett 🎲" },
             { q: "Lieber Marmelade oder Nutella?", a: "Marmelade 🍓", b: "Nutella 🍫" },
-            { q: "Lieber lieber warm oder kalt trinken?", a: "Warm ♨️☕", b: "Kalt 🧊🥤" },
+            { q: "Lieber warm oder kalt trinken?", a: "Warm ♨️☕", b: "Kalt 🧊🥤" },
             { q: "Lieber Fleisch oder Fisch?", a: "Fleisch 🥩", b: "Fisch 🐟" },
             { q: "Lieber Süßkartoffel oder normale Kartoffel?", a: "Süß 🍠", b: "Normal 🥔" },
             { q: "Lieber Hemd oder T-Shirt?", a: "Hemd 👔", b: "T-Shirt 👕" },
@@ -845,7 +845,10 @@
         window.createGame = async () => {
             const name = document.getElementById('inpName').value.trim();
             const dmg = parseInt(document.getElementById('inpDmg').value);
-            if(!name) return alert("Bitte Namen eingeben!");
+            if(!name) {
+                showToast("Bitte gib einen Namen ein!");
+                return;
+            }
             
             const code = Math.random().toString(36).substring(2,6).toUpperCase();
             myName = name; 
@@ -875,7 +878,10 @@
         window.joinGame = async () => {
             const name = document.getElementById('inpName').value.trim();
             const code = document.getElementById('inpCode').value.trim().toUpperCase();
-            if(!name || !code) return alert("Name und Code erforderlich!");
+            if(!name || !code) {
+                showToast("Bitte gib Name und Code ein!");
+                return;
+            }
             
             myName = name; 
             roomId = code;
@@ -884,7 +890,10 @@
 
             const ref = doc(db, "lobbies", code);
             const snap = await getDoc(ref);
-            if(!snap.exists()) return alert("Lobby nicht gefunden!");
+            if(!snap.exists()) {
+                showToast("Lobby nicht gefunden! Prüfe den Code.");
+                return;
+            }
 
             if(!snap.data().players[name]) {
                 await updateDoc(ref, { [`players.${name}`]: { temp: 0, inventory: [] } });
@@ -920,7 +929,7 @@
                 if(data.status === 'closed') {
                     if(!lobbyClosedHandled) {
                         lobbyClosedHandled = true;
-                        alert("🛑 Host hat die Lobby beendet.");
+                        showToast("🛑 Host hat die Lobby beendet.");
                     }
                     sessionStorage.clear();
                     setTimeout(() => location.reload(), 200);
@@ -1165,7 +1174,7 @@
             }
             
             if(!data.hotseat) {
-                lblHotseat.innerText = "Hotseat wird vorbereitet...";
+                lblHotseat.innerText = "Runde wird vorbereitet...";
                 lblHotseatSub.innerText = "Bitte kurz warten.";
                 document.getElementById('stratSection').classList.remove('hidden');
                 // A/B Buttons deaktivieren, bis Strategie gewählt
@@ -1176,7 +1185,7 @@
                 }
             } else if(myName === data.hotseat) {
                 lblHotseat.innerText = "Du bist der Hitzkopf!";
-                lblHotseatSub.innerText = "Antworte ehrlich – die anderen versuchen dich zu lesen.";
+                lblHotseatSub.innerText = "Antworte ehrlich – die anderen versuchen deine Wahl zu erraten.";
                 document.getElementById('stratSection').classList.add('hidden');
                 // Hotseat kann direkt A/B wählen (keine Strategie nötig)
                 const optionRow = document.getElementById('optionRow');
@@ -1186,7 +1195,7 @@
                 }
             } else {
                 lblHotseat.innerText = `${data.hotseat} ist der Hitzkopf!`;
-                lblHotseatSub.innerText = "Errate seine Wahl, um zu bestrafen oder Karten zu ziehen.";
+                lblHotseatSub.innerText = "Errate die Wahl des Hitzkopfs, um anzugreifen oder Joker zu ziehen.";
                 document.getElementById('stratSection').classList.remove('hidden');
                 // A/B Buttons deaktivieren, bis Strategie gewählt
                 const optionRow = document.getElementById('optionRow');
@@ -1202,7 +1211,7 @@
             const voteStatusEl = document.getElementById('lblVoteStatus');
             const voteText = voted.length ? voted.join(', ') : 'Niemand';
             const pendingText = pending.length ? pending.join(', ') : 'Niemand';
-            voteStatusEl.innerHTML = `✅ Eingeloggt: ${voteText}<br>🤔 Überlegen: ${pendingText}`;
+            voteStatusEl.innerHTML = `✅ Abgegeben: ${voteText}<br>🤔 Überlegen: ${pendingText}`;
             if(data.players[myName]) {
                 renderMyJokers('myJokerListGame', data.players[myName]);
             }
@@ -1258,7 +1267,7 @@
             }
 
             if(myName === data.hotseat) {
-                statusEl.innerText = "Du warst am Zug.";
+                statusEl.innerText = "Du warst der Hitzkopf.";
                 statusEl.style.color = "#aaa";
             } else {
                 if(myVote && myVote.choice === truth) {
@@ -1267,7 +1276,7 @@
 
                     if(!localActionDone) {
                         btnReady.disabled = true;
-                        btnReady.innerText = "⚡ Belohnung wählen!";
+                        btnReady.innerText = "⚡ Wähle deine Belohnung!";
                         
                         if(myVote.strategy === 'invest') {
                             boxShop.style.display = 'block';
@@ -1278,7 +1287,7 @@
                     }
                 } else {
                     if(!myVote) {
-                        statusEl.innerText = "⌛ Kein Tipp abgegeben.";
+                        statusEl.innerText = "⌛ Keine Antwort abgegeben.";
                         statusEl.style.color = "#ccc";
                     } else {
                         statusEl.innerText = "❌ FALSCH";
@@ -1344,7 +1353,7 @@
             
             if(!isHotseat) {
                 if(!myStrategy) {
-                    alert("Bitte zuerst eine Strategie wählen (Angriff oder Joker)!");
+                    showToast("Bitte wähle zuerst eine Strategie!");
                     return;
                 }
             }
@@ -1364,9 +1373,13 @@
             
             let strat = myStrategy;
             if(!isHotseat && !strat) {
-                return alert("Bitte zuerst eine Strategie wählen (Angriff oder Joker)!");
+                showToast("Bitte wähle zuerst eine Strategie!");
+                return;
             }
-            if(!mySelection) return alert("Bitte A oder B wählen!");
+            if(!mySelection) {
+                showToast("Bitte wähle zuerst eine Antwort (A oder B)!");
+                return;
+            }
             
             // Hotseat braucht keine Strategie (wird ignoriert)
             if(isHotseat) {
@@ -1429,7 +1442,7 @@
 
             const inventory = globalData?.players?.[myName]?.inventory || [];
             if(inventory.includes(card)) {
-                showToast("Du besitzt diesen Joker bereits!");
+                showToast("Du besitzt diesen Joker bereits! Du kannst jeden Joker nur einmal haben.");
                 return;
             }
 
@@ -1437,7 +1450,7 @@
                 [`players.${myName}.inventory`]: arrayUnion(card),
                 log: arrayUnion(`🃏 ${myName} zieht eine geheime Karte.`)
             });
-            showToast(`${cardInfo[card].label} gesichert – ${cardInfo[card].desc}`);
+            showToast(`${cardInfo[card].label} erhalten! ${cardInfo[card].desc}`);
         };
 
         // --- SKIP ATTACK ---
@@ -1447,7 +1460,7 @@
             document.getElementById('btnReady').disabled = false;
             document.getElementById('btnReady').innerText = "👍 Bereit";
             await updateDoc(doc(db, "lobbies", roomId), {
-                log: arrayUnion(`🕊️ ${myName} verzichtet auf eine Bestrafung.`)
+                log: arrayUnion(`🕊️ ${myName} verzichtet auf einen Angriff.`)
             });
         };
 
@@ -1461,11 +1474,14 @@
         window.startCountdown = async () => {
             if(!isHost || !globalData) return;
             const players = Object.keys(globalData.players);
-            if(players.length < 2) return alert("Mindestens 2 Spieler benötigt!");
+            if(players.length < 2) {
+                showToast("Mindestens 2 Spieler benötigt!");
+                return;
+            }
             const readyObj = globalData.lobbyReady || {};
             const unready = players.filter(p => !readyObj[p]);
-            if(unready.length) {
-                alert("Noch nicht alle bereit: " + unready.join(', '));
+                if(unready.length) {
+                showToast(`Noch nicht alle bereit: ${unready.join(', ')}`);
                 return;
             }
             await applyIceCooling(globalData.players);
@@ -1512,7 +1528,7 @@
         // --- FORCE NEXT ROUND ---
         window.forceNextRound = async () => {
             if(!isHost) return;
-            if(!confirm("Runde überspringen?")) return;
+            if(!confirm("Möchtest du wirklich zur nächsten Runde springen?")) return;
             await nextRound();
             toggleMenu();
         };
@@ -1520,7 +1536,7 @@
         // --- RESET GAME ---
         window.resetGame = async () => {
             if(!isHost) return;
-            if(!confirm("Spiel wirklich neustarten?")) return;
+            if(!confirm("Möchtest du das Spiel wirklich neustarten? Alle Temperaturen werden zurückgesetzt.")) return;
             
             const pClean = {};
             Object.keys(globalData.players).forEach(p => {
@@ -1546,18 +1562,18 @@
         // --- KILL LOBBY ---
         window.killLobby = async () => {
             if(!isHost) return;
-            if(!confirm("Lobby wirklich löschen? Alle Spieler werden rausgeworfen!")) return;
+            if(!confirm("Lobby wirklich löschen? Alle Spieler werden ausgeworfen und die Lobby ist danach nicht mehr verfügbar!")) return;
             const ref = doc(db, "lobbies", roomId);
             await updateDoc(ref, {
                 status: 'closed',
-                log: arrayUnion(`🛑 ${myName} hat die Lobby geschlossen.`)
+                log: arrayUnion(`🛑 ${myName} hat die Lobby beendet.`)
             });
             setTimeout(() => deleteDoc(ref), 1200);
         };
 
         // --- LEAVE LOBBY ---
         window.leaveLobby = () => {
-            if(confirm("Lobby verlassen?")) {
+            if(confirm("Lobby wirklich verlassen?")) {
                 document.body.classList.remove('final-mode');
                 sessionStorage.clear();
                 location.reload();
@@ -1566,23 +1582,23 @@
         
         window.shareLobby = async () => {
             if(!roomId) {
-                showToast("Kein aktiver Raum zum Teilen.");
+                showToast("Kein aktiver Raum zum Teilen verfügbar.");
                 return;
             }
             const text = `🔥 Hitzkopf-Code: ${roomId} – komm in meine Lobby!`;
             try {
                 if(navigator.share) {
                     await navigator.share({ title: "Hitzkopf Lobby", text, url: location.href });
-                    showToast("Link verschickt!");
+                    showToast("Link erfolgreich geteilt!");
                 } else if(navigator.clipboard) {
                     await navigator.clipboard.writeText(text);
-                    showToast("Link kopiert – schick ihn deinen Freunden!");
+                    showToast("Link kopiert! Teile ihn mit deinen Freunden.");
                 } else {
                     prompt("Code kopieren:", text);
                 }
             } catch (err) {
                 console.warn(err);
-                showToast("Teilen abgebrochen.");
+                showToast("Teilen wurde abgebrochen.");
             }
         };
 
@@ -1592,7 +1608,7 @@
                 showToast("Nur der Host kann eine Revanche starten.");
                 return;
             }
-            if(!confirm("Neue Revanche starten?")) return;
+            if(!confirm("Möchtest du eine Revanche starten? Alle Temperaturen werden zurückgesetzt.")) return;
             const pClean = {};
             Object.keys(globalData.players).forEach(p => {
                 pClean[p] = { temp: 0, inventory: [] };
@@ -1602,7 +1618,7 @@
                 players: pClean,
                 votes: {},
                 ready: [],
-                log: arrayUnion("♻️ Revanche! Alle Temperaturen wurden zurückgesetzt."),
+                log: arrayUnion("♻️ Revanche gestartet! Alle Temperaturen wurden zurückgesetzt."),
                 hotseat: "",
                 roundId: (globalData.roundId ?? 0) + 1,
                 lobbyReady: {},
@@ -1610,7 +1626,7 @@
                 usedQuestions: []
             });
             document.body.classList.remove('final-mode');
-            showToast("Revanche gestartet – alle zurück in die Lobby!");
+            showToast("Revanche gestartet! Alle zurück in die Lobby.");
         };
 
         // --- RENDER HELPERS ---
@@ -1628,7 +1644,7 @@
             const emojiEl = document.getElementById('finalEmoji');
             const btnRematch = document.getElementById('btnRematch');
             nameEl.innerText = loser;
-            captionEl.innerText = `${loser} ist die Birne geplatzt – er ist ein richtiger Hitzkopf!`;
+            captionEl.innerText = `${loser} hat 100°C erreicht – ein echter Hitzkopf! 🔥`;
             if(emojiEl) emojiEl.innerText = '🥵';
             if(fillEl) {
                 fillEl.style.width = '0%';
@@ -1744,7 +1760,7 @@
                 entries.push(`✅ Richtige Spieler: ${correct.join(', ')}`);
                 if(wrong.length) entries.push(`❌ Daneben: ${wrong.join(', ')}`);
             } else {
-                entries.push('⚪ Niemand lag richtig – nichts ist passiert.');
+                entries.push('⚪ Niemand lag richtig – keine Aktionen in dieser Runde.');
             }
 
             await updateDoc(doc(db, "lobbies", roomId), {
