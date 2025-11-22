@@ -541,17 +541,18 @@
         
         <h3 id="lblQuestion" style="margin:20px 0;">Lade...</h3>
 
-        <div class="option-row">
-            <button id="btnA" class="btn-option" onclick="vote('A')">A</button>
-            <button id="btnB" class="btn-option" onclick="vote('B')">B</button>
-        </div>
-
         <div id="stratSection" style="margin-top:15px;">
             <p style="font-size:0.8rem; color:#666; margin-bottom:5px;">WENN DU RICHTIG LIEGST:</p>
-            <select id="inpStrat">
+            <select id="inpStrat" onchange="onStrategyChange()">
+                <option value="">-- Bitte wählen --</option>
                 <option value="attack">🔴 Angriff</option>
                 <option value="invest">🃏 Joker ziehen</option>
             </select>
+        </div>
+
+        <div class="option-row" id="optionRow" style="margin-top:15px; opacity:0.5; pointer-events:none;">
+            <button id="btnA" class="btn-option" onclick="vote('A')">A</button>
+            <button id="btnB" class="btn-option" onclick="vote('B')">B</button>
         </div>
 
         <button id="btnLock" class="btn-primary" style="margin-top:20px;" onclick="submitVote()">🔒 Einloggen</button>
@@ -1089,13 +1090,39 @@
                 btnA.classList.remove('selected');
                 btnB.classList.remove('selected');
                 btnLock.disabled = true;
+                // Strategie zurücksetzen
+                document.getElementById('inpStrat').value = '';
+                // A/B Buttons deaktivieren
+                const optionRow = document.getElementById('optionRow');
+                if(optionRow) {
+                    optionRow.style.opacity = '0.5';
+                    optionRow.style.pointerEvents = 'none';
+                }
             }
 
             if(data.votes[myName]) {
                 btnLock.classList.add('hidden');
+                // Wenn bereits abgestimmt, Strategie und A/B Buttons deaktivieren
+                const optionRow = document.getElementById('optionRow');
+                if(optionRow) {
+                    optionRow.style.opacity = '0.5';
+                    optionRow.style.pointerEvents = 'none';
+                }
+                const stratSelect = document.getElementById('inpStrat');
+                if(stratSelect) stratSelect.disabled = true;
             } else {
                 btnLock.classList.remove('hidden');
-                btnLock.disabled = !mySelection;
+                const stratSelect = document.getElementById('inpStrat');
+                const stratSection = document.getElementById('stratSection');
+                const isHotseat = stratSection && stratSection.classList.contains('hidden');
+                
+                // Für Hotseat: nur mySelection prüfen, für andere: beides prüfen
+                if(isHotseat) {
+                    btnLock.disabled = !mySelection;
+                } else {
+                    btnLock.disabled = !mySelection || !stratSelect.value;
+                }
+                if(stratSelect) stratSelect.disabled = false;
             }
 
             // Robustere Behandlung von currentQ (Firebase kann Objekte anders serialisieren)
@@ -1130,14 +1157,32 @@
                 lblHotseat.innerText = "Hotseat wird vorbereitet...";
                 lblHotseatSub.innerText = "Bitte kurz warten.";
                 document.getElementById('stratSection').classList.remove('hidden');
+                // A/B Buttons deaktivieren, bis Strategie gewählt
+                const optionRow = document.getElementById('optionRow');
+                if(optionRow && !document.getElementById('inpStrat').value) {
+                    optionRow.style.opacity = '0.5';
+                    optionRow.style.pointerEvents = 'none';
+                }
             } else if(myName === data.hotseat) {
                 lblHotseat.innerText = "Du bist der Hitzkopf!";
                 lblHotseatSub.innerText = "Antworte ehrlich – die anderen versuchen dich zu lesen.";
                 document.getElementById('stratSection').classList.add('hidden');
+                // Hotseat kann direkt A/B wählen (keine Strategie nötig)
+                const optionRow = document.getElementById('optionRow');
+                if(optionRow) {
+                    optionRow.style.opacity = '1';
+                    optionRow.style.pointerEvents = 'auto';
+                }
             } else {
                 lblHotseat.innerText = `${data.hotseat} ist der Hitzkopf!`;
                 lblHotseatSub.innerText = "Errate seine Wahl, um zu bestrafen oder Karten zu ziehen.";
                 document.getElementById('stratSection').classList.remove('hidden');
+                // A/B Buttons deaktivieren, bis Strategie gewählt
+                const optionRow = document.getElementById('optionRow');
+                if(optionRow && !document.getElementById('inpStrat').value) {
+                    optionRow.style.opacity = '0.5';
+                    optionRow.style.pointerEvents = 'none';
+                }
             }
             
             const players = Object.keys(data.players);
@@ -1252,8 +1297,45 @@
             });
         };
 
+        // --- STRATEGY CHANGE ---
+        window.onStrategyChange = () => {
+            const strat = document.getElementById('inpStrat').value;
+            const optionRow = document.getElementById('optionRow');
+            const lockBtn = document.getElementById('btnLock');
+            
+            if(strat) {
+                // Strategie gewählt - A/B Buttons aktivieren
+                optionRow.style.opacity = '1';
+                optionRow.style.pointerEvents = 'auto';
+                // Lock-Button aktivieren, wenn bereits A/B gewählt wurde
+                if(lockBtn && mySelection) {
+                    lockBtn.disabled = false;
+                }
+            } else {
+                // Keine Strategie - A/B Buttons deaktivieren
+                optionRow.style.opacity = '0.5';
+                optionRow.style.pointerEvents = 'none';
+                mySelection = null;
+                document.getElementById('btnA').classList.remove('selected');
+                document.getElementById('btnB').classList.remove('selected');
+                if(lockBtn) lockBtn.disabled = true;
+            }
+        };
+
         // --- VOTE ---
         window.vote = (opt) => {
+            // Prüfe ob Hotseat (dann keine Strategie nötig)
+            const stratSection = document.getElementById('stratSection');
+            const isHotseat = stratSection && stratSection.classList.contains('hidden');
+            
+            if(!isHotseat) {
+                const strat = document.getElementById('inpStrat').value;
+                if(!strat) {
+                    alert("Bitte zuerst eine Strategie wählen (Angriff oder Joker)!");
+                    return;
+                }
+            }
+            
             mySelection = opt;
             document.getElementById('btnA').classList.toggle('selected', opt === 'A');
             document.getElementById('btnB').classList.toggle('selected', opt === 'B');
@@ -1263,8 +1345,21 @@
 
         // --- SUBMIT VOTE ---
         window.submitVote = async () => {
+            // Prüfe ob Hotseat (dann keine Strategie nötig)
+            const stratSection = document.getElementById('stratSection');
+            const isHotseat = stratSection && stratSection.classList.contains('hidden');
+            
+            let strat = document.getElementById('inpStrat').value;
+            if(!isHotseat && !strat) {
+                return alert("Bitte zuerst eine Strategie wählen (Angriff oder Joker)!");
+            }
             if(!mySelection) return alert("Bitte A oder B wählen!");
-            const strat = document.getElementById('inpStrat').value;
+            
+            // Hotseat braucht keine Strategie (wird ignoriert)
+            if(isHotseat) {
+                strat = 'none'; // Placeholder für Hotseat
+            }
+            
             document.getElementById('btnLock').classList.add('hidden');
             
             await updateDoc(doc(db, "lobbies", roomId), {
