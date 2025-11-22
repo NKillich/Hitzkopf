@@ -446,6 +446,38 @@
             color: #aaa;
         }
 
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #ffd700;
+            position: absolute;
+            animation: confetti-fall linear forwards;
+        }
+        @keyframes confetti-fall {
+            to {
+                transform: translateY(100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+        .spectator-mode {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .spectator-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #ff4500, #ff8c00);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+            z-index: 3000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
         @keyframes fadeIn { 
             from { opacity: 0; transform: translateY(20px); } 
             to { opacity: 1; transform: translateY(0); } 
@@ -578,16 +610,7 @@
         
         <h3 id="lblQuestion" style="margin:20px 0; min-height:60px; display:flex; align-items:center; justify-content:center;">Lade Frage...</h3>
 
-        <div id="stratSection" style="margin-top:15px;">
-            <p style="font-size:0.85rem; color:#888; margin-bottom:8px; font-weight:600;">WENN DU RICHTIG LIEGST (Vorauswahl):</p>
-            <div class="option-row" style="gap:12px; margin-top:10px;">
-                <button id="btnStratAttack" class="btn-option" onclick="selectStrategy('attack')" style="flex:1; padding:20px 10px; font-size:1.1rem; font-weight:bold;">🔴 Angriff</button>
-                <button id="btnStratInvest" class="btn-option" onclick="selectStrategy('invest')" style="flex:1; padding:20px 10px; font-size:1.1rem; font-weight:bold;">🃏 Joker ziehen</button>
-            </div>
-            <p style="font-size:0.75rem; color:#666; margin-top:8px; font-style:italic;">💡 Du kannst deine Entscheidung später noch ändern!</p>
-        </div>
-
-        <div class="option-row" id="optionRow" style="margin-top:15px; opacity:0.5; pointer-events:none;">
+        <div class="option-row" id="optionRow" style="margin-top:15px;">
             <button id="btnA" class="btn-option" onclick="vote('A')">A</button>
             <button id="btnB" class="btn-option" onclick="vote('B')">B</button>
         </div>
@@ -622,7 +645,10 @@
         <div id="boxAttack" style="display:none; background:#3a1a1a; padding:10px; border-radius:10px; margin-bottom:15px;">
             <h4 style="margin:0 0 10px 0;">🔥 Wen angreifen?</h4>
             <div id="divTargets" style="display:grid; grid-template-columns:1fr 1fr; gap:5px;"></div>
-            <button style="background:transparent; border:1px solid #666; color:#aaa; font-size:0.7rem; margin-top:10px; padding:8px;" onclick="skipAttack()">Angriff überspringen</button>
+            <div style="display:flex; gap:5px; margin-top:10px;">
+                <button style="flex:1; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; padding:8px;" onclick="goBackToReward()">← Zurück</button>
+                <button style="flex:1; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; padding:8px;" onclick="skipAttack()">Angriff überspringen</button>
+            </div>
         </div>
 
         <div id="boxShop" style="display:none; background:#1a2a3a; padding:10px; border-radius:10px; margin-bottom:15px;">
@@ -641,6 +667,7 @@
                     <span>Kühlt dich in der nächsten Runde automatisch ab.</span>
                 </button>
             </div>
+            <button style="width:100%; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; margin-top:10px; padding:8px;" onclick="goBackToReward()">← Zurück</button>
         </div>
 
         <div style="text-align:left; font-size:0.7rem; color:#666; margin-bottom:5px;">📋 Spielverlauf:</div>
@@ -654,7 +681,50 @@
         </div>
     </div>
 
-    <!-- GAMEOVER SCREEN -->
+    <!-- FULLSCREEN ANIMATION OVERLAY -->
+    <div id="fullscreenAnimation" class="countdown-overlay" style="display:none;">
+        <div style="background:linear-gradient(145deg, #1e1e1e, #252525); padding:40px; border-radius:20px; max-width:600px; margin:20px; border:2px solid #ff4500; box-shadow:0 8px 32px rgba(0,0,0,0.8); text-align:center;">
+            <div id="animEmoji" style="font-size:5rem; margin-bottom:20px; animation:sweatShake 0.9s infinite;">🥵</div>
+            <div id="animName" style="font-size:2.5rem; font-weight:800; color:#ff4500; margin-bottom:15px; text-shadow:0 0 18px rgba(255,69,0,0.6);">...</div>
+            <div id="animText" style="font-size:1.2rem; color:#fff; margin-bottom:25px;">...</div>
+            <div style="width:80%; margin:0 auto 20px auto;">
+                <div style="height:25px; border-radius:12px; background:#280000; overflow:hidden; box-shadow:inset 0 0 10px rgba(0,0,0,0.7);">
+                    <div id="animThermoFill" style="height:100%; width:0%; background:linear-gradient(90deg, #ffae00, #ff0000); box-shadow:0 0 20px rgba(255,0,0,0.7); transition:width 1.2s ease-out;"></div>
+                </div>
+                <div id="animTemp" style="font-size:1.5rem; font-weight:bold; color:#ff4500; margin-top:10px;">0°C</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WINNER SCREEN -->
+    <div id="screen-winner" class="screen card" style="background:radial-gradient(circle at center, rgba(0,209,255,0.15), #0a0a0a 70%); border:2px solid #00d1ff;">
+        <div id="confetti-container" style="position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:5000;"></div>
+        <div style="text-align:center; position:relative; z-index:1;">
+            <div style="font-size:6rem; margin-bottom:20px; animation:sweatShake 0.9s infinite;">😎</div>
+            <div id="winnerName" style="font-size:3rem; font-weight:900; color:#00d1ff; margin-bottom:15px; text-shadow:0 0 30px rgba(0,209,255,0.7);">...</div>
+            <div style="font-size:1.3rem; color:#c8f4ff; margin-bottom:30px;">ist cool geblieben und gewinnt diese Runde Hitzkopf! 🧊</div>
+            <div style="width:80%; margin:0 auto 30px auto;">
+                <div style="height:30px; border-radius:15px; background:#001a28; overflow:hidden; box-shadow:inset 0 0 15px rgba(0,0,0,0.7);">
+                    <div id="winnerThermoFill" style="height:100%; width:0%; background:linear-gradient(90deg, #00d1ff, #0080ff); box-shadow:0 0 25px rgba(0,209,255,0.7); transition:width 1.5s ease-out;"></div>
+                </div>
+                <div id="winnerTemp" style="font-size:2rem; font-weight:bold; color:#00d1ff; margin-top:15px;">0°C</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VOTING SCREEN -->
+    <div id="screen-voting" class="screen card">
+        <h2 style="color:#ff8c00; margin-bottom:20px;">🎮 Spiel beendet!</h2>
+        <p style="color:#aaa; margin-bottom:30px;">Möchtest du noch eine Runde spielen?</p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:20px;">
+            <button id="btnVoteRematch" class="btn-primary" onclick="voteRematch(true)" style="padding:20px; font-size:1.2rem;">✅ Nochmal spielen</button>
+            <button id="btnVoteLeave" class="btn-secondary" onclick="voteRematch(false)" style="padding:20px; font-size:1.2rem;">🚪 Verlassen</button>
+        </div>
+        <div id="votingStatus" style="font-size:0.9rem; color:#888; margin-top:15px;">Warte auf andere Spieler...</div>
+        <div id="votingResults" style="margin-top:20px; font-size:0.85rem; color:#aaa;"></div>
+    </div>
+
+    <!-- GAMEOVER SCREEN (für rausgeflogene Spieler) -->
     <div id="screen-gameover" class="screen card final-card">
         <div class="final-hero">
             <div id="finalEmoji" class="final-emoji">🥵</div>
@@ -954,7 +1024,10 @@
                 roundId: 0,
                 lobbyReady: {},
                 countdownEnds: null,
-                usedQuestions: []
+                usedQuestions: [],
+                eliminatedShown: [],
+                rematchVotes: {},
+                winner: null
             });
             connectToLobby();
         };
@@ -1041,24 +1114,67 @@
                 renderThermos(data.players, 'gridResult');
                 renderLog(data.log);
 
-                // DEATH CHECK
-                let dead = null;
-                let winner = null;
-                let minTemp = 999;
+                // DEATH CHECK - Spieler mit 100° fliegen raus, können aber zuschauen
                 const maxTemp = data.config?.maxTemp || 100;
-                Object.keys(data.players).forEach(p => {
-                    if(data.players[p].temp >= maxTemp) dead = p;
-                    if(data.players[p].temp < minTemp) { 
-                        minTemp = data.players[p].temp; 
-                        winner = p; 
+                const activePlayers = Object.keys(data.players).filter(p => data.players[p].temp < maxTemp);
+                const eliminatedPlayers = Object.keys(data.players).filter(p => data.players[p].temp >= maxTemp);
+                
+                // Prüfe ob Spieler gerade rausgeflogen ist (für Animation)
+                if(eliminatedPlayers.length > 0 && isHost) {
+                    eliminatedPlayers.forEach(eliminated => {
+                        const eliminatedShown = data.eliminatedShown || [];
+                        if(!eliminatedShown.includes(eliminated)) {
+                            // Markiere als gezeigt
+                            updateDoc(doc(db, "lobbies", roomId), {
+                                eliminatedShown: arrayUnion(eliminated)
+                            }).catch(console.error);
+                        }
+                    });
+                }
+                
+                // Zeige Animation für alle (auch wenn nicht Host)
+                eliminatedPlayers.forEach(eliminated => {
+                    const eliminatedShown = data.eliminatedShown || [];
+                    if(eliminatedShown.includes(eliminated)) {
+                        // Nur einmal zeigen
+                        return;
                     }
+                    // Zeige Animation für rausgeflogenen Spieler
+                    showEliminationAnimation(eliminated, data.players[eliminated].temp);
                 });
 
-                if(dead) {
-                    renderGameOver(dead, data.players);
-                    return;
+                // Prüfe ob nur noch ein Spieler übrig ist (Gewinner)
+                if(activePlayers.length === 1 && data.status !== 'winner' && data.status !== 'voting') {
+                    const winner = activePlayers[0];
+                    if(isHost) {
+                        updateDoc(doc(db, "lobbies", roomId), {
+                            status: 'winner',
+                            winner: winner
+                        }).catch(console.error);
+                    }
+                } else if(activePlayers.length === 0 && data.status !== 'voting') {
+                    // Fallback: Wenn alle raus sind, gewinnt der mit niedrigster Temperatur
+                    let minTemp = 999;
+                    let winner = null;
+                    Object.keys(data.players).forEach(p => {
+                        if(data.players[p].temp < minTemp) {
+                            minTemp = data.players[p].temp;
+                            winner = p;
+                        }
+                    });
+                    if(winner && isHost) {
+                        updateDoc(doc(db, "lobbies", roomId), {
+                            status: 'winner',
+                            winner: winner
+                        }).catch(console.error);
+                    }
+                }
+
+                // Prüfe ob Spieler rausgeflogen ist (für Spectator-Mode)
+                if(eliminatedPlayers.includes(myName)) {
+                    showSpectatorMode();
                 } else {
-                    document.body.classList.remove('final-mode');
+                    hideSpectatorMode();
                 }
 
                 // ROUTER
@@ -1174,6 +1290,24 @@
                         setTimeout(() => nextRound(), 1000);
                     }
                 }
+                else if(data.status === 'winner') {
+                    showScreen('screen-winner');
+                    renderWinner(data.winner, data.players);
+                    if(shareBtn) shareBtn.style.display = 'none';
+                    if(hostStartBtn) hostStartBtn.style.display = 'none';
+                    // Nach 5 Sekunden zum Voting-Screen
+                    if(isHost) {
+                        setTimeout(() => {
+                            updateDoc(doc(db, "lobbies", roomId), { status: 'voting' }).catch(console.error);
+                        }, 5000);
+                    }
+                }
+                else if(data.status === 'voting') {
+                    showScreen('screen-voting');
+                    renderVoting(data);
+                    if(shareBtn) shareBtn.style.display = 'none';
+                    if(hostStartBtn) hostStartBtn.style.display = 'none';
+                }
                 handleCountdownOverlay(data);
             });
         }
@@ -1193,39 +1327,19 @@
                 btnA.classList.remove('selected');
                 btnB.classList.remove('selected');
                 btnLock.disabled = true;
-                // Strategie zurücksetzen (nur Vorauswahl)
-                myStrategy = null;
-                const btnAttack = document.getElementById('btnStratAttack');
-                const btnInvest = document.getElementById('btnStratInvest');
-                if(btnAttack) btnAttack.classList.remove('selected');
-                if(btnInvest) btnInvest.classList.remove('selected');
                 // A/B Buttons werden später aktiviert, wenn hotseat gesetzt ist
             }
 
             if(data.votes[myName]) {
                 btnLock.classList.add('hidden');
-                // Wenn bereits abgestimmt, Strategie und A/B Buttons deaktivieren
+                // Wenn bereits abgestimmt, A/B Buttons deaktivieren
                 const optionRow = document.getElementById('optionRow');
                 if(optionRow) {
                     optionRow.style.opacity = '0.5';
                     optionRow.style.pointerEvents = 'none';
                 }
-                // Strategie-Buttons deaktivieren
-                const btnAttack = document.getElementById('btnStratAttack');
-                const btnInvest = document.getElementById('btnStratInvest');
-                if(btnAttack) btnAttack.disabled = true;
-                if(btnInvest) btnInvest.disabled = true;
             } else {
                 btnLock.classList.remove('hidden');
-                const stratSection = document.getElementById('stratSection');
-                const isHotseat = stratSection && stratSection.classList.contains('hidden');
-                
-                // Strategie-Buttons aktivieren
-                const btnAttack = document.getElementById('btnStratAttack');
-                const btnInvest = document.getElementById('btnStratInvest');
-                if(btnAttack) btnAttack.disabled = false;
-                if(btnInvest) btnInvest.disabled = false;
-                
                 // Strategie ist nur eine Vorauswahl, nicht mehr zwingend
                 btnLock.disabled = !mySelection;
             }
@@ -1261,28 +1375,25 @@
             if(!data.hotseat) {
                 lblHotseat.innerText = "Runde wird vorbereitet...";
                 lblHotseatSub.innerText = "Bitte kurz warten.";
-                document.getElementById('stratSection').classList.remove('hidden');
-                // A/B Buttons aktivieren (Strategie ist nur Vorauswahl)
+                // A/B Buttons aktivieren
                 const optionRow = document.getElementById('optionRow');
                 if(optionRow) {
                     optionRow.style.opacity = '1';
                     optionRow.style.pointerEvents = 'auto';
                 }
             } else if(myName === data.hotseat) {
-                lblHotseat.innerText = "Du bist der Hitzkopf!";
+                lblHotseat.innerText = "Du beantwortest die Frage!";
                 lblHotseatSub.innerText = "Antworte ehrlich – die anderen versuchen deine Wahl zu erraten.";
-                document.getElementById('stratSection').classList.add('hidden');
-                // Hotseat kann direkt A/B wählen (keine Strategie nötig)
+                // Hotseat kann direkt A/B wählen
                 const optionRow = document.getElementById('optionRow');
                 if(optionRow) {
                     optionRow.style.opacity = '1';
                     optionRow.style.pointerEvents = 'auto';
                 }
             } else {
-                lblHotseat.innerText = `${data.hotseat} ist der Hitzkopf!`;
-                lblHotseatSub.innerText = "Errate die Wahl des Hitzkopfs, um anzugreifen oder Joker zu ziehen.";
-                document.getElementById('stratSection').classList.remove('hidden');
-                // A/B Buttons aktivieren (Strategie ist nur Vorauswahl)
+                lblHotseat.innerText = `${data.hotseat} beantwortet die Frage!`;
+                lblHotseatSub.innerText = "Errate die Wahl, um anzugreifen oder Joker zu ziehen.";
+                // A/B Buttons aktivieren
                 const optionRow = document.getElementById('optionRow');
                 if(optionRow) {
                     optionRow.style.opacity = '1';
@@ -1352,7 +1463,7 @@
             }
 
             if(myName === data.hotseat) {
-                statusEl.innerText = "Du warst der Hitzkopf.";
+                statusEl.innerText = "Du hast die Frage beantwortet.";
                 statusEl.style.color = "#aaa";
             } else {
                 if(myVote && myVote.choice === truth) {
@@ -1475,6 +1586,17 @@
             }
         };
 
+        // --- GO BACK TO REWARD ---
+        window.goBackToReward = () => {
+            const rewardBox = document.getElementById('boxReward');
+            const boxAttack = document.getElementById('boxAttack');
+            const boxShop = document.getElementById('boxShop');
+            
+            if(rewardBox) rewardBox.style.display = 'block';
+            if(boxAttack) boxAttack.style.display = 'none';
+            if(boxShop) boxShop.style.display = 'none';
+        };
+
         // --- ATTACK ---
         window.doAttack = async (target) => {
             localActionDone = true;
@@ -1513,9 +1635,13 @@
             }
 
             await sleep(700);
+            const newTemp = (targetState.temp || 0) + dmg;
             await updateDoc(ref, {
                 [`players.${target}.temp`]: increment(dmg)
             });
+            
+            // Zeige Animation
+            await showAttackAnimation(target, myName, dmg, newTemp);
         };
 
         // --- TAKE CARD ---
@@ -1536,6 +1662,10 @@
                 [`players.${myName}.inventory`]: arrayUnion(card),
                 log: arrayUnion(`🃏 ${myName} zieht eine geheime Karte.`)
             });
+            
+            // Zeige Animation
+            await showJokerAnimation(myName, card);
+            
             showToast(`${cardInfo[card].label} erhalten! ${cardInfo[card].desc}`);
         };
 
@@ -1641,16 +1771,39 @@
 
         // --- NEXT ROUND ---
         window.nextRound = async () => {
-            const players = Object.keys(globalData.players);
+            const maxTemp = globalData?.config?.maxTemp || 100;
+            const activePlayers = Object.keys(globalData.players).filter(p => 
+                (globalData.players[p].temp || 0) < maxTemp
+            );
+            
+            if(activePlayers.length === 0) {
+                // Fallback: Alle sind raus, nimm alle Spieler
+                activePlayers.push(...Object.keys(globalData.players));
+            }
+            
+            if(activePlayers.length === 1) {
+                // Nur noch ein Spieler übrig - Gewinner!
+                if(isHost) {
+                    await updateDoc(doc(db, "lobbies", roomId), {
+                        status: 'winner',
+                        winner: activePlayers[0]
+                    });
+                }
+                return;
+            }
+            
             const curr = globalData.hotseat;
-            const nextIdx = (players.indexOf(curr) + 1) % players.length;
+            let nextIdx = activePlayers.indexOf(curr);
+            if(nextIdx === -1) nextIdx = 0;
+            nextIdx = (nextIdx + 1) % activePlayers.length;
+            
             const usedQuestions = globalData.usedQuestions || [];
             const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions);
             const nextRoundId = (globalData?.roundId ?? 0) + 1;
             await applyIceCooling(globalData.players);
             await updateDoc(doc(db, "lobbies", roomId), {
                 status: 'game',
-                hotseat: players[nextIdx],
+                hotseat: activePlayers[nextIdx],
                 currentQ: q,
                 votes: {},
                 ready: [],
@@ -2002,8 +2155,266 @@
             if(seconds > 0) {
                 textEl.innerText = seconds;
             } else {
-                textEl.innerText = "HITZKOPF!";
+                textEl.innerText = "LOS!";
             }
+        }
+
+        // --- SPECTATOR MODE ---
+        function showSpectatorMode() {
+            const banner = document.getElementById('spectatorBanner');
+            if(!banner) {
+                const newBanner = document.createElement('div');
+                newBanner.id = 'spectatorBanner';
+                newBanner.className = 'spectator-banner';
+                newBanner.innerText = '🔥 Du bist ein Hitzkopf! Bis zur nächsten Runde bist du leider raus. Zeit abzukühlen.';
+                document.body.appendChild(newBanner);
+            }
+            document.body.classList.add('spectator-mode');
+        }
+
+        function hideSpectatorMode() {
+            const banner = document.getElementById('spectatorBanner');
+            if(banner) banner.remove();
+            document.body.classList.remove('spectator-mode');
+        }
+
+        // --- ELIMINATION ANIMATION ---
+        function showEliminationAnimation(playerName, temp) {
+            const overlay = document.getElementById('fullscreenAnimation');
+            if(!overlay) return;
+            
+            const emojiEl = document.getElementById('animEmoji');
+            const nameEl = document.getElementById('animName');
+            const textEl = document.getElementById('animText');
+            const thermoEl = document.getElementById('animThermoFill');
+            const tempEl = document.getElementById('animTemp');
+            
+            if(emojiEl) emojiEl.innerText = '🥵';
+            if(nameEl) nameEl.innerText = playerName;
+            if(textEl) textEl.innerText = 'ist ein Hitzkopf und fliegt raus! 🔥';
+            if(tempEl) tempEl.innerText = `${temp}°C`;
+            
+            overlay.style.display = 'flex';
+            
+            // Thermometer animieren
+            if(thermoEl) {
+                thermoEl.style.width = '0%';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        thermoEl.style.width = `${Math.min(temp, 120)}%`;
+                    });
+                });
+            }
+            
+            // Nach 3 Sekunden ausblenden
+            setTimeout(() => {
+                overlay.style.display = 'none';
+            }, 3000);
+        }
+
+        // --- RENDER WINNER ---
+        function renderWinner(winnerName, players) {
+            const nameEl = document.getElementById('winnerName');
+            const tempEl = document.getElementById('winnerTemp');
+            const thermoEl = document.getElementById('winnerThermoFill');
+            
+            if(nameEl) nameEl.innerText = winnerName;
+            const temp = players[winnerName]?.temp || 0;
+            if(tempEl) tempEl.innerText = `${temp}°C`;
+            
+            // Thermometer animieren
+            if(thermoEl) {
+                thermoEl.style.width = '0%';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        thermoEl.style.width = `${Math.min((temp / 100) * 100, 100)}%`;
+                    });
+                });
+            }
+            
+            // Konfetti starten
+            startConfetti();
+        }
+
+        // --- CONFETTI ---
+        function startConfetti() {
+            const container = document.getElementById('confetti-container');
+            if(!container) return;
+            
+            const colors = ['#ffd700', '#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#f0932b', '#eb4d4b', '#6c5ce7'];
+            
+            for(let i = 0; i < 100; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                    confetti.style.animationDelay = Math.random() * 0.5 + 's';
+                    container.appendChild(confetti);
+                    
+                    setTimeout(() => confetti.remove(), 5000);
+                }, i * 20);
+            }
+        }
+
+        // --- RENDER VOTING ---
+        function renderVoting(data) {
+            const votingStatus = document.getElementById('votingStatus');
+            const votingResults = document.getElementById('votingResults');
+            const btnRematch = document.getElementById('btnVoteRematch');
+            const btnLeave = document.getElementById('btnVoteLeave');
+            
+            const votes = data.rematchVotes || {};
+            const players = Object.keys(data.players);
+            const activePlayers = players.filter(p => (data.players[p].temp || 0) < (data.config?.maxTemp || 100));
+            
+            const rematchCount = activePlayers.filter(p => votes[p] === true).length;
+            const leaveCount = activePlayers.filter(p => votes[p] === false).length;
+            const totalVotes = rematchCount + leaveCount;
+            
+            if(votingStatus) {
+                votingStatus.innerText = `Abgestimmt: ${totalVotes}/${activePlayers.length}`;
+            }
+            
+            if(votingResults) {
+                votingResults.innerHTML = `
+                    <div style="margin-bottom:10px;">✅ Nochmal spielen: ${rematchCount}</div>
+                    <div>🚪 Verlassen: ${leaveCount}</div>
+                `;
+            }
+            
+            // Buttons deaktivieren wenn bereits abgestimmt
+            if(votes[myName] !== undefined) {
+                if(btnRematch) btnRematch.disabled = true;
+                if(btnLeave) btnLeave.disabled = true;
+                if(votes[myName]) {
+                    if(btnRematch) btnRematch.innerText = '✅ Gewählt';
+                    if(btnLeave) btnLeave.innerText = '🚪 Verlassen';
+                } else {
+                    if(btnRematch) btnRematch.innerText = '✅ Nochmal spielen';
+                    if(btnLeave) btnLeave.innerText = '🚪 Gewählt';
+                }
+            } else {
+                if(btnRematch) btnRematch.disabled = false;
+                if(btnLeave) btnLeave.disabled = false;
+            }
+            
+            // Host kann Spiel starten wenn alle für Rematch gestimmt haben
+            if(isHost && totalVotes === activePlayers.length && rematchCount === activePlayers.length) {
+                const startBtn = document.createElement('button');
+                startBtn.className = 'btn-primary';
+                startBtn.style.cssText = 'width:100%; margin-top:20px; padding:15px; font-size:1.2rem;';
+                startBtn.innerText = '🎮 Neue Runde starten';
+                startBtn.onclick = startRematchGame;
+                if(!document.getElementById('btnStartRematch')) {
+                    startBtn.id = 'btnStartRematch';
+                    const votingCard = document.getElementById('screen-voting');
+                    if(votingCard) votingCard.appendChild(startBtn);
+                }
+            }
+        }
+
+        // --- VOTE REMATCH ---
+        window.voteRematch = async (wantRematch) => {
+            await updateDoc(doc(db, "lobbies", roomId), {
+                [`rematchVotes.${myName}`]: wantRematch
+            });
+        };
+
+        // --- START REMATCH ---
+        window.startRematchGame = async () => {
+            if(!isHost) return;
+            const pClean = {};
+            Object.keys(globalData.players).forEach(p => {
+                const startTemp = globalData.config?.startTemp || 0;
+                pClean[p] = { temp: startTemp, inventory: [], gender: globalData.players[p].gender || 'divers' };
+            });
+            
+            await updateDoc(doc(db, "lobbies", roomId), {
+                status: 'lobby',
+                players: pClean,
+                votes: {},
+                ready: [],
+                log: arrayUnion("♻️ Neue Runde gestartet! Alle Temperaturen wurden zurückgesetzt."),
+                hotseat: "",
+                roundId: 0,
+                lobbyReady: {},
+                countdownEnds: null,
+                usedQuestions: [],
+                rematchVotes: {},
+                eliminatedShown: [],
+                winner: null
+            });
+            document.body.classList.remove('final-mode');
+            showToast("Neue Runde gestartet!");
+        };
+
+        // --- SHOW ATTACK ANIMATION ---
+        async function showAttackAnimation(targetName, attackerName, dmg, newTemp) {
+            const overlay = document.getElementById('fullscreenAnimation');
+            if(!overlay) return;
+            
+            const emojiEl = document.getElementById('animEmoji');
+            const nameEl = document.getElementById('animName');
+            const textEl = document.getElementById('animText');
+            const thermoEl = document.getElementById('animThermoFill');
+            const tempEl = document.getElementById('animTemp');
+            
+            if(emojiEl) emojiEl.innerText = '🔥';
+            if(nameEl) nameEl.innerText = targetName;
+            if(textEl) textEl.innerText = `${attackerName} hat ${targetName} aufgeheizt (+${dmg}°C)`;
+            if(tempEl) tempEl.innerText = `${newTemp}°C`;
+            
+            overlay.style.display = 'flex';
+            
+            // Thermometer animieren
+            if(thermoEl) {
+                thermoEl.style.width = '0%';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        thermoEl.style.width = `${Math.min((newTemp / 100) * 100, 100)}%`;
+                    });
+                });
+            }
+            
+            // Nach 3 Sekunden ausblenden
+            await sleep(3000);
+            overlay.style.display = 'none';
+        }
+
+        // --- SHOW JOKER ANIMATION ---
+        async function showJokerAnimation(playerName, cardName) {
+            const overlay = document.getElementById('fullscreenAnimation');
+            if(!overlay) return;
+            
+            const emojiEl = document.getElementById('animEmoji');
+            const nameEl = document.getElementById('animName');
+            const textEl = document.getElementById('animText');
+            const thermoEl = document.getElementById('animThermoFill');
+            const tempEl = document.getElementById('animTemp');
+            
+            const cardInfo = {
+                card_oil: { emoji: '🛢️', name: 'Ölfass' },
+                card_mirror: { emoji: '🪞', name: 'Spiegel' },
+                card_ice: { emoji: '🧊', name: 'Eiswürfel' }
+            };
+            
+            const info = cardInfo[cardName] || { emoji: '🃏', name: 'Joker' };
+            
+            if(emojiEl) emojiEl.innerText = info.emoji;
+            if(nameEl) nameEl.innerText = playerName;
+            if(textEl) textEl.innerText = `hat einen Joker gezogen: ${info.name} - Aufgepasst! 🃏`;
+            if(tempEl) tempEl.innerText = '';
+            
+            overlay.style.display = 'flex';
+            
+            // Thermometer ausblenden
+            if(thermoEl) thermoEl.style.width = '0%';
+            
+            // Nach 3 Sekunden ausblenden
+            await sleep(3000);
+            overlay.style.display = 'none';
         }
 
     </script>
