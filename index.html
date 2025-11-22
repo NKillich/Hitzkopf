@@ -499,7 +499,7 @@
     <div class="menu-btn" onclick="toggleMenu()">⚙️</div>
     <div id="attackAlert" class="attack-alert"></div>
     <div id="countdownOverlay" class="countdown-overlay">
-        <div id="countdownText" class="countdown-text">3</div>
+        <div id="countdownText" class="countdown-text" style="font-size:4rem; line-height:1.2;">Hitz<br>kopf</div>
         <div class="countdown-sub">Bereit machen...</div>
     </div>
     <div id="rulesOverlay" class="countdown-overlay" style="display:none;">
@@ -535,16 +535,19 @@
     <div id="screen-start" class="screen active card">
         <h3 style="margin-bottom:15px; color:#ff8c00;">Wie heißt du?</h3>
         <input type="text" id="inpName" placeholder="Dein Name" maxlength="20" autocomplete="off">
-        <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:10px; margin-bottom:5px; font-weight:500;">Geschlecht (für korrekte Texte):</label>
-        <select id="inpGender" style="margin-bottom:15px;">
-            <option value="divers">Divers</option>
-            <option value="männlich">Männlich</option>
-            <option value="weiblich">Weiblich</option>
-        </select>
+        <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:15px; margin-bottom:8px; font-weight:500;">Wähle dein Emoji:</label>
+        <div style="position:relative; margin-bottom:15px;">
+            <div id="emojiCarousel" style="display:flex; align-items:center; gap:10px; overflow:hidden; position:relative;">
+                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:#2a2a2a; border:2px solid #444; border-radius:50%; width:40px; height:40px; color:#fff; font-size:1.2rem; cursor:pointer; flex-shrink:0;">‹</button>
+                <div id="emojiDisplay" style="flex:1; text-align:center; font-size:3rem; min-height:60px; display:flex; align-items:center; justify-content:center;">😊</div>
+                <button id="emojiNext" onclick="changeEmoji(1)" style="background:#2a2a2a; border:2px solid #444; border-radius:50%; width:40px; height:40px; color:#fff; font-size:1.2rem; cursor:pointer; flex-shrink:0;">›</button>
+            </div>
+            <input type="hidden" id="inpEmoji" value="😊">
+        </div>
         
         <div class="start-actions">
-            <button class="btn-primary" onclick="openHostSettings()">🔥 Hosten</button>
-            <button class="btn-secondary" onclick="openJoinPanel()">🤝 Beitreten</button>
+            <button class="btn-primary" onclick="openHostSettings()">🎮 Spiel erstellen</button>
+            <button class="btn-secondary" onclick="openJoinPanel()">🚪 Spiel beitreten</button>
         </div>
 
         <div id="hostSettings" class="start-panel hidden">
@@ -700,7 +703,7 @@
     <div id="screen-winner" class="screen card" style="background:radial-gradient(circle at center, rgba(0,209,255,0.15), #0a0a0a 70%); border:2px solid #00d1ff;">
         <div id="confetti-container" style="position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:5000;"></div>
         <div style="text-align:center; position:relative; z-index:1;">
-            <div style="font-size:6rem; margin-bottom:20px; animation:sweatShake 0.9s infinite;">😎</div>
+            <div id="winnerEmoji" style="font-size:6rem; margin-bottom:20px; animation:sweatShake 0.9s infinite;">😎</div>
             <div id="winnerName" style="font-size:3rem; font-weight:900; color:#00d1ff; margin-bottom:15px; text-shadow:0 0 30px rgba(0,209,255,0.7);">...</div>
             <div style="font-size:1.3rem; color:#c8f4ff; margin-bottom:30px;">ist cool geblieben und gewinnt diese Runde Hitzkopf! 🧊</div>
             <div style="width:80%; margin:0 auto 30px auto;">
@@ -708,6 +711,10 @@
                     <div id="winnerThermoFill" style="height:100%; width:0%; background:linear-gradient(90deg, #00d1ff, #0080ff); box-shadow:0 0 25px rgba(0,209,255,0.7); transition:width 1.5s ease-out;"></div>
                 </div>
                 <div id="winnerTemp" style="font-size:2rem; font-weight:bold; color:#00d1ff; margin-top:15px;">0°C</div>
+            </div>
+            <hr style="border-color:#003d5c; margin:30px 0;">
+            <div id="rankingList" style="text-align:left; margin-top:20px;">
+                <!-- Wird dynamisch gefüllt -->
             </div>
         </div>
     </div>
@@ -762,7 +769,8 @@
 
         // --- STATE ---
         let myName = sessionStorage.getItem("hk_name") || "";
-        let myGender = sessionStorage.getItem("hk_gender") || "divers";
+        let myEmoji = sessionStorage.getItem("hk_emoji") || "😊";
+        let myGender = sessionStorage.getItem("hk_gender") || "divers"; // Deaktiviert, aber behalten
         let roomId = sessionStorage.getItem("hk_room") || "";
         let isHost = false;
         let localActionDone = false;
@@ -778,6 +786,61 @@
         let countdownInterval = null;
         let countdownTarget = null;
         let rulesShown = false;
+        
+        // --- EMOJI SELECTION ---
+        const availableEmojis = ['😊', '😎', '🤠', '🥳', '😄', '🤩', '😇', '🧐', '🤓', '😋'];
+        let currentEmojiIndex = 0;
+        
+        window.changeEmoji = (direction) => {
+            currentEmojiIndex = (currentEmojiIndex + direction + availableEmojis.length) % availableEmojis.length;
+            const emoji = availableEmojis[currentEmojiIndex];
+            document.getElementById('emojiDisplay').innerText = emoji;
+            document.getElementById('inpEmoji').value = emoji;
+            myEmoji = emoji;
+        };
+        
+        // Touch-Swipe für Emoji-Auswahl
+        let touchStartX = 0;
+        let touchEndX = 0;
+        
+        // Initialisiere Emoji-Auswahl
+        if(document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initEmojiCarousel);
+        } else {
+            initEmojiCarousel();
+        }
+        
+        function initEmojiCarousel() {
+            const emojiCarousel = document.getElementById('emojiCarousel');
+            if(emojiCarousel) {
+                emojiCarousel.addEventListener('touchstart', (e) => {
+                    touchStartX = e.changedTouches[0].screenX;
+                });
+                emojiCarousel.addEventListener('touchend', (e) => {
+                    touchEndX = e.changedTouches[0].screenX;
+                    handleSwipe();
+                });
+            }
+            
+            // Initialisiere Emoji-Anzeige
+            const emojiDisplay = document.getElementById('emojiDisplay');
+            const inpEmoji = document.getElementById('inpEmoji');
+            if(emojiDisplay && inpEmoji) {
+                emojiDisplay.innerText = myEmoji;
+                inpEmoji.value = myEmoji;
+                currentEmojiIndex = availableEmojis.indexOf(myEmoji);
+                if(currentEmojiIndex === -1) currentEmojiIndex = 0;
+            }
+        }
+        
+        function handleSwipe() {
+            if(touchEndX < touchStartX - 50) {
+                changeEmoji(1); // Swipe left = next
+            }
+            if(touchEndX > touchStartX + 50) {
+                changeEmoji(-1); // Swipe right = prev
+            }
+        }
         
         // --- GENDERING FUNCTION ---
         function genderText(text, gender = myGender) {
@@ -942,7 +1005,12 @@
         // --- AUTO LOGIN ---
         if(myName && roomId) {
             document.getElementById('inpName').value = myName;
-            document.getElementById('inpGender').value = myGender;
+            if(document.getElementById('inpEmoji')) {
+                document.getElementById('inpEmoji').value = myEmoji;
+                document.getElementById('emojiDisplay').innerText = myEmoji;
+                currentEmojiIndex = availableEmojis.indexOf(myEmoji);
+                if(currentEmojiIndex === -1) currentEmojiIndex = 0;
+            }
             document.getElementById('inpCode').value = roomId;
             setTimeout(() => joinGame(), 500);
         }
@@ -993,7 +1061,8 @@
         // --- CREATE GAME ---
         window.createGame = async () => {
             const name = document.getElementById('inpName').value.trim();
-            const gender = document.getElementById('inpGender').value;
+            const emoji = document.getElementById('inpEmoji').value || '😊';
+            const gender = "divers"; // Deaktiviert, aber behalten
             const dmg = parseInt(document.getElementById('inpDmg').value);
             const speed = parseFloat(document.getElementById('inpSpeed').value);
             const startTemp = parseInt(document.getElementById('inpStartTemp').value);
@@ -1005,16 +1074,18 @@
             
             const code = Math.random().toString(36).substring(2,6).toUpperCase();
             myName = name;
+            myEmoji = emoji;
             myGender = gender;
             roomId = code;
             sessionStorage.setItem("hk_name", name);
+            sessionStorage.setItem("hk_emoji", emoji);
             sessionStorage.setItem("hk_gender", gender);
             sessionStorage.setItem("hk_room", code);
 
             await setDoc(doc(db, "lobbies", code), {
                 host: name,
                 status: "lobby",
-                players: { [name]: { temp: startTemp, inventory: [], gender: gender } },
+                players: { [name]: { temp: startTemp, inventory: [], gender: gender, emoji: emoji } },
                 config: { dmg: dmg, speed: speed, startTemp: startTemp, maxTemp: maxTemp },
                 votes: {},
                 ready: [],
@@ -1035,7 +1106,8 @@
         // --- JOIN GAME ---
         window.joinGame = async () => {
             const name = document.getElementById('inpName').value.trim();
-            const gender = document.getElementById('inpGender').value;
+            const emoji = document.getElementById('inpEmoji').value || '😊';
+            const gender = "divers"; // Deaktiviert, aber behalten
             const code = document.getElementById('inpCode').value.trim().toUpperCase();
             if(!name || !code) {
                 showToast("Bitte gib Name und Code ein!");
@@ -1043,9 +1115,11 @@
             }
             
             myName = name;
+            myEmoji = emoji;
             myGender = gender;
             roomId = code;
             sessionStorage.setItem("hk_name", name);
+            sessionStorage.setItem("hk_emoji", emoji);
             sessionStorage.setItem("hk_gender", gender);
             sessionStorage.setItem("hk_room", code);
 
@@ -1059,10 +1133,13 @@
             const data = snap.data();
             const startTemp = data.config?.startTemp || 0;
             if(!data.players[name]) {
-                await updateDoc(ref, { [`players.${name}`]: { temp: startTemp, inventory: [], gender: gender } });
+                await updateDoc(ref, { [`players.${name}`]: { temp: startTemp, inventory: [], gender: gender, emoji: emoji } });
             } else {
-                // Geschlecht aktualisieren falls bereits vorhanden
-                await updateDoc(ref, { [`players.${name}.gender`]: gender });
+                // Emoji und Geschlecht aktualisieren falls bereits vorhanden
+                await updateDoc(ref, { 
+                    [`players.${name}.gender`]: gender,
+                    [`players.${name}.emoji`]: emoji
+                });
             }
             connectToLobby();
         };
@@ -1195,7 +1272,9 @@
                         readyList.innerHTML = players.map(p => {
                             const ready = readyObj[p];
                             const icon = ready ? '✅' : '⏳';
-                            return `<div>${icon} ${p}</div>`;
+                            const playerData = data.players[p];
+                            const playerEmoji = playerData?.emoji || '😊';
+                            return `<div>${icon} ${playerEmoji} ${p}</div>`;
                         }).join('');
                     }
                     const readyCount = players.filter(p => readyObj[p]).length;
@@ -1703,7 +1782,7 @@
                 return;
             }
             
-            // Zeige Regeln beim ersten Start
+            // Zeige Regeln beim ersten Start (für alle Spieler)
             if(!rulesShown) {
                 const rulesOverlay = document.getElementById('rulesOverlay');
                 if(rulesOverlay) {
@@ -1993,8 +2072,9 @@
                 if(targetId === 'gridGame' && lastTemps[p] != null && d.temp > lastTemps[p]) {
                     classes.push('shake');
                 }
+                const playerEmoji = d.emoji || '😊';
                 const prefix = isHotseat ? '🥵 ' : (idx === 0 ? '🔥 ' : '');
-                const nameLabel = `${prefix}${p}${inventory}`;
+                const nameLabel = `${prefix}${playerEmoji} ${p}${inventory}`;
                 
                 html += `
                     <div class="${classes.join(' ')}">
@@ -2153,9 +2233,9 @@
             const remainingMs = countdownTarget - Date.now();
             const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
             if(seconds > 0) {
-                textEl.innerText = seconds;
+                textEl.innerHTML = seconds.toString();
             } else {
-                textEl.innerText = "LOS!";
+                textEl.innerHTML = "Hitz<br>kopf";
             }
         }
 
@@ -2215,11 +2295,17 @@
         // --- RENDER WINNER ---
         function renderWinner(winnerName, players) {
             const nameEl = document.getElementById('winnerName');
+            const emojiEl = document.getElementById('winnerEmoji');
             const tempEl = document.getElementById('winnerTemp');
             const thermoEl = document.getElementById('winnerThermoFill');
+            const rankingEl = document.getElementById('rankingList');
+            
+            const winnerData = players[winnerName];
+            const winnerEmoji = winnerData?.emoji || '😎';
             
             if(nameEl) nameEl.innerText = winnerName;
-            const temp = players[winnerName]?.temp || 0;
+            if(emojiEl) emojiEl.innerText = winnerEmoji;
+            const temp = winnerData?.temp || 0;
             if(tempEl) tempEl.innerText = `${temp}°C`;
             
             // Thermometer animieren
@@ -2230,6 +2316,31 @@
                         thermoEl.style.width = `${Math.min((temp / 100) * 100, 100)}%`;
                     });
                 });
+            }
+            
+            // Ranking: Andere Spieler nach Reihenfolge des Rausfliegens
+            const maxTemp = globalData?.config?.maxTemp || 100;
+            const eliminated = Object.keys(players)
+                .filter(p => p !== winnerName && (players[p].temp || 0) >= maxTemp)
+                .sort((a, b) => (players[b].temp || 0) - (players[a].temp || 0)); // Höchste zuerst (zuletzt rausgeflogen)
+            
+            if(rankingEl && eliminated.length > 0) {
+                rankingEl.innerHTML = eliminated.map((p, idx) => {
+                    const playerData = players[p];
+                    const playerEmoji = playerData?.emoji || '🥵';
+                    const playerTemp = playerData?.temp || 0;
+                    return `
+                        <div style="padding:12px; margin-bottom:8px; background:rgba(255,69,0,0.1); border:1px solid rgba(255,69,0,0.3); border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <span style="font-size:1.5rem; margin-right:10px;">${playerEmoji}</span>
+                                <span style="font-size:1.1rem; font-weight:bold; color:#ff8c00;">${p}</span>
+                            </div>
+                            <div style="font-size:1rem; color:#ff4500; font-weight:bold;">${playerTemp}°C</div>
+                        </div>
+                    `;
+                }).join('');
+            } else if(rankingEl) {
+                rankingEl.innerHTML = '<div style="text-align:center; color:#888; padding:20px;">Keine weiteren Spieler</div>';
             }
             
             // Konfetti starten
