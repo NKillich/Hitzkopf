@@ -550,12 +550,6 @@
             <button class="btn-primary" onclick="openHostSettings()">🎮 Spiel erstellen</button>
             <button class="btn-secondary" onclick="openJoinPanel()">🚪 Spiel beitreten</button>
         </div>
-    </div>
-    
-    <!-- ANLEITUNG BUTTON (außerhalb des Kastens) -->
-    <div style="max-width:480px; margin:20px auto 0 auto;">
-        <button onclick="openRulesOverlay()" class="btn-secondary" style="width:100%; padding:12px; font-size:0.95rem; margin-top:10px;">📖 Anleitung</button>
-    </div>
 
         <div id="hostSettings" class="start-panel hidden">
             <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px; font-weight:600;">⚙️ Host-Einstellungen</p>
@@ -592,6 +586,11 @@
             <input type="text" id="inpCode" placeholder="Raum-Code" style="text-transform:uppercase;" maxlength="6" autocomplete="off" oninput="this.value = this.value.toUpperCase();">
             <button class="btn-secondary" onclick="joinGame()">🚪 Beitreten</button>
         </div>
+    </div>
+    
+    <!-- ANLEITUNG BUTTON (außerhalb des Kastens, nur auf Start-Screen) -->
+    <div id="anleitungButton" style="max-width:480px; margin:20px auto 0 auto; display:none;">
+        <button onclick="openRulesOverlay()" class="btn-secondary" style="width:100%; padding:12px; font-size:0.95rem; margin-top:10px;">📖 Anleitung</button>
     </div>
 
     <!-- LOBBY SCREEN -->
@@ -862,6 +861,13 @@
                 }
                 emojiDisplay.innerText = myEmoji;
                 inpEmoji.value = myEmoji;
+            }
+            
+            // Initialisiere Anleitung-Button Sichtbarkeit
+            const anleitungBtn = document.getElementById('anleitungButton');
+            const startScreen = document.getElementById('screen-start');
+            if(anleitungBtn && startScreen) {
+                anleitungBtn.style.display = startScreen.classList.contains('active') ? 'block' : 'none';
             }
         }
         
@@ -2018,6 +2024,20 @@
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+            
+            // Anleitung-Button nur auf Start-Screen anzeigen
+            const anleitungBtn = document.getElementById('anleitungButton');
+            if(anleitungBtn) {
+                anleitungBtn.style.display = (id === 'screen-start') ? 'block' : 'none';
+            }
+            
+            // Host-Einstellungen und Join-Panel zurücksetzen wenn nicht auf Start-Screen
+            if(id !== 'screen-start') {
+                const hostSettings = document.getElementById('hostSettings');
+                const joinPanel = document.getElementById('joinPanel');
+                if(hostSettings) hostSettings.classList.add('hidden');
+                if(joinPanel) joinPanel.classList.add('hidden');
+            }
         }
 
         function renderGameOver(loser, players) {
