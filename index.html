@@ -542,12 +542,11 @@
         <h3 id="lblQuestion" style="margin:20px 0;">Lade...</h3>
 
         <div id="stratSection" style="margin-top:15px;">
-            <p style="font-size:0.8rem; color:#666; margin-bottom:5px;">WENN DU RICHTIG LIEGST:</p>
-            <select id="inpStrat" onchange="onStrategyChange()">
-                <option value="">-- Bitte wählen --</option>
-                <option value="attack">🔴 Angriff</option>
-                <option value="invest">🃏 Joker ziehen</option>
-            </select>
+            <p style="font-size:0.8rem; color:#666; margin-bottom:8px;">WENN DU RICHTIG LIEGST:</p>
+            <div class="option-row" style="gap:12px;">
+                <button id="btnStratAttack" class="btn-option" onclick="selectStrategy('attack')" style="flex:1;">🔴 Angriff</button>
+                <button id="btnStratInvest" class="btn-option" onclick="selectStrategy('invest')" style="flex:1;">🃏 Joker ziehen</button>
+            </div>
         </div>
 
         <div class="option-row" id="optionRow" style="margin-top:15px; opacity:0.5; pointer-events:none;">
@@ -647,6 +646,7 @@
         let isHost = false;
         let localActionDone = false;
         let mySelection = null;
+        let myStrategy = null;
         let globalData = null;
         let lastRoundId = null;
         let loggedRoundResult = null;
@@ -1091,7 +1091,11 @@
                 btnB.classList.remove('selected');
                 btnLock.disabled = true;
                 // Strategie zurücksetzen
-                document.getElementById('inpStrat').value = '';
+                myStrategy = null;
+                const btnAttack = document.getElementById('btnStratAttack');
+                const btnInvest = document.getElementById('btnStratInvest');
+                if(btnAttack) btnAttack.classList.remove('selected');
+                if(btnInvest) btnInvest.classList.remove('selected');
                 // A/B Buttons deaktivieren
                 const optionRow = document.getElementById('optionRow');
                 if(optionRow) {
@@ -1108,21 +1112,28 @@
                     optionRow.style.opacity = '0.5';
                     optionRow.style.pointerEvents = 'none';
                 }
-                const stratSelect = document.getElementById('inpStrat');
-                if(stratSelect) stratSelect.disabled = true;
+                // Strategie-Buttons deaktivieren
+                const btnAttack = document.getElementById('btnStratAttack');
+                const btnInvest = document.getElementById('btnStratInvest');
+                if(btnAttack) btnAttack.disabled = true;
+                if(btnInvest) btnInvest.disabled = true;
             } else {
                 btnLock.classList.remove('hidden');
-                const stratSelect = document.getElementById('inpStrat');
                 const stratSection = document.getElementById('stratSection');
                 const isHotseat = stratSection && stratSection.classList.contains('hidden');
+                
+                // Strategie-Buttons aktivieren
+                const btnAttack = document.getElementById('btnStratAttack');
+                const btnInvest = document.getElementById('btnStratInvest');
+                if(btnAttack) btnAttack.disabled = false;
+                if(btnInvest) btnInvest.disabled = false;
                 
                 // Für Hotseat: nur mySelection prüfen, für andere: beides prüfen
                 if(isHotseat) {
                     btnLock.disabled = !mySelection;
                 } else {
-                    btnLock.disabled = !mySelection || !stratSelect.value;
+                    btnLock.disabled = !mySelection || !myStrategy;
                 }
-                if(stratSelect) stratSelect.disabled = false;
             }
 
             // Robustere Behandlung von currentQ (Firebase kann Objekte anders serialisieren)
@@ -1159,7 +1170,7 @@
                 document.getElementById('stratSection').classList.remove('hidden');
                 // A/B Buttons deaktivieren, bis Strategie gewählt
                 const optionRow = document.getElementById('optionRow');
-                if(optionRow && !document.getElementById('inpStrat').value) {
+                if(optionRow && !myStrategy) {
                     optionRow.style.opacity = '0.5';
                     optionRow.style.pointerEvents = 'none';
                 }
@@ -1179,7 +1190,7 @@
                 document.getElementById('stratSection').classList.remove('hidden');
                 // A/B Buttons deaktivieren, bis Strategie gewählt
                 const optionRow = document.getElementById('optionRow');
-                if(optionRow && !document.getElementById('inpStrat').value) {
+                if(optionRow && !myStrategy) {
                     optionRow.style.opacity = '0.5';
                     optionRow.style.pointerEvents = 'none';
                 }
@@ -1297,28 +1308,31 @@
             });
         };
 
-        // --- STRATEGY CHANGE ---
-        window.onStrategyChange = () => {
-            const strat = document.getElementById('inpStrat').value;
+        // --- SELECT STRATEGY ---
+        window.selectStrategy = (strat) => {
+            myStrategy = strat;
+            const btnAttack = document.getElementById('btnStratAttack');
+            const btnInvest = document.getElementById('btnStratInvest');
             const optionRow = document.getElementById('optionRow');
             const lockBtn = document.getElementById('btnLock');
             
-            if(strat) {
-                // Strategie gewählt - A/B Buttons aktivieren
+            // Buttons markieren
+            if(btnAttack) {
+                btnAttack.classList.toggle('selected', strat === 'attack');
+            }
+            if(btnInvest) {
+                btnInvest.classList.toggle('selected', strat === 'invest');
+            }
+            
+            // A/B Buttons aktivieren
+            if(optionRow) {
                 optionRow.style.opacity = '1';
                 optionRow.style.pointerEvents = 'auto';
-                // Lock-Button aktivieren, wenn bereits A/B gewählt wurde
-                if(lockBtn && mySelection) {
-                    lockBtn.disabled = false;
-                }
-            } else {
-                // Keine Strategie - A/B Buttons deaktivieren
-                optionRow.style.opacity = '0.5';
-                optionRow.style.pointerEvents = 'none';
-                mySelection = null;
-                document.getElementById('btnA').classList.remove('selected');
-                document.getElementById('btnB').classList.remove('selected');
-                if(lockBtn) lockBtn.disabled = true;
+            }
+            
+            // Lock-Button aktivieren, wenn bereits A/B gewählt wurde
+            if(lockBtn && mySelection) {
+                lockBtn.disabled = false;
             }
         };
 
@@ -1329,8 +1343,7 @@
             const isHotseat = stratSection && stratSection.classList.contains('hidden');
             
             if(!isHotseat) {
-                const strat = document.getElementById('inpStrat').value;
-                if(!strat) {
+                if(!myStrategy) {
                     alert("Bitte zuerst eine Strategie wählen (Angriff oder Joker)!");
                     return;
                 }
@@ -1349,7 +1362,7 @@
             const stratSection = document.getElementById('stratSection');
             const isHotseat = stratSection && stratSection.classList.contains('hidden');
             
-            let strat = document.getElementById('inpStrat').value;
+            let strat = myStrategy;
             if(!isHotseat && !strat) {
                 return alert("Bitte zuerst eine Strategie wählen (Angriff oder Joker)!");
             }
