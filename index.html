@@ -763,12 +763,25 @@
         ];
         
         function getRandomUnusedQuestion(usedQuestions = []) {
+            if(!questions || questions.length === 0) {
+                console.error('Keine Fragen verfügbar!');
+                return { question: { q: "Keine Frage verfügbar", a: "A", b: "B" }, index: -1 };
+            }
             const available = questions.filter((q, idx) => !usedQuestions.includes(idx));
             if(available.length === 0) {
                 const randomIdx = Math.floor(Math.random() * questions.length);
-                return { question: questions[randomIdx], index: randomIdx };
+                const q = questions[randomIdx];
+                if(!q || !q.q) {
+                    console.error('Ungültige Frage gefunden:', q);
+                    return { question: questions[0] || { q: "Fehler", a: "A", b: "B" }, index: 0 };
+                }
+                return { question: q, index: randomIdx };
             }
             const randomQ = available[Math.floor(Math.random() * available.length)];
+            if(!randomQ || !randomQ.q) {
+                console.error('Ungültige Frage gefunden:', randomQ);
+                return { question: questions[0] || { q: "Fehler", a: "A", b: "B" }, index: 0 };
+            }
             return { question: randomQ, index: questions.indexOf(randomQ) };
         }
         const cardInfo = {
@@ -992,17 +1005,24 @@
                     }
                 }
                 else if(data.status === 'game') {
-                    // Sicherstellen, dass currentQ gesetzt ist
-                    if(!data.currentQ || !data.currentQ.q) {
+                    // Sicherstellen, dass currentQ gesetzt ist und korrekt formatiert
+                    let currentQ = data.currentQ;
+                    if(currentQ && typeof currentQ === 'object') {
+                        // Prüfe ob es ein Firebase Timestamp oder Map ist
+                        if(currentQ.toDate || currentQ.toMillis) currentQ = null;
+                    }
+                    if(!currentQ || typeof currentQ.q !== 'string' || !currentQ.q) {
                         if(isHost) {
                             const usedQuestions = data.usedQuestions || [];
                             const { question: q } = getRandomUnusedQuestion(usedQuestions);
-                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q });
+                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q }).catch(console.error);
                             data.currentQ = q;
                         } else {
                             // Fallback für Nicht-Hosts
                             data.currentQ = questions[0] || { q: "Lade Frage...", a: "A", b: "B" };
                         }
+                    } else {
+                        data.currentQ = currentQ; // Verwende das bereinigte currentQ
                     }
                     if(readyBtn) readyBtn.style.display = 'none';
                     if(readyStatus) readyStatus.innerText = "";
@@ -1019,17 +1039,24 @@
                     }
                 }
                 else if(data.status === 'result') {
-                    // Sicherstellen, dass currentQ gesetzt ist
-                    if(!data.currentQ || !data.currentQ.q) {
+                    // Sicherstellen, dass currentQ gesetzt ist und korrekt formatiert
+                    let currentQ = data.currentQ;
+                    if(currentQ && typeof currentQ === 'object') {
+                        // Prüfe ob es ein Firebase Timestamp oder Map ist
+                        if(currentQ.toDate || currentQ.toMillis) currentQ = null;
+                    }
+                    if(!currentQ || typeof currentQ.q !== 'string' || !currentQ.q) {
                         if(isHost) {
                             const usedQuestions = data.usedQuestions || [];
                             const { question: q } = getRandomUnusedQuestion(usedQuestions);
-                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q });
+                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q }).catch(console.error);
                             data.currentQ = q;
                         } else {
                             // Fallback für Nicht-Hosts
                             data.currentQ = questions[0] || { q: "Lade Frage...", a: "A", b: "B" };
                         }
+                    } else {
+                        data.currentQ = currentQ; // Verwende das bereinigte currentQ
                     }
                     if(readyBtn) readyBtn.style.display = 'none';
                     if(readyStatus) readyStatus.innerText = "";
@@ -1071,16 +1098,32 @@
                 btnLock.disabled = !mySelection;
             }
 
-            if(data.currentQ && data.currentQ.q) {
-                document.getElementById('lblQuestion').innerText = data.currentQ.q;
-                btnA.innerText = data.currentQ.a || 'A';
-                btnB.innerText = data.currentQ.b || 'B';
+            // Robustere Behandlung von currentQ (Firebase kann Objekte anders serialisieren)
+            let currentQ = data.currentQ;
+            if(currentQ && typeof currentQ === 'object') {
+                // Prüfe ob es ein Firebase Timestamp oder Map ist
+                if(currentQ.toDate) currentQ = null; // Timestamp, ignorieren
+                if(currentQ.toMillis) currentQ = null; // Timestamp, ignorieren
+            }
+            
+            if(currentQ && currentQ.q && typeof currentQ.q === 'string') {
+                document.getElementById('lblQuestion').innerText = currentQ.q;
+                btnA.innerText = currentQ.a || 'A';
+                btnB.innerText = currentQ.b || 'B';
             } else {
-                // Fallback falls currentQ fehlt
+                // Fallback falls currentQ fehlt oder falsch formatiert
+                console.warn('currentQ fehlt oder ist falsch formatiert:', currentQ);
                 const fallbackQ = questions[0] || { q: "Lade Frage...", a: "A", b: "B" };
                 document.getElementById('lblQuestion').innerText = fallbackQ.q;
                 btnA.innerText = fallbackQ.a;
                 btnB.innerText = fallbackQ.b;
+                
+                // Versuche currentQ zu reparieren (nur als Host)
+                if(isHost && globalData) {
+                    const usedQuestions = globalData.usedQuestions || [];
+                    const { question: q } = getRandomUnusedQuestion(usedQuestions);
+                    updateDoc(doc(db, "lobbies", roomId), { currentQ: q }).catch(console.error);
+                }
             }
             
             if(!data.hotseat) {
@@ -1113,8 +1156,21 @@
         function renderResult(data) {
             const truth = data.votes[data.hotseat]?.choice;
             let truthText = '?';
-            if(truth && data.currentQ) {
-                truthText = truth === 'A' ? (data.currentQ.a || 'A') : (data.currentQ.b || 'B');
+            
+            // Robustere Behandlung von currentQ (Firebase kann Objekte anders serialisieren)
+            let currentQ = data.currentQ;
+            if(currentQ && typeof currentQ === 'object') {
+                // Prüfe ob es ein Firebase Timestamp oder Map ist
+                if(currentQ.toDate) currentQ = null; // Timestamp, ignorieren
+                if(currentQ.toMillis) currentQ = null; // Timestamp, ignorieren
+            }
+            
+            if(truth && currentQ && typeof currentQ.a === 'string' && typeof currentQ.b === 'string') {
+                truthText = truth === 'A' ? currentQ.a : currentQ.b;
+            } else if(truth) {
+                // Fallback falls currentQ fehlt
+                console.warn('currentQ fehlt in renderResult:', currentQ);
+                truthText = truth === 'A' ? 'A' : 'B';
             }
             document.getElementById('lblTruth').innerText = truthText;
 
