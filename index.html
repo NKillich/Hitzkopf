@@ -159,6 +159,47 @@
         
         .category-card {
             aspect-ratio: 1;
+            background: linear-gradient(145deg, #1a1a1a, #0f0f0f);
+            border: 3px solid #333;
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            opacity: 0.4;
+        }
+        .category-card:hover {
+            opacity: 0.6;
+            transform: translateY(-2px);
+        }
+        .category-card.selected {
+            opacity: 1;
+            border-color: #ff4500;
+            background: linear-gradient(145deg, #2a2a2a, #1f1f1f);
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.5);
+        }
+        .category-card.selected:hover {
+            opacity: 1;
+        }
+        .category-card .category-emoji {
+            font-size: 2rem;
+        }
+        .category-card .category-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #888;
+        }
+        .category-card.selected .category-name {
+            color: #fff;
+        }
+        
+        .game-mode-card {
+            aspect-ratio: 1;
             background: linear-gradient(145deg, #2a2a2a, #1f1f1f);
             border: 3px solid #444;
             border-radius: 12px;
@@ -172,25 +213,25 @@
             transition: all 0.3s;
             text-align: center;
         }
-        .category-card:hover {
+        .game-mode-card:hover {
             border-color: #666;
             background: linear-gradient(145deg, #333, #2a2a2a);
             transform: translateY(-2px);
         }
-        .category-card.selected {
+        .game-mode-card.selected {
             border-color: #ff4500;
             background: linear-gradient(145deg, #3e2e2e, #2a1a1a);
             box-shadow: 0 0 20px rgba(255, 69, 0, 0.5);
         }
-        .category-card .category-emoji {
+        .game-mode-card .mode-emoji {
             font-size: 2rem;
         }
-        .category-card .category-name {
-            font-size: 0.85rem;
+        .game-mode-card .mode-name {
+            font-size: 0.9rem;
             font-weight: 600;
             color: #fff;
         }
-        .category-card.selected .category-name {
+        .game-mode-card.selected .mode-name {
             color: #ff4500;
         }
 
@@ -591,10 +632,18 @@
         <div id="hostSettings" class="start-panel hidden">
             <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px; font-weight:600;">⚙️ Host-Einstellungen</p>
             <label style="display:block; font-size:0.85rem; color:#aaa; margin-bottom:5px; font-weight:500;">Spielmodus:</label>
-            <select id="inpGameMode">
-                <option value="strategisch">Strategisch (länger) 🕐</option>
-                <option value="party">Party (schneller) ⚡</option>
-            </select>
+            <div id="gameModeSelection" style="display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-top:10px; margin-bottom:15px;">
+                <div class="game-mode-card selected" data-mode="party" onclick="toggleGameMode('party')">
+                    <div class="mode-emoji">⚡</div>
+                    <div class="mode-name">Party-Modus</div>
+                    <div style="font-size:0.7rem; color:#aaa; margin-top:5px;">Schnell & einfach</div>
+                </div>
+                <div class="game-mode-card" data-mode="strategisch" onclick="toggleGameMode('strategisch')">
+                    <div class="mode-emoji">🕐</div>
+                    <div class="mode-name">Strategie-Modus</div>
+                    <div style="font-size:0.7rem; color:#aaa; margin-top:5px;">Mit Joker & Taktik</div>
+                </div>
+            </div>
             <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:12px; margin-bottom:5px; font-weight:500;">Wähle Fragenkategorien:</label>
             <div id="categorySelection" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-top:10px; margin-bottom:15px;">
                 <!-- Wird dynamisch gefüllt -->
@@ -603,7 +652,7 @@
         </div>
 
         <div id="joinPanel" class="start-panel hidden">
-            <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px; font-weight:600;">🤝 Lobby beitreten</p>
+            <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px; font-weight:600;">🤝 Spiel beitreten</p>
             <div id="roomList" style="max-height:300px; overflow-y:auto; margin-bottom:15px; display:none;">
                 <!-- Wird dynamisch gefüllt -->
             </div>
@@ -652,7 +701,7 @@
 
         <button id="btnLock" class="btn-primary" style="margin-top:20px;" onclick="submitVote()">🔒 Antwort absenden</button>
         <div id="lblVoteStatus" style="font-size:0.8rem; color:#888; margin-top:10px;"></div>
-        <div class="joker-panel">
+        <div class="joker-panel" id="jokerPanelGame">
             <h4>Deine Joker</h4>
             <div id="myJokerListGame" class="joker-strip"></div>
         </div>
@@ -678,11 +727,11 @@
         </div>
 
         <div id="boxAttack" style="display:none; background:#3a1a1a; padding:10px; border-radius:10px; margin-bottom:15px;">
-            <h4 style="margin:0 0 10px 0;">🔥 Wen angreifen?</h4>
+            <h4 style="margin:0 0 10px 0;" id="attackTitle">🔥 Wen aufheizen?</h4>
             <div id="divTargets" style="display:grid; grid-template-columns:1fr 1fr; gap:5px;"></div>
-            <div style="display:flex; gap:5px; margin-top:10px;">
-                <button style="flex:1; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; padding:8px;" onclick="goBackToReward()">← Zurück</button>
-                <button style="flex:1; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; padding:8px;" onclick="skipAttack()">Angriff überspringen</button>
+            <div style="display:flex; gap:5px; margin-top:10px;" id="attackControls">
+                <button style="flex:1; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; padding:8px; display:none;" onclick="goBackToReward()" id="btnBackFromAttack">← Zurück</button>
+                <button style="flex:1; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; padding:8px; display:none;" onclick="skipAttack()" id="btnSkipAttack">Angriff überspringen</button>
             </div>
         </div>
 
@@ -1414,13 +1463,7 @@
                 `;
             }).join('');
             
-            // Alle Kategorien standardmäßig aktivieren
-            Object.keys(questionCategories).forEach(catKey => {
-                const card = document.querySelector(`[data-category="${catKey}"]`);
-                if(card) {
-                    card.classList.add('selected');
-                }
-            });
+            // Keine Kategorien standardmäßig aktiviert
         }
         
         window.toggleCategory = (catKey) => {
@@ -1430,12 +1473,27 @@
             }
         };
         
+        window.toggleGameMode = (mode) => {
+            document.querySelectorAll('.game-mode-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            const card = document.querySelector(`[data-mode="${mode}"]`);
+            if(card) {
+                card.classList.add('selected');
+            }
+        };
+        
+        function getSelectedGameMode() {
+            const selectedCard = document.querySelector('.game-mode-card.selected');
+            return selectedCard ? selectedCard.getAttribute('data-mode') : 'party';
+        }
+        
         function getSelectedCategories() {
             const selected = [];
             document.querySelectorAll('.category-card.selected').forEach(card => {
                 selected.push(card.getAttribute('data-category'));
             });
-            return selected.length > 0 ? selected : Object.keys(questionCategories);
+            return selected;
         }
         window.openJoinPanel = () => {
             if(!ensureName()) return;
@@ -1474,6 +1532,7 @@
                 if(rooms.length === 0) {
                     roomListEl.style.display = 'none';
                     inpCodeEl.style.display = 'block';
+                    inpCodeEl.placeholder = 'Raum-Code';
                     inpPasswordEl.style.display = 'none';
                     inpCodeEl.focus();
                 } else {
@@ -1483,7 +1542,7 @@
                     roomListEl.innerHTML = rooms.map(room => `
                         <div class="card" style="padding:15px; margin-bottom:10px; cursor:pointer; background:linear-gradient(145deg, #1e1e1e, #252525);" onclick="selectRoom('${room.id}', ${room.password ? 'true' : 'false'})">
                             <div style="font-weight:bold; font-size:1.1rem; color:#ff8c00;">Raum von ${room.hostName}</div>
-                            <div style="font-size:0.85rem; color:#aaa; margin-top:5px;">👥 ${room.playerCount} Spieler</div>
+                            <div style="font-size:0.85rem; color:#aaa; margin-top:5px;">👥 ${room.playerCount} Spieler • Code: ${room.id}</div>
                         </div>
                     `).join('');
                 }
@@ -1494,15 +1553,18 @@
         };
         
         window.selectRoom = (roomId, hasPassword) => {
-            document.getElementById('inpCode').value = roomId;
+            // Zeige Code-Eingabefeld und Passwort-Feld
             document.getElementById('inpCode').style.display = 'block';
+            document.getElementById('inpCode').placeholder = `Raum-Code (z.B. ${roomId})`;
+            document.getElementById('inpCode').value = '';
+            document.getElementById('inpCode').focus();
             if(hasPassword) {
                 document.getElementById('inpPassword').style.display = 'block';
-                document.getElementById('inpPassword').focus();
             } else {
                 document.getElementById('inpPassword').style.display = 'none';
-                joinGame();
             }
+            // Verstecke Raumliste
+            document.getElementById('roomList').style.display = 'none';
         };
         window.toggleLobbyReady = async () => {
             if(!roomId) return;
@@ -1517,7 +1579,7 @@
             const name = document.getElementById('inpName').value.trim();
             const emoji = document.getElementById('inpEmoji').value || '😊';
             const gender = "divers"; // Deaktiviert, aber behalten
-            const gameMode = document.getElementById('inpGameMode').value;
+            const gameMode = getSelectedGameMode();
             const selectedCategories = getSelectedCategories();
             
             if(!name) {
@@ -1526,7 +1588,7 @@
             }
             
             if(selectedCategories.length === 0) {
-                showToast("Bitte wähle mindestens eine Kategorie!");
+                showToast("Bitte wähle mindestens eine Kategorie aus!");
                 return;
             }
             
@@ -1538,10 +1600,10 @@
                 startTemp = 0;
                 maxTemp = 120;
             } else { // party
-                dmg = 20;
+                dmg = 20; // Schaden für Angriff
                 speed = 1.5;
-                startTemp = 10;
-                maxTemp = 80;
+                startTemp = 0;
+                maxTemp = 100;
             }
             
             const code = Math.random().toString(36).substring(2,6).toUpperCase();
@@ -1983,7 +2045,15 @@
             const voteText = voted.length ? voted.join(', ') : 'Niemand';
             const pendingText = pending.length ? pending.join(', ') : 'Niemand';
             voteStatusEl.innerHTML = `✅ Abgegeben: ${voteText}<br>🤔 Überlegen: ${pendingText}`;
-            if(data.players[myName]) {
+            // Joker nur im Strategiemodus anzeigen
+            const gameMode = data.config?.gameMode || 'party';
+            const isPartyMode = gameMode === 'party';
+            const jokerPanelGame = document.getElementById('jokerPanelGame');
+            if(jokerPanelGame) {
+                jokerPanelGame.style.display = isPartyMode ? 'none' : 'block';
+            }
+            
+            if(data.players[myName] && !isPartyMode) {
                 renderMyJokers('myJokerListGame', data.players[myName]);
             }
         }
@@ -2071,22 +2141,48 @@
                 }, 1500);
             }
 
+            const gameMode = data.config?.gameMode || 'party';
+            const isPartyMode = gameMode === 'party';
+            
+            // Joker-Panel nur im Strategiemodus anzeigen
+            const jokerPanel = document.querySelector('.joker-panel');
+            if(jokerPanel) {
+                jokerPanel.style.display = isPartyMode ? 'none' : 'block';
+            }
+            
             if(myName === data.hotseat) {
                 statusEl.innerText = "Du hast die Frage beantwortet.";
                 statusEl.style.color = "#aaa";
             } else {
                 if(myVote && myVote.choice === truth) {
-                    statusEl.innerHTML = "✅ <strong>RICHTIG GERATEN!</strong><br><span style='font-size:0.9rem; font-weight:normal;'>Hier ist deine Belohnung, wie möchtest du vorgehen?</span>";
-                    statusEl.style.color = "#0f0";
-
-                    if(!localActionDone) {
-                        btnReady.disabled = true;
-                        btnReady.innerText = "⚡ Wähle deine Belohnung!";
+                    if(isPartyMode) {
+                        // Partymodus: Direkt Angriff-Auswahl
+                        statusEl.innerHTML = "✅ <strong>RICHTIG GERATEN!</strong><br><span style='font-size:0.9rem; font-weight:normal;'>Wähle einen Spieler zum Aufheizen!</span>";
+                        statusEl.style.color = "#0f0";
                         
-                        // Zeige immer beide Optionen an, unabhängig von der vorherigen Strategie
-                        const rewardBoxEl = document.getElementById('boxReward');
-                        if(rewardBoxEl) {
-                            rewardBoxEl.style.display = 'block';
+                        if(!localActionDone) {
+                            btnReady.disabled = true;
+                            btnReady.innerText = "⚡ Wähle einen Spieler!";
+                            
+                            const boxAttackEl = document.getElementById('boxAttack');
+                            if(boxAttackEl) {
+                                boxAttackEl.style.display = 'block';
+                                renderTargets(data.players);
+                            }
+                        }
+                    } else {
+                        // Strategiemodus: Belohnungsauswahl
+                        statusEl.innerHTML = "✅ <strong>RICHTIG GERATEN!</strong><br><span style='font-size:0.9rem; font-weight:normal;'>Hier ist deine Belohnung, wie möchtest du vorgehen?</span>";
+                        statusEl.style.color = "#0f0";
+
+                        if(!localActionDone) {
+                            btnReady.disabled = true;
+                            btnReady.innerText = "⚡ Wähle deine Belohnung!";
+                            
+                            const rewardBoxEl = document.getElementById('boxReward');
+                            if(rewardBoxEl) {
+                                rewardBoxEl.style.display = 'block';
+                            }
                         }
                     }
                 } else {
@@ -2096,11 +2192,19 @@
                     } else {
                         statusEl.innerText = "❌ FALSCH";
                         statusEl.style.color = "#f00";
+                        
+                        // Partymodus: Bei falscher Antwort automatisch 10° selbst bekommen
+                        if(isPartyMode && !localActionDone) {
+                            localActionDone = true;
+                            handlePartyModeWrongAnswer();
+                        }
                     }
-                    localActionDone = true;
+                    if(!isPartyMode || (isPartyMode && !myVote)) {
+                        localActionDone = true;
+                    }
                 }
             }
-            if(data.players[myName]) {
+            if(data.players[myName] && !isPartyMode) {
                 renderMyJokers('myJokerListResult', data.players[myName]);
             }
         }
@@ -2108,8 +2212,25 @@
         // --- RENDER TARGETS ---
         window.renderTargets = (players) => {
             const div = document.getElementById('divTargets');
+            const attackTitle = document.getElementById('attackTitle');
+            const btnBack = document.getElementById('btnBackFromAttack');
+            const btnSkip = document.getElementById('btnSkipAttack');
             div.innerHTML = "";
-            const dmg = globalData?.config?.dmg || 10;
+            const gameMode = globalData?.config?.gameMode || 'party';
+            const isPartyMode = gameMode === 'party';
+            const dmg = isPartyMode ? 20 : (globalData?.config?.dmg || 10);
+            
+            // Anpassen für Partymodus
+            if(isPartyMode) {
+                if(attackTitle) attackTitle.innerText = "🔥 Wen aufheizen?";
+                if(btnBack) btnBack.style.display = 'none';
+                if(btnSkip) btnSkip.style.display = 'none';
+            } else {
+                if(attackTitle) attackTitle.innerText = "🔥 Wen angreifen?";
+                if(btnBack) btnBack.style.display = 'block';
+                if(btnSkip) btnSkip.style.display = 'block';
+            }
+            
             Object.keys(players).forEach(p => {
                 if(p !== myName) {
                     const b = document.createElement('button');
@@ -2214,7 +2335,9 @@
             document.getElementById('boxAttack').style.display = 'none';
             document.getElementById('btnReady').disabled = false;
             
-            const baseDmg = globalData?.config?.dmg || 10;
+            const gameMode = globalData?.config?.gameMode || 'party';
+            const isPartyMode = gameMode === 'party';
+            const baseDmg = isPartyMode ? 20 : (globalData?.config?.dmg || 10); // Partymodus: 20°
             const ref = doc(db, "lobbies", roomId);
             const attackerState = globalData?.players?.[myName] || {};
             const targetState = globalData?.players?.[target] || {};
@@ -2297,6 +2420,16 @@
                 ready: arrayUnion(myName) 
             });
         };
+        
+        // --- PARTY MODE WRONG ANSWER ---
+        async function handlePartyModeWrongAnswer() {
+            const dmg = 10; // 10° selbst bekommen bei falscher Antwort
+            await updateDoc(doc(db, "lobbies", roomId), {
+                [`players.${myName}.temp`]: increment(dmg),
+                log: arrayUnion(`❌ ${myName} hat falsch geraten und sich selbst aufgeheizt (+${dmg}°C)`)
+            });
+            showToast(`Du hast falsch geraten! +${dmg}°C für dich.`);
+        }
         // --- START GAME (COUNTDOWN) ---
         window.startCountdown = async () => {
             if(!isHost || !globalData) return;
