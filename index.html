@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥6</title>
+    <title>Hitzkopf 🔥7</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -196,6 +196,55 @@
         }
         .category-card.selected .category-name {
             color: #fff;
+        }
+        
+        /* Angriffsziele-Karten (ähnlich wie Kategorien-Karten) */
+        .target-card {
+            aspect-ratio: 1;
+            background: linear-gradient(145deg, #1a1a1a, #0f0f0f);
+            border: 3px solid #333;
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .target-card:hover {
+            border-color: #ff4500;
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.3);
+        }
+        
+        .target-card.selected {
+            border-color: #ff4500;
+            background: linear-gradient(145deg, #2a2a2a, #1f1f1f);
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.5);
+        }
+        
+        .target-card .target-emoji {
+            font-size: 2.5rem;
+            margin-bottom: 4px;
+        }
+        
+        .target-card .target-name {
+            font-size: 0.9rem;
+            color: #ccc;
+            font-weight: 600;
+            margin-bottom: 2px;
+            text-align: center;
+        }
+        
+        .target-card .target-dmg {
+            font-size: 0.7rem;
+            color: #ff4500;
+            font-weight: bold;
+            text-align: center;
         }
         
         .game-mode-card {
@@ -848,7 +897,7 @@
 
         <div id="boxAttack" style="display:none; background:#3a1a1a; padding:10px; border-radius:10px; margin-bottom:15px;">
             <h4 style="margin:0 0 10px 0;" id="attackTitle">🔥 Wen aufheizen?</h4>
-            <div id="divTargets" style="display:grid; grid-template-columns:1fr 1fr; gap:5px;"></div>
+            <div id="divTargets" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:12px; margin-top:10px;"></div>
             <div style="display:flex; gap:5px; margin-top:10px;" id="attackControls">
                 <button style="flex:1; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; padding:8px; display:none;" onclick="goBackToReward()" id="btnBackFromAttack">← Zurück</button>
                 <button style="flex:1; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; padding:8px; display:none;" onclick="skipAttack()" id="btnSkipAttack">Angriff überspringen</button>
@@ -1804,7 +1853,8 @@
                 winner: null,
                 password: roomPassword || "", // Leer = öffentlich
                 lastQuestionCategory: firstCategory,
-                pendingAttacks: {} // Sammelt Angriffe: { targetName: [{ attacker, dmg, hasOil }] }
+                pendingAttacks: {}, // Sammelt Angriffe: { targetName: [{ attacker, dmg, hasOil }] }
+                attackDecisions: {} // Trackt welche Spieler ihre Angriffsentscheidung getroffen haben
             });
             
             showToast(`Raum erstellt! Code: ${code}`);
@@ -2120,24 +2170,25 @@
                     if(shareBtn) shareBtn.style.display = 'none';
                     if(hostStartBtn) hostStartBtn.style.display = 'none';
                     
-                    // Prüfe ob alle bereit sind und executePendingAttacks aufrufen (JEDES MAL wenn sich data ändert)
-                    const readyCount = (data.ready || []).length;
+                    // Prüfe ob alle Spieler ihre Angriffsentscheidung getroffen haben (nicht erst wenn alle bereit sind)
+                    const attackDecisions = data.attackDecisions || {};
                     const playerCount = Object.keys(data.players || {}).length;
-                    const allReady = readyCount >= playerCount;
+                    const playersWithDecision = Object.keys(attackDecisions).filter(p => attackDecisions[p] === true);
+                    const allDecided = playersWithDecision.length >= playerCount;
                     const recapNotShown = !data.roundRecapShown;
                     
                     console.log('onSnapshot (result): Prüfe Bedingung für executePendingAttacks', {
-                        readyCount,
+                        playersWithDecision: playersWithDecision.length,
                         playerCount,
-                        allReady,
+                        allDecided,
                         recapNotShown,
-                        readyArray: data.ready,
+                        attackDecisions,
                         roundRecapShown: data.roundRecapShown,
                         isHost
                     });
                     
-                    if(allReady && recapNotShown && isHost) {
-                        console.log('onSnapshot (result): Bedingung erfüllt, rufe executePendingAttacks auf');
+                    if(allDecided && recapNotShown && isHost) {
+                        console.log('onSnapshot (result): Alle Spieler haben ihre Entscheidung getroffen, rufe executePendingAttacks auf');
                         executePendingAttacks(data).then(() => {
                             setTimeout(() => {
                                 updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
@@ -2382,13 +2433,29 @@
             
             document.getElementById('lblReady').innerHTML = readyText;
             
-            if(data.ready.includes(myName)) {
+            // Prüfe ob Angriffszusammenfassung angezeigt wird (attackResults vorhanden)
+            const hasAttackResults = data.attackResults && Object.keys(data.attackResults).length > 0;
+            
+            if(hasAttackResults) {
+                // Zeige "Nächste Runde" Button statt "Bereit"
+                btnReady.disabled = false;
+                btnReady.innerText = "⏭️ Nächste Runde";
+                btnReady.onclick = () => {
+                    if(isHost) {
+                        nextRound();
+                    } else {
+                        showToast("Nur der Host kann die nächste Runde starten.");
+                    }
+                };
+            } else if(data.ready.includes(myName)) {
                 btnReady.disabled = true;
                 btnReady.innerText = "⏳ Warte...";
+                btnReady.onclick = setReady;
                 return;
             } else {
                 btnReady.disabled = false;
                 btnReady.innerText = "👍 Bereit";
+                btnReady.onclick = setReady;
             }
 
             if(isHost) {
@@ -2515,7 +2582,12 @@
             div.innerHTML = "";
             const gameMode = globalData?.config?.gameMode || 'party';
             const isPartyMode = gameMode === 'party';
-            const dmg = isPartyMode ? 20 : (globalData?.config?.dmg || 10);
+            const baseDmg = isPartyMode ? 20 : (globalData?.config?.dmg || 10);
+            
+            // Prüfe ob Spieler Ölfass hat (verdoppelt Schaden)
+            const attackerState = globalData?.players?.[myName] || {};
+            const hasOil = attackerState.inventory?.includes('card_oil');
+            const dmg = baseDmg * (hasOil ? 2 : 1);
             
             // Anpassen für Partymodus
             if(isPartyMode) {
@@ -2530,11 +2602,35 @@
             
             Object.keys(players).forEach(p => {
                 if(p !== myName) {
-                    const b = document.createElement('button');
-                    b.className = 'btn-danger';
-                    b.innerText = `${p} (+${dmg}°C)`;
-                    b.onclick = () => doAttack(p);
-                    div.appendChild(b);
+                    const playerData = players[p];
+                    const playerEmoji = playerData?.emoji || '😊';
+                    
+                    // Erstelle Karte ähnlich wie Kategorien-Karten
+                    const card = document.createElement('div');
+                    card.className = 'target-card';
+                    card.setAttribute('data-target', p);
+                    card.onclick = () => doAttack(p);
+                    
+                    // Emoji oben
+                    const emojiDiv = document.createElement('div');
+                    emojiDiv.className = 'target-emoji';
+                    emojiDiv.innerText = playerEmoji;
+                    
+                    // Name mittig
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'target-name';
+                    nameDiv.innerText = p;
+                    
+                    // Schaden unten (klein)
+                    const dmgDiv = document.createElement('div');
+                    dmgDiv.className = 'target-dmg';
+                    dmgDiv.innerText = `+${dmg}°`;
+                    
+                    card.appendChild(emojiDiv);
+                    card.appendChild(nameDiv);
+                    card.appendChild(dmgDiv);
+                    
+                    div.appendChild(card);
                 }
             });
         };
@@ -2630,7 +2726,6 @@
             const rewardBox = document.getElementById('boxReward');
             if(rewardBox) rewardBox.style.display = 'none';
             document.getElementById('boxAttack').style.display = 'none';
-            document.getElementById('btnReady').disabled = false;
             
             const gameMode = globalData?.config?.gameMode || 'party';
             const isPartyMode = gameMode === 'party';
@@ -2640,7 +2735,6 @@
             const dmg = baseDmg * (hasOil ? 2 : 1);
             
             // Angriff sammeln statt sofort ausführen
-            // Verwende arrayUnion für pendingAttacks um Race Conditions zu vermeiden
             const ref = doc(db, "lobbies", roomId);
             const attackEntry = {
                 attacker: myName,
@@ -2659,21 +2753,30 @@
                 [target]: targetAttacks
             };
             
+            // Markiere dass dieser Spieler seine Angriffsentscheidung getroffen hat
+            const currentAttackDecisions = currentData.data()?.attackDecisions || {};
+            const updatedAttackDecisions = {
+                ...currentAttackDecisions,
+                [myName]: true
+            };
+            
             console.log('doAttack: Angriff hinzugefügt:', { target, attacker: myName, dmg, updatedPendingAttacks });
             
             // Ölfass entfernen wenn verwendet
             if(hasOil) {
                 await updateDoc(ref, { 
                     [`players.${myName}.inventory`]: arrayRemove('card_oil'),
-                    pendingAttacks: updatedPendingAttacks
+                    pendingAttacks: updatedPendingAttacks,
+                    attackDecisions: updatedAttackDecisions
                 });
             } else {
                 await updateDoc(ref, { 
-                    pendingAttacks: updatedPendingAttacks
+                    pendingAttacks: updatedPendingAttacks,
+                    attackDecisions: updatedAttackDecisions
                 });
             }
             
-            console.log('doAttack: pendingAttacks aktualisiert');
+            console.log('doAttack: pendingAttacks und attackDecisions aktualisiert');
         };
 
         // --- TAKE CARD ---
@@ -2707,11 +2810,21 @@
             const rewardBox = document.getElementById('boxReward');
             if(rewardBox) rewardBox.style.display = 'none';
             document.getElementById('boxAttack').style.display = 'none';
-            document.getElementById('btnReady').disabled = false;
-            document.getElementById('btnReady').innerText = "👍 Bereit";
-            await updateDoc(doc(db, "lobbies", roomId), {
-                log: arrayUnion(`🕊️ ${myName} verzichtet auf einen Angriff.`)
+            
+            const ref = doc(db, "lobbies", roomId);
+            const currentData = await getDoc(ref);
+            const currentAttackDecisions = currentData.data()?.attackDecisions || {};
+            const updatedAttackDecisions = {
+                ...currentAttackDecisions,
+                [myName]: true
+            };
+            
+            await updateDoc(ref, {
+                log: arrayUnion(`🕊️ ${myName} verzichtet auf einen Angriff.`),
+                attackDecisions: updatedAttackDecisions
             });
+            
+            console.log('skipAttack: attackDecisions aktualisiert');
         };
 
         // --- SET READY ---
@@ -2900,7 +3013,8 @@
                 roundRecapShown: false,
                 lastQuestionCategory: qCategory,
                 pendingAttacks: {}, // Zurücksetzen für neue Runde
-                attackResults: {} // Zurücksetzen für neue Runde
+                attackResults: {}, // Zurücksetzen für neue Runde
+                attackDecisions: {} // Zurücksetzen für neue Runde
             });
         };
 
