@@ -879,9 +879,8 @@
     <div id="screen-result" class="screen card">
         <div id="gridResult" class="thermo-grid"></div>
         
-        <h3>Die Wahrheit: <span id="lblTruth" style="color:#fff;">?</span></h3>
-        <p id="lblResultCategory" style="font-size:0.8rem; color:#888; margin-top:-10px; margin-bottom:10px; font-style:italic;"></p>
-        <h2 id="lblResultStatus" style="margin:10px 0;">...</h2>
+        <h2 id="lblResultStatus" style="margin:20px 0 15px 0;">...</h2>
+        <p id="lblResultCategory" style="font-size:0.8rem; color:#888; margin-bottom:15px; font-style:italic;"></p>
 
         <div id="boxReward" style="display:none; background:#2a3a1a; padding:15px; border-radius:10px; margin-bottom:15px; border:2px solid #4a6a2a;">
             <h4 style="margin:0 0 12px 0; color:#8fef8f;">🎁 Belohnung wählen:</h4>
@@ -2380,7 +2379,8 @@
                 console.warn('currentQ fehlt in renderResult:', currentQ);
                 truthText = truth === 'A' ? 'A' : 'B';
             }
-            document.getElementById('lblTruth').innerText = truthText;
+            // lblTruth wird nicht mehr angezeigt (nur noch "RICHTIG GERATEN!" etc.)
+            // document.getElementById('lblTruth').innerText = truthText;
             
             // Kategorie anzeigen
             const categoryLabel = document.getElementById('lblResultCategory');
@@ -2568,7 +2568,15 @@
                     }
                 }
             }
-            if(data.players[myName] && !isPartyMode) {
+            // Joker nur im Strategiemodus anzeigen
+            const resultGameMode = data.config?.gameMode || 'party';
+            const resultIsPartyMode = resultGameMode === 'party';
+            const jokerPanelResult = document.querySelector('#screen-result .joker-panel');
+            if(jokerPanelResult) {
+                jokerPanelResult.style.display = resultIsPartyMode ? 'none' : 'block';
+            }
+            
+            if(data.players[myName] && !resultIsPartyMode) {
                 renderMyJokers('myJokerListResult', data.players[myName]);
             }
         }
@@ -2856,11 +2864,21 @@
         // --- PARTY MODE WRONG ANSWER ---
         async function handlePartyModeWrongAnswer() {
             const dmg = 10; // 10° selbst bekommen bei falscher Antwort
-            await updateDoc(doc(db, "lobbies", roomId), {
+            const ref = doc(db, "lobbies", roomId);
+            const currentData = await getDoc(ref);
+            const currentAttackDecisions = currentData.data()?.attackDecisions || {};
+            const updatedAttackDecisions = {
+                ...currentAttackDecisions,
+                [myName]: true // Markiere dass Entscheidung getroffen wurde (Selbstschaden)
+            };
+            
+            await updateDoc(ref, {
                 [`players.${myName}.temp`]: increment(dmg),
-                log: arrayUnion(`❌ ${myName} hat falsch geraten und sich selbst aufgeheizt (+${dmg}°C)`)
+                log: arrayUnion(`❌ ${myName} hat falsch geraten und sich selbst aufgeheizt (+${dmg}°C)`),
+                attackDecisions: updatedAttackDecisions
             });
             showToast(`Du hast falsch geraten! +${dmg}°C für dich.`);
+            console.log('handlePartyModeWrongAnswer: attackDecisions aktualisiert');
         }
         // --- START GAME (COUNTDOWN) ---
         window.startCountdown = async () => {
