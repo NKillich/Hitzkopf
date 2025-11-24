@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥10</title>
+    <title>Hitzkopf 🔥11</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -1950,16 +1950,26 @@
                     // Zeige Popup für ALLE Spieler (auch die nicht angegriffenen)
                     if(data.attackResults && data.attackResults[myName] !== undefined) {
                         const result = data.attackResults[myName];
-                        console.log('Attack-Feedback für', myName, ':', result);
-                        triggerAttackFeedback(result);
-                        // Entferne nach Anzeige (mit längerer Verzögerung damit alle sehen können - 8 Sekunden)
-                        setTimeout(() => {
-                            if(isHost) {
-                                const newResults = { ...(data.attackResults || {}) };
-                                delete newResults[myName];
-                                updateDoc(doc(db, "lobbies", roomId), { attackResults: newResults }).catch(console.error);
-                            }
-                        }, 8000);
+                        // Erstelle einen eindeutigen Schlüssel für dieses Ergebnis
+                        const resultKey = `${result.totalDmg}-${JSON.stringify(result.attackDetails || [])}`;
+                        
+                        // Zeige Popup nur einmal pro eindeutigem Ergebnis
+                        if(resultKey !== lastAttackResultKey) {
+                            lastAttackResultKey = resultKey;
+                            console.log('Attack-Feedback für', myName, ':', result);
+                            triggerAttackFeedback(result);
+                            // Entferne nach Anzeige (mit längerer Verzögerung damit alle sehen können - 8 Sekunden)
+                            setTimeout(() => {
+                                if(isHost) {
+                                    const newResults = { ...(data.attackResults || {}) };
+                                    delete newResults[myName];
+                                    updateDoc(doc(db, "lobbies", roomId), { attackResults: newResults }).catch(console.error);
+                                }
+                            }, 8000);
+                        }
+                    } else {
+                        // Wenn attackResults entfernt wurde, zurücksetzen
+                        lastAttackResultKey = null;
                     }
                     lastMyTemp = meState.temp;
                 } else {
@@ -1993,9 +2003,18 @@
                 const activePlayers = Object.keys(data.players).filter(p => data.players[p].temp < maxTemp);
                 const eliminatedPlayers = Object.keys(data.players).filter(p => data.players[p].temp >= maxTemp);
                 
-                // Prüfe ob Spieler gerade rausgeflogen ist (für Animation)
+                // Eliminierte Spieler permanent als "Ready" markieren, damit sie nicht blockieren
                 if(eliminatedPlayers.length > 0 && isHost) {
+                    const currentReady = data.ready || [];
+                    const updatedReady = [...currentReady];
+                    let needsUpdate = false;
+                    
                     eliminatedPlayers.forEach(eliminated => {
+                        if(!updatedReady.includes(eliminated)) {
+                            updatedReady.push(eliminated);
+                            needsUpdate = true;
+                        }
+                        
                         const eliminatedShown = data.eliminatedShown || [];
                         if(!eliminatedShown.includes(eliminated)) {
                             // Markiere als gezeigt
@@ -2004,6 +2023,13 @@
                             }).catch(console.error);
                         }
                     });
+                    
+                    // Aktualisiere ready-Liste mit eliminierten Spielern
+                    if(needsUpdate) {
+                        updateDoc(doc(db, "lobbies", roomId), {
+                            ready: updatedReady
+                        }).catch(console.error);
+                    }
                 }
                 
                 // Zeige Animation für alle (auch wenn nicht Host)
@@ -2433,25 +2459,26 @@
             
             document.getElementById('lblReady').innerHTML = readyText;
             
-            // Prüfe ob Angriffszusammenfassung angezeigt wird (attackResults vorhanden)
+            // Prüfe ob Spieler eliminiert ist (100° erreicht)
+            const maxTemp = data.config?.maxTemp || 100;
+            const isEliminated = (data.players[myName]?.temp || 0) >= maxTemp;
+            
+            // Eliminierte Spieler sind automatisch bereit und sehen nur den Wartescreen
+            if(isEliminated) {
+                btnReady.disabled = true;
+                btnReady.innerText = "🔥 Hitzkopf - Ausgeschieden";
+                btnReady.onclick = null;
+                return;
+            }
+            
+            // Prüfe ob Angriffszusammenfassung noch angezeigt wird (attackResults vorhanden)
             const hasAttackResults = data.attackResults && Object.keys(data.attackResults).length > 0;
             
-            if(hasAttackResults) {
-                // Zeige "Nächste Runde" Button statt "Bereit"
-                btnReady.disabled = false;
-                btnReady.innerText = "⏭️ Nächste Runde";
-                btnReady.onclick = () => {
-                    if(isHost) {
-                        nextRound();
-                    } else {
-                        showToast("Nur der Host kann die nächste Runde starten.");
-                    }
-                };
-            } else if(data.ready.includes(myName)) {
+            // Nach dem Popup: Immer "Bereit" Button zeigen, nicht "Nächste Runde"
+            if(data.ready.includes(myName)) {
                 btnReady.disabled = true;
-                btnReady.innerText = "⏳ Warte...";
+                btnReady.innerText = "⏳ Warte auf andere...";
                 btnReady.onclick = setReady;
-                return;
             } else {
                 btnReady.disabled = false;
                 btnReady.innerText = "👍 Bereit";
@@ -2462,47 +2489,32 @@
                 maybeLogRoundSummary(data, truthText, truth);
             }
 
-            // Zeige Rekapitulation wenn alle bereit sind (nur einmal pro Runde)
+            // Automatisch zur nächsten Runde wenn alle bereit sind (inkl. eliminierten Spielern)
             // WICHTIG: Verwende globalData statt data, da globalData immer aktuell ist
             const currentReady = globalData?.ready || [];
             const readyCount = Array.isArray(currentReady) ? currentReady.length : 0;
-            const playerCount = Object.keys(globalData?.players || data.players || {}).length;
+            const allPlayers = Object.keys(globalData?.players || data.players || {});
+            const playerCount = allPlayers.length;
             const allReady = readyCount >= playerCount;
-            const recapNotShown = !(globalData?.roundRecapShown || data.roundRecapShown);
             
-            console.log('renderResult: Prüfe Bedingung für executePendingAttacks', {
+            // Prüfe ob Angriffe bereits ausgeführt wurden (roundRecapShown = true)
+            const recapShown = globalData?.roundRecapShown || data.roundRecapShown;
+            
+            console.log('renderResult: Prüfe Bedingung für automatische Weiterleitung', {
                 readyCount,
                 playerCount,
                 allReady,
-                recapNotShown,
+                recapShown,
                 readyArray: currentReady,
-                readyArrayFromData: data.ready,
-                globalDataReady: globalData?.ready,
-                players: Object.keys(globalData?.players || data.players || {}),
-                roundRecapShown: globalData?.roundRecapShown || data.roundRecapShown,
                 isHost
             });
             
-            if(allReady && recapNotShown) {
-                console.log('renderResult: Bedingung erfüllt, rufe executePendingAttacks auf');
-                if(isHost) {
-                    // Führe gesammelte Angriffe aus bevor Rekapitulation gezeigt wird
-                    // Verwende globalData für executePendingAttacks, da es die aktuellsten Daten enthält
-                    executePendingAttacks(globalData || data).then(() => {
-                        // Warte kurz bevor roundRecapShown gesetzt wird, damit alle Updates durch sind
-                        setTimeout(() => {
-                            updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
-                        }, 500);
-                    }).catch(err => {
-                        console.error('Fehler bei executePendingAttacks:', err);
-                    });
-                } else {
-                    console.log('renderResult: Nicht der Host, warte auf Host');
-                }
-                // Zeige Rekapitulation nach kurzer Verzögerung
+            // Wenn alle bereit sind UND Angriffe bereits ausgeführt wurden, starte automatisch nächste Runde
+            if(allReady && recapShown && isHost) {
+                console.log('renderResult: Alle bereit und Angriffe ausgeführt, starte automatisch nächste Runde');
                 setTimeout(() => {
-                    showRoundRecap(globalData || data);
-                }, 2000);
+                    nextRound();
+                }, 1000);
             }
 
             const gameMode = data.config?.gameMode || 'party';
@@ -3406,12 +3418,16 @@
             
             // attackResult kann sein: { attackers: [], totalDmg: 0, attackDetails: [{ attacker, dmg, isPenalty }] }
             // oder null/undefined wenn nicht angegriffen
-            const wasAttacked = attackResult && attackResult.totalDmg > 0;
+            // Prüfe ob Spieler angegriffen wurde: totalDmg > 0 ODER attackDetails enthält Einträge (inkl. Strafhitze)
+            const hasAttackDetails = attackResult && attackResult.attackDetails && attackResult.attackDetails.length > 0;
+            const wasAttacked = attackResult && (attackResult.totalDmg > 0 || hasAttackDetails);
             
-            const body = document.body;
-            if(wasAttacked) {
-                body.classList.add('viewport-shake');
-                setTimeout(() => body.classList.remove('viewport-shake'), 600);
+            // Screen Shake nur einmal pro Angriff (verhindere mehrfache Trigger)
+            if(wasAttacked && !document.body.classList.contains('viewport-shake')) {
+                document.body.classList.add('viewport-shake');
+                setTimeout(() => {
+                    document.body.classList.remove('viewport-shake');
+                }, 600);
             }
             
             // Aktuelle Temperatur des Spielers - lese aus globalData (wird durch onSnapshot aktualisiert)
