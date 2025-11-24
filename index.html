@@ -547,6 +547,65 @@
             pointer-events: auto !important;
             opacity: 1 !important;
         }
+        
+        .emoji-card {
+            aspect-ratio: 1;
+            min-width: 80px;
+            width: 80px;
+            background: rgba(255,255,255,0.05);
+            border: 3px solid #333;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+        .emoji-card:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: #666;
+            transform: scale(1.05);
+        }
+        .emoji-card.selected {
+            background: rgba(255,69,0,0.2);
+            border-color: #ff4500;
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.5);
+            transform: scale(1.1);
+        }
+        
+        #emojiGallery {
+            scrollbar-width: thin;
+            scrollbar-color: #444 #1a1a1a;
+            position: relative;
+        }
+        #emojiGallery::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 50%;
+            background: linear-gradient(to right, transparent, rgba(10,10,10,0.8));
+            pointer-events: none;
+            z-index: 1;
+        }
+        #emojiGallery::-webkit-scrollbar {
+            height: 6px;
+        }
+        #emojiGallery::-webkit-scrollbar-track {
+            background: #1a1a1a;
+            border-radius: 3px;
+        }
+        #emojiGallery::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+        #emojiGallery::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
         .spectator-banner {
             position: fixed;
             top: 0;
@@ -622,10 +681,8 @@
         <input type="text" id="inpName" placeholder="Dein Name" maxlength="20" autocomplete="off">
         <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:15px; margin-bottom:8px; font-weight:500;">Wähle deinen Charakter:</label>
         <div style="position:relative; margin-bottom:15px;">
-            <div id="emojiCarousel" style="display:flex; align-items:center; gap:15px; overflow:visible; position:relative; justify-content:center;">
-                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:rgba(255,255,255,0.1); border:2px solid rgba(255,255,255,0.2); border-radius:12px; color:#fff; font-size:2.5rem; cursor:pointer; flex-shrink:0; padding:10px; display:flex; align-items:center; justify-content:center; min-width:50px; min-height:50px; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'; this.style.borderColor='rgba(255,255,255,0.4)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='rgba(255,255,255,0.2)'">⬅️</button>
-                <div id="emojiDisplay" style="text-align:center; font-size:4rem; min-height:80px; min-width:80px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border-radius:15px; padding:10px;">😊</div>
-                <button id="emojiNext" onclick="changeEmoji(1)" style="background:rgba(255,255,255,0.1); border:2px solid rgba(255,255,255,0.2); border-radius:12px; color:#fff; font-size:2.5rem; cursor:pointer; flex-shrink:0; padding:10px; display:flex; align-items:center; justify-content:center; min-width:50px; min-height:50px; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'; this.style.borderColor='rgba(255,255,255,0.4)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='rgba(255,255,255,0.2)'">➡️</button>
+            <div id="emojiGallery" style="display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:10px 0; scroll-behavior:smooth; -webkit-overflow-scrolling:touch; width:100%; max-width:100%;">
+                <!-- Wird dynamisch gefüllt -->
             </div>
             <input type="hidden" id="inpEmoji" value="😊">
         </div>
@@ -679,10 +736,6 @@
 
     <!-- LOBBY SCREEN -->
     <div id="screen-lobby" class="screen card">
-        <div id="lblCodeContainer" style="display:none;">
-            <p style="color:#aaa; margin-bottom:8px; font-size:0.9rem;">Raum-Code:</p>
-            <div id="lblCode" style="font-size:3.5rem; color:#ff8c00; font-weight:900; line-height:1; letter-spacing:8px;">...</div>
-        </div>
         <div id="lobbyList" style="margin:25px 0; font-weight:bold; font-size:1.15rem; color:#fff;"></div>
         <div id="lobbyReadyList" style="font-size:0.9rem; color:#aaa; margin-bottom:15px;"></div>
         <button id="btnLobbyReady" class="btn-secondary" onclick="toggleLobbyReady()">✅ Bereit</button>
@@ -899,72 +952,70 @@
         const availableEmojis = [...baseEmojis].sort(() => Math.random() - 0.5);
         let currentEmojiIndex = 0;
         
-        window.changeEmoji = (direction) => {
-            currentEmojiIndex = (currentEmojiIndex + direction + availableEmojis.length) % availableEmojis.length;
-            const emoji = availableEmojis[currentEmojiIndex];
-            const emojiDisplay = document.getElementById('emojiDisplay');
+        window.selectEmoji = (emoji) => {
             const inpEmoji = document.getElementById('inpEmoji');
-            if(emojiDisplay) emojiDisplay.innerText = emoji;
             if(inpEmoji) inpEmoji.value = emoji;
             myEmoji = emoji;
+            currentEmojiIndex = availableEmojis.indexOf(emoji);
+            
+            // Aktualisiere visuelle Auswahl
+            const gallery = document.getElementById('emojiGallery');
+            if(gallery) {
+                gallery.querySelectorAll('.emoji-card').forEach((card) => {
+                    const cardEmoji = card.getAttribute('data-emoji');
+                    if(cardEmoji === emoji) {
+                        card.classList.add('selected');
+                        // Scroll zu ausgewähltem Emoji
+                        card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    } else {
+                        card.classList.remove('selected');
+                    }
+                });
+            }
         };
         
-        // Touch-Swipe für Emoji-Auswahl
-        let touchStartX = 0;
-        let touchEndX = 0;
-        
-        // Initialisiere Emoji-Auswahl
+        // Initialisiere Emoji-Galerie
         if(document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initEmojiCarousel);
+            document.addEventListener('DOMContentLoaded', initEmojiGallery);
         } else {
-            initEmojiCarousel();
+            initEmojiGallery();
         }
         
-        function initEmojiCarousel() {
-            const emojiCarousel = document.getElementById('emojiCarousel');
-            if(emojiCarousel) {
-                emojiCarousel.addEventListener('touchstart', (e) => {
-                    touchStartX = e.changedTouches[0].screenX;
-                });
-                emojiCarousel.addEventListener('touchend', (e) => {
-                    touchEndX = e.changedTouches[0].screenX;
-                    handleSwipe();
-                });
-            }
-            
-            // Initialisiere Emoji-Anzeige
-            const emojiDisplay = document.getElementById('emojiDisplay');
+        function initEmojiGallery() {
+            const gallery = document.getElementById('emojiGallery');
             const inpEmoji = document.getElementById('inpEmoji');
-            if(emojiDisplay && inpEmoji) {
-                // Wenn kein Emoji gespeichert, nimm das erste aus der zufälligen Liste
-                if(!myEmoji || myEmoji === '😊') {
-                    myEmoji = availableEmojis[0];
-                    currentEmojiIndex = 0;
-                } else {
-                    currentEmojiIndex = availableEmojis.indexOf(myEmoji);
-                    if(currentEmojiIndex === -1) {
-                        currentEmojiIndex = 0;
-                        myEmoji = availableEmojis[0];
-                    }
-                }
-                emojiDisplay.innerText = myEmoji;
-                inpEmoji.value = myEmoji;
+            if(!gallery || !inpEmoji) return;
+            
+            // Finde aktuelles Emoji
+            let currentEmoji = myEmoji || '😊';
+            if(!availableEmojis.includes(currentEmoji)) {
+                currentEmoji = availableEmojis[0];
             }
+            currentEmojiIndex = availableEmojis.indexOf(currentEmoji);
+            
+            // Erstelle Galerie
+            gallery.innerHTML = availableEmojis.map((emoji, idx) => {
+                const isSelected = emoji === currentEmoji;
+                return `
+                    <div class="emoji-card ${isSelected ? 'selected' : ''}" onclick="selectEmoji('${emoji}')" data-emoji="${emoji}">
+                        ${emoji}
+                    </div>
+                `;
+            }).join('');
+            
+            inpEmoji.value = currentEmoji;
+            myEmoji = currentEmoji;
+            
+            // Positioniere so dass nur 1.5 Emojis sichtbar sind (scroll auf Position 0)
+            setTimeout(() => {
+                gallery.scrollLeft = 0;
+            }, 100);
             
             // Initialisiere Anleitung-Button Sichtbarkeit
             const anleitungBtn = document.getElementById('anleitungButton');
             const startScreen = document.getElementById('screen-start');
             if(anleitungBtn && startScreen) {
                 anleitungBtn.style.display = startScreen.classList.contains('active') ? 'block' : 'none';
-            }
-        }
-        
-        function handleSwipe() {
-            if(touchEndX < touchStartX - 50) {
-                changeEmoji(1); // Swipe left = next
-            }
-            if(touchEndX > touchStartX + 50) {
-                changeEmoji(-1); // Swipe right = prev
             }
         }
         
@@ -1439,7 +1490,18 @@
             document.getElementById('inpName').value = myName;
             if(document.getElementById('inpEmoji')) {
                 document.getElementById('inpEmoji').value = myEmoji;
-                document.getElementById('emojiDisplay').innerText = myEmoji;
+                // Aktualisiere Emoji-Galerie wenn vorhanden
+                const gallery = document.getElementById('emojiGallery');
+                if(gallery) {
+                    gallery.querySelectorAll('.emoji-card').forEach((card) => {
+                        const cardEmoji = card.getAttribute('data-emoji');
+                        if(cardEmoji === myEmoji) {
+                            card.classList.add('selected');
+                        } else {
+                            card.classList.remove('selected');
+                        }
+                    });
+                }
                 currentEmojiIndex = availableEmojis.indexOf(myEmoji);
                 if(currentEmojiIndex === -1) currentEmojiIndex = 0;
             }
@@ -1569,7 +1631,7 @@
                             <div style="font-weight:bold; font-size:1.1rem; color:#ff8c00;">
                                 ${room.hasPassword ? '🔒 ' : ''}Raum von ${room.hostName}
                             </div>
-                            <div style="font-size:0.85rem; color:#aaa; margin-top:5px;">👥 ${room.playerCount} Spieler • Code: ${room.id}</div>
+                            <div style="font-size:0.85rem; color:#aaa; margin-top:5px;">👥 ${room.playerCount} Spieler</div>
                         </div>
                     `).join('');
                 }
@@ -1674,12 +1736,7 @@
                 pendingAttacks: {} // Sammelt Angriffe: { targetName: [{ attacker, dmg, hasOil }] }
             });
             
-            // Code nur anzeigen wenn Passwort gesetzt ist
-            if(roomPassword) {
-                showToast(`Raum erstellt! Code: ${code} | Passwort: ${roomPassword}`);
-            } else {
-                showToast(`Raum erstellt! Code: ${code}`);
-            }
+            showToast(`Raum erstellt! Code: ${code}`);
             
             connectToLobby();
         };
@@ -1865,17 +1922,6 @@
                 const hostStartBtn = document.getElementById('btnHostStart');
                 if(data.status === 'lobby') {
                     showScreen('screen-lobby');
-                    // Code nur anzeigen wenn Passwort gesetzt ist
-                    const hasPassword = data.password && data.password.trim().length > 0;
-                    const codeContainer = document.getElementById('lblCodeContainer');
-                    if(codeContainer) {
-                        if(hasPassword && isHost) {
-                            codeContainer.style.display = 'block';
-                            document.getElementById('lblCode').innerText = roomId;
-                        } else {
-                            codeContainer.style.display = 'none';
-                        }
-                    }
                     const players = Object.keys(data.players);
                     document.getElementById('lobbyList').innerHTML = players.map(p => 
                         `<div>${p}${p === data.host ? ' 👑' : ''}</div>`
@@ -2742,12 +2788,7 @@
                 showToast("Kein aktiver Raum zum Teilen verfügbar.");
                 return;
             }
-            const roomPassword = globalData.password || "";
-            const hasPassword = roomPassword && roomPassword.trim().length > 0;
             let text = `🔥 Hitzkopf-Code: ${roomId}`;
-            if(hasPassword) {
-                text += ` | Passwort: ${roomPassword}`;
-            }
             text += " – komm in meine Lobby!";
             try {
                 if(navigator.share) {
