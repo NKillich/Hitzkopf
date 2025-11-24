@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥</title>
+    <title>Hitzkopf 🔥2</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -2574,26 +2574,34 @@
             const dmg = baseDmg * (hasOil ? 2 : 1);
             
             // Angriff sammeln statt sofort ausführen
+            // Verwende arrayUnion für pendingAttacks um Race Conditions zu vermeiden
             const ref = doc(db, "lobbies", roomId);
-            const pendingAttacks = globalData.pendingAttacks || {};
-            if(!pendingAttacks[target]) {
-                pendingAttacks[target] = [];
-            }
-            pendingAttacks[target].push({
+            const attackEntry = {
                 attacker: myName,
                 dmg: dmg,
                 hasOil: hasOil
-            });
+            };
+            
+            // Lese aktuelle pendingAttacks aus Firebase
+            const currentData = await getDoc(ref);
+            const currentPendingAttacks = currentData.data()?.pendingAttacks || {};
+            const targetAttacks = currentPendingAttacks[target] || [];
+            targetAttacks.push(attackEntry);
+            
+            const updatedPendingAttacks = {
+                ...currentPendingAttacks,
+                [target]: targetAttacks
+            };
             
             // Ölfass entfernen wenn verwendet
             if(hasOil) {
                 await updateDoc(ref, { 
                     [`players.${myName}.inventory`]: arrayRemove('card_oil'),
-                    pendingAttacks: pendingAttacks
+                    pendingAttacks: updatedPendingAttacks
                 });
             } else {
                 await updateDoc(ref, { 
-                    pendingAttacks: pendingAttacks
+                    pendingAttacks: updatedPendingAttacks
                 });
             }
         };
@@ -3271,10 +3279,23 @@
         async function executePendingAttacks(data) {
             if(!isHost) return;
             const pendingAttacks = data.pendingAttacks || {};
-            if(Object.keys(pendingAttacks).length === 0) return;
+            const players = data.players || {};
+            
+            // Auch wenn keine Angriffe vorhanden sind, erstelle attackResults für alle Spieler
+            if(Object.keys(pendingAttacks).length === 0) {
+                const attackResults = {};
+                Object.keys(players).forEach(playerName => {
+                    attackResults[playerName] = {
+                        attackers: [],
+                        totalDmg: 0,
+                        attackDetails: []
+                    };
+                });
+                await updateDoc(doc(db, "lobbies", roomId), { attackResults: attackResults });
+                return;
+            }
             
             const ref = doc(db, "lobbies", roomId);
-            const players = data.players || {};
             const logEntries = [];
             const tempUpdates = {};
             const attackResults = {}; // Für Anzeige bei betroffenen Spielern: { target: { attackers: [], totalDmg: 0 } }
@@ -3395,10 +3416,9 @@
                 }
             }
             
-            // Speichere Angriffsergebnisse für Anzeige bei betroffenen Spielern
-            if(Object.keys(attackResults).length > 0) {
-                updateData.attackResults = attackResults;
-            }
+            // Speichere Angriffsergebnisse für Anzeige bei ALLEN Spielern (auch die nicht angegriffenen)
+            // attackResults enthält bereits alle Spieler (siehe oben)
+            updateData.attackResults = attackResults;
             
             await updateDoc(ref, updateData);
         }
