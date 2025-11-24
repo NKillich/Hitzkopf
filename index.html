@@ -271,7 +271,7 @@
             background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
             border-radius: 50%; 
             border: 2px solid #444; 
-            z-index: 2000; 
+            z-index: 3000; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
@@ -279,6 +279,7 @@
             cursor: pointer;
             transition: all 0.3s;
             box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+            pointer-events: auto;
         }
         .menu-btn:hover { transform: rotate(90deg); border-color: #ff4500; }
         
@@ -542,11 +543,16 @@
             opacity: 0.6;
             pointer-events: none;
         }
+        .spectator-mode .menu-btn {
+            pointer-events: auto !important;
+            opacity: 1 !important;
+        }
         .spectator-banner {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
+            z-index: 1000;
             background: linear-gradient(135deg, #ff4500, #ff8c00);
             color: white;
             padding: 15px;
@@ -616,10 +622,10 @@
         <input type="text" id="inpName" placeholder="Dein Name" maxlength="20" autocomplete="off">
         <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:15px; margin-bottom:8px; font-weight:500;">Wähle deinen Charakter:</label>
         <div style="position:relative; margin-bottom:15px;">
-            <div id="emojiCarousel" style="display:flex; align-items:center; gap:15px; overflow:hidden; position:relative; justify-content:center;">
-                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:transparent; border:none; color:#fff; font-size:2.5rem; cursor:pointer; flex-shrink:0; padding:10px; display:flex; align-items:center; justify-content:center; min-width:50px; min-height:50px;">⬅️</button>
+            <div id="emojiCarousel" style="display:flex; align-items:center; gap:15px; overflow:visible; position:relative; justify-content:center;">
+                <button id="emojiPrev" onclick="changeEmoji(-1)" style="background:rgba(255,255,255,0.1); border:2px solid rgba(255,255,255,0.2); border-radius:12px; color:#fff; font-size:2.5rem; cursor:pointer; flex-shrink:0; padding:10px; display:flex; align-items:center; justify-content:center; min-width:50px; min-height:50px; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'; this.style.borderColor='rgba(255,255,255,0.4)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='rgba(255,255,255,0.2)'">⬅️</button>
                 <div id="emojiDisplay" style="text-align:center; font-size:4rem; min-height:80px; min-width:80px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border-radius:15px; padding:10px;">😊</div>
-                <button id="emojiNext" onclick="changeEmoji(1)" style="background:transparent; border:none; color:#fff; font-size:2.5rem; cursor:pointer; flex-shrink:0; padding:10px; display:flex; align-items:center; justify-content:center; min-width:50px; min-height:50px;">➡️</button>
+                <button id="emojiNext" onclick="changeEmoji(1)" style="background:rgba(255,255,255,0.1); border:2px solid rgba(255,255,255,0.2); border-radius:12px; color:#fff; font-size:2.5rem; cursor:pointer; flex-shrink:0; padding:10px; display:flex; align-items:center; justify-content:center; min-width:50px; min-height:50px; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'; this.style.borderColor='rgba(255,255,255,0.4)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='rgba(255,255,255,0.2)'">➡️</button>
             </div>
             <input type="hidden" id="inpEmoji" value="😊">
         </div>
@@ -648,6 +654,9 @@
             <div id="categorySelection" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-top:10px; margin-bottom:15px;">
                 <!-- Wird dynamisch gefüllt -->
             </div>
+            <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:15px; margin-bottom:5px; font-weight:500;">🔒 Raum-Passwort (optional):</label>
+            <input type="password" id="inpRoomPassword" placeholder="Leer lassen für öffentlichen Raum" style="margin-bottom:5px;" autocomplete="off">
+            <p style="font-size:0.7rem; color:#666; margin-top:5px; margin-bottom:15px;">⚠️ Mit Passwort können nur Spieler mit dem Code + Passwort beitreten</p>
             <button class="btn-primary" onclick="createGame()" style="margin-top:15px;">🎮 Spiel erstellen</button>
         </div>
 
@@ -670,8 +679,10 @@
 
     <!-- LOBBY SCREEN -->
     <div id="screen-lobby" class="screen card">
-        <p style="color:#aaa; margin-bottom:8px; font-size:0.9rem;">Raum-Code:</p>
-        <div id="lblCode" style="font-size:3.5rem; color:#ff8c00; font-weight:900; line-height:1; letter-spacing:8px;">...</div>
+        <div id="lblCodeContainer" style="display:none;">
+            <p style="color:#aaa; margin-bottom:8px; font-size:0.9rem;">Raum-Code:</p>
+            <div id="lblCode" style="font-size:3.5rem; color:#ff8c00; font-weight:900; line-height:1; letter-spacing:8px;">...</div>
+        </div>
         <div id="lobbyList" style="margin:25px 0; font-weight:bold; font-size:1.15rem; color:#fff;"></div>
         <div id="lobbyReadyList" style="font-size:0.9rem; color:#aaa; margin-bottom:15px;"></div>
         <button id="btnLobbyReady" class="btn-secondary" onclick="toggleLobbyReady()">✅ Bereit</button>
@@ -693,6 +704,7 @@
         </div>
         
         <h3 id="lblQuestion" style="margin:20px 0; min-height:60px; display:flex; align-items:center; justify-content:center;">Lade Frage...</h3>
+        <p id="lblQuestionCategory" style="font-size:0.8rem; color:#888; margin-top:-10px; margin-bottom:10px; font-style:italic;"></p>
 
         <div class="option-row" id="optionRow" style="margin-top:15px;">
             <button id="btnA" class="btn-option" onclick="vote('A')">A</button>
@@ -712,6 +724,7 @@
         <div id="gridResult" class="thermo-grid"></div>
         
         <h3>Die Wahrheit: <span id="lblTruth" style="color:#fff;">?</span></h3>
+        <p id="lblResultCategory" style="font-size:0.8rem; color:#888; margin-top:-10px; margin-bottom:10px; font-style:italic;"></p>
         <h2 id="lblResultStatus" style="margin:10px 0;">...</h2>
 
         <div id="boxReward" style="display:none; background:#2a3a1a; padding:15px; border-radius:10px; margin-bottom:15px; border:2px solid #4a6a2a;">
@@ -1381,7 +1394,7 @@
             return allQuestions;
         }
 
-        function getRandomUnusedQuestion(usedQuestions = [], activeCategories = []) {
+        function getRandomUnusedQuestion(usedQuestions = [], activeCategories = [], lastCategory = null) {
             const questions = getAllQuestions(activeCategories);
             if(questions.length === 0) {
                 console.error('Keine Fragen verfügbar!');
@@ -1397,7 +1410,18 @@
                 }
                 return { question: q, index: randomIdx, category: q.category };
             }
-            const randomQ = available[Math.floor(Math.random() * available.length)];
+            
+            // Wenn mehrere Kategorien aktiv sind und eine letzte Kategorie bekannt ist,
+            // vermeide Fragen aus derselben Kategorie
+            let filteredAvailable = available;
+            if(activeCategories.length > 1 && lastCategory) {
+                const fromOtherCategories = available.filter(q => q.category !== lastCategory);
+                if(fromOtherCategories.length > 0) {
+                    filteredAvailable = fromOtherCategories;
+                }
+            }
+            
+            const randomQ = filteredAvailable[Math.floor(Math.random() * filteredAvailable.length)];
             if(!randomQ || !randomQ.q) {
                 console.error('Ungültige Frage gefunden:', randomQ);
                 return { question: questions[0] || { q: "Fehler", a: "A", b: "B" }, index: 0, category: null };
@@ -1516,12 +1540,13 @@
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
                     if(data.hostName) {
-                        rooms.push({
-                            id: doc.id,
-                            hostName: data.hostName,
-                            playerCount: Object.keys(data.players || {}).length,
-                            password: data.password || ""
-                        });
+                    rooms.push({
+                        id: doc.id,
+                        hostName: data.hostName,
+                        playerCount: Object.keys(data.players || {}).length,
+                        password: data.password || "",
+                        hasPassword: !!(data.password && data.password.trim().length > 0)
+                    });
                     }
                 });
                 
@@ -1540,8 +1565,10 @@
                     inpCodeEl.style.display = 'none';
                     inpPasswordEl.style.display = 'none';
                     roomListEl.innerHTML = rooms.map(room => `
-                        <div class="card" style="padding:15px; margin-bottom:10px; cursor:pointer; background:linear-gradient(145deg, #1e1e1e, #252525);" onclick="selectRoom('${room.id}', ${room.password ? 'true' : 'false'})">
-                            <div style="font-weight:bold; font-size:1.1rem; color:#ff8c00;">Raum von ${room.hostName}</div>
+                        <div class="card" style="padding:15px; margin-bottom:10px; cursor:pointer; background:linear-gradient(145deg, #1e1e1e, #252525);" onclick="selectRoom('${room.id}', ${room.hasPassword ? 'true' : 'false'})">
+                            <div style="font-weight:bold; font-size:1.1rem; color:#ff8c00;">
+                                ${room.hasPassword ? '🔒 ' : ''}Raum von ${room.hostName}
+                            </div>
                             <div style="font-size:0.85rem; color:#aaa; margin-top:5px;">👥 ${room.playerCount} Spieler • Code: ${room.id}</div>
                         </div>
                     `).join('');
@@ -1555,13 +1582,16 @@
         window.selectRoom = (roomId, hasPassword) => {
             // Zeige Code-Eingabefeld und Passwort-Feld
             document.getElementById('inpCode').style.display = 'block';
-            document.getElementById('inpCode').placeholder = `Raum-Code (z.B. ${roomId})`;
+            document.getElementById('inpCode').placeholder = 'Raum-Code';
             document.getElementById('inpCode').value = '';
             document.getElementById('inpCode').focus();
             if(hasPassword) {
                 document.getElementById('inpPassword').style.display = 'block';
+                document.getElementById('inpPassword').placeholder = 'Passwort erforderlich';
+                document.getElementById('inpPassword').value = '';
             } else {
                 document.getElementById('inpPassword').style.display = 'none';
+                document.getElementById('inpPassword').value = '';
             }
             // Verstecke Raumliste
             document.getElementById('roomList').style.display = 'none';
@@ -1581,6 +1611,7 @@
             const gender = "divers"; // Deaktiviert, aber behalten
             const gameMode = getSelectedGameMode();
             const selectedCategories = getSelectedCategories();
+            const roomPassword = document.getElementById('inpRoomPassword').value.trim();
             
             if(!name) {
                 showToast("Bitte gib einen Namen ein!");
@@ -1618,6 +1649,7 @@
             
             // Erste Frage aus aktiven Kategorien
             const firstQuestion = getAllQuestions(selectedCategories)[0] || { q: "Willkommen zu Hitzkopf!", a: "A", b: "B" };
+            const firstCategory = firstQuestion.category || null;
 
             await setDoc(doc(db, "lobbies", code), {
                 host: name,
@@ -1637,8 +1669,18 @@
                 eliminatedShown: [],
                 rematchVotes: {},
                 winner: null,
-                password: "" // Optional: später für Passwortschutz
+                password: roomPassword || "", // Leer = öffentlich
+                lastQuestionCategory: firstCategory,
+                pendingAttacks: {} // Sammelt Angriffe: { targetName: [{ attacker, dmg, hasOil }] }
             });
+            
+            // Code nur anzeigen wenn Passwort gesetzt ist
+            if(roomPassword) {
+                showToast(`Raum erstellt! Code: ${code} | Passwort: ${roomPassword}`);
+            } else {
+                showToast(`Raum erstellt! Code: ${code}`);
+            }
+            
             connectToLobby();
         };
 
@@ -1648,20 +1690,31 @@
             const emoji = document.getElementById('inpEmoji').value || '😊';
             const gender = "divers"; // Deaktiviert, aber behalten
             const code = document.getElementById('inpCode').value.trim().toUpperCase();
-            const password = document.getElementById('inpPassword').value;
+            const password = document.getElementById('inpPassword').value.trim();
             
             if(!name || !code) {
                 showToast("Bitte gib Name und Code ein!");
                 return;
             }
             
-            // Passwortprüfung (später implementieren wenn nötig)
-            // const ref = doc(db, "lobbies", code);
-            // const snap = await getDoc(ref);
-            // if(snap.exists() && snap.data().password && snap.data().password !== password) {
-            //     showToast("Falsches Passwort!");
-            //     return;
-            // }
+            // Passwortprüfung
+            const ref = doc(db, "lobbies", code);
+            const snap = await getDoc(ref);
+            if(!snap.exists()) {
+                showToast("Lobby nicht gefunden! Prüfe den Code.");
+                return;
+            }
+            
+            const roomData = snap.data();
+            const roomPassword = roomData.password || "";
+            
+            // Wenn Raum ein Passwort hat, muss es übereinstimmen
+            if(roomPassword && roomPassword.trim().length > 0) {
+                if(!password || password !== roomPassword) {
+                    showToast("Falsches Passwort! Bitte versuche es erneut.");
+                    return;
+                }
+            }
             
             myName = name;
             myEmoji = emoji;
@@ -1672,13 +1725,7 @@
             sessionStorage.setItem("hk_gender", gender);
             sessionStorage.setItem("hk_room", code);
 
-            const ref = doc(db, "lobbies", code);
-            const snap = await getDoc(ref);
-            if(!snap.exists()) {
-                showToast("Lobby nicht gefunden! Prüfe den Code.");
-                return;
-            }
-
+            // data wird bereits oben geladen (siehe Passwortprüfung)
             const data = snap.data();
             const startTemp = data.config?.startTemp || 0;
             if(!data.players[name]) {
@@ -1704,14 +1751,21 @@
                 const data = snap.data();
                 globalData = data;
 
+                // Prüfe ob Angriffe ausgeführt wurden und zeige beim Angegriffenen
                 const meState = data.players?.[myName];
                 if(meState) {
-                    if(lastMyTemp != null && meState.temp > lastMyTemp) {
-                        const delta = meState.temp - lastMyTemp;
-                        const latestAttack = findLatestAttackOnMe(data.log);
-                        const attacker = latestAttack?.attacker || "Jemand";
-                        const dmgShown = latestAttack?.dmg || delta;
-                        triggerAttackFeedback(attacker, dmgShown);
+                    // Prüfe ob Angriffe ausgeführt wurden (durch executePendingAttacks)
+                    if(data.attackResults && data.attackResults[myName]) {
+                        const result = data.attackResults[myName];
+                        triggerAttackFeedback(result.attackers, result.totalDmg);
+                        // Entferne nach Anzeige (mit kurzer Verzögerung damit alle sehen können)
+                        setTimeout(() => {
+                            if(isHost) {
+                                const newResults = { ...(data.attackResults || {}) };
+                                delete newResults[myName];
+                                updateDoc(doc(db, "lobbies", roomId), { attackResults: newResults }).catch(console.error);
+                            }
+                        }, 3500);
                     }
                     lastMyTemp = meState.temp;
                 } else {
@@ -1811,7 +1865,17 @@
                 const hostStartBtn = document.getElementById('btnHostStart');
                 if(data.status === 'lobby') {
                     showScreen('screen-lobby');
-                    document.getElementById('lblCode').innerText = roomId;
+                    // Code nur anzeigen wenn Passwort gesetzt ist
+                    const hasPassword = data.password && data.password.trim().length > 0;
+                    const codeContainer = document.getElementById('lblCodeContainer');
+                    if(codeContainer) {
+                        if(hasPassword && isHost) {
+                            codeContainer.style.display = 'block';
+                            document.getElementById('lblCode').innerText = roomId;
+                        } else {
+                            codeContainer.style.display = 'none';
+                        }
+                    }
                     const players = Object.keys(data.players);
                     document.getElementById('lobbyList').innerHTML = players.map(p => 
                         `<div>${p}${p === data.host ? ' 👑' : ''}</div>`
@@ -1863,8 +1927,9 @@
                         if(isHost) {
                             const usedQuestions = data.usedQuestions || [];
                             const activeCategories = data.config?.categories || Object.keys(questionCategories);
-                            const { question: q } = getRandomUnusedQuestion(usedQuestions, activeCategories);
-                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q }).catch(console.error);
+                            const lastCategory = data.lastQuestionCategory || null;
+                            const { question: q, category: qCategory } = getRandomUnusedQuestion(usedQuestions, activeCategories, lastCategory);
+                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q, lastQuestionCategory: qCategory }).catch(console.error);
                             data.currentQ = q;
                         } else {
                             // Fallback für Nicht-Hosts
@@ -1900,8 +1965,9 @@
                         if(isHost) {
                             const usedQuestions = data.usedQuestions || [];
                             const activeCategories = data.config?.categories || Object.keys(questionCategories);
-                            const { question: q } = getRandomUnusedQuestion(usedQuestions, activeCategories);
-                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q }).catch(console.error);
+                            const lastCategory = data.lastQuestionCategory || null;
+                            const { question: q, category: qCategory } = getRandomUnusedQuestion(usedQuestions, activeCategories, lastCategory);
+                            updateDoc(doc(db, "lobbies", roomId), { currentQ: q, lastQuestionCategory: qCategory }).catch(console.error);
                             data.currentQ = q;
                         } else {
                             // Fallback für Nicht-Hosts
@@ -1990,6 +2056,20 @@
                 document.getElementById('lblQuestion').innerText = currentQ.q;
                 btnA.innerText = currentQ.a || 'A';
                 btnB.innerText = currentQ.b || 'B';
+                
+                // Kategorie anzeigen
+                const categoryLabel = document.getElementById('lblQuestionCategory');
+                if(categoryLabel && currentQ.category) {
+                    const cat = questionCategories[currentQ.category];
+                    if(cat) {
+                        categoryLabel.innerText = `${cat.emoji} ${cat.name}`;
+                        categoryLabel.style.display = 'block';
+                    } else {
+                        categoryLabel.style.display = 'none';
+                    }
+                } else if(categoryLabel) {
+                    categoryLabel.style.display = 'none';
+                }
             } else {
                 // Fallback falls currentQ fehlt oder falsch formatiert
                 console.warn('currentQ fehlt oder ist falsch formatiert:', currentQ);
@@ -2004,8 +2084,9 @@
                 if(isHost && globalData) {
                     const usedQuestions = globalData.usedQuestions || [];
                     const activeCategories = globalData.config?.categories || Object.keys(questionCategories);
-                    const { question: q } = getRandomUnusedQuestion(usedQuestions, activeCategories);
-                    updateDoc(doc(db, "lobbies", roomId), { currentQ: q }).catch(console.error);
+                    const lastCategory = globalData.lastQuestionCategory || null;
+                    const { question: q, category: qCategory } = getRandomUnusedQuestion(usedQuestions, activeCategories, lastCategory);
+                    updateDoc(doc(db, "lobbies", roomId), { currentQ: q, lastQuestionCategory: qCategory }).catch(console.error);
                 }
             }
             
@@ -2029,7 +2110,13 @@
                 }
             } else {
                 lblHotseat.innerText = `${data.hotseat} beantwortet die Frage!`;
-                lblHotseatSub.innerText = "Errate die Wahl, um anzugreifen oder Joker zu ziehen.";
+                const gameMode = data.config?.gameMode || 'party';
+                const isPartyMode = gameMode === 'party';
+                if(isPartyMode) {
+                    lblHotseatSub.innerText = "Errate die Wahl, um einen Spieler aufzuheizen!";
+                } else {
+                    lblHotseatSub.innerText = "Errate die Wahl, um anzugreifen oder Joker zu ziehen.";
+                }
                 // A/B Buttons aktivieren
                 const optionRow = document.getElementById('optionRow');
                 if(optionRow) {
@@ -2079,6 +2166,20 @@
                 truthText = truth === 'A' ? 'A' : 'B';
             }
             document.getElementById('lblTruth').innerText = truthText;
+            
+            // Kategorie anzeigen
+            const categoryLabel = document.getElementById('lblResultCategory');
+            if(categoryLabel && currentQ && currentQ.category) {
+                const cat = questionCategories[currentQ.category];
+                if(cat) {
+                    categoryLabel.innerText = `${cat.emoji} ${cat.name}`;
+                    categoryLabel.style.display = 'block';
+                } else {
+                    categoryLabel.style.display = 'none';
+                }
+            } else if(categoryLabel) {
+                categoryLabel.style.display = 'none';
+            }
 
             const myVote = data.votes[myName];
             const statusEl = document.getElementById('lblResultStatus');
@@ -2133,7 +2234,10 @@
             // Zeige Rekapitulation wenn alle bereit sind (nur einmal pro Runde)
             if(data.ready.length >= Object.keys(data.players).length && !data.roundRecapShown) {
                 if(isHost) {
-                    updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
+                    // Führe gesammelte Angriffe aus bevor Rekapitulation gezeigt wird
+                    executePendingAttacks(data).then(() => {
+                        updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
+                    });
                 }
                 // Zeige Rekapitulation nach kurzer Verzögerung
                 setTimeout(() => {
@@ -2338,42 +2442,33 @@
             const gameMode = globalData?.config?.gameMode || 'party';
             const isPartyMode = gameMode === 'party';
             const baseDmg = isPartyMode ? 20 : (globalData?.config?.dmg || 10); // Partymodus: 20°
-            const ref = doc(db, "lobbies", roomId);
             const attackerState = globalData?.players?.[myName] || {};
-            const targetState = globalData?.players?.[target] || {};
             const hasOil = attackerState.inventory?.includes('card_oil');
-            const targetHasMirror = targetState.inventory?.includes('card_mirror');
             const dmg = baseDmg * (hasOil ? 2 : 1);
-            const attackMsg = hasOil 
-                ? `🔥 ${myName} greift ${target} mit dem Ölfass an (+${dmg}°C)`
-                : `🔥 ${myName} greift ${target} an (+${dmg}°C)`;
-
-            await updateDoc(ref, { log: arrayUnion(attackMsg) });
-
-            if(hasOil) {
-                await updateDoc(ref, { [`players.${myName}.inventory`]: arrayRemove('card_oil') });
+            
+            // Angriff sammeln statt sofort ausführen
+            const ref = doc(db, "lobbies", roomId);
+            const pendingAttacks = globalData.pendingAttacks || {};
+            if(!pendingAttacks[target]) {
+                pendingAttacks[target] = [];
             }
-
-            if(targetHasMirror) {
-                await updateDoc(ref, {
-                    [`players.${target}.inventory`]: arrayRemove('card_mirror'),
-                    log: arrayUnion(`🪞 ${target} spiegelt den Angriff auf ${myName} zurück! (+${dmg}°C)`)
-                });
-                await sleep(400);
-                await updateDoc(ref, {
-                    [`players.${myName}.temp`]: increment(dmg)
-                });
-                return;
-            }
-
-            await sleep(700);
-            const newTemp = (targetState.temp || 0) + dmg;
-            await updateDoc(ref, {
-                [`players.${target}.temp`]: increment(dmg)
+            pendingAttacks[target].push({
+                attacker: myName,
+                dmg: dmg,
+                hasOil: hasOil
             });
             
-            // Zeige Animation
-            await showAttackAnimation(target, myName, dmg, newTemp);
+            // Ölfass entfernen wenn verwendet
+            if(hasOil) {
+                await updateDoc(ref, { 
+                    [`players.${myName}.inventory`]: arrayRemove('card_oil'),
+                    pendingAttacks: pendingAttacks
+                });
+            } else {
+                await updateDoc(ref, { 
+                    pendingAttacks: pendingAttacks
+                });
+            }
         };
 
         // --- TAKE CARD ---
@@ -2448,7 +2543,8 @@
             await applyIceCooling(globalData.players);
             const usedQuestions = globalData.usedQuestions || [];
             const activeCategories = globalData.config?.categories || Object.keys(questionCategories);
-            const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions, activeCategories);
+            const lastCategory = globalData.lastQuestionCategory || null;
+            const { question: q, index: qIdx, category: qCategory } = getRandomUnusedQuestion(usedQuestions, activeCategories, lastCategory);
             const nextRoundId = (globalData?.roundId ?? 0) + 1;
             const countdownEnds = Date.now() + 3000;
             await updateDoc(doc(db, "lobbies", roomId), {
@@ -2460,7 +2556,9 @@
                 roundId: nextRoundId,
                 countdownEnds,
                 lobbyReady: {},
-                usedQuestions: [...usedQuestions, qIdx]
+                usedQuestions: [...usedQuestions, qIdx],
+                lastQuestionCategory: qCategory,
+                pendingAttacks: {} // Zurücksetzen für neue Runde
             });
             setTimeout(() => {
                 updateDoc(doc(db, "lobbies", roomId), { status: 'game', countdownEnds: null });
@@ -2563,7 +2661,8 @@
             
             const usedQuestions = globalData.usedQuestions || [];
             const activeCategories = globalData.config?.categories || Object.keys(questionCategories);
-            const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions, activeCategories);
+            const lastCategory = globalData.lastQuestionCategory || null;
+            const { question: q, index: qIdx, category: qCategory } = getRandomUnusedQuestion(usedQuestions, activeCategories, lastCategory);
             const nextRoundId = (globalData?.roundId ?? 0) + 1;
             await applyIceCooling(globalData.players);
             await updateDoc(doc(db, "lobbies", roomId), {
@@ -2574,7 +2673,10 @@
                 ready: [],
                 roundId: nextRoundId,
                 usedQuestions: [...usedQuestions, qIdx],
-                roundRecapShown: false
+                roundRecapShown: false,
+                lastQuestionCategory: qCategory,
+                pendingAttacks: {}, // Zurücksetzen für neue Runde
+                attackResults: {} // Zurücksetzen für neue Runde
             });
         };
 
@@ -2606,7 +2708,9 @@
                 roundId: 0,
                 lobbyReady: {},
                 countdownEnds: null,
-                usedQuestions: []
+                usedQuestions: [],
+                pendingAttacks: {},
+                attackResults: {}
             });
             toggleMenu();
             document.body.classList.remove('final-mode');
@@ -2634,11 +2738,17 @@
         };
         
         window.shareLobby = async () => {
-            if(!roomId) {
+            if(!roomId || !globalData) {
                 showToast("Kein aktiver Raum zum Teilen verfügbar.");
                 return;
             }
-            const text = `🔥 Hitzkopf-Code: ${roomId} – komm in meine Lobby!`;
+            const roomPassword = globalData.password || "";
+            const hasPassword = roomPassword && roomPassword.trim().length > 0;
+            let text = `🔥 Hitzkopf-Code: ${roomId}`;
+            if(hasPassword) {
+                text += ` | Passwort: ${roomPassword}`;
+            }
+            text += " – komm in meine Lobby!";
             try {
                 if(navigator.share) {
                     await navigator.share({ title: "Hitzkopf Lobby", text, url: location.href });
@@ -2676,7 +2786,9 @@
                 roundId: (globalData.roundId ?? 0) + 1,
                 lobbyReady: {},
                 countdownEnds: null,
-                usedQuestions: []
+                usedQuestions: [],
+                pendingAttacks: {},
+                attackResults: {}
             });
             document.body.classList.remove('final-mode');
             showToast("Revanche gestartet! Alle zurück in die Lobby.");
@@ -2889,17 +3001,108 @@
             return null;
         }
 
-        function triggerAttackFeedback(attacker, dmg) {
+        function triggerAttackFeedback(attackers, totalDmg) {
             const body = document.body;
             body.classList.add('viewport-shake');
             setTimeout(() => body.classList.remove('viewport-shake'), 600);
 
             const alert = document.getElementById('attackAlert');
             if(!alert) return;
-            alert.innerText = `🔥 ${attacker} hat dich aufgeheizt (+${dmg}°C)`;
+            
+            // Formatiere Meldung je nach Anzahl der Angreifer
+            let message;
+            if(Array.isArray(attackers) && attackers.length > 1) {
+                const attackerList = attackers.join(' und ');
+                message = `🔥 ${attackerList} haben dich gemeinsam angegriffen (+${totalDmg}°C)`;
+            } else {
+                const attacker = Array.isArray(attackers) ? attackers[0] : attackers;
+                message = `🔥 ${attacker} hat dich aufgeheizt (+${totalDmg}°C)`;
+            }
+            
+            alert.innerText = message;
             alert.classList.add('show');
             if(attackAlertTimer) clearTimeout(attackAlertTimer);
-            attackAlertTimer = setTimeout(() => alert.classList.remove('show'), 2600);
+            attackAlertTimer = setTimeout(() => alert.classList.remove('show'), 3000);
+        }
+        
+        // --- EXECUTE PENDING ATTACKS ---
+        async function executePendingAttacks(data) {
+            if(!isHost) return;
+            const pendingAttacks = data.pendingAttacks || {};
+            if(Object.keys(pendingAttacks).length === 0) return;
+            
+            const ref = doc(db, "lobbies", roomId);
+            const players = data.players || {};
+            const logEntries = [];
+            const tempUpdates = {};
+            const attackResults = {}; // Für Anzeige bei betroffenen Spielern: { target: { attackers: [], totalDmg: 0 } }
+            
+            // Verarbeite alle Angriffe
+            for(const [target, attacks] of Object.entries(pendingAttacks)) {
+                if(!players[target] || attacks.length === 0) continue;
+                
+                const targetState = players[target];
+                const targetHasMirror = targetState.inventory?.includes('card_mirror');
+                let totalDmg = 0;
+                const attackerNames = [];
+                
+                // Summiere Schaden und sammle Angreifer
+                attacks.forEach(attack => {
+                    totalDmg += attack.dmg;
+                    attackerNames.push(attack.attacker);
+                    
+                    // Log-Eintrag für einzelnen Angriff
+                    if(attack.hasOil) {
+                        logEntries.push(`🔥 ${attack.attacker} greift ${target} mit dem Ölfass an (+${attack.dmg}°C)`);
+                    } else {
+                        logEntries.push(`🔥 ${attack.attacker} greift ${target} an (+${attack.dmg}°C)`);
+                    }
+                });
+                
+                // Spiegele Angriffe zurück wenn Spiegel vorhanden
+                if(targetHasMirror) {
+                    await updateDoc(ref, {
+                        [`players.${target}.inventory`]: arrayRemove('card_mirror')
+                    });
+                    
+                    // Spiegle an jeden Angreifer zurück
+                    attacks.forEach(attack => {
+                        if(!tempUpdates[`players.${attack.attacker}.temp`]) {
+                            tempUpdates[`players.${attack.attacker}.temp`] = 0;
+                        }
+                        tempUpdates[`players.${attack.attacker}.temp`] += attack.dmg;
+                    });
+                    
+                    // Sammle alle Angreifer für Log
+                    const attackerList = attackerNames.join(' und ');
+                    logEntries.push(`🪞 ${target} spiegelt die Angriffe von ${attackerList} zurück! (+${totalDmg}°C)`);
+                } else {
+                    // Normaler Angriff
+                    if(!tempUpdates[`players.${target}.temp`]) {
+                        tempUpdates[`players.${target}.temp`] = 0;
+                    }
+                    tempUpdates[`players.${target}.temp`] += totalDmg;
+                    
+                    // Für Anzeige beim Angegriffenen
+                    attackResults[target] = {
+                        attackers: attackerNames,
+                        totalDmg: totalDmg
+                    };
+                }
+            }
+            
+            // Führe alle Temperatur-Updates aus
+            const updateData = { pendingAttacks: {}, log: arrayUnion(...logEntries) };
+            for(const [path, dmg] of Object.entries(tempUpdates)) {
+                updateData[path] = increment(dmg);
+            }
+            
+            // Speichere Angriffsergebnisse für Anzeige bei betroffenen Spielern
+            if(Object.keys(attackResults).length > 0) {
+                updateData.attackResults = attackResults;
+            }
+            
+            await updateDoc(ref, updateData);
         }
 
         function handleCountdownOverlay(data) {
