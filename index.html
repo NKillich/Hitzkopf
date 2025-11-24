@@ -1866,14 +1866,14 @@
                     if(data.attackResults && data.attackResults[myName]) {
                         const result = data.attackResults[myName];
                         triggerAttackFeedback(result.attackers, result.totalDmg);
-                        // Entferne nach Anzeige (mit kurzer Verzögerung damit alle sehen können)
+                        // Entferne nach Anzeige (mit längerer Verzögerung damit alle sehen können - 5.5 Sekunden)
                         setTimeout(() => {
                             if(isHost) {
                                 const newResults = { ...(data.attackResults || {}) };
                                 delete newResults[myName];
                                 updateDoc(doc(db, "lobbies", roomId), { attackResults: newResults }).catch(console.error);
                             }
-                        }, 3500);
+                        }, 5500);
                     }
                     lastMyTemp = meState.temp;
                 } else {
@@ -3111,20 +3111,26 @@
             const alert = document.getElementById('attackAlert');
             if(!alert) return;
             
-            // Formatiere Meldung je nach Anzahl der Angreifer
+            // Formatiere Meldung je nach Anzahl der Angreifer mit Flammen-Emoji oben
             let message;
             if(Array.isArray(attackers) && attackers.length > 1) {
                 const attackerList = attackers.join(' und ');
-                message = `🔥 ${attackerList} haben dich gemeinsam angegriffen (+${totalDmg}°C)`;
+                message = `🔥<br>${attackerList}<br>haben dich gemeinsam angegriffen<br><strong>+${totalDmg}°C</strong>`;
             } else {
                 const attacker = Array.isArray(attackers) ? attackers[0] : attackers;
-                message = `🔥 ${attacker} hat dich aufgeheizt (+${totalDmg}°C)`;
+                message = `🔥<br>${attacker}<br>hat dich aufgeheizt<br><strong>+${totalDmg}°C</strong>`;
             }
             
-            alert.innerText = message;
+            alert.innerHTML = message;
+            alert.style.padding = '20px 30px';
+            alert.style.fontSize = '1.1rem';
+            alert.style.lineHeight = '1.6';
+            alert.style.textAlign = 'center';
+            alert.style.minWidth = '250px';
             alert.classList.add('show');
             if(attackAlertTimer) clearTimeout(attackAlertTimer);
-            attackAlertTimer = setTimeout(() => alert.classList.remove('show'), 3000);
+            // Länger anzeigen (5 Sekunden statt 3)
+            attackAlertTimer = setTimeout(() => alert.classList.remove('show'), 5000);
         }
         
         function triggerHotseatAlert(hotseatName, players) {
