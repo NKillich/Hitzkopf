@@ -382,14 +382,14 @@
             transform: scale(1.05);
         }
         body.viewport-shake {
-            animation: screenShake 0.6s cubic-bezier(.36,.07,.19,.97);
+            animation: screenShake 0.6s cubic-bezier(.36,.07,.19,.97) !important;
         }
         @keyframes screenShake {
+            0%, 100% { transform: translate3d(0, 0, 0); }
             10%, 90% { transform: translate3d(-4px, 0, 0); }
             20%, 80% { transform: translate3d(5px, 0, 0); }
             30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
             40%, 60% { transform: translate3d(8px, 0, 0); }
-            100% { transform: translate3d(0,0,0); }
         }
         .joker-panel {
             margin-top: 20px;
@@ -668,6 +668,30 @@
     <div class="menu-btn" onclick="toggleMenu()">⚙️</div>
     <div id="attackAlert" class="attack-alert"></div>
     <div id="hotseatAlert" class="attack-alert"></div>
+    <!-- Attack Modal -->
+    <div id="attackModal" class="countdown-overlay" style="display:none;">
+        <div style="background:linear-gradient(145deg, #1e1e1e, #252525); padding:40px; border-radius:20px; max-width:500px; margin:20px; border:2px solid #ff4500; box-shadow:0 8px 32px rgba(0,0,0,0.8); text-align:center;">
+            <div id="attackModalEmoji" style="font-size:5rem; margin-bottom:20px;">🔥</div>
+            <div id="attackModalName" style="font-size:2.5rem; font-weight:800; color:#ff4500; margin-bottom:15px; text-shadow:0 0 18px rgba(255,69,0,0.6);">...</div>
+            <div id="attackModalText" style="font-size:1.2rem; color:#fff; margin-bottom:25px;">...</div>
+            <div style="width:80%; margin:0 auto 20px auto;">
+                <div style="height:25px; border-radius:12px; background:#280000; overflow:hidden; box-shadow:inset 0 0 10px rgba(0,0,0,0.7);">
+                    <div id="attackModalThermoFill" style="height:100%; width:0%; background:linear-gradient(90deg, #ffae00, #ff0000); box-shadow:0 0 20px rgba(255,0,0,0.7); transition:width 1.2s ease-out;"></div>
+                </div>
+                <div id="attackModalTemp" style="font-size:1.5rem; font-weight:bold; color:#ff4500; margin-top:10px;">0°C</div>
+            </div>
+            <button onclick="closeAttackModal()" class="btn-primary" style="margin-top:20px; padding:15px 30px; font-size:1.1rem;">Verstanden</button>
+        </div>
+    </div>
+    <!-- Hotseat Modal -->
+    <div id="hotseatModal" class="countdown-overlay" style="display:none;">
+        <div style="background:linear-gradient(145deg, #1e1e1e, #252525); padding:40px; border-radius:20px; max-width:500px; margin:20px; border:2px solid #ff4500; box-shadow:0 8px 32px rgba(0,0,0,0.8); text-align:center;">
+            <div id="hotseatModalEmoji" style="font-size:5rem; margin-bottom:20px;">🎯</div>
+            <div id="hotseatModalName" style="font-size:2.5rem; font-weight:800; color:#ff4500; margin-bottom:15px; text-shadow:0 0 18px rgba(255,69,0,0.6);">...</div>
+            <div id="hotseatModalText" style="font-size:1.2rem; color:#fff; margin-bottom:25px;">...</div>
+            <button onclick="closeHotseatModal()" class="btn-primary" style="margin-top:20px; padding:15px 30px; font-size:1.1rem;">Los geht's</button>
+        </div>
+    </div>
     <div id="countdownOverlay" class="countdown-overlay">
         <div id="countdownText" class="countdown-text" style="font-size:4rem; line-height:1.2;">Hitz<br>kopf</div>
         <div class="countdown-sub">Bereit machen...</div>
@@ -3108,57 +3132,95 @@
             body.classList.add('viewport-shake');
             setTimeout(() => body.classList.remove('viewport-shake'), 600);
 
-            const alert = document.getElementById('attackAlert');
-            if(!alert) return;
+            const modal = document.getElementById('attackModal');
+            if(!modal) return;
             
-            // Formatiere Meldung je nach Anzahl der Angreifer mit Flammen-Emoji oben
-            let message;
+            // Aktuelle Temperatur des Spielers
+            const currentTemp = globalData?.players?.[myName]?.temp || 0;
+            const newTemp = currentTemp + totalDmg;
+            const maxTemp = globalData?.config?.maxTemp || 100;
+            const tempPercent = Math.min((newTemp / maxTemp) * 100, 100);
+            
+            // Formatiere Meldung je nach Anzahl der Angreifer
+            let nameText, messageText;
             if(Array.isArray(attackers) && attackers.length > 1) {
                 const attackerList = attackers.join(' und ');
-                message = `🔥<br>${attackerList}<br>haben dich gemeinsam angegriffen<br><strong>+${totalDmg}°C</strong>`;
+                nameText = attackerList;
+                messageText = `haben dich gemeinsam angegriffen (+${totalDmg}°C)`;
             } else {
                 const attacker = Array.isArray(attackers) ? attackers[0] : attackers;
-                message = `🔥<br>${attacker}<br>hat dich aufgeheizt<br><strong>+${totalDmg}°C</strong>`;
+                nameText = attacker;
+                messageText = `hat dich aufgeheizt (+${totalDmg}°C)`;
             }
             
-            alert.innerHTML = message;
-            alert.style.padding = '20px 30px';
-            alert.style.fontSize = '1.1rem';
-            alert.style.lineHeight = '1.6';
-            alert.style.textAlign = 'center';
-            alert.style.minWidth = '250px';
-            alert.classList.add('show');
-            if(attackAlertTimer) clearTimeout(attackAlertTimer);
-            // Länger anzeigen (5 Sekunden statt 3)
-            attackAlertTimer = setTimeout(() => alert.classList.remove('show'), 5000);
+            // Setze Modal-Inhalte
+            const emojiEl = document.getElementById('attackModalEmoji');
+            const nameEl = document.getElementById('attackModalName');
+            const textEl = document.getElementById('attackModalText');
+            const thermoEl = document.getElementById('attackModalThermoFill');
+            const tempEl = document.getElementById('attackModalTemp');
+            
+            if(emojiEl) emojiEl.innerText = '🔥';
+            if(nameEl) nameEl.innerText = nameText;
+            if(textEl) textEl.innerText = messageText;
+            if(tempEl) tempEl.innerText = `${newTemp}°C`;
+            
+            // Animiere Thermometer
+            if(thermoEl) {
+                thermoEl.style.width = '0%';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        thermoEl.style.width = `${tempPercent}%`;
+                    });
+                });
+            }
+            
+            // Zeige Modal
+            modal.style.display = 'flex';
         }
         
+        window.closeAttackModal = () => {
+            const modal = document.getElementById('attackModal');
+            if(modal) {
+                modal.style.display = 'none';
+            }
+        };
+        
         function triggerHotseatAlert(hotseatName, players) {
-            const alert = document.getElementById('hotseatAlert');
-            if(!alert) return;
+            const modal = document.getElementById('hotseatModal');
+            if(!modal) return;
             
             const playerData = players[hotseatName];
             const playerEmoji = playerData?.emoji || '😊';
             
-            let message;
+            const emojiEl = document.getElementById('hotseatModalEmoji');
+            const nameEl = document.getElementById('hotseatModalName');
+            const textEl = document.getElementById('hotseatModalText');
+            
             if(hotseatName === myName) {
-                message = `🎯 Du bist gefragt!<br>Alle anderen müssen deine Antwort erraten.`;
+                if(emojiEl) emojiEl.innerText = '🎯';
+                if(nameEl) nameEl.innerText = 'Du bist gefragt!';
+                if(textEl) textEl.innerText = 'Alle anderen müssen deine Antwort erraten.';
             } else {
-                message = `🎯 ${playerEmoji} ${hotseatName} ist gefragt.<br>Versuche ${hotseatName}'s Antwort zu erraten.`;
+                if(emojiEl) emojiEl.innerText = '🎯';
+                if(nameEl) nameEl.innerText = `${playerEmoji} ${hotseatName}`;
+                if(textEl) textEl.innerText = `ist gefragt. Versuche ${hotseatName}'s Antwort zu erraten.`;
             }
             
-            alert.innerHTML = `
-                <div style="margin-bottom:10px;">${message}</div>
-                <button onclick="closeHotseatAlert()">Los geht's</button>
-            `;
-            alert.classList.add('show');
+            // Zeige Modal
+            modal.style.display = 'flex';
         }
         
-        window.closeHotseatAlert = () => {
-            const alert = document.getElementById('hotseatAlert');
-            if(alert) {
-                alert.classList.remove('show');
+        window.closeHotseatModal = () => {
+            const modal = document.getElementById('hotseatModal');
+            if(modal) {
+                modal.style.display = 'none';
             }
+        };
+        
+        // Alte Funktionen für Rückwärtskompatibilität
+        window.closeHotseatAlert = () => {
+            closeHotseatModal();
         };
         
         // --- EXECUTE PENDING ATTACKS ---
@@ -3229,8 +3291,28 @@
             
             // Führe alle Temperatur-Updates aus
             const updateData = { pendingAttacks: {}, log: arrayUnion(...logEntries) };
+            
+            // Konvertiere verschachtelte Pfade zu Firebase-Update-Format
+            const playersUpdate = {};
             for(const [path, dmg] of Object.entries(tempUpdates)) {
-                updateData[path] = increment(dmg);
+                // Pfad ist z.B. "players.${target}.temp"
+                const parts = path.split('.');
+                if(parts.length === 3 && parts[0] === 'players' && parts[2] === 'temp') {
+                    const playerName = parts[1];
+                    if(!playersUpdate[playerName]) {
+                        playersUpdate[playerName] = {};
+                    }
+                    playersUpdate[playerName].temp = increment(dmg);
+                }
+            }
+            
+            // Füge Spieler-Updates hinzu
+            if(Object.keys(playersUpdate).length > 0) {
+                for(const [playerName, updates] of Object.entries(playersUpdate)) {
+                    Object.keys(updates).forEach(key => {
+                        updateData[`players.${playerName}.${key}`] = updates[key];
+                    });
+                }
             }
             
             // Speichere Angriffsergebnisse für Anzeige bei betroffenen Spielern
