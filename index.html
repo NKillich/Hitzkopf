@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥2</title>
+    <title>Hitzkopf 🔥3</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -2360,7 +2360,24 @@
             }
 
             // Zeige Rekapitulation wenn alle bereit sind (nur einmal pro Runde)
-            if(data.ready.length >= Object.keys(data.players).length && !data.roundRecapShown) {
+            const readyCount = data.ready ? data.ready.length : 0;
+            const playerCount = Object.keys(data.players || {}).length;
+            const allReady = readyCount >= playerCount;
+            const recapNotShown = !data.roundRecapShown;
+            
+            console.log('renderResult: Prüfe Bedingung für executePendingAttacks', {
+                readyCount,
+                playerCount,
+                allReady,
+                recapNotShown,
+                readyArray: data.ready,
+                players: Object.keys(data.players || {}),
+                roundRecapShown: data.roundRecapShown,
+                isHost
+            });
+            
+            if(allReady && recapNotShown) {
+                console.log('renderResult: Bedingung erfüllt, rufe executePendingAttacks auf');
                 if(isHost) {
                     // Führe gesammelte Angriffe aus bevor Rekapitulation gezeigt wird
                     executePendingAttacks(data).then(() => {
@@ -2371,6 +2388,8 @@
                     }).catch(err => {
                         console.error('Fehler bei executePendingAttacks:', err);
                     });
+                } else {
+                    console.log('renderResult: Nicht der Host, warte auf Host');
                 }
                 // Zeige Rekapitulation nach kurzer Verzögerung
                 setTimeout(() => {
@@ -2656,9 +2675,11 @@
 
         // --- SET READY ---
         window.setReady = async () => {
+            console.log('setReady: Markiere Spieler als bereit:', myName);
             await updateDoc(doc(db, "lobbies", roomId), { 
                 ready: arrayUnion(myName) 
             });
+            console.log('setReady: Bereitschaft gesetzt');
         };
         
         // --- PARTY MODE WRONG ANSWER ---
