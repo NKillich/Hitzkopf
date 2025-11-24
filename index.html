@@ -156,6 +156,43 @@
             color: #ff4500;
             box-shadow: 0 0 20px rgba(255, 69, 0, 0.5);
         }
+        
+        .category-card {
+            aspect-ratio: 1;
+            background: linear-gradient(145deg, #2a2a2a, #1f1f1f);
+            border: 3px solid #444;
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        .category-card:hover {
+            border-color: #666;
+            background: linear-gradient(145deg, #333, #2a2a2a);
+            transform: translateY(-2px);
+        }
+        .category-card.selected {
+            border-color: #ff4500;
+            background: linear-gradient(145deg, #3e2e2e, #2a1a1a);
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.5);
+        }
+        .category-card .category-emoji {
+            font-size: 2rem;
+        }
+        .category-card .category-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #fff;
+        }
+        .category-card.selected .category-name {
+            color: #ff4500;
+        }
 
         .log-box { 
             background: #0a0a0a; 
@@ -553,38 +590,27 @@
 
         <div id="hostSettings" class="start-panel hidden">
             <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px; font-weight:600;">⚙️ Host-Einstellungen</p>
-            <label style="display:block; font-size:0.85rem; color:#aaa; margin-bottom:5px; font-weight:500;">Schaden pro Angriff:</label>
-            <select id="inpDmg">
-                <option value="10">10°C (Normal) ⚖️</option>
-                <option value="20">20°C (Intensiv) 🔥</option>
-                <option value="60">60°C (Speed-Modus) ⚡</option>
+            <label style="display:block; font-size:0.85rem; color:#aaa; margin-bottom:5px; font-weight:500;">Spielmodus:</label>
+            <select id="inpGameMode">
+                <option value="strategisch">Strategisch (länger) 🕐</option>
+                <option value="party">Party (schneller) ⚡</option>
             </select>
-            <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:12px; margin-bottom:5px; font-weight:500;">Spielgeschwindigkeit (Multiplikator):</label>
-            <select id="inpSpeed">
-                <option value="1.0">1.0x (Normal) ⏱️</option>
-                <option value="0.5">0.5x (Langsam) 🐌</option>
-                <option value="1.5">1.5x (Schnell) ⚡</option>
-                <option value="2.0">2.0x (Sehr schnell) 🚀</option>
-            </select>
-            <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:12px; margin-bottom:5px; font-weight:500;">Starttemperatur:</label>
-            <select id="inpStartTemp">
-                <option value="0">0°C (Standard) ❄️</option>
-                <option value="10">10°C (Warm starten) 🔥</option>
-                <option value="20">20°C (Heiß starten) 🌡️</option>
-            </select>
-            <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:12px; margin-bottom:5px; font-weight:500;">Maximale Temperatur:</label>
-            <select id="inpMaxTemp">
-                <option value="100">100°C (Standard) 🔥</option>
-                <option value="80">80°C (Kürzer) ⚡</option>
-                <option value="120">120°C (Länger) 🕐</option>
-            </select>
+            <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:12px; margin-bottom:5px; font-weight:500;">Wähle Fragenkategorien:</label>
+            <div id="categorySelection" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-top:10px; margin-bottom:15px;">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
             <button class="btn-primary" onclick="createGame()" style="margin-top:15px;">🎮 Spiel erstellen</button>
         </div>
 
         <div id="joinPanel" class="start-panel hidden">
             <p style="font-size:0.85rem; color:#ccc; margin-bottom:8px; font-weight:600;">🤝 Lobby beitreten</p>
-            <input type="text" id="inpCode" placeholder="Raum-Code" style="text-transform:uppercase;" maxlength="6" autocomplete="off" oninput="this.value = this.value.toUpperCase();">
-            <button class="btn-secondary" onclick="joinGame()">🚪 Beitreten</button>
+            <div id="roomList" style="max-height:300px; overflow-y:auto; margin-bottom:15px; display:none;">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
+            <input type="text" id="inpCode" placeholder="Raum-Code" style="text-transform:uppercase; display:none;" maxlength="6" autocomplete="off" oninput="this.value = this.value.toUpperCase();">
+            <input type="password" id="inpPassword" placeholder="Passwort (optional)" style="display:none; margin-top:10px;" autocomplete="off">
+            <button class="btn-secondary" onclick="joinGame()" id="btnJoinGame">🚪 Beitreten</button>
+            <button class="btn-secondary" onclick="loadRoomList()" style="margin-top:10px; font-size:0.9rem; padding:10px;">🔄 Räume aktualisieren</button>
         </div>
     </div>
     
@@ -771,7 +797,7 @@
     <script type="module">
         // --- FIREBASE SETUP ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment, deleteDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
@@ -908,114 +934,409 @@
 
         const sleep = (ms = 0) => new Promise(res => setTimeout(res, ms));
 
-        const questions = [
-            { q: "Lieber Butter oder Margarine?", a: "Butter 🧈", b: "Margarine 🥄" },
-            { q: "Lieber Kaffee oder Tee?", a: "Kaffee ☕", b: "Tee 🍵" },
-            { q: "Lieber Film oder Serie?", a: "Film 🎬", b: "Serie 📺" },
-            { q: "Lieber Hund oder Katze?", a: "Hund 🐕", b: "Katze 🐈" },
-            { q: "Lieber Sommer oder Winter?", a: "Sommer ☀️", b: "Winter ❄️" },
-            { q: "Lieber Urlaub am Strand oder in den Bergen?", a: "Strand 🏖️", b: "Berge ⛰️" },
-            { q: "Lieber Pizza oder Pasta?", a: "Pizza 🍕", b: "Pasta 🍝" },
-            { q: "Lieber Frühaufsteher oder Langschläfer?", a: "Früh ⏰☀️", b: "Spät 🌙💤" },
-            { q: "Lieber Bar oder Club?", a: "Bar 🍸", b: "Club 🎶" },
-            { q: "Lieber Konsole oder PC?", a: "Konsole 🎮", b: "PC 💻" },
-            { q: "Lieber Schokolade oder Gummibärchen?", a: "Schokolade 🍫", b: "Gummibärchen 🐻" },
-            { q: "Lieber Burger oder Döner?", a: "Burger 🍔", b: "Döner 🥙" },
-            { q: "Lieber kochen oder bestellen?", a: "Kochen 🧑‍🍳", b: "Bestellen 🛵" },
-            { q: "Lieber Apple oder Android?", a: "Apple 🍎", b: "Android 🤖" },
-            { q: "Lieber Sport im Team oder allein?", a: "Team ⚽", b: "Allein 🏃‍♀️" },
-            { q: "Lieber Buch oder Hörbuch?", a: "Buch 📚", b: "Hörbuch 🎧" },
-            { q: "Lieber Bargeld oder Karte?", a: "Bargeld 💵", b: "Karte 💳" },
-            { q: "Lieber Rock oder Pop?", a: "Rock 🎸", b: "Pop 🎤" },
-            { q: "Lieber Vanille oder Schokoeis?", a: "Vanille 🤍🍦", b: "Schoko 🤎🍦" },
-            { q: "Lieber Städtetrip oder Wellness?", a: "Städtetrip 🏙️", b: "Wellness 🧘‍♀️" },
-            { q: "Lieber Popcorn süß oder salzig?", a: "Süß 🍬🍿", b: "Salzig 🧂🍿" },
-            { q: "Lieber duschen oder baden?", a: "Duschen 🚿", b: "Baden 🛁" },
-            { q: "Lieber Wein oder Bier?", a: "Wein 🍷", b: "Bier 🍺" },
-            { q: "Lieber Sneaker oder Stiefel?", a: "Sneaker 👟", b: "Stiefel 👢" },
-            { q: "Lieber Auto oder Bahn?", a: "Auto 🚗", b: "Bahn 🚂" },
-            { q: "Lieber Käse oder Wurst?", a: "Käse 🧀", b: "Wurst 🥓" },
-            { q: "Lieber Spiegelei oder Rührei?", a: "Spiegelei 🍳👁️", b: "Rührei 🥚🥣" },
-            { q: "Lieber WhatsApp oder Anruf?", a: "WhatsApp 💬", b: "Anruf 📞" },
-            { q: "Lieber Limo oder Saft?", a: "Limo 🥤", b: "Saft 🧃" },
-            { q: "Lieber Holz- oder Metallmöbel?", a: "Holz 🪵", b: "Metall 🔩" },
-            { q: "Lieber Jeans oder Stoffhose?", a: "Jeans 👖", b: "Stoffhose 🩳" },
-            { q: "Lieber laut oder leise Musik hören?", a: "Laut 🔊🎶", b: "Leise 🤫🎧" },
-            { q: "Lieber Torte oder Kuchen?", a: "Torte 🎂", b: "Kuchen 🍰" },
-            { q: "Lieber drinnen oder draußen feiern?", a: "Drinnen 🏠🎉", b: "Draußen 🌳🥳" },
-            { q: "Lieber Socken an oder barfuß?", a: "Socken an 🧦", b: "Barfuß 🦶" },
-            { q: "Lieber Couch oder Sessel?", a: "Couch 🛋️", b: "Sessel 🪑" },
-            { q: "Lieber Ketchup oder Mayo?", a: "Ketchup 🍅", b: "Mayo 🥚" },
-            { q: "Lieber Stadt oder Land?", a: "Stadt 🏙️", b: "Land 🏞️" },
-            { q: "Lieber Meer oder See?", a: "Meer 🌊", b: "See 🏞️💧" },
-            { q: "Lieber Salat oder Suppe?", a: "Salat 🥗", b: "Suppe 🥣" },
-            { q: "Lieber Netflix oder YouTube?", a: "Netflix 🟥", b: "YouTube ▶️" },
-            { q: "Lieber Smartphone oder Laptop?", a: "Smartphone 📱", b: "Laptop 💻" },
-            { q: "Lieber Frühling oder Herbst?", a: "Frühling 🌷", b: "Herbst 🍂" },
-            { q: "Lieber aufstehen oder liegen bleiben?", a: "Aufstehen 🚶‍♀️", b: "Liegen 🛌" },
-            { q: "Lieber Bleistift oder Kugelschreiber?", a: "Bleistift ✏️", b: "Kugelschreiber 🖊️" },
-            { q: "Lieber Marmelade oder Honig?", a: "Marmelade 🍓", b: "Honig 🍯" },
-            { q: "Lieber Kartoffeln oder Reis?", a: "Kartoffeln 🥔", b: "Reis 🍚" },
-            { q: "Lieber Schreibtisch oder Homeoffice?", a: "Büro 🏢", b: "Homeoffice 🏡" },
-            { q: "Lieber Feste planen oder spontan sein?", a: "Planen 🗓️", b: "Spontan 🎉" },
-            { q: "Lieber Duschgel oder Seife?", a: "Duschgel 🧴", b: "Seife 🧼" },
-            { q: "Lieber süß oder herzhaft frühstücken?", a: "Süß 🥞🍬", b: "Herzhaft 🥓🍳" },
-            { q: "Lieber Käseplatte oder Obstteller?", a: "Käse 🧀🍇", b: "Obst 🥝🍎" },
-            { q: "Lieber drinnen lesen oder draußen spazieren?", a: "Drinnen lesen 📖🏠", b: "Draußen spazieren 🚶‍♂️🌲" },
-            { q: "Lieber Zelt oder Hotel?", a: "Zelt ⛺", b: "Hotel 🏨" },
-            { q: "Lieber Apfelkuchen oder Käsekuchen?", a: "Apfelkuchen 🍎🍰", b: "Käsekuchen 🧀🍰" },
-            { q: "Lieber Nachrichten lesen oder hören?", a: "Lesen 📰👀", b: "Hören 📻👂" },
-            { q: "Lieber Kerzenlicht oder helles Licht?", a: "Kerzenlicht 🔥🕯️", b: "Helles Licht 💡✨" },
-            { q: "Lieber Sport gucken oder selber machen?", a: "Gucken 🏟️👀", b: "Machen 🤸‍♂️💪" },
-            { q: "Lieber kurze oder lange Haare?", a: "Kurz 💇‍♀️✂️", b: "Lang 👱‍♀️🦒" },
-            { q: "Lieber Ananas auf Pizza: Ja oder Nein?", a: "Ananas: Ja 🍍🍕👍", b: "Ananas: Nein 🍍🍕👎" },
-            { q: "Lieber Stille oder Hintergrundgeräusche beim Arbeiten?", a: "Stille 🤫🔇", b: "Hintergrund 🎧🎵" },
-            { q: "Lieber Bleistift oder Marker?", a: "Bleistift ✏️", b: "Marker 🖍️" },
-            { q: "Lieber Wandern oder Radfahren?", a: "Wandern 🚶‍♀️🏔️", b: "Radfahren 🚲🌳" },
-            { q: "Lieber Eis im Becher oder in der Waffel?", a: "Becher 🍨", b: "Waffel 🍦" },
-            { q: "Lieber am Fenster sitzen oder am Gang (Flugzeug/Bahn)?", a: "Fenster 🖼️", b: "Gang 🚪" },
-            { q: "Lieber eine saubere, leere Wohnung oder eine unordentliche, gemütliche?", a: "Sauber & Leer ✨📦", b: "Unordentlich & Gemütlich 🛋️😌" },
-            { q: "Lieber Kissen weich oder hart?", a: "Weich ☁️", b: "Hart 🧱" },
-            { q: "Lieber Laufen oder Schwimmen?", a: "Laufen 🏃", b: "Schwimmen 🏊" },
-            { q: "Lieber ein Leben lang nur noch Toast oder nur noch Brötchen essen?", a: "Toast 🍞", b: "Brötchen 🥐" },
-            { q: "Lieber in der ersten oder letzten Reihe sitzen (Kino/Theater)?", a: "Erste Reihe 🥇", b: "Letzte Reihe 🔚" },
-            { q: "Lieber Videospiele spielen oder Brettspiele?", a: "Video 🎮", b: "Brett 🎲" },
-            { q: "Lieber Marmelade oder Nutella?", a: "Marmelade 🍓", b: "Nutella 🍫" },
-            { q: "Lieber warm oder kalt trinken?", a: "Warm ♨️☕", b: "Kalt 🧊🥤" },
-            { q: "Lieber Fleisch oder Fisch?", a: "Fleisch 🥩", b: "Fisch 🐟" },
-            { q: "Lieber Süßkartoffel oder normale Kartoffel?", a: "Süß 🍠", b: "Normal 🥔" },
-            { q: "Lieber Hemd oder T-Shirt?", a: "Hemd 👔", b: "T-Shirt 👕" },
-            { q: "Lieber im Hotel frühstücken oder im Café?", a: "Hotel 🏨🍳", b: "Café ☕🥐" },
-            { q: "Lieber Scharf oder Mild essen?", a: "Scharf 🌶️🔥", b: "Mild 🥛😌" },
-            { q: "Lieber E-Book oder gedrucktes Buch?", a: "E-Book 📱📚", b: "Gedruckt 📖🌳" },
-            { q: "Lieber mit öffentlichen Verkehrsmitteln oder mit dem Rad zur Arbeit?", a: "Öffentlich 🚌🚆", b: "Fahrrad 🚲" },
-            { q: "Lieber Rotwein oder Weißwein?", a: "Rotwein 🍷🔴", b: "Weißwein 🥂⚪" },
-            { q: "Lieber in der Küche oder im Wohnzimmer essen?", a: "Küche 🧑‍🍳🍽️", b: "Wohnzimmer 🛋️📺" },
-            { q: "Lieber Salzgebäck oder Chips?", a: "Salzgebäck 🥨", b: "Chips 🥔💸" },
-            { q: "Lieber morgens oder abends trainieren?", a: "Morgens 🌅🏃", b: "Abends 🌙💪" },
-            { q: "Lieber schreiben oder lesen?", a: "Schreiben ✍️", b: "Lesen 📖" },
-            { q: "Lieber Krawatte oder Fliege?", a: "Krawatte 👔", b: "Fliege 🎀" },
-            { q: "Lieber glatt oder lockig?", a: "Glatt 💇‍♀️📏", b: "Lockig 💆‍♀️🌀" },
-            { q: "Lieber Taschenlampe oder Kerze?", a: "Taschenlampe 🔦", b: "Kerze 🕯️" },
-            { q: "Lieber nur noch Gemüse oder nur noch Obst essen?", a: "Gemüse 🥦🥬", b: "Obst 🍎🍊" },
-            { q: "Lieber online shoppen oder im Laden?", a: "Online 🛒💻", b: "Im Laden 🛍️🚶" },
-            { q: "Lieber nur noch Mützen oder nur noch Schals tragen?", a: "Mützen 🧢👒", b: "Schals 🧣🧣" },
-            { q: "Lieber immer pünktlich oder immer gute Laune?", a: "Pünktlich ⏰✅", b: "Gute Laune 😄🥳" },
-            { q: "Lieber Suppe mit Einlage oder pur?", a: "Mit Einlage 🍜🍲", b: "Pur 🥣💧" },
-            { q: "Lieber Süßigkeiten im Kühlschrank oder ungekühlt?", a: "Kalt 🧊🍬", b: "Zimmerwarm 🌡️🍭" },
-            { q: "Lieber einmal viel Geld oder jeden Tag ein bisschen?", a: "Einmal viel 💰💥", b: "Jeden Tag etwas 💸🗓️" },
-            { q: "Lieber auf dem Bauch oder auf der Seite schlafen?", a: "Bauch ⬇️🛌", b: "Seite ↪️😴" },
-            { q: "Lieber Jeans mit Löchern oder ohne?", a: "Mit Löchern 👖🕳️", b: "Ohne Löcher 👖✨" },
-            { q: "Lieber weiße oder bunte Wäsche?", a: "Weiße ⚪🧺", b: "Bunte 🌈👕" },
-            { q: "Lieber Nudeln al dente oder weich?", a: "Al Dente 👌🍝", b: "Weich 😴🍜" },
-            { q: "Lieber Musik mit oder ohne Text?", a: "Mit Text 🗣️🎵", b: "Instrumental 🎼🎧" },
-            { q: "Lieber Füller oder Kugelschreiber?", a: "Füller 🖋️✨", b: "Kugelschreiber 🖊️💪" }
-        ];
+        // Fragenstruktur in Kategorien organisiert
+        const questionCategories = {
+            "astronomie_geographie": {
+                name: "Astronomie & Geographie",
+                emoji: "🌍",
+                questions: [
+                    { q: "Lieber Tag oder Nacht?", a: "Tag ☀️", b: "Nacht 🌙" },
+                    { q: "Lieber Regenwald oder Wüste?", a: "Regenwald 🌳💧", b: "Wüste 🏜️☀️" },
+                    { q: "Lieber Ozean oder Gebirge?", a: "Ozean 🌊", b: "Gebirge ⛰️" },
+                    { q: "Lieber Nordpol oder Südpol?", a: "Nordpol 🐻‍❄️", b: "Südpol 🐧" },
+                    { q: "Lieber Städtereise oder Naturreise?", a: "Stadt 🏙️", b: "Natur 🏞️" },
+                    { q: "Lieber Kontinental oder Insel?", a: "Kontinental 🗺️", b: "Insel 🏝️" },
+                    { q: "Lieber heiße oder kalte Klimazone?", a: "Heiß 🌞", b: "Kalt ❄️" },
+                    { q: "Lieber Regen oder Schnee?", a: "Regen 🌧️", b: "Schnee ❄️" },
+                    { q: "Lieber Sonne oder Mond beobachten?", a: "Sonne ☀️", b: "Mond 🌙" },
+                    { q: "Lieber Flachland oder Hochland?", a: "Flachland 🌾", b: "Hochland 🏔️" },
+                    { q: "Lieber Fluss oder See?", a: "Fluss 🌊", b: "See 🏞️" },
+                    { q: "Lieber tropisch oder gemäßigt?", a: "Tropisch 🌴", b: "Gemäßigt 🍃" },
+                    { q: "Lieber Meeresküste oder Seenlandschaft?", a: "Meeresküste 🌊", b: "Seenlandschaft 🏞️" },
+                    { q: "Lieber Vulkan oder Geysir?", a: "Vulkan 🌋", b: "Geysir 💨" },
+                    { q: "Lieber Regenzeit oder Trockenzeit?", a: "Regenzeit 🌧️", b: "Trockenzeit ☀️" },
+                    { q: "Lieber Polarlicht oder Sonnenuntergang?", a: "Polarlicht 🌌", b: "Sonnenuntergang 🌅" },
+                    { q: "Lieber Kontinent oder Ozean?", a: "Kontinent 🗺️", b: "Ozean 🌊" },
+                    { q: "Lieber Wettervorhersage oder überrascht werden?", a: "Vorhersage 📡", b: "Überraschung 🎲" },
+                    { q: "Lieber Höhenluft oder Meereshöhe?", a: "Höhenluft ⛰️", b: "Meereshöhe 🏖️" },
+                    { q: "Lieber Erdmagnetfeld oder Schwerkraft?", a: "Magnetfeld 🧲", b: "Schwerkraft ⬇️" }
+                ]
+            },
+            "essen_trinken": {
+                name: "Essen & Trinken",
+                emoji: "🍽️",
+                questions: [
+                    { q: "Lieber Butter oder Margarine?", a: "Butter 🧈", b: "Margarine 🥄" },
+                    { q: "Lieber Kaffee oder Tee?", a: "Kaffee ☕", b: "Tee 🍵" },
+                    { q: "Lieber Pizza oder Pasta?", a: "Pizza 🍕", b: "Pasta 🍝" },
+                    { q: "Lieber Schokolade oder Gummibärchen?", a: "Schokolade 🍫", b: "Gummibärchen 🐻" },
+                    { q: "Lieber Burger oder Döner?", a: "Burger 🍔", b: "Döner 🥙" },
+                    { q: "Lieber kochen oder bestellen?", a: "Kochen 🧑‍🍳", b: "Bestellen 🛵" },
+                    { q: "Lieber Vanille oder Schokoeis?", a: "Vanille 🤍🍦", b: "Schoko 🤎🍦" },
+                    { q: "Lieber Popcorn süß oder salzig?", a: "Süß 🍬🍿", b: "Salzig 🧂🍿" },
+                    { q: "Lieber Wein oder Bier?", a: "Wein 🍷", b: "Bier 🍺" },
+                    { q: "Lieber Käse oder Wurst?", a: "Käse 🧀", b: "Wurst 🥓" },
+                    { q: "Lieber Spiegelei oder Rührei?", a: "Spiegelei 🍳👁️", b: "Rührei 🥚🥣" },
+                    { q: "Lieber Limo oder Saft?", a: "Limo 🥤", b: "Saft 🧃" },
+                    { q: "Lieber Torte oder Kuchen?", a: "Torte 🎂", b: "Kuchen 🍰" },
+                    { q: "Lieber Ketchup oder Mayo?", a: "Ketchup 🍅", b: "Mayo 🥚" },
+                    { q: "Lieber Salat oder Suppe?", a: "Salat 🥗", b: "Suppe 🥣" },
+                    { q: "Lieber Marmelade oder Honig?", a: "Marmelade 🍓", b: "Honig 🍯" },
+                    { q: "Lieber Kartoffeln oder Reis?", a: "Kartoffeln 🥔", b: "Reis 🍚" },
+                    { q: "Lieber süß oder herzhaft frühstücken?", a: "Süß 🥞🍬", b: "Herzhaft 🥓🍳" },
+                    { q: "Lieber Käseplatte oder Obstteller?", a: "Käse 🧀🍇", b: "Obst 🥝🍎" },
+                    { q: "Lieber Apfelkuchen oder Käsekuchen?", a: "Apfelkuchen 🍎🍰", b: "Käsekuchen 🧀🍰" }
+                ]
+            },
+            "flora_fauna": {
+                name: "Flora & Fauna",
+                emoji: "🌿",
+                questions: [
+                    { q: "Lieber Hund oder Katze?", a: "Hund 🐕", b: "Katze 🐈" },
+                    { q: "Lieber Blumen oder Bäume?", a: "Blumen 🌸", b: "Bäume 🌳" },
+                    { q: "Lieber Vögel oder Fische beobachten?", a: "Vögel 🐦", b: "Fische 🐠" },
+                    { q: "Lieber Rosen oder Sonnenblumen?", a: "Rosen 🌹", b: "Sonnenblumen 🌻" },
+                    { q: "Lieber Haus- oder Wildtier?", a: "Haustier 🐕", b: "Wildtier 🦁" },
+                    { q: "Lieber Garten oder Wald?", a: "Garten 🌳", b: "Wald 🌲" },
+                    { q: "Lieber Kraut oder Blüte?", a: "Kraut 🌿", b: "Blüte 🌺" },
+                    { q: "Lieber Tagfalter oder Nachtfalter?", a: "Tagfalter 🦋", b: "Nachtfalter 🦋🌙" },
+                    { q: "Lieber Nadel- oder Laubbaum?", a: "Nadelbaum 🌲", b: "Laubbaum 🍃" },
+                    { q: "Lieber Säugetier oder Reptil?", a: "Säugetier 🐾", b: "Reptil 🦎" },
+                    { q: "Lieber Obst- oder Gemüsegarten?", a: "Obstgarten 🍎", b: "Gemüsegarten 🥕" },
+                    { q: "Lieber Land- oder Wassertier?", a: "Landtier 🦌", b: "Wassertier 🐙" },
+                    { q: "Lieber Kaktus oder Palme?", a: "Kaktus 🌵", b: "Palme 🌴" },
+                    { q: "Lieber kleine oder große Tiere?", a: "Klein 🐭", b: "Groß 🐘" },
+                    { q: "Lieber duftende oder bunte Blumen?", a: "Duftend 🌸", b: "Bunt 🌺" },
+                    { q: "Lieber Raub- oder Beutetier?", a: "Raubtier 🦁", b: "Beutetier 🐰" },
+                    { q: "Lieber heimische oder exotische Pflanzen?", a: "Heimisch 🌾", b: "Exotisch 🌴" },
+                    { q: "Lieber Insekten oder Spinnen?", a: "Insekten 🦗", b: "Spinnen 🕷️" },
+                    { q: "Lieber einjährige oder mehrjährige Pflanzen?", a: "Einjährig 🌱", b: "Mehrjährig 🌳" },
+                    { q: "Lieber Pflanzen pflegen oder Tiere versorgen?", a: "Pflanzen 🌿", b: "Tiere 🐕" }
+                ]
+            },
+            "forschung_wissenschaft": {
+                name: "Forschung & Wissenschaft",
+                emoji: "🔬",
+                questions: [
+                    { q: "Lieber Biologie oder Physik?", a: "Biologie 🧬", b: "Physik ⚛️" },
+                    { q: "Lieber Labor oder Feldversuch?", a: "Labor 🧪", b: "Feldversuch 🌍" },
+                    { q: "Lieber Theorie oder Praxis?", a: "Theorie 📚", b: "Praxis 🔬" },
+                    { q: "Lieber Mikroskop oder Teleskop?", a: "Mikroskop 🔬", b: "Teleskop 🔭" },
+                    { q: "Lieber Chemie oder Mathematik?", a: "Chemie ⚗️", b: "Mathematik 📐" },
+                    { q: "Lieber beobachten oder experimentieren?", a: "Beobachten 👁️", b: "Experimentieren ⚗️" },
+                    { q: "Lieber Naturwissenschaft oder Geisteswissenschaft?", a: "Naturwissenschaft 🔬", b: "Geisteswissenschaft 📖" },
+                    { q: "Lieber Einzelergebnis oder Durchbruch?", a: "Einzelergebnis 📊", b: "Durchbruch 💡" },
+                    { q: "Lieber quantitative oder qualitative Forschung?", a: "Quantitativ 📈", b: "Qualitativ 📝" },
+                    { q: "Lieber Astronomie oder Geologie?", a: "Astronomie 🪐", b: "Geologie 🗿" },
+                    { q: "Lieber Genom oder Umwelt?", a: "Genom 🧬", b: "Umwelt 🌍" },
+                    { q: "Lieber Hypothese oder Theorie?", a: "Hypothese 💭", b: "Theorie 📚" },
+                    { q: "Lieber klinische oder Grundlagenforschung?", a: "Klinisch 🏥", b: "Grundlagen 🧪" },
+                    { q: "Lieber Robotik oder KI?", a: "Robotik 🤖", b: "KI 🧠" },
+                    { q: "Lieber Entdeckung oder Erfindung?", a: "Entdeckung 🔍", b: "Erfindung 💡" },
+                    { q: "Lieber Mikro- oder Makroskala?", a: "Mikro 🔬", b: "Makro 🌌" },
+                    { q: "Lieber Langzeitstudie oder Schnelltest?", a: "Langzeit 📅", b: "Schnelltest ⚡" },
+                    { q: "Lieber Teamforschung oder Einzelforschung?", a: "Team 👥", b: "Einzel 🧑‍🔬" },
+                    { q: "Lieber Datenanalyse oder Datensammlung?", a: "Analyse 📊", b: "Sammlung 📦" },
+                    { q: "Lieber publizieren oder forschen?", a: "Publizieren 📄", b: "Forschen 🔬" }
+                ]
+            },
+            "geschichte_politik": {
+                name: "Geschichte & Politik",
+                emoji: "🏛️",
+                questions: [
+                    { q: "Lieber Antike oder Moderne?", a: "Antike 🏛️", b: "Moderne 🏙️" },
+                    { q: "Lieber Monarchie oder Republik?", a: "Monarchie 👑", b: "Republik 🗳️" },
+                    { q: "Lieber lokale oder Weltgeschichte?", a: "Lokal 🏘️", b: "Welt 🌍" },
+                    { q: "Lieber Krieg oder Frieden?", a: "Krieg ⚔️", b: "Frieden 🕊️" },
+                    { q: "Lieber Revolution oder Evolution?", a: "Revolution 🔥", b: "Evolution 📈" },
+                    { q: "Lieber Demokratie oder Diktatur?", a: "Demokratie 🗳️", b: "Diktatur 🚫" },
+                    { q: "Lieber geschichtliche Dokumente oder mündliche Überlieferung?", a: "Dokumente 📜", b: "Mündlich 🗣️" },
+                    { q: "Lieber Imperium oder Stadtstaat?", a: "Imperium 🌍", b: "Stadtstaat 🏛️" },
+                    { q: "Lieber Vergangenheit oder Zukunft?", a: "Vergangenheit ⏮️", b: "Zukunft ⏭️" },
+                    { q: "Lieber Wirtschafts- oder Kulturpolitik?", a: "Wirtschaft 💼", b: "Kultur 🎭" },
+                    { q: "Lieber Nationalismus oder Globalismus?", a: "Nationalismus 🇩🇪", b: "Globalismus 🌐" },
+                    { q: "Lieber Konservativ oder Progressiv?", a: "Konservativ 📜", b: "Progressiv 🚀" },
+                    { q: "Lieber historische Persönlichkeit oder Ereignis?", a: "Persönlichkeit 👤", b: "Ereignis 📅" },
+                    { q: "Lieber Innen- oder Außenpolitik?", a: "Innenpolitik 🏠", b: "Außenpolitik 🌍" },
+                    { q: "Lieber Wahl oder Revolution?", a: "Wahl 🗳️", b: "Revolution 🔥" },
+                    { q: "Lieber Tradition oder Innovation?", a: "Tradition 📜", b: "Innovation 💡" },
+                    { q: "Lieber Friedensvertrag oder Handelsabkommen?", a: "Friedensvertrag ✍️", b: "Handelsabkommen 🤝" },
+                    { q: "Lieber historischer Roman oder Dokumentation?", a: "Roman 📚", b: "Dokumentation 🎥" },
+                    { q: "Lieber Regierung oder Opposition?", a: "Regierung 🏛️", b: "Opposition 🎤" },
+                    { q: "Lieber Geschichtsbuch oder Museum?", a: "Buch 📖", b: "Museum 🏛️" }
+                ]
+            },
+            "glaube_religion": {
+                name: "Glaube & Religion",
+                emoji: "🙏",
+                questions: [
+                    { q: "Lieber Glaube oder Wissen?", a: "Glaube 🙏", b: "Wissen 📚" },
+                    { q: "Lieber Gebet oder Meditation?", a: "Gebet 🙏", b: "Meditation 🧘" },
+                    { q: "Lieber Kirche oder Natur?", a: "Kirche ⛪", b: "Natur 🌳" },
+                    { q: "Lieber religiöser Text oder spirituelle Erfahrung?", a: "Text 📖", b: "Erfahrung ✨" },
+                    { q: "Lieber Gemeinschaft oder Einzelgänger?", a: "Gemeinschaft 👥", b: "Einzel 🙏" },
+                    { q: "Lieber Ritual oder spontan?", a: "Ritual 🔔", b: "Spontan 💫" },
+                    { q: "Lieber Tradition oder Modernität?", a: "Tradition 📜", b: "Modernität 🌟" },
+                    { q: "Lieber Philosophie oder Theologie?", a: "Philosophie 💭", b: "Theologie 📖" },
+                    { q: "Lieber feste Überzeugung oder offene Fragen?", a: "Überzeugung 💪", b: "Offen 🤔" },
+                    { q: "Lieber Gott oder Universum?", a: "Gott 👼", b: "Universum 🌌" },
+                    { q: "Lieber Predigt oder Stille?", a: "Predigt 🗣️", b: "Stille 🤫" },
+                    { q: "Lieber heiliger Ort oder überall?", a: "Heiliger Ort ⛪", b: "Überall 🌍" },
+                    { q: "Lieber Dogma oder Toleranz?", a: "Dogma 📜", b: "Toleranz 🤝" },
+                    { q: "Lieber Religion oder Spiritualität?", a: "Religion ⛪", b: "Spiritualität ✨" },
+                    { q: "Lieber Gemeindeleben oder Privatheit?", a: "Gemeinde 👥", b: "Privat 🙏" },
+                    { q: "Lieber geschriebenes Gesetz oder Gewissen?", a: "Gesetz 📜", b: "Gewissen ❤️" },
+                    { q: "Lieber Priester oder Laie?", a: "Priester 👨‍💼", b: "Laie 👤" },
+                    { q: "Lieber heilige Schrift oder persönliche Offenbarung?", a: "Schrift 📖", b: "Offenbarung 💡" },
+                    { q: "Lieber Festtag oder Alltag?", a: "Festtag 🎉", b: "Alltag 📅" },
+                    { q: "Lieber Transzendenz oder Immanenz?", a: "Transzendenz 🌌", b: "Immanenz 🌍" }
+                ]
+            },
+            "kunst_kultur": {
+                name: "Kunst & Kultur",
+                emoji: "🎨",
+                questions: [
+                    { q: "Lieber Malerei oder Skulptur?", a: "Malerei 🖼️", b: "Skulptur 🗿" },
+                    { q: "Lieber abstrakt oder figurativ?", a: "Abstrakt 🎨", b: "Figurativ 👤" },
+                    { q: "Lieber Museum oder Galerie?", a: "Museum 🏛️", b: "Galerie 🖼️" },
+                    { q: "Lieber klassisch oder modern?", a: "Klassisch 🎭", b: "Modern 🎨" },
+                    { q: "Lieber Farbe oder Form?", a: "Farbe 🌈", b: "Form ⬜" },
+                    { q: "Lieber Original oder Reproduktion?", a: "Original ✨", b: "Reproduktion 📋" },
+                    { q: "Lieber Künstler oder Betrachter?", a: "Künstler 🎨", b: "Betrachter 👁️" },
+                    { q: "Lieber Öl- oder Aquarellmalerei?", a: "Öl 🖌️", b: "Aquarell 💧" },
+                    { q: "Lieber Renaissance oder Barock?", a: "Renaissance 🎭", b: "Barock 🏛️" },
+                    { q: "Lieber Street Art oder Museumskunst?", a: "Street Art 🎨", b: "Museumskunst 🖼️" },
+                    { q: "Lieber Porträt oder Landschaft?", a: "Porträt 👤", b: "Landschaft 🌄" },
+                    { q: "Lieber Fotografie oder Gemälde?", a: "Fotografie 📸", b: "Gemälde 🖼️" },
+                    { q: "Lieber Installation oder Performance?", a: "Installation 🎭", b: "Performance 🎪" },
+                    { q: "Lieber Realismus oder Surrealismus?", a: "Realismus 👁️", b: "Surrealismus 🌈" },
+                    { q: "Lieber minimal oder opulent?", a: "Minimal ⬜", b: "Opulent ✨" },
+                    { q: "Lieber analog oder digital?", a: "Analog 🖌️", b: "Digital 💻" },
+                    { q: "Lieber Tradition oder Avantgarde?", a: "Tradition 📜", b: "Avantgarde 🚀" },
+                    { q: "Lieber Einzelwerk oder Serie?", a: "Einzelwerk 🖼️", b: "Serie 📚" },
+                    { q: "Lieber Gemälde oder Zeichnung?", a: "Gemälde 🎨", b: "Zeichnung ✏️" },
+                    { q: "Lieber Künstlerkollektiv oder Einzelkünstler?", a: "Kollektiv 👥", b: "Einzelkünstler 🎨" }
+                ]
+            },
+            "literatur_sprache": {
+                name: "Literatur & Sprache",
+                emoji: "📚",
+                questions: [
+                    { q: "Lieber Buch oder Hörbuch?", a: "Buch 📚", b: "Hörbuch 🎧" },
+                    { q: "Lieber Roman oder Gedicht?", a: "Roman 📖", b: "Gedicht ✍️" },
+                    { q: "Lieber Fiktion oder Non-Fiktion?", a: "Fiktion 🎭", b: "Non-Fiktion 📊" },
+                    { q: "Lieber Schreiber oder Leser?", a: "Schreiber ✍️", b: "Leser 👁️" },
+                    { q: "Lieber gedruckt oder digital?", a: "Gedruckt 📖", b: "Digital 📱" },
+                    { q: "Lieber Fantasy oder Realismus?", a: "Fantasy 🐉", b: "Realismus 👁️" },
+                    { q: "Lieber Kurzgeschichte oder Roman?", a: "Kurzgeschichte 📝", b: "Roman 📖" },
+                    { q: "Lieber Übersetzen oder Original?", a: "Übersetzen 🌐", b: "Original 📚" },
+                    { q: "Lieber Gedicht schreiben oder lesen?", a: "Schreiben ✍️", b: "Lesen 👁️" },
+                    { q: "Lieber Drama oder Komödie?", a: "Drama 🎭", b: "Komödie 😂" },
+                    { q: "Lieber Autor oder Kritiker?", a: "Autor ✍️", b: "Kritiker 📝" },
+                    { q: "Lieber Bibliothek oder Buchhandlung?", a: "Bibliothek 📚", b: "Buchhandlung 🏪" },
+                    { q: "Lieber Klassiker oder Bestseller?", a: "Klassiker 📜", b: "Bestseller 🔥" },
+                    { q: "Lieber Poesie oder Prosa?", a: "Poesie ✍️", b: "Prosa 📖" },
+                    { q: "Lieber Muttersprache oder Fremdsprache?", a: "Muttersprache 🇩🇪", b: "Fremdsprache 🌍" },
+                    { q: "Lieber Erzähler oder Zuhörer?", a: "Erzähler 🗣️", b: "Zuhörer 👂" },
+                    { q: "Lieber Brief oder E-Mail?", a: "Brief ✉️", b: "E-Mail 📧" },
+                    { q: "Lieber Tagebuch oder Blog?", a: "Tagebuch 📔", b: "Blog 💻" },
+                    { q: "Lieber Lyrik oder Epik?", a: "Lyrik ✍️", b: "Epik 📖" },
+                    { q: "Lieber Wort oder Bild?", a: "Wort 📝", b: "Bild 🖼️" }
+                ]
+            },
+            "medien_unterhaltung": {
+                name: "Medien & Unterhaltung",
+                emoji: "📺",
+                questions: [
+                    { q: "Lieber Film oder Serie?", a: "Film 🎬", b: "Serie 📺" },
+                    { q: "Lieber Netflix oder YouTube?", a: "Netflix 🟥", b: "YouTube ▶️" },
+                    { q: "Lieber Kino oder zu Hause?", a: "Kino 🎬", b: "Zuhause 📺" },
+                    { q: "Lieber Action oder Drama?", a: "Action 💥", b: "Drama 🎭" },
+                    { q: "Lieber Comedy oder Thriller?", a: "Comedy 😂", b: "Thriller 🕵️" },
+                    { q: "Lieber Live-TV oder Streaming?", a: "Live-TV 📡", b: "Streaming 📱" },
+                    { q: "Lieber Dokumentation oder Spielfilm?", a: "Dokumentation 📹", b: "Spielfilm 🎬" },
+                    { q: "Lieber Originalsprache oder Synchronisation?", a: "Original 🗣️", b: "Synchronisation 🎤" },
+                    { q: "Lieber Kurzfilm oder Langfilm?", a: "Kurzfilm ⏱️", b: "Langfilm ⏰" },
+                    { q: "Lieber Schwarz-Weiß oder Farbe?", a: "Schwarz-Weiß ⚫⚪", b: "Farbe 🌈" },
+                    { q: "Lieber Realität oder Fiktion?", a: "Realität 👁️", b: "Fiktion 🎭" },
+                    { q: "Lieber Single-Player oder Multiplayer?", a: "Single 🎮", b: "Multiplayer 👥" },
+                    { q: "Lieber Actionspiel oder Strategiespiel?", a: "Action 💥", b: "Strategie 🧠" },
+                    { q: "Lieber Konsole oder PC?", a: "Konsole 🎮", b: "PC 💻" },
+                    { q: "Lieber Videospiele spielen oder Brettspiele?", a: "Video 🎮", b: "Brett 🎲" },
+                    { q: "Lieber Kabel oder Streaming?", a: "Kabel 📺", b: "Streaming 📱" },
+                    { q: "Lieber Neuerscheinung oder Klassiker?", a: "Neu 🆕", b: "Klassiker ⭐" },
+                    { q: "Lieber Fernseher oder Projektor?", a: "Fernseher 📺", b: "Projektor 🎬" },
+                    { q: "Lieber Reality-TV oder Scripted?", a: "Reality 📺", b: "Scripted 📝" },
+                    { q: "Lieber Binge-Watching oder wöchentlich?", a: "Binge 🍿", b: "Wöchentlich 📅" }
+                ]
+            },
+            "musik": {
+                name: "Musik",
+                emoji: "🎵",
+                questions: [
+                    { q: "Lieber Rock oder Pop?", a: "Rock 🎸", b: "Pop 🎤" },
+                    { q: "Lieber laut oder leise Musik hören?", a: "Laut 🔊🎶", b: "Leise 🤫🎧" },
+                    { q: "Lieber Musik mit oder ohne Text?", a: "Mit Text 🗣️🎵", b: "Instrumental 🎼🎧" },
+                    { q: "Lieber Live-Konzert oder Studioaufnahme?", a: "Live 🎤", b: "Studio 🎧" },
+                    { q: "Lieber Sänger oder Instrumentalist?", a: "Sänger 🎤", b: "Instrumentalist 🎸" },
+                    { q: "Lieber Klassik oder Moderne?", a: "Klassik 🎻", b: "Moderne 🎸" },
+                    { q: "Lieber Gitarre oder Klavier?", a: "Gitarre 🎸", b: "Klavier 🎹" },
+                    { q: "Lieber allein oder in der Band?", a: "Allein 🎤", b: "Band 👥" },
+                    { q: "Lieber Kopfhörer oder Lautsprecher?", a: "Kopfhörer 🎧", b: "Lautsprecher 🔊" },
+                    { q: "Lieber Vinyl oder Digital?", a: "Vinyl 💿", b: "Digital 📱" },
+                    { q: "Lieber Songwriter oder Interprete?", a: "Songwriter ✍️", b: "Interprete 🎤" },
+                    { q: "Lieber Jazz oder Electronic?", a: "Jazz 🎷", b: "Electronic 🎹" },
+                    { q: "Lieber Festival oder Intimkonzert?", a: "Festival 🎪", b: "Intim 🎵" },
+                    { q: "Lieber Refrain oder Bridge?", a: "Refrain 🎵", b: "Bridge 🌉" },
+                    { q: "Lieber Musik machen oder hören?", a: "Machen 🎸", b: "Hören 🎧" },
+                    { q: "Lieber Akustik oder Elektrik?", a: "Akustik 🎸", b: "Elektrik ⚡" },
+                    { q: "Lieber Cover oder Original?", a: "Cover 🎵", b: "Original ✨" },
+                    { q: "Lieber Album oder Single?", a: "Album 💿", b: "Single 🎵" },
+                    { q: "Lieber Rhythmus oder Melodie?", a: "Rhythmus 🥁", b: "Melodie 🎵" },
+                    { q: "Lieber Bar oder Club?", a: "Bar 🍸", b: "Club 🎶" }
+                ]
+            },
+            "sport": {
+                name: "Sport",
+                emoji: "⚽",
+                questions: [
+                    { q: "Lieber Sport im Team oder allein?", a: "Team ⚽", b: "Allein 🏃‍♀️" },
+                    { q: "Lieber Sport gucken oder selber machen?", a: "Gucken 🏟️👀", b: "Machen 🤸‍♂️💪" },
+                    { q: "Lieber morgens oder abends trainieren?", a: "Morgens 🌅🏃", b: "Abends 🌙💪" },
+                    { q: "Lieber Laufen oder Schwimmen?", a: "Laufen 🏃", b: "Schwimmen 🏊" },
+                    { q: "Lieber Fußball oder Basketball?", a: "Fußball ⚽", b: "Basketball 🏀" },
+                    { q: "Lieber Indoor oder Outdoor?", a: "Indoor 🏠", b: "Outdoor 🌳" },
+                    { q: "Lieber Ausdauer oder Kraft?", a: "Ausdauer 🏃", b: "Kraft 💪" },
+                    { q: "Lieber Wettkampf oder Training?", a: "Wettkampf 🏆", b: "Training 💪" },
+                    { q: "Lieber Mannschaft oder Einzelsport?", a: "Mannschaft 👥", b: "Einzel 🏃" },
+                    { q: "Lieber Tennis oder Badminton?", a: "Tennis 🎾", b: "Badminton 🏸" },
+                    { q: "Lieber Radfahren oder Wandern?", a: "Radfahren 🚲🌳", b: "Wandern 🚶‍♀️🏔️" },
+                    { q: "Lieber Gym oder Natur?", a: "Gym 🏋️", b: "Natur 🌲" },
+                    { q: "Lieber Profi oder Amateur?", a: "Profi 🏆", b: "Amateur 🎯" },
+                    { q: "Lieber Sieg oder Spaß?", a: "Sieg 🏆", b: "Spaß 😊" },
+                    { q: "Lieber Sommer- oder Wintersport?", a: "Sommer ☀️", b: "Winter ❄️" },
+                    { q: "Lieber Kontaktsport oder Nicht-Kontakt?", a: "Kontakt 🤼", b: "Nicht-Kontakt 🏃" },
+                    { q: "Lieber Sprint oder Marathon?", a: "Sprint ⚡", b: "Marathon 🏃" },
+                    { q: "Lieber Ball- oder Rückschlagsport?", a: "Ball ⚽", b: "Rückschlag 🎾" },
+                    { q: "Lieber Sportartikel oder natürliche Bewegung?", a: "Artikel 🎾", b: "Natürlich 🏃" },
+                    { q: "Lieber Tageszeitung oder Sport-App?", a: "Zeitung 📰", b: "App 📱" }
+                ]
+            },
+            "technik_wirtschaft": {
+                name: "Technik & Wirtschaft",
+                emoji: "💻",
+                questions: [
+                    { q: "Lieber Apple oder Android?", a: "Apple 🍎", b: "Android 🤖" },
+                    { q: "Lieber Smartphone oder Laptop?", a: "Smartphone 📱", b: "Laptop 💻" },
+                    { q: "Lieber Bargeld oder Karte?", a: "Bargeld 💵", b: "Karte 💳" },
+                    { q: "Lieber Auto oder Bahn?", a: "Auto 🚗", b: "Bahn 🚂" },
+                    { q: "Lieber Schreibtisch oder Homeoffice?", a: "Büro 🏢", b: "Homeoffice 🏡" },
+                    { q: "Lieber WhatsApp oder Anruf?", a: "WhatsApp 💬", b: "Anruf 📞" },
+                    { q: "Lieber online shoppen oder im Laden?", a: "Online 🛒💻", b: "Im Laden 🛍️🚶" },
+                    { q: "Lieber Aktien oder Immobilien?", a: "Aktien 📈", b: "Immobilien 🏠" },
+                    { q: "Lieber Start-up oder Konzern?", a: "Start-up 🚀", b: "Konzern 🏢" },
+                    { q: "Lieber Innovation oder Stabilität?", a: "Innovation 💡", b: "Stabilität 📊" },
+                    { q: "Lieber Cloud oder lokal?", a: "Cloud ☁️", b: "Lokal 💾" },
+                    { q: "Lieber Kryptowährung oder Fiat?", a: "Krypto ₿", b: "Fiat 💵" },
+                    { q: "Lieber Automatisierung oder Handarbeit?", a: "Automatisierung 🤖", b: "Handarbeit ✋" },
+                    { q: "Lieber Ökonomie oder Ökologie?", a: "Ökonomie 💼", b: "Ökologie 🌿" },
+                    { q: "Lieber B2B oder B2C?", a: "B2B 💼", b: "B2C 🛒" },
+                    { q: "Lieber Offline oder Online?", a: "Offline 📴", b: "Online 🌐" },
+                    { q: "Lieber Freelancer oder Angestellter?", a: "Freelancer 🆓", b: "Angestellter 💼" },
+                    { q: "Lieber Kredit oder Sparen?", a: "Kredit 💳", b: "Sparen 💰" },
+                    { q: "Lieber Risiko oder Sicherheit?", a: "Risiko 🎲", b: "Sicherheit 🔒" },
+                    { q: "Lieber einmal viel Geld oder jeden Tag ein bisschen?", a: "Einmal viel 💰💥", b: "Jeden Tag etwas 💸🗓️" }
+                ]
+            },
+            "diverses": {
+                name: "Diverses",
+                emoji: "🎲",
+                questions: [
+                    { q: "Lieber Sommer oder Winter?", a: "Sommer ☀️", b: "Winter ❄️" },
+                    { q: "Lieber Urlaub am Strand oder in den Bergen?", a: "Strand 🏖️", b: "Berge ⛰️" },
+                    { q: "Lieber Frühaufsteher oder Langschläfer?", a: "Früh ⏰☀️", b: "Spät 🌙💤" },
+                    { q: "Lieber Sneaker oder Stiefel?", a: "Sneaker 👟", b: "Stiefel 👢" },
+                    { q: "Lieber Holz- oder Metallmöbel?", a: "Holz 🪵", b: "Metall 🔩" },
+                    { q: "Lieber Jeans oder Stoffhose?", a: "Jeans 👖", b: "Stoffhose 🩳" },
+                    { q: "Lieber drinnen oder draußen feiern?", a: "Drinnen 🏠🎉", b: "Draußen 🌳🥳" },
+                    { q: "Lieber Socken an oder barfuß?", a: "Socken an 🧦", b: "Barfuß 🦶" },
+                    { q: "Lieber Couch oder Sessel?", a: "Couch 🛋️", b: "Sessel 🪑" },
+                    { q: "Lieber Stadt oder Land?", a: "Stadt 🏙️", b: "Land 🏞️" },
+                    { q: "Lieber Meer oder See?", a: "Meer 🌊", b: "See 🏞️💧" },
+                    { q: "Lieber Frühling oder Herbst?", a: "Frühling 🌷", b: "Herbst 🍂" },
+                    { q: "Lieber aufstehen oder liegen bleiben?", a: "Aufstehen 🚶‍♀️", b: "Liegen 🛌" },
+                    { q: "Lieber Bleistift oder Kugelschreiber?", a: "Bleistift ✏️", b: "Kugelschreiber 🖊️" },
+                    { q: "Lieber Feste planen oder spontan sein?", a: "Planen 🗓️", b: "Spontan 🎉" },
+                    { q: "Lieber Duschgel oder Seife?", a: "Duschgel 🧴", b: "Seife 🧼" },
+                    { q: "Lieber drinnen lesen oder draußen spazieren?", a: "Drinnen lesen 📖🏠", b: "Draußen spazieren 🚶‍♂️🌲" },
+                    { q: "Lieber Zelt oder Hotel?", a: "Zelt ⛺", b: "Hotel 🏨" },
+                    { q: "Lieber Nachrichten lesen oder hören?", a: "Lesen 📰👀", b: "Hören 📻👂" },
+                    { q: "Lieber Kerzenlicht oder helles Licht?", a: "Kerzenlicht 🔥🕯️", b: "Helles Licht 💡✨" },
+                    { q: "Lieber kurze oder lange Haare?", a: "Kurz 💇‍♀️✂️", b: "Lang 👱‍♀️🦒" },
+                    { q: "Lieber Ananas auf Pizza: Ja oder Nein?", a: "Ananas: Ja 🍍🍕👍", b: "Ananas: Nein 🍍🍕👎" },
+                    { q: "Lieber Stille oder Hintergrundgeräusche beim Arbeiten?", a: "Stille 🤫🔇", b: "Hintergrund 🎧🎵" },
+                    { q: "Lieber Bleistift oder Marker?", a: "Bleistift ✏️", b: "Marker 🖍️" },
+                    { q: "Lieber Eis im Becher oder in der Waffel?", a: "Becher 🍨", b: "Waffel 🍦" },
+                    { q: "Lieber am Fenster sitzen oder am Gang (Flugzeug/Bahn)?", a: "Fenster 🖼️", b: "Gang 🚪" },
+                    { q: "Lieber eine saubere, leere Wohnung oder eine unordentliche, gemütliche?", a: "Sauber & Leer ✨📦", b: "Unordentlich & Gemütlich 🛋️😌" },
+                    { q: "Lieber Kissen weich oder hart?", a: "Weich ☁️", b: "Hart 🧱" },
+                    { q: "Lieber ein Leben lang nur noch Toast oder nur noch Brötchen essen?", a: "Toast 🍞", b: "Brötchen 🥐" },
+                    { q: "Lieber in der ersten oder letzten Reihe sitzen (Kino/Theater)?", a: "Erste Reihe 🥇", b: "Letzte Reihe 🔚" },
+                    { q: "Lieber Marmelade oder Nutella?", a: "Marmelade 🍓", b: "Nutella 🍫" },
+                    { q: "Lieber warm oder kalt trinken?", a: "Warm ♨️☕", b: "Kalt 🧊🥤" },
+                    { q: "Lieber Fleisch oder Fisch?", a: "Fleisch 🥩", b: "Fisch 🐟" },
+                    { q: "Lieber Süßkartoffel oder normale Kartoffel?", a: "Süß 🍠", b: "Normal 🥔" },
+                    { q: "Lieber Hemd oder T-Shirt?", a: "Hemd 👔", b: "T-Shirt 👕" },
+                    { q: "Lieber im Hotel frühstücken oder im Café?", a: "Hotel 🏨🍳", b: "Café ☕🥐" },
+                    { q: "Lieber Scharf oder Mild essen?", a: "Scharf 🌶️🔥", b: "Mild 🥛😌" },
+                    { q: "Lieber E-Book oder gedrucktes Buch?", a: "E-Book 📱📚", b: "Gedruckt 📖🌳" },
+                    { q: "Lieber mit öffentlichen Verkehrsmitteln oder mit dem Rad zur Arbeit?", a: "Öffentlich 🚌🚆", b: "Fahrrad 🚲" },
+                    { q: "Lieber Rotwein oder Weißwein?", a: "Rotwein 🍷🔴", b: "Weißwein 🥂⚪" },
+                    { q: "Lieber in der Küche oder im Wohnzimmer essen?", a: "Küche 🧑‍🍳🍽️", b: "Wohnzimmer 🛋️📺" },
+                    { q: "Lieber Salzgebäck oder Chips?", a: "Salzgebäck 🥨", b: "Chips 🥔💸" },
+                    { q: "Lieber schreiben oder lesen?", a: "Schreiben ✍️", b: "Lesen 📖" },
+                    { q: "Lieber Krawatte oder Fliege?", a: "Krawatte 👔", b: "Fliege 🎀" },
+                    { q: "Lieber glatt oder lockig?", a: "Glatt 💇‍♀️📏", b: "Lockig 💆‍♀️🌀" },
+                    { q: "Lieber Taschenlampe oder Kerze?", a: "Taschenlampe 🔦", b: "Kerze 🕯️" },
+                    { q: "Lieber nur noch Gemüse oder nur noch Obst essen?", a: "Gemüse 🥦🥬", b: "Obst 🍎🍊" },
+                    { q: "Lieber nur noch Mützen oder nur noch Schals tragen?", a: "Mützen 🧢👒", b: "Schals 🧣🧣" },
+                    { q: "Lieber immer pünktlich oder immer gute Laune?", a: "Pünktlich ⏰✅", b: "Gute Laune 😄🥳" },
+                    { q: "Lieber Suppe mit Einlage oder pur?", a: "Mit Einlage 🍜🍲", b: "Pur 🥣💧" },
+                    { q: "Lieber Süßigkeiten im Kühlschrank oder ungekühlt?", a: "Kalt 🧊🍬", b: "Zimmerwarm 🌡️🍭" },
+                    { q: "Lieber auf dem Bauch oder auf der Seite schlafen?", a: "Bauch ⬇️🛌", b: "Seite ↪️😴" },
+                    { q: "Lieber Jeans mit Löchern oder ohne?", a: "Mit Löchern 👖🕳️", b: "Ohne Löcher 👖✨" },
+                    { q: "Lieber weiße oder bunte Wäsche?", a: "Weiße ⚪🧺", b: "Bunte 🌈👕" },
+                    { q: "Lieber Nudeln al dente oder weich?", a: "Al Dente 👌🍝", b: "Weich 😴🍜" },
+                    { q: "Lieber Füller oder Kugelschreiber?", a: "Füller 🖋️✨", b: "Kugelschreiber 🖊️💪" },
+                    { q: "Lieber Städtetrip oder Wellness?", a: "Städtetrip 🏙️", b: "Wellness 🧘‍♀️" },
+                    { q: "Lieber duschen oder baden?", a: "Duschen 🚿", b: "Baden 🛁" }
+                ]
+            }
+        };
         
-        function getRandomUnusedQuestion(usedQuestions = []) {
-            if(!questions || questions.length === 0) {
+        // Flache Liste aller Fragen mit Kategorie-Information
+        function getAllQuestions(activeCategories = []) {
+            let allQuestions = [];
+            if(activeCategories.length === 0) {
+                // Falls keine Kategorien aktiv sind, verwende alle
+                activeCategories = Object.keys(questionCategories);
+            }
+            
+            activeCategories.forEach(catKey => {
+                if(questionCategories[catKey] && questionCategories[catKey].questions) {
+                    questionCategories[catKey].questions.forEach(q => {
+                        allQuestions.push({ ...q, category: catKey });
+                    });
+                }
+            });
+            return allQuestions;
+        }
+
+        function getRandomUnusedQuestion(usedQuestions = [], activeCategories = []) {
+            const questions = getAllQuestions(activeCategories);
+            if(questions.length === 0) {
                 console.error('Keine Fragen verfügbar!');
-                return { question: { q: "Keine Frage verfügbar", a: "A", b: "B" }, index: -1 };
+                return { question: { q: "Keine Frage verfügbar", a: "A", b: "B" }, index: -1, category: null };
             }
             const available = questions.filter((q, idx) => !usedQuestions.includes(idx));
             if(available.length === 0) {
@@ -1023,16 +1344,16 @@
                 const q = questions[randomIdx];
                 if(!q || !q.q) {
                     console.error('Ungültige Frage gefunden:', q);
-                    return { question: questions[0] || { q: "Fehler", a: "A", b: "B" }, index: 0 };
+                    return { question: questions[0] || { q: "Fehler", a: "A", b: "B" }, index: 0, category: null };
                 }
-                return { question: q, index: randomIdx };
+                return { question: q, index: randomIdx, category: q.category };
             }
             const randomQ = available[Math.floor(Math.random() * available.length)];
             if(!randomQ || !randomQ.q) {
                 console.error('Ungültige Frage gefunden:', randomQ);
-                return { question: questions[0] || { q: "Fehler", a: "A", b: "B" }, index: 0 };
+                return { question: questions[0] || { q: "Fehler", a: "A", b: "B" }, index: 0, category: null };
             }
-            return { question: randomQ, index: questions.indexOf(randomQ) };
+            return { question: randomQ, index: questions.indexOf(randomQ), category: randomQ.category };
         }
         const cardInfo = {
             card_oil: { label: "🛢️ Ölfass", desc: "Verdoppelt deinen nächsten Angriff." },
@@ -1075,9 +1396,47 @@
             join.classList.add('hidden');
             panel.classList.toggle('hidden');
             if(!panel.classList.contains('hidden')) {
-                document.getElementById('inpDmg').focus();
+                renderCategorySelection();
             }
         };
+        
+        function renderCategorySelection() {
+            const container = document.getElementById('categorySelection');
+            if(!container) return;
+            
+            container.innerHTML = Object.keys(questionCategories).map(catKey => {
+                const cat = questionCategories[catKey];
+                return `
+                    <div class="category-card" data-category="${catKey}" onclick="toggleCategory('${catKey}')">
+                        <div class="category-emoji">${cat.emoji}</div>
+                        <div class="category-name">${cat.name}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Alle Kategorien standardmäßig aktivieren
+            Object.keys(questionCategories).forEach(catKey => {
+                const card = document.querySelector(`[data-category="${catKey}"]`);
+                if(card) {
+                    card.classList.add('selected');
+                }
+            });
+        }
+        
+        window.toggleCategory = (catKey) => {
+            const card = document.querySelector(`[data-category="${catKey}"]`);
+            if(card) {
+                card.classList.toggle('selected');
+            }
+        };
+        
+        function getSelectedCategories() {
+            const selected = [];
+            document.querySelectorAll('.category-card.selected').forEach(card => {
+                selected.push(card.getAttribute('data-category'));
+            });
+            return selected.length > 0 ? selected : Object.keys(questionCategories);
+        }
         window.openJoinPanel = () => {
             if(!ensureName()) return;
             const panel = document.getElementById('joinPanel');
@@ -1085,7 +1444,64 @@
             host.classList.add('hidden');
             panel.classList.toggle('hidden');
             if(!panel.classList.contains('hidden')) {
-                document.getElementById('inpCode').focus();
+                loadRoomList();
+            }
+        };
+        
+        window.loadRoomList = async () => {
+            try {
+                const roomsRef = collection(db, "lobbies");
+                const q = query(roomsRef, where("status", "==", "lobby"));
+                const querySnapshot = await getDocs(q);
+                
+                const rooms = [];
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if(data.hostName) {
+                        rooms.push({
+                            id: doc.id,
+                            hostName: data.hostName,
+                            playerCount: Object.keys(data.players || {}).length,
+                            password: data.password || ""
+                        });
+                    }
+                });
+                
+                const roomListEl = document.getElementById('roomList');
+                const inpCodeEl = document.getElementById('inpCode');
+                const inpPasswordEl = document.getElementById('inpPassword');
+                
+                if(rooms.length === 0) {
+                    roomListEl.style.display = 'none';
+                    inpCodeEl.style.display = 'block';
+                    inpPasswordEl.style.display = 'none';
+                    inpCodeEl.focus();
+                } else {
+                    roomListEl.style.display = 'block';
+                    inpCodeEl.style.display = 'none';
+                    inpPasswordEl.style.display = 'none';
+                    roomListEl.innerHTML = rooms.map(room => `
+                        <div class="card" style="padding:15px; margin-bottom:10px; cursor:pointer; background:linear-gradient(145deg, #1e1e1e, #252525);" onclick="selectRoom('${room.id}', ${room.password ? 'true' : 'false'})">
+                            <div style="font-weight:bold; font-size:1.1rem; color:#ff8c00;">Raum von ${room.hostName}</div>
+                            <div style="font-size:0.85rem; color:#aaa; margin-top:5px;">👥 ${room.playerCount} Spieler</div>
+                        </div>
+                    `).join('');
+                }
+            } catch(error) {
+                console.error('Fehler beim Laden der Räume:', error);
+                showToast("Fehler beim Laden der Räume");
+            }
+        };
+        
+        window.selectRoom = (roomId, hasPassword) => {
+            document.getElementById('inpCode').value = roomId;
+            document.getElementById('inpCode').style.display = 'block';
+            if(hasPassword) {
+                document.getElementById('inpPassword').style.display = 'block';
+                document.getElementById('inpPassword').focus();
+            } else {
+                document.getElementById('inpPassword').style.display = 'none';
+                joinGame();
             }
         };
         window.toggleLobbyReady = async () => {
@@ -1101,13 +1517,31 @@
             const name = document.getElementById('inpName').value.trim();
             const emoji = document.getElementById('inpEmoji').value || '😊';
             const gender = "divers"; // Deaktiviert, aber behalten
-            const dmg = parseInt(document.getElementById('inpDmg').value);
-            const speed = parseFloat(document.getElementById('inpSpeed').value);
-            const startTemp = parseInt(document.getElementById('inpStartTemp').value);
-            const maxTemp = parseInt(document.getElementById('inpMaxTemp').value);
+            const gameMode = document.getElementById('inpGameMode').value;
+            const selectedCategories = getSelectedCategories();
+            
             if(!name) {
                 showToast("Bitte gib einen Namen ein!");
                 return;
+            }
+            
+            if(selectedCategories.length === 0) {
+                showToast("Bitte wähle mindestens eine Kategorie!");
+                return;
+            }
+            
+            // Konfiguration basierend auf Spielmodus
+            let dmg, speed, startTemp, maxTemp;
+            if(gameMode === 'strategisch') {
+                dmg = 10;
+                speed = 1.0;
+                startTemp = 0;
+                maxTemp = 120;
+            } else { // party
+                dmg = 20;
+                speed = 1.5;
+                startTemp = 10;
+                maxTemp = 80;
             }
             
             const code = Math.random().toString(36).substring(2,6).toUpperCase();
@@ -1119,24 +1553,29 @@
             sessionStorage.setItem("hk_emoji", emoji);
             sessionStorage.setItem("hk_gender", gender);
             sessionStorage.setItem("hk_room", code);
+            
+            // Erste Frage aus aktiven Kategorien
+            const firstQuestion = getAllQuestions(selectedCategories)[0] || { q: "Willkommen zu Hitzkopf!", a: "A", b: "B" };
 
             await setDoc(doc(db, "lobbies", code), {
                 host: name,
+                hostName: name, // Für Raumliste
                 status: "lobby",
                 players: { [name]: { temp: startTemp, inventory: [], gender: gender, emoji: emoji } },
-                config: { dmg: dmg, speed: speed, startTemp: startTemp, maxTemp: maxTemp },
+                config: { dmg: dmg, speed: speed, startTemp: startTemp, maxTemp: maxTemp, gameMode: gameMode, categories: selectedCategories },
                 votes: {},
                 ready: [],
                 log: [],
                 hotseat: "",
-                currentQ: questions[0],
+                currentQ: firstQuestion,
                 roundId: 0,
                 lobbyReady: {},
                 countdownEnds: null,
                 usedQuestions: [],
                 eliminatedShown: [],
                 rematchVotes: {},
-                winner: null
+                winner: null,
+                password: "" // Optional: später für Passwortschutz
             });
             connectToLobby();
         };
@@ -1147,10 +1586,20 @@
             const emoji = document.getElementById('inpEmoji').value || '😊';
             const gender = "divers"; // Deaktiviert, aber behalten
             const code = document.getElementById('inpCode').value.trim().toUpperCase();
+            const password = document.getElementById('inpPassword').value;
+            
             if(!name || !code) {
                 showToast("Bitte gib Name und Code ein!");
                 return;
             }
+            
+            // Passwortprüfung (später implementieren wenn nötig)
+            // const ref = doc(db, "lobbies", code);
+            // const snap = await getDoc(ref);
+            // if(snap.exists() && snap.data().password && snap.data().password !== password) {
+            //     showToast("Falsches Passwort!");
+            //     return;
+            // }
             
             myName = name;
             myEmoji = emoji;
@@ -1351,12 +1800,15 @@
                     if(!currentQ || typeof currentQ.q !== 'string' || !currentQ.q) {
                         if(isHost) {
                             const usedQuestions = data.usedQuestions || [];
-                            const { question: q } = getRandomUnusedQuestion(usedQuestions);
+                            const activeCategories = data.config?.categories || Object.keys(questionCategories);
+                            const { question: q } = getRandomUnusedQuestion(usedQuestions, activeCategories);
                             updateDoc(doc(db, "lobbies", roomId), { currentQ: q }).catch(console.error);
                             data.currentQ = q;
                         } else {
                             // Fallback für Nicht-Hosts
-                            data.currentQ = questions[0] || { q: "Lade Frage...", a: "A", b: "B" };
+                            const activeCategories = data.config?.categories || Object.keys(questionCategories);
+                            const allQuestions = getAllQuestions(activeCategories);
+                            data.currentQ = allQuestions[0] || { q: "Lade Frage...", a: "A", b: "B" };
                         }
                     } else {
                         data.currentQ = currentQ; // Verwende das bereinigte currentQ
@@ -1385,12 +1837,15 @@
                     if(!currentQ || typeof currentQ.q !== 'string' || !currentQ.q) {
                         if(isHost) {
                             const usedQuestions = data.usedQuestions || [];
-                            const { question: q } = getRandomUnusedQuestion(usedQuestions);
+                            const activeCategories = data.config?.categories || Object.keys(questionCategories);
+                            const { question: q } = getRandomUnusedQuestion(usedQuestions, activeCategories);
                             updateDoc(doc(db, "lobbies", roomId), { currentQ: q }).catch(console.error);
                             data.currentQ = q;
                         } else {
                             // Fallback für Nicht-Hosts
-                            data.currentQ = questions[0] || { q: "Lade Frage...", a: "A", b: "B" };
+                            const activeCategories = data.config?.categories || Object.keys(questionCategories);
+                            const allQuestions = getAllQuestions(activeCategories);
+                            data.currentQ = allQuestions[0] || { q: "Lade Frage...", a: "A", b: "B" };
                         }
                     } else {
                         data.currentQ = currentQ; // Verwende das bereinigte currentQ
@@ -1476,7 +1931,9 @@
             } else {
                 // Fallback falls currentQ fehlt oder falsch formatiert
                 console.warn('currentQ fehlt oder ist falsch formatiert:', currentQ);
-                const fallbackQ = questions[0] || { q: "Lade Frage...", a: "A", b: "B" };
+                const activeCategories = globalData?.config?.categories || Object.keys(questionCategories);
+                const allQuestions = getAllQuestions(activeCategories);
+                const fallbackQ = allQuestions[0] || { q: "Lade Frage...", a: "A", b: "B" };
                 document.getElementById('lblQuestion').innerText = fallbackQ.q;
                 btnA.innerText = fallbackQ.a;
                 btnB.innerText = fallbackQ.b;
@@ -1484,7 +1941,8 @@
                 // Versuche currentQ zu reparieren (nur als Host)
                 if(isHost && globalData) {
                     const usedQuestions = globalData.usedQuestions || [];
-                    const { question: q } = getRandomUnusedQuestion(usedQuestions);
+                    const activeCategories = globalData.config?.categories || Object.keys(questionCategories);
+                    const { question: q } = getRandomUnusedQuestion(usedQuestions, activeCategories);
                     updateDoc(doc(db, "lobbies", roomId), { currentQ: q }).catch(console.error);
                 }
             }
@@ -1562,9 +2020,32 @@
             boxAttack.style.display = 'none';
             boxShop.style.display = 'none';
             
-            // Ready Status
-            document.getElementById('lblReady').innerText = 
-                `Bereit: ${data.ready.length}/${Object.keys(data.players).length}`;
+            // Ready Status mit Namen
+            const players = Object.keys(data.players);
+            const readyPlayers = data.ready || [];
+            const notReadyPlayers = players.filter(p => !readyPlayers.includes(p));
+            
+            let readyText = `✅ Bereit (${readyPlayers.length}/${players.length}): `;
+            if(readyPlayers.length > 0) {
+                readyText += readyPlayers.map(p => {
+                    const playerData = data.players[p];
+                    const playerEmoji = playerData?.emoji || '😊';
+                    return `${playerEmoji} ${p}`;
+                }).join(', ');
+            } else {
+                readyText += "Niemand";
+            }
+            
+            if(notReadyPlayers.length > 0) {
+                readyText += `<br>⏳ Noch nicht bereit: `;
+                readyText += notReadyPlayers.map(p => {
+                    const playerData = data.players[p];
+                    const playerEmoji = playerData?.emoji || '😊';
+                    return `${playerEmoji} ${p}`;
+                }).join(', ');
+            }
+            
+            document.getElementById('lblReady').innerHTML = readyText;
             
             if(data.ready.includes(myName)) {
                 btnReady.disabled = true;
@@ -1833,7 +2314,8 @@
             
             await applyIceCooling(globalData.players);
             const usedQuestions = globalData.usedQuestions || [];
-            const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions);
+            const activeCategories = globalData.config?.categories || Object.keys(questionCategories);
+            const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions, activeCategories);
             const nextRoundId = (globalData?.roundId ?? 0) + 1;
             const countdownEnds = Date.now() + 3000;
             await updateDoc(doc(db, "lobbies", roomId), {
@@ -1864,6 +2346,52 @@
         // --- CLOSE RULES OVERLAY ---
         window.closeRulesOverlay = () => {
             const overlay = document.getElementById('rulesOverlay');
+            if(overlay) {
+                overlay.style.display = 'none';
+            }
+        };
+        
+        // --- SHOW ROUND RECAP ---
+        function showRoundRecap(data) {
+            const overlay = document.getElementById('roundRecapOverlay');
+            const content = document.getElementById('recapContent');
+            if(!overlay || !content) return;
+            
+            const players = Object.keys(data.players || {});
+            const readyPlayers = data.ready || [];
+            const notReadyPlayers = players.filter(p => !readyPlayers.includes(p));
+            
+            let html = `<div style="text-align:left; margin-bottom:20px;">`;
+            html += `<h3 style="color:#ff4500; margin-bottom:15px;">Bereitschaftsstatus:</h3>`;
+            
+            if(readyPlayers.length > 0) {
+                html += `<div style="margin-bottom:15px;"><strong style="color:#4CAF50;">✅ Bereit (${readyPlayers.length}):</strong><br>`;
+                html += readyPlayers.map(p => {
+                    const playerData = data.players[p];
+                    const playerEmoji = playerData?.emoji || '😊';
+                    return `  ${playerEmoji} ${p}`;
+                }).join('<br>');
+                html += `</div>`;
+            }
+            
+            if(notReadyPlayers.length > 0) {
+                html += `<div><strong style="color:#ff9800;">⏳ Noch nicht bereit (${notReadyPlayers.length}):</strong><br>`;
+                html += notReadyPlayers.map(p => {
+                    const playerData = data.players[p];
+                    const playerEmoji = playerData?.emoji || '😊';
+                    return `  ${playerEmoji} ${p}`;
+                }).join('<br>');
+                html += `</div>`;
+            }
+            
+            html += `</div>`;
+            content.innerHTML = html;
+            overlay.style.display = 'flex';
+        }
+        
+        // --- CLOSE ROUND RECAP ---
+        window.closeRoundRecap = () => {
+            const overlay = document.getElementById('roundRecapOverlay');
             if(overlay) {
                 overlay.style.display = 'none';
             }
@@ -1901,7 +2429,8 @@
             nextIdx = (nextIdx + 1) % activePlayers.length;
             
             const usedQuestions = globalData.usedQuestions || [];
-            const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions);
+            const activeCategories = globalData.config?.categories || Object.keys(questionCategories);
+            const { question: q, index: qIdx } = getRandomUnusedQuestion(usedQuestions, activeCategories);
             const nextRoundId = (globalData?.roundId ?? 0) + 1;
             await applyIceCooling(globalData.players);
             await updateDoc(doc(db, "lobbies", roomId), {
