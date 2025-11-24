@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥11</title>
+    <title>Hitzkopf 🔥14</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -773,6 +773,10 @@
             <hr style="border:none; border-top:1px solid #333; margin:20px 0;">
         </div>
 
+        <hr style="border:none; border-top:1px solid #333; margin:20px 0;">
+        <p style="font-size:0.75rem; color:#888; margin-bottom:8px; text-transform:uppercase;">Spielverlauf:</p>
+        <div id="divLogMenu" class="log-box" style="max-height:200px; font-size:0.75rem; margin-bottom:15px;"></div>
+        
         <button style="padding:12px; font-size:0.85rem; margin:8px 0; background:#444; border-radius:8px;" onclick="leaveLobby()">👋 Lobby verlassen</button>
     </div>
 
@@ -922,8 +926,6 @@
             <button style="width:100%; background:transparent; border:1px solid #666; color:#aaa; font-size:0.85rem; margin-top:10px; padding:8px;" onclick="goBackToReward()">← Zurück</button>
         </div>
 
-        <div style="text-align:left; font-size:0.7rem; color:#666; margin-bottom:5px;">📋 Spielverlauf:</div>
-        <div id="divLog" class="log-box"></div>
 
         <button id="btnReady" class="btn-ready" onclick="setReady()">👍 Bereit</button>
         <div id="lblReady" style="font-size:0.8rem; color:#666; margin-top:5px;"></div>
@@ -983,7 +985,7 @@
             <h2 style="color:#ff8c00; margin-bottom:20px; font-size:1.5rem;">🎮 Noch eine Runde?</h2>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:20px; max-width:600px; margin-left:auto; margin-right:auto;">
                 <button id="btnVoteRematch" class="btn-primary" onclick="voteRematch(true)" style="padding:20px; font-size:1.2rem;">✅ Nochmal spielen</button>
-                <button id="btnVoteLeave" class="btn-secondary" onclick="voteRematch(false)" style="padding:20px; font-size:1.2rem;">🚪 Verlassen</button>
+                <button id="btnVoteLeave" class="btn-secondary" onclick="leaveLobby()" style="padding:20px; font-size:1.2rem;">🚪 Verlassen</button>
             </div>
             <div id="votingStatus" style="font-size:0.9rem; color:#888; margin-top:15px;">Warte auf andere Spieler...</div>
             <div id="votingResults" style="margin-top:20px; font-size:0.85rem; color:#aaa;"></div>
@@ -999,7 +1001,7 @@
         <p style="color:#aaa; margin-bottom:30px;">Möchtest du noch eine Runde spielen?</p>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:20px;">
             <button id="btnVoteRematch" class="btn-primary" onclick="voteRematch(true)" style="padding:20px; font-size:1.2rem;">✅ Nochmal spielen</button>
-            <button id="btnVoteLeave" class="btn-secondary" onclick="voteRematch(false)" style="padding:20px; font-size:1.2rem;">🚪 Verlassen</button>
+            <button id="btnVoteLeave" class="btn-secondary" onclick="leaveLobby()" style="padding:20px; font-size:1.2rem;">🚪 Verlassen</button>
         </div>
         <div id="votingStatus" style="font-size:0.9rem; color:#888; margin-top:15px;">Warte auf andere Spieler...</div>
         <div id="votingResults" style="margin-top:20px; font-size:0.85rem; color:#aaa;"></div>
@@ -1027,7 +1029,7 @@
     <script type="module">
         // --- FIREBASE SETUP ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment, deleteDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment, deleteDoc, deleteField, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
@@ -1060,6 +1062,7 @@
         let countdownInterval = null;
         let countdownTarget = null;
         let rulesShown = false;
+        let lastAttackResultKey = null; // Verhindert mehrfache Popup-Anzeige
         
         // --- EMOJI SELECTION ---
         const baseEmojis = ['😊', '😎', '🤠', '🥳', '😄', '🤩', '😇', '🧐', '🤓', '😋', '🐷', '👻', '🐄', '🐶', '🐱', '🐼', '🦁', '🐸', '🦊', '🐨'];
@@ -1707,8 +1710,107 @@
             }
         };
         
+        // Cleanup-Funktion: Lösche leere Räume (ohne Spieler) und "tote" Räume
+        async function cleanupEmptyRooms() {
+            try {
+                const roomsRef = collection(db, "lobbies");
+                const q = query(roomsRef);
+                const querySnapshot = await getDocs(q);
+                
+                const deletePromises = [];
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const players = data.players || {};
+                    // Filtere echte Spieler (nicht null/undefined/leere Objekte)
+                    const realPlayers = Object.keys(players).filter(p => {
+                        const playerData = players[p];
+                        return playerData !== undefined && playerData !== null && typeof playerData === 'object' && Object.keys(playerData).length > 0;
+                    });
+                    
+                    // Prüfe ob Raum beitretbar ist (muss hostName haben und Status "lobby")
+                    const hasHostName = data.hostName && typeof data.hostName === 'string' && data.hostName.trim().length > 0;
+                    const isValidStatus = data.status === 'lobby';
+                    
+                    // Lösche Räume wenn:
+                    // 1. Keine echten Spieler vorhanden
+                    // 2. ODER nur noch ein Spieler im Winner-Screen (Geisterlobby)
+                    // 3. ODER geschlossener Status
+                    // 4. ODER kein gültiger Host-Name (toter Raum)
+                    // 5. ODER Status nicht "lobby" (außer winner/voting die noch aktiv sein könnten)
+                    const isWinnerScreenWithOnePlayer = data.status === 'winner' && realPlayers.length === 1;
+                    const shouldDelete = realPlayers.length === 0 || 
+                                       isWinnerScreenWithOnePlayer ||
+                                       data.status === 'closed' || 
+                                       !hasHostName ||
+                                       (data.status && data.status !== 'lobby' && data.status !== 'game' && data.status !== 'result' && data.status !== 'winner' && data.status !== 'voting' && data.status !== 'countdown');
+                    
+                    if(shouldDelete) {
+                        deletePromises.push(deleteDoc(doc.ref));
+                        console.log('Leerer/toter Raum gelöscht:', doc.id, {
+                            realPlayers: realPlayers.length,
+                            status: data.status,
+                            hasHostName,
+                            reason: realPlayers.length === 0 ? 'keine Spieler' : 
+                                   isWinnerScreenWithOnePlayer ? 'Winner-Screen mit nur einem Spieler (Geisterlobby)' :
+                                   data.status === 'closed' ? 'geschlossen' :
+                                   !hasHostName ? 'kein Host-Name' : 'ungültiger Status'
+                        });
+                    }
+                });
+                
+                if(deletePromises.length > 0) {
+                    await Promise.all(deletePromises);
+                    console.log(`${deletePromises.length} leere/tote Räume bereinigt`);
+                }
+            } catch(error) {
+                console.error('Fehler beim Bereinigen leerer Räume:', error);
+            }
+        }
+
+        // Manuelle Funktion zum Löschen spezifischer "toter" Räume (Einmalige Aktion)
+        window.forceDeleteDeadRooms = async () => {
+            try {
+                const roomsRef = collection(db, "lobbies");
+                const q = query(roomsRef, where("status", "==", "lobby"));
+                const querySnapshot = await getDocs(q);
+                
+                const deletePromises = [];
+                const targetHostNames = ['Niklas', 'asdfasdf', 'fasdff']; // Die drei zu löschenden Räume
+                
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const hostName = data.hostName;
+                    
+                    // Lösche Räume mit diesen Host-Namen
+                    if(hostName && targetHostNames.includes(hostName)) {
+                        deletePromises.push(deleteDoc(doc.ref));
+                        console.log('Manuell gelöschter toter Raum:', doc.id, 'Host:', hostName);
+                    }
+                });
+                
+                if(deletePromises.length > 0) {
+                    await Promise.all(deletePromises);
+                    console.log(`${deletePromises.length} tote Räume manuell gelöscht`);
+                    if(typeof showToast === 'function') {
+                        showToast(`${deletePromises.length} tote Räume gelöscht`);
+                    }
+                } else {
+                    console.log('Keine toten Räume zum Löschen gefunden');
+                }
+            } catch(error) {
+                console.error('Fehler beim manuellen Löschen toter Räume:', error);
+            }
+        };
+        
         window.loadRoomList = async () => {
             try {
+                // Bereinige leere Räume beim Laden der Liste
+                await cleanupEmptyRooms();
+                
+                // EINMALIG: Lösche die drei toten Räume manuell
+                // Dies kann nach dem ersten Durchlauf entfernt werden
+                await window.forceDeleteDeadRooms();
+                
                 const roomsRef = collection(db, "lobbies");
                 const q = query(roomsRef, where("status", "==", "lobby"));
                 const querySnapshot = await getDocs(q);
@@ -1716,14 +1818,23 @@
                 const rooms = [];
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
-                    if(data.hostName) {
-                    rooms.push({
-                        id: doc.id,
-                        hostName: data.hostName,
-                        playerCount: Object.keys(data.players || {}).length,
-                        password: data.password || "",
-                        hasPassword: !!(data.password && data.password.trim().length > 0)
+                    const players = data.players || {};
+                    // Filtere echte Spieler (nicht null/undefined/leere Objekte)
+                    const realPlayers = Object.keys(players).filter(p => {
+                        const playerData = players[p];
+                        return playerData !== undefined && playerData !== null && typeof playerData === 'object' && Object.keys(playerData).length > 0;
                     });
+                    
+                    // Zeige nur Räume mit echten Spielern und gültigem Host-Namen
+                    const hasHostName = data.hostName && typeof data.hostName === 'string' && data.hostName.trim().length > 0;
+                    if(hasHostName && realPlayers.length > 0) {
+                        rooms.push({
+                            id: doc.id,
+                            hostName: data.hostName,
+                            playerCount: realPlayers.length,
+                            password: data.password || "",
+                            hasPassword: !!(data.password && data.password.trim().length > 0)
+                        });
                     }
                 });
                 
@@ -1853,10 +1964,9 @@
                 password: roomPassword || "", // Leer = öffentlich
                 lastQuestionCategory: firstCategory,
                 pendingAttacks: {}, // Sammelt Angriffe: { targetName: [{ attacker, dmg, hasOil }] }
-                attackDecisions: {} // Trackt welche Spieler ihre Angriffsentscheidung getroffen haben
+                attackDecisions: {}, // Trackt welche Spieler ihre Angriffsentscheidung getroffen haben
+                popupConfirmed: {} // Trackt welche Spieler ihre Attack-Feedback-Popups bestätigt haben
             });
-            
-            showToast(`Raum erstellt! Code: ${code}`);
             
             connectToLobby();
         };
@@ -1933,6 +2043,49 @@
                     return; 
                 }
                 const data = snap.data();
+                
+                // WICHTIG: Prüfe ob sich ready geändert hat (für renderResult-Update)
+                const readyChanged = globalData && JSON.stringify(globalData.ready || []) !== JSON.stringify(data.ready || []);
+                
+                // WICHTIG: Prüfe ob im Winner-Screen nur noch ein Spieler übrig ist - entferne diesen automatisch
+                if(data.status === 'winner') {
+                    const players = data.players || {};
+                    const remainingPlayers = Object.keys(players).filter(p => {
+                        const playerData = players[p];
+                        return playerData !== undefined && playerData !== null && typeof playerData === 'object' && Object.keys(playerData).length > 0;
+                    });
+                    
+                    // Wenn nur noch ein Spieler übrig ist (und dieser nicht ich bin), entferne diesen automatisch
+                    if(remainingPlayers.length === 1 && remainingPlayers[0] !== myName && isHost) {
+                        const lastPlayer = remainingPlayers[0];
+                        console.log('Winner-Screen: Nur noch ein Spieler übrig (nicht ich), entferne diesen automatisch:', lastPlayer);
+                        const ref = doc(db, "lobbies", roomId);
+                        updateDoc(ref, {
+                            [`players.${lastPlayer}`]: deleteField()
+                        }).then(() => {
+                            // Prüfe ob Raum jetzt leer ist
+                            getDoc(ref).then(snap => {
+                                if(snap.exists()) {
+                                    const data = snap.data();
+                                    const players = data.players || {};
+                                    const realPlayers = Object.keys(players).filter(p => {
+                                        const playerData = players[p];
+                                        return playerData !== undefined && playerData !== null && typeof playerData === 'object' && Object.keys(playerData).length > 0;
+                                    });
+                                    if(realPlayers.length === 0) {
+                                        deleteDoc(ref);
+                                        console.log('Leerer Raum gelöscht (Winner-Screen, letzter Spieler entfernt):', roomId);
+                                    }
+                                }
+                            }).catch(err => {
+                                console.error('Fehler beim Prüfen des leeren Raums:', err);
+                            });
+                        }).catch(err => {
+                            console.error('Fehler beim Entfernen des letzten Spielers:', err);
+                        });
+                    }
+                }
+                
                 globalData = data;
 
                 // Prüfe ob Angriffe ausgeführt wurden und zeige beim Angegriffenen
@@ -1948,16 +2101,61 @@
                     
                     // Prüfe ob Angriffe ausgeführt wurden (durch executePendingAttacks)
                     // Zeige Popup für ALLE Spieler (auch die nicht angegriffenen)
-                    if(data.attackResults && data.attackResults[myName] !== undefined) {
+                    // Warte bis attackResults vollständig sind (roundRecapShown = true)
+                    const recapShown = data.roundRecapShown || false;
+                    
+                    // WICHTIG: Popup-Logik nur im result-Status ausführen, nicht wenn sich nur ready ändert
+                    // UND nur wenn sich attackResults geändert haben (nicht wenn nur ready geändert wurde)
+                    if(data.status === 'result' && data.attackResults && data.attackResults[myName] !== undefined && recapShown && !readyChanged) {
                         const result = data.attackResults[myName];
                         // Erstelle einen eindeutigen Schlüssel für dieses Ergebnis
-                        const resultKey = `${result.totalDmg}-${JSON.stringify(result.attackDetails || [])}`;
+                        const resultKey = `${result.totalDmg}-${JSON.stringify(result.attackDetails || [])}-${recapShown}`;
                         
-                        // Zeige Popup nur einmal pro eindeutigem Ergebnis
-                        if(resultKey !== lastAttackResultKey) {
+                        // Zeige Popup nur einmal pro eindeutigem Ergebnis und nur wenn Modal nicht bereits offen ist
+                        const modal = document.getElementById('attackModal');
+                        const isModalOpen = modal && modal.style.display === 'flex';
+                        
+                        // WICHTIG: Verhindere erneutes Auslösen des Popups wenn nur ready-Status ändert
+                        // Prüfe ob attackResults unverändert sind (nur ready geändert)
+                        // UND prüfe ob das Modal bereits einmal angezeigt wurde
+                        if(resultKey === lastAttackResultKey) {
+                            // Key ist gleich = attackResults haben sich nicht geändert, nur ready wurde geändert
+                            // Überspringe erneutes Auslösen des Popups
+                            console.log('Popup-Logik: Überspringe erneutes Auslösen - resultKey unverändert:', resultKey);
+                            return;
+                        }
+                        
+                        // Zusätzliche Prüfung: Wenn das Modal bereits einmal angezeigt wurde, nicht erneut anzeigen
+                        if(isModalOpen) {
+                            console.log('Popup-Logik: Modal bereits offen, überspringe erneutes Auslösen');
+                            return;
+                        }
+                        
+                        if(resultKey !== lastAttackResultKey && !isModalOpen) {
                             lastAttackResultKey = resultKey;
                             console.log('Attack-Feedback für', myName, ':', result);
-                            triggerAttackFeedback(result);
+                            console.log('Attack-Feedback Debug:', {
+                                totalDmg: result.totalDmg,
+                                attackers: result.attackers,
+                                attackDetails: result.attackDetails,
+                                attackersLength: result.attackers?.length || 0,
+                                attackDetailsLength: result.attackDetails?.length || 0,
+                                resultKey,
+                                lastAttackResultKey: lastAttackResultKey
+                            });
+                            
+                            // Warte kurz um sicherzustellen, dass alle Daten aktualisiert sind
+                            setTimeout(() => {
+                                // Nochmal prüfen ob Modal in der Zwischenzeit geöffnet wurde
+                                const modalCheck = document.getElementById('attackModal');
+                                const isModalOpenCheck = modalCheck && modalCheck.style.display === 'flex';
+                                if(!isModalOpenCheck) {
+                                    triggerAttackFeedback(result);
+                                } else {
+                                    console.log('Popup-Logik: Modal wurde in der Zwischenzeit geöffnet, überspringe triggerAttackFeedback');
+                                }
+                            }, 100);
+                            
                             // Entferne nach Anzeige (mit längerer Verzögerung damit alle sehen können - 8 Sekunden)
                             setTimeout(() => {
                                 if(isHost) {
@@ -1967,15 +2165,31 @@
                                 }
                             }, 8000);
                         }
-                    } else {
+                    } else if(!data.attackResults || data.attackResults[myName] === undefined) {
                         // Wenn attackResults entfernt wurde, zurücksetzen
-                        lastAttackResultKey = null;
+                        if(lastAttackResultKey !== null) {
+                            lastAttackResultKey = null;
+                        }
                     }
                     lastMyTemp = meState.temp;
                 } else {
                     lastMyTemp = null;
                 }
 
+                // Prüfe ob Raum leer ist und lösche automatisch
+                const players = data.players || {};
+                const playerCount = Object.keys(players).filter(p => players[p] !== undefined && players[p] !== null).length;
+                
+                if(playerCount === 0 && isHost) {
+                    // Raum ist leer, lösche automatisch
+                    const ref = doc(db, "lobbies", roomId);
+                    deleteDoc(ref).catch(console.error);
+                    console.log('Leerer Raum automatisch gelöscht:', roomId);
+                    sessionStorage.clear();
+                    setTimeout(() => location.reload(), 500);
+                    return;
+                }
+                
                 if(data.status === 'closed') {
                     if(!lobbyClosedHandled) {
                         lobbyClosedHandled = true;
@@ -2043,35 +2257,89 @@
                     showEliminationAnimation(eliminated, data.players[eliminated].temp);
                 });
 
-                // Prüfe ob nur noch ein Spieler übrig ist (Gewinner) - NUR während des Spiels
+                // WICHTIG: Prüfe ob nur noch ein Spieler übrig ist (Gewinner) - ABER NUR NACHDEM ALLE POPUPS ANGEZEIGT WURDEN
+                // 1. Alle Attack-Feedback-Popups müssen angezeigt worden sein (roundRecapShown = true)
+                // 2. Alle Elimination-Animationen müssen angezeigt worden sein (alle eliminierten Spieler in eliminatedShown)
+                // 3. Erst dann zum Winner-Screen wechseln
+                // WICHTIG: Nur prüfen wenn eliminiert wurde (eliminatedPlayers.length > 0) ODER wenn bereits roundRecapShown = true
                 if((data.status === 'game' || data.status === 'result') && activePlayers.length === 1 && data.status !== 'winner' && data.status !== 'voting') {
-                    const winner = activePlayers[0];
-                    if(isHost) {
-                        updateDoc(doc(db, "lobbies", roomId), {
-                            status: 'winner',
-                            winner: winner
-                        }).catch(console.error);
+                    const recapShown = data.roundRecapShown || false;
+                    const eliminatedShown = data.eliminatedShown || [];
+                    
+                    // Wenn keine Elimination stattgefunden hat, direkt zum Winner-Screen (z.B. wenn alle außer einem aufgegeben haben)
+                    // Wenn Elimination stattgefunden hat, warte bis alle Popups angezeigt wurden
+                    if(eliminatedPlayers.length === 0) {
+                        // Keine Elimination, direkt zum Winner-Screen
+                        const winner = activePlayers[0];
+                        if(isHost) {
+                            console.log('onSnapshot: Keine Elimination, wechsle direkt zum Winner-Screen. Gewinner:', winner);
+                            updateDoc(doc(db, "lobbies", roomId), {
+                                status: 'winner',
+                                winner: winner
+                            }).catch(console.error);
+                        }
+                    } else {
+                        // Es gab Eliminationen - warte bis alle Popups angezeigt wurden UND alle Spieler sie bestätigt haben
+                        const allEliminatedShown = eliminatedPlayers.every(e => eliminatedShown.includes(e));
+                        const popupConfirmed = data.popupConfirmed || {};
+                        const allPlayers = Object.keys(data.players || {});
+                        // Prüfe ob ALLE Spieler ihre Popups bestätigt haben
+                        const allPopupConfirmed = allPlayers.every(p => popupConfirmed[p] === true);
+                        
+                        // Prüfe ob alle Popups angezeigt wurden UND alle Spieler sie bestätigt haben
+                        if(recapShown && allEliminatedShown && allPopupConfirmed && isHost) {
+                            const winner = activePlayers[0];
+                            console.log('onSnapshot: Alle Popups angezeigt und bestätigt, wechsle zum Winner-Screen. Gewinner:', winner);
+                            updateDoc(doc(db, "lobbies", roomId), {
+                                status: 'winner',
+                                winner: winner
+                            }).catch(console.error);
+                        } else {
+                            // Debug: Warum wird nicht gewechselt?
+                            console.log('onSnapshot: Winner-Screen-Check - noch nicht alle Popups bestätigt', {
+                                recapShown,
+                                allEliminatedShown,
+                                allPopupConfirmed,
+                                popupConfirmed,
+                                allPlayers,
+                                eliminatedPlayers: eliminatedPlayers.length,
+                                eliminatedShown: eliminatedShown.length,
+                                eliminatedPlayersList: eliminatedPlayers,
+                                eliminatedShownList: eliminatedShown,
+                                isHost
+                            });
+                        }
                     }
                 } else if((data.status === 'game' || data.status === 'result') && activePlayers.length === 0 && data.status !== 'voting') {
                     // Fallback: Wenn alle raus sind, gewinnt der mit niedrigster Temperatur
-                    let minTemp = 999;
-                    let winner = null;
-                    Object.keys(data.players).forEach(p => {
-                        if(data.players[p].temp < minTemp) {
-                            minTemp = data.players[p].temp;
-                            winner = p;
+                    // ABER NUR NACHDEM ALLE POPUPS ANGEZEIGT WURDEN
+                    const recapShown = data.roundRecapShown || false;
+                    const eliminatedShown = data.eliminatedShown || [];
+                    const allEliminatedShown = eliminatedPlayers.length > 0 ? eliminatedPlayers.every(e => eliminatedShown.includes(e)) : true;
+                    
+                    if(recapShown && allEliminatedShown && isHost) {
+                        let minTemp = 999;
+                        let winner = null;
+                        Object.keys(data.players).forEach(p => {
+                            if(data.players[p].temp < minTemp) {
+                                minTemp = data.players[p].temp;
+                                winner = p;
+                            }
+                        });
+                        if(winner) {
+                            console.log('onSnapshot: Alle Popups angezeigt, wechsle zum Winner-Screen. Gewinner (Fallback):', winner);
+                            updateDoc(doc(db, "lobbies", roomId), {
+                                status: 'winner',
+                                winner: winner
+                            }).catch(console.error);
                         }
-                    });
-                    if(winner && isHost) {
-                        updateDoc(doc(db, "lobbies", roomId), {
-                            status: 'winner',
-                            winner: winner
-                        }).catch(console.error);
                     }
                 }
 
                 // Prüfe ob Spieler rausgeflogen ist (für Spectator-Mode)
-                if(eliminatedPlayers.includes(myName)) {
+                // WICHTIG: Spectator-Mode nur im result-Status anzeigen, NICHT im winner-Status
+                // Im Winner-Screen müssen alle Spieler (auch eliminierten) die Voting-Buttons sehen können
+                if(eliminatedPlayers.includes(myName) && data.status !== 'winner' && data.status !== 'voting') {
                     showSpectatorMode();
                 } else {
                     hideSpectatorMode();
@@ -2191,6 +2459,8 @@
                     if(readyStatus) readyStatus.innerText = "";
                     if(readyList) readyList.innerHTML = "";
                     showScreen('screen-result');
+                    // WICHTIG: renderResult immer aufrufen, auch wenn sich nur ready ändert
+                    // Dies stellt sicher, dass der Ready-Button und die Liste aktualisiert werden
                     renderResult(data);
                     if(shareBtn) shareBtn.style.display = 'none';
                     if(hostStartBtn) hostStartBtn.style.display = 'none';
@@ -2214,11 +2484,8 @@
                     
                     if(allDecided && recapNotShown && isHost) {
                         console.log('onSnapshot (result): Alle Spieler haben ihre Entscheidung getroffen, rufe executePendingAttacks auf');
-                        executePendingAttacks(data).then(() => {
-                            setTimeout(() => {
-                                updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
-                            }, 500);
-                        }).catch(err => {
+                        // executePendingAttacks setzt jetzt roundRecapShown selbst, kein separates Update nötig
+                        executePendingAttacks(data).catch(err => {
                             console.error('Fehler bei executePendingAttacks:', err);
                         });
                     }
@@ -2475,7 +2742,9 @@
             const hasAttackResults = data.attackResults && Object.keys(data.attackResults).length > 0;
             
             // Nach dem Popup: Immer "Bereit" Button zeigen, nicht "Nächste Runde"
-            if(data.ready.includes(myName)) {
+            // WICHTIG: Verwende globalData für aktuelle ready-Liste
+            const currentReadyForButton = globalData?.ready || data.ready || [];
+            if(currentReadyForButton.includes(myName)) {
                 btnReady.disabled = true;
                 btnReady.innerText = "⏳ Warte auf andere...";
                 btnReady.onclick = setReady;
@@ -2531,27 +2800,25 @@
                 statusEl.style.color = "#aaa";
                 
                 // Hotseat kann nicht angreifen, markiere automatisch als "entschieden"
-                if(isPartyMode && !localActionDone) {
-                    localActionDone = true;
-                    // Verwende separate async Funktion
-                    (async () => {
-                        const ref = doc(db, "lobbies", roomId);
-                        const currentData = await getDoc(ref);
-                        const currentAttackDecisions = currentData.data()?.attackDecisions || {};
-                        if(!currentAttackDecisions[myName]) {
-                            const updatedAttackDecisions = {
-                                ...currentAttackDecisions,
-                                [myName]: true // Hotseat hat keine Angriffsentscheidung zu treffen
-                            };
-                            await updateDoc(ref, {
-                                attackDecisions: updatedAttackDecisions
-                            });
-                            console.log('Hotseat automatisch als entschieden markiert');
-                        }
-                    })().catch(err => {
-                        console.error('Fehler beim Markieren des Hotseats als entschieden:', err);
-                    });
-                }
+                // WICHTIG: Immer markieren (Party und Strategic Mode), damit executePendingAttacks aufgerufen wird
+                (async () => {
+                    const ref = doc(db, "lobbies", roomId);
+                    const currentData = await getDoc(ref);
+                    const currentAttackDecisions = currentData.data()?.attackDecisions || {};
+                    if(!currentAttackDecisions[myName]) {
+                        const updatedAttackDecisions = {
+                            ...currentAttackDecisions,
+                            [myName]: true // Hotseat hat keine Angriffsentscheidung zu treffen
+                        };
+                        await updateDoc(ref, {
+                            attackDecisions: updatedAttackDecisions
+                        });
+                        console.log('Hotseat automatisch als entschieden markiert');
+                        localActionDone = true;
+                    }
+                })().catch(err => {
+                    console.error('Fehler beim Markieren des Hotseats als entschieden:', err);
+                });
             } else {
                 if(myVote && myVote.choice === truth) {
                     // Bei richtiger Antwort: consecutiveWrongAnswers zurücksetzen
@@ -2628,6 +2895,55 @@
             
             if(data.players[myName] && !resultIsPartyMode) {
                 renderMyJokers('myJokerListResult', data.players[myName]);
+            }
+            
+            // WICHTIG: Stelle sicher, dass ALLE Spieler ihre attackDecisions setzen, auch wenn keine Angriffe vorhanden sind
+            // Dies ist notwendig, damit executePendingAttacks aufgerufen wird (für Strafhitze) und roundRecapShown gesetzt wird
+            const attackDecisions = data.attackDecisions || {};
+            if(!attackDecisions[myName]) {
+                // Spieler hat noch keine Angriffsentscheidung getroffen
+                // Prüfe ob er eine treffen muss (nicht Hotseat, hat falsch geraten oder richtig ohne Angriff)
+                const isHotseat = myName === data.hotseat;
+                const myVoteData = data.votes?.[myName];
+                const truth = data.votes?.[data.hotseat]?.choice;
+                const guessedCorrectly = myVoteData && myVoteData.choice === truth;
+                
+                // Im Strategic Mode: Wenn richtig geraten, muss Spieler Belohnung wählen (das setzt attackDecisions über doAttack/skipAttack)
+                // Im Party Mode: Wenn richtig geraten, muss Spieler Angriff wählen (das setzt attackDecisions über doAttack)
+                // Wenn falsch geraten im Party Mode: wird bereits in handlePartyModeWrongAnswer gesetzt
+                // Wenn falsch geraten im Strategic Mode oder Hotseat: automatisch setzen
+                if(isHotseat) {
+                    // Hotseat sollte bereits oben gesetzt sein, aber sicherheitshalber nochmal prüfen
+                    (async () => {
+                        const ref = doc(db, "lobbies", roomId);
+                        const currentData = await getDoc(ref);
+                        const currentAttackDecisions = currentData.data()?.attackDecisions || {};
+                        if(!currentAttackDecisions[myName]) {
+                            await updateDoc(ref, {
+                                [`attackDecisions.${myName}`]: true
+                            });
+                            console.log('Hotseat (Fallback) automatisch als entschieden markiert');
+                        }
+                    })().catch(err => {
+                        console.error('Fehler beim Markieren des Hotseats als entschieden:', err);
+                    });
+                } else if(!guessedCorrectly) {
+                    // Falsch geraten (Party oder Strategic Mode): automatisch als entschieden markieren
+                    // Im Party Mode wird es bereits in handlePartyModeWrongAnswer gesetzt, aber sicherheitshalber nochmal
+                    (async () => {
+                        const ref = doc(db, "lobbies", roomId);
+                        const currentData = await getDoc(ref);
+                        const currentAttackDecisions = currentData.data()?.attackDecisions || {};
+                        if(!currentAttackDecisions[myName]) {
+                            await updateDoc(ref, {
+                                [`attackDecisions.${myName}`]: true
+                            });
+                            console.log('Spieler (falsch geraten) automatisch als entschieden markiert:', myName);
+                        }
+                    })().catch(err => {
+                        console.error('Fehler beim Markieren des Spielers als entschieden:', err);
+                    });
+                }
             }
         }
 
@@ -3116,7 +3432,8 @@
                 countdownEnds: null,
                 usedQuestions: [],
                 pendingAttacks: {},
-                attackResults: {}
+                attackResults: {},
+                popupConfirmed: {}
             });
             toggleMenu();
             document.body.classList.remove('final-mode');
@@ -3127,20 +3444,72 @@
             if(!isHost) return;
             if(!confirm("Lobby wirklich löschen? Alle Spieler werden ausgeworfen und die Lobby ist danach nicht mehr verfügbar!")) return;
             const ref = doc(db, "lobbies", roomId);
-            await updateDoc(ref, {
-                status: 'closed',
-                log: arrayUnion(`🛑 ${myName} hat die Lobby beendet.`)
-            });
-            setTimeout(() => deleteDoc(ref), 1200);
+            // Lösche sofort - kein Status-Update nötig
+            await deleteDoc(ref);
+            console.log('Lobby gelöscht:', roomId);
         };
 
         // --- LEAVE LOBBY ---
-        window.leaveLobby = () => {
-            if(confirm("Lobby wirklich verlassen?")) {
-                document.body.classList.remove('final-mode');
-                sessionStorage.clear();
-                location.reload();
+        window.leaveLobby = async () => {
+            if(!confirm("Lobby wirklich verlassen?")) return;
+            
+            if(roomId && myName) {
+                const ref = doc(db, "lobbies", roomId);
+                try {
+                    // Entferne Spieler aus dem Raum
+                    await updateDoc(ref, {
+                        [`players.${myName}`]: deleteField()
+                    });
+                    
+                    // Prüfe ob Raum jetzt leer ist oder nur noch ein Spieler übrig ist (im Winner-Screen)
+                    const snap = await getDoc(ref);
+                    if(snap.exists()) {
+                        const data = snap.data();
+                        const players = data.players || {};
+                        const remainingPlayers = Object.keys(players).filter(p => {
+                            const playerData = players[p];
+                            return playerData !== undefined && playerData !== null && typeof playerData === 'object' && Object.keys(playerData).length > 0;
+                        });
+                        
+                        // WICHTIG: Wenn im Winner-Screen und nur noch ein Spieler übrig ist, entferne diesen auch automatisch
+                        // Dies verhindert "Geisterlobbies" mit nur einem Spieler
+                        if(data.status === 'winner' && remainingPlayers.length === 1) {
+                            const lastPlayer = remainingPlayers[0];
+                            console.log('Winner-Screen: Nur noch ein Spieler übrig, entferne diesen automatisch:', lastPlayer);
+                            await updateDoc(ref, {
+                                [`players.${lastPlayer}`]: deleteField()
+                            });
+                            // Raum ist jetzt leer, lösche ihn
+                            await deleteDoc(ref);
+                            console.log('Leerer Raum gelöscht nach Verlassen (Winner-Screen, letzter Spieler):', roomId);
+                        }
+                        // Wenn keine Spieler mehr vorhanden, lösche den Raum
+                        else if(remainingPlayers.length === 0) {
+                            await deleteDoc(ref);
+                            console.log('Leerer Raum gelöscht nach Verlassen:', roomId);
+                        } else {
+                            // Entferne aus ready-Liste und anderen Arrays
+                            const currentReady = data.ready || [];
+                            const updatedReady = currentReady.filter(p => p !== myName);
+                            
+                            const currentAttackDecisions = data.attackDecisions || {};
+                            const updatedAttackDecisions = { ...currentAttackDecisions };
+                            delete updatedAttackDecisions[myName];
+                            
+                            await updateDoc(ref, {
+                                ready: updatedReady,
+                                attackDecisions: updatedAttackDecisions
+                            });
+                        }
+                    }
+                } catch(error) {
+                    console.error('Fehler beim Verlassen der Lobby:', error);
+                }
             }
+            
+            document.body.classList.remove('final-mode');
+            sessionStorage.clear();
+            location.reload();
         };
         
         window.shareLobby = async () => {
@@ -3194,7 +3563,8 @@
                 countdownEnds: null,
                 usedQuestions: [],
                 pendingAttacks: {},
-                attackResults: {}
+                attackResults: {},
+                popupConfirmed: {}
             });
             document.body.classList.remove('final-mode');
             showToast("Revanche gestartet! Alle zurück in die Lobby.");
@@ -3319,17 +3689,25 @@
         }
 
         function renderLog(log) {
-            const el = document.getElementById('divLog');
-            if(!el || !log) return;
+            // Rendere in beiden Stellen: Menü (divLogMenu) und Result-Screen (divLog, falls vorhanden)
+            const elMenu = document.getElementById('divLogMenu');
+            const elResult = document.getElementById('divLog');
+            if(!elMenu && !elResult || !log) return;
             
-            el.innerHTML = log.slice(-10).reverse().map(l => {
+            const html = log.slice(-15).reverse().map(l => {
                 let className = 'log-entry';
                 if(l.includes('🔥')) className += ' attack';
                 return `<div class="${className}">${l}</div>`;
             }).join('');
             
-            // Auto-scroll to top (newest)
-            el.scrollTop = 0;
+            if(elMenu) {
+                elMenu.innerHTML = html;
+                elMenu.scrollTop = 0; // Auto-scroll to top (newest)
+            }
+            if(elResult) {
+                elResult.innerHTML = html;
+                elResult.scrollTop = 0; // Auto-scroll to top (newest)
+            }
         }
 
         async function maybeLogRoundSummary(data, truthText, truthKey) {
@@ -3416,11 +3794,37 @@
             const containerEl = document.getElementById('attackModalContainer');
             if(!modal) return;
             
+            // Prüfe ob Modal bereits offen ist - verhindere mehrfache Anzeige
+            if(modal.style.display === 'flex') {
+                console.log('Modal bereits offen, überspringe triggerAttackFeedback');
+                return;
+            }
+            
             // attackResult kann sein: { attackers: [], totalDmg: 0, attackDetails: [{ attacker, dmg, isPenalty }] }
             // oder null/undefined wenn nicht angegriffen
-            // Prüfe ob Spieler angegriffen wurde: totalDmg > 0 ODER attackDetails enthält Einträge (inkl. Strafhitze)
+            // Prüfe ob Spieler angegriffen wurde:
+            // 1. totalDmg > 0 = definitiv angegriffen
+            // 2. attackers Array nicht leer = wurde angegriffen (auch wenn gespiegelt)
+            // 3. attackDetails enthält normale Angriffe (nicht nur Strafhitze)
+            const hasAttackers = attackResult && attackResult.attackers && attackResult.attackers.length > 0;
             const hasAttackDetails = attackResult && attackResult.attackDetails && attackResult.attackDetails.length > 0;
-            const wasAttacked = attackResult && (attackResult.totalDmg > 0 || hasAttackDetails);
+            const hasRegularAttacks = hasAttackDetails && attackResult.attackDetails.some(d => !d.isPenalty && !d.mirrored);
+            
+            // WICHTIG: Prüfe zuerst ob es Angreifer gibt (attackers Array) - das ist das zuverlässigste Signal
+            const wasAttacked = attackResult && (
+                attackResult.totalDmg > 0 || 
+                hasAttackers ||
+                hasRegularAttacks
+            );
+            
+            console.log('triggerAttackFeedback: wasAttacked Prüfung', {
+                totalDmg: attackResult?.totalDmg,
+                hasAttackers,
+                hasRegularAttacks,
+                attackers: attackResult?.attackers,
+                attackDetails: attackResult?.attackDetails,
+                wasAttacked
+            });
             
             // Screen Shake nur einmal pro Angriff (verhindere mehrfache Trigger)
             if(wasAttacked && !document.body.classList.contains('viewport-shake')) {
@@ -3431,10 +3835,20 @@
             }
             
             // Aktuelle Temperatur des Spielers - lese aus globalData (wird durch onSnapshot aktualisiert)
-            const currentTemp = globalData?.players?.[myName]?.temp || 0;
-            // newTemp ist die Temperatur NACH dem Angriff
-            const newTemp = wasAttacked ? currentTemp + attackResult.totalDmg : currentTemp;
+            // WICHTIG: globalData enthält die Temperatur VOR dem Angriff (wird nach executePendingAttacks aktualisiert)
+            // Wenn das Popup angezeigt wird, wurde executePendingAttacks bereits ausgeführt
+            // also ist globalData bereits auf die neue Temperatur aktualisiert
+            // Berechne daher die alte Temperatur durch Subtraktion des Schadens
+            const newTempFromDB = globalData?.players?.[myName]?.temp || 0;
+            const damage = attackResult?.totalDmg || 0;
+            
+            // Berechne die Temperatur VOR dem Angriff (falls globalData bereits aktualisiert wurde)
+            // Wenn wasAttacked = true, dann wurde der Schaden bereits angewendet, also subtrahiere den Schaden
+            const currentTemp = wasAttacked ? Math.max(0, newTempFromDB - damage) : newTempFromDB;
+            // newTemp ist die Temperatur NACH dem Angriff (currentTemp + damage)
+            const newTemp = wasAttacked ? (currentTemp + damage) : currentTemp;
             const maxTemp = globalData?.config?.maxTemp || 100;
+            // Zeige im Thermometer die neue Temperatur (nach dem Angriff)
             const tempPercent = Math.min((newTemp / maxTemp) * 100, 100);
             
             console.log('triggerAttackFeedback:', { myName, currentTemp, totalDmg: attackResult.totalDmg, newTemp, wasAttacked });
@@ -3466,19 +3880,25 @@
                 // Prüfe ob gespiegelt wurde
                 const wasMirrored = attackDetails.some(d => d.mirrored) && attackResult.totalDmg === 0;
                 
+                // Prüfe ob nur Strafhitze vorhanden ist (keine normalen Angriffe)
+                const regularAttacks = attackDetails.filter(d => !d.isPenalty && !d.mirrored);
+                const penaltyAttacks = attackDetails.filter(d => d.isPenalty);
+                const onlyPenalty = regularAttacks.length === 0 && penaltyAttacks.length > 0;
+                
                 if(wasMirrored) {
                     // Angriffe wurden gespiegelt
                     if(textEl) textEl.innerText = `Angriffe gespiegelt - kein Schaden erhalten`;
+                } else if(onlyPenalty) {
+                    // Nur Strafhitze - spezieller Text
+                    const totalPenalty = penaltyAttacks.reduce((sum, p) => sum + p.dmg, 0);
+                    if(textEl) textEl.innerText = `Falsch geraten! Das gibt eine Strafhitze von ${totalPenalty}°C`;
                 } else {
-                    // Gesamtschaden
+                    // Gesamtschaden (normale Angriffe oder gemischt)
                     if(textEl) textEl.innerText = `Du wurdest aufgeheizt! Insgesamt ${attackResult.totalDmg}°C`;
                 }
                 
                 // Details: Wer hat wie viel Schaden verursacht (inkl. Strafhitze)
                 if(detailsEl && attackDetails.length > 0) {
-                    const regularAttacks = attackDetails.filter(d => !d.isPenalty);
-                    const penaltyAttacks = attackDetails.filter(d => d.isPenalty);
-                    
                     let detailsHTML = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #333;"><strong>Angriffe:</strong><br>';
                     
                     // Normale Angriffe
@@ -3510,10 +3930,12 @@
                 }
                 
                 // Thermometer mit Änderung
+                // Zeige die neue Temperatur (alt + Schaden)
                 if(thermoEl) {
                     thermoEl.style.background = 'linear-gradient(90deg, #ffae00, #ff0000)';
                 }
                 if(tempEl) {
+                    // Zeige die neue Temperatur nach dem Angriff
                     tempEl.innerText = `${newTemp}°C`;
                     tempEl.style.color = '#ff4500';
                 }
@@ -3556,10 +3978,29 @@
             modal.style.display = 'flex';
         }
         
-        window.closeAttackModal = () => {
+        window.closeAttackModal = async () => {
             const modal = document.getElementById('attackModal');
             if(modal) {
                 modal.style.display = 'none';
+            }
+            
+            // WICHTIG: Markiere Spieler als "Popups bestätigt"
+            if(roomId && myName) {
+                try {
+                    const ref = doc(db, "lobbies", roomId);
+                    const currentData = await getDoc(ref);
+                    const currentPopupConfirmed = currentData.data()?.popupConfirmed || {};
+                    
+                    // Prüfe ob bereits bestätigt
+                    if(!currentPopupConfirmed[myName]) {
+                        await updateDoc(ref, {
+                            [`popupConfirmed.${myName}`]: true
+                        });
+                        console.log('Popup bestätigt von:', myName);
+                    }
+                } catch(error) {
+                    console.error('Fehler beim Markieren des Popups als bestätigt:', error);
+                }
             }
         };
         
@@ -3614,26 +4055,12 @@
             console.log('executePendingAttacks: pendingAttacks =', pendingAttacks);
             console.log('executePendingAttacks: players =', Object.keys(players));
             
-            // Auch wenn keine Angriffe vorhanden sind, erstelle attackResults für alle Spieler
-            if(Object.keys(pendingAttacks).length === 0) {
-                console.log('executePendingAttacks: Keine Angriffe, erstelle leere attackResults');
-                const attackResults = {};
-                Object.keys(players).forEach(playerName => {
-                    attackResults[playerName] = {
-                        attackers: [],
-                        totalDmg: 0,
-                        attackDetails: []
-                    };
-                });
-                await updateDoc(doc(db, "lobbies", roomId), { attackResults: attackResults });
-                console.log('executePendingAttacks: Leere attackResults gespeichert');
-                return;
-            }
-            
+            // WICHTIG: Initialisiere tempUpdates und attackResults VOR der Prüfung auf leere Angriffe
+            // damit Strafhitze auch ohne normale Angriffe angewendet werden kann
             const ref = doc(db, "lobbies", roomId);
-            const logEntries = [];
             const tempUpdates = {};
             const attackResults = {}; // Für Anzeige bei betroffenen Spielern: { target: { attackers: [], totalDmg: 0 } }
+            const logEntries = [];
             
             // Verarbeite alle Angriffe
             for(const [target, attacks] of Object.entries(pendingAttacks)) {
@@ -3704,11 +4131,18 @@
                     tempUpdates[`players.${target}.temp`] += totalDmg;
                     
                     // Für Anzeige beim Angegriffenen - mit Details
+                    // WICHTIG: Erstelle neues Objekt, nicht überschreibe
                     attackResults[target] = {
-                        attackers: attackerNames,
+                        attackers: [...attackerNames], // Kopie des Arrays
                         totalDmg: totalDmg,
                         attackDetails: attacks.map(a => ({ attacker: a.attacker, dmg: a.dmg }))
                     };
+                    
+                    console.log('executePendingAttacks: Angriff auf', target, 'gespeichert:', {
+                        attackers: attackerNames,
+                        totalDmg,
+                        attackDetails: attackResults[target].attackDetails
+                    });
                 }
             }
             
@@ -3719,6 +4153,8 @@
             const votes = data.votes || {};
             const truth = data.votes?.[data.hotseat]?.choice;
             const playersUpdate = {}; // Für consecutiveWrongAnswers Updates
+            const gameMode = data.config?.gameMode || 'party';
+            const isPartyMode = gameMode === 'party';
             
             allPlayers.forEach(playerName => {
                 if(playerName === data.hotseat) return; // Hotseat bekommt keine Strafhitze
@@ -3746,13 +4182,20 @@
                         penaltyDmg = 10;
                     }
                     
-                    // Füge Strafhitze zu Temperatur-Update hinzu
-                    if(!tempUpdates[`players.${playerName}.temp`]) {
-                        tempUpdates[`players.${playerName}.temp`] = 0;
-                    }
-                    tempUpdates[`players.${playerName}.temp`] += penaltyDmg;
+                    // WICHTIG: Im Party Mode wurde bereits 10° in handlePartyModeWrongAnswer angewendet
+                    // Subtrahiere diese 10° von der Strafhitze, damit die korrekte Gesamtsumme erreicht wird
+                    // Im Strategic Mode wird die volle Strafhitze angewendet
+                    const actualPenaltyDmg = isPartyMode ? Math.max(0, penaltyDmg - 10) : penaltyDmg;
                     
-                    // Füge Strafhitze zu attackResults hinzu
+                    // Füge Strafhitze zu Temperatur-Update hinzu (nur wenn > 0)
+                    if(actualPenaltyDmg > 0) {
+                        if(!tempUpdates[`players.${playerName}.temp`]) {
+                            tempUpdates[`players.${playerName}.temp`] = 0;
+                        }
+                        tempUpdates[`players.${playerName}.temp`] += actualPenaltyDmg;
+                    }
+                    
+                    // Füge Strafhitze zu attackResults hinzu (zeige immer die volle Strafhitze, auch wenn im Party Mode bereits 10° angewendet wurden)
                     if(!attackResults[playerName]) {
                         attackResults[playerName] = {
                             attackers: [],
@@ -3760,14 +4203,21 @@
                             attackDetails: []
                         };
                     }
-                    attackResults[playerName].totalDmg += penaltyDmg;
+                    // Im Party Mode: Zeige die bereits angewendeten 10° + zusätzliche Strafhitze (wenn vorhanden)
+                    // Im Strategic Mode: Zeige die volle Strafhitze
+                    const displayedPenaltyDmg = isPartyMode ? 10 + actualPenaltyDmg : penaltyDmg;
+                    attackResults[playerName].totalDmg += displayedPenaltyDmg;
                     attackResults[playerName].attackDetails.push({
                         attacker: 'Strafhitze',
-                        dmg: penaltyDmg,
+                        dmg: displayedPenaltyDmg,
                         isPenalty: true
                     });
                     
-                    logEntries.push(`❄️ ${playerName} erhält Strafhitze für falsche Antwort (+${penaltyDmg}°C)`);
+                    if(actualPenaltyDmg > 0) {
+                        logEntries.push(`❄️ ${playerName} erhält zusätzliche Strafhitze für falsche Antwort (+${actualPenaltyDmg}°C)`);
+                    } else {
+                        logEntries.push(`❄️ ${playerName} erhält Strafhitze für falsche Antwort (+${displayedPenaltyDmg}°C)`);
+                    }
                 } else if(playerVote && playerVote.choice === truth) {
                     // Bei richtiger Antwort: consecutiveWrongAnswers zurücksetzen
                     if(consecutiveWrong > 0) {
@@ -3781,12 +4231,19 @@
             
             allPlayers.forEach(playerName => {
                 if(!attackResults[playerName]) {
-                    // Spieler wurde nicht angegriffen
+                    // Spieler wurde nicht angegriffen und hat keine Strafhitze
                     attackResults[playerName] = {
                         attackers: [],
                         totalDmg: 0,
                         attackDetails: []
                     };
+                } else {
+                    // Debug: Logge für jeden Spieler mit attackResults
+                    console.log('executePendingAttacks: Finale attackResults für', playerName, ':', {
+                        attackers: attackResults[playerName].attackers,
+                        totalDmg: attackResults[playerName].totalDmg,
+                        attackDetails: attackResults[playerName].attackDetails
+                    });
                 }
             });
             
@@ -3837,11 +4294,24 @@
             // Speichere Angriffsergebnisse für Anzeige bei ALLEN Spielern (auch die nicht angegriffenen)
             // attackResults enthält bereits alle Spieler (siehe oben)
             updateData.attackResults = attackResults;
-            console.log('executePendingAttacks: attackResults vorbereitet:', Object.keys(attackResults));
+            // WICHTIG: Setze roundRecapShown zusammen mit attackResults, damit sie atomar gespeichert werden
+            updateData.roundRecapShown = true;
+            
+            // Debug: Logge alle attackResults für jeden Spieler
+            console.log('executePendingAttacks: attackResults vorbereitet:');
+            Object.keys(attackResults).forEach(playerName => {
+                const result = attackResults[playerName];
+                console.log(`  ${playerName}:`, {
+                    attackers: result.attackers,
+                    totalDmg: result.totalDmg,
+                    attackDetailsCount: result.attackDetails?.length || 0,
+                    fullResult: result
+                });
+            });
             
             try {
                 await updateDoc(ref, updateData);
-                console.log('executePendingAttacks: Update erfolgreich gespeichert');
+                console.log('executePendingAttacks: Update erfolgreich gespeichert (inkl. attackResults und roundRecapShown)');
             } catch(error) {
                 console.error('executePendingAttacks: Fehler beim Speichern:', error);
                 throw error;
@@ -4376,7 +4846,8 @@
                 currentQ: firstQuestion,
                 lastQuestionCategory: firstCategory,
                 pendingAttacks: {},
-                attackResults: {}
+                attackResults: {},
+                popupConfirmed: {}
             });
             
             // Reset Rematch-Einstellungen
