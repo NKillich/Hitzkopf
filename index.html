@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥14</title>
+    <title>Hitzkopf 🔥15</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -1657,7 +1657,16 @@
             const container = document.getElementById('categorySelection');
             if(!container) return;
             
-            container.innerHTML = Object.keys(questionCategories).map(catKey => {
+            // Erstelle "Alle Kategorien"-Button zuerst
+            const allCategoriesButton = `
+                <div class="category-card" data-category="all" onclick="selectAllCategories()" style="border:2px solid #ff4500; background:linear-gradient(145deg, #3e2e2e, #2a1a1a);">
+                    <div class="category-emoji">🌟</div>
+                    <div class="category-name">Alle Kategorien</div>
+                </div>
+            `;
+            
+            // Erstelle Kategorie-Karten
+            const categoryCards = Object.keys(questionCategories).map(catKey => {
                 const cat = questionCategories[catKey];
                 return `
                     <div class="category-card" data-category="${catKey}" onclick="toggleCategory('${catKey}')">
@@ -1667,6 +1676,8 @@
                 `;
             }).join('');
             
+            container.innerHTML = allCategoriesButton + categoryCards;
+            
             // Keine Kategorien standardmäßig aktiviert
         }
         
@@ -1674,6 +1685,26 @@
             const card = document.querySelector(`[data-category="${catKey}"]`);
             if(card) {
                 card.classList.toggle('selected');
+            }
+            // Wenn eine einzelne Kategorie deaktiviert wird, deaktiviere auch "Alle Kategorien"
+            const allCategoriesCard = document.querySelector(`[data-category="all"]`);
+            if(allCategoriesCard && allCategoriesCard.classList.contains('selected')) {
+                allCategoriesCard.classList.remove('selected');
+            }
+        };
+        
+        window.selectAllCategories = () => {
+            // Wähle alle Kategorien aus
+            Object.keys(questionCategories).forEach(catKey => {
+                const card = document.querySelector(`[data-category="${catKey}"]`);
+                if(card) {
+                    card.classList.add('selected');
+                }
+            });
+            // Markiere auch "Alle Kategorien"-Button als ausgewählt
+            const allCategoriesCard = document.querySelector(`[data-category="all"]`);
+            if(allCategoriesCard) {
+                allCategoriesCard.classList.add('selected');
             }
         };
         
@@ -1694,10 +1725,22 @@
         
         function getSelectedCategories() {
             const selected = [];
-            document.querySelectorAll('.category-card.selected').forEach(card => {
-                selected.push(card.getAttribute('data-category'));
-            });
-            return selected;
+            const allCategoriesCard = document.querySelector(`[data-category="all"]`);
+            const isAllSelected = allCategoriesCard && allCategoriesCard.classList.contains('selected');
+            
+            if(isAllSelected) {
+                // Wenn "Alle Kategorien" ausgewählt ist, gib alle Kategorien zurück
+                return Object.keys(questionCategories);
+            } else {
+                // Sonst sammle nur die einzeln ausgewählten Kategorien
+                document.querySelectorAll('.category-card.selected').forEach(card => {
+                    const catKey = card.getAttribute('data-category');
+                    if(catKey !== 'all') { // Ignoriere "Alle Kategorien"-Button
+                        selected.push(catKey);
+                    }
+                });
+                return selected;
+            }
         }
         window.openJoinPanel = () => {
             if(!ensureName()) return;
@@ -1737,12 +1780,15 @@
                     // 3. ODER geschlossener Status
                     // 4. ODER kein gültiger Host-Name (toter Raum)
                     // 5. ODER Status nicht "lobby" (außer winner/voting die noch aktiv sein könnten)
+                    // WICHTIG: Räume im "lobby"-Status mit mindestens einem Spieler (Host wartet auf Spieler) NICHT löschen
                     const isWinnerScreenWithOnePlayer = data.status === 'winner' && realPlayers.length === 1;
-                    const shouldDelete = realPlayers.length === 0 || 
+                    const isLobbyWithHost = data.status === 'lobby' && realPlayers.length >= 1 && hasHostName;
+                    const shouldDelete = (realPlayers.length === 0 || 
                                        isWinnerScreenWithOnePlayer ||
                                        data.status === 'closed' || 
                                        !hasHostName ||
-                                       (data.status && data.status !== 'lobby' && data.status !== 'game' && data.status !== 'result' && data.status !== 'winner' && data.status !== 'voting' && data.status !== 'countdown');
+                                       (data.status && data.status !== 'lobby' && data.status !== 'game' && data.status !== 'result' && data.status !== 'winner' && data.status !== 'voting' && data.status !== 'countdown'))
+                                       && !isLobbyWithHost; // NICHT löschen wenn Host in Lobby wartet
                     
                     if(shouldDelete) {
                         deletePromises.push(deleteDoc(doc.ref));
