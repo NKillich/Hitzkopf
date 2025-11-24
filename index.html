@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥 V5</title>
+    <title>Hitzkopf 🔥</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -673,7 +673,10 @@
         <div style="background:linear-gradient(145deg, #1e1e1e, #252525); padding:40px; border-radius:20px; max-width:500px; margin:20px; border:2px solid #ff4500; box-shadow:0 8px 32px rgba(0,0,0,0.8); text-align:center;">
             <div id="attackModalEmoji" style="font-size:5rem; margin-bottom:20px;">🔥</div>
             <div id="attackModalName" style="font-size:2.5rem; font-weight:800; color:#ff4500; margin-bottom:15px; text-shadow:0 0 18px rgba(255,69,0,0.6);">...</div>
-            <div id="attackModalText" style="font-size:1.2rem; color:#fff; margin-bottom:25px;">...</div>
+            <div id="attackModalText" style="font-size:1.2rem; color:#fff; margin-bottom:15px;">...</div>
+            <div id="attackModalDetails" style="font-size:0.9rem; color:#aaa; margin-bottom:25px; text-align:left; max-width:80%; margin-left:auto; margin-right:auto;">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
             <div style="width:80%; margin:0 auto 20px auto;">
                 <div style="height:25px; border-radius:12px; background:#280000; overflow:hidden; box-shadow:inset 0 0 10px rgba(0,0,0,0.7);">
                     <div id="attackModalThermoFill" style="height:100%; width:0%; background:linear-gradient(90deg, #ffae00, #ff0000); box-shadow:0 0 20px rgba(255,0,0,0.7); transition:width 1.2s ease-out;"></div>
@@ -802,7 +805,7 @@
         <hr style="border-color:#333; margin:15px 0;">
         
         <div style="margin-bottom:15px;">
-            <span style="font-size:2rem;">🥵</span>
+            <span style="font-size:2rem;">🎯</span>
             <div id="lblHotseat" style="font-weight:bold; font-size:1.3rem; color:#ff4500;">...</div>
             <p id="lblHotseatSub" style="font-size:0.85rem; color:#aaa; margin-top:4px;"></p>
         </div>
@@ -1887,9 +1890,10 @@
                 const meState = data.players?.[myName];
                 if(meState) {
                     // Prüfe ob Angriffe ausgeführt wurden (durch executePendingAttacks)
-                    if(data.attackResults && data.attackResults[myName]) {
+                    // Zeige Popup für ALLE Spieler (auch die nicht angegriffenen)
+                    if(data.attackResults && data.attackResults[myName] !== undefined) {
                         const result = data.attackResults[myName];
-                        triggerAttackFeedback(result.attackers, result.totalDmg);
+                        triggerAttackFeedback(result);
                         // Entferne nach Anzeige (mit längerer Verzögerung damit alle sehen können - 5.5 Sekunden)
                         setTimeout(() => {
                             if(isHost) {
@@ -3010,9 +3014,10 @@
                 }
                 const playerEmoji = d.emoji || '😊';
                 // Hitzkopf nur bei heißester Person (letzter Platz, können mehrere sein)
+                // 🥵 Emoji nur noch für Hitzköpfe, nicht mehr für Hotseat
                 const maxTemp = Math.max(...Object.values(players).map(p => p.temp || 0));
                 const isHottest = d.temp === maxTemp && d.temp > 0;
-                const prefix = isHotseat ? '🥵 ' : (isHottest ? '🔥 ' : '');
+                const prefix = isHottest ? '🔥 ' : '';
                 const nameLabel = `${prefix}${playerEmoji} ${p}${inventory}`;
                 
                 html += `
@@ -3127,42 +3132,81 @@
             return null;
         }
 
-        function triggerAttackFeedback(attackers, totalDmg) {
-            const body = document.body;
-            body.classList.add('viewport-shake');
-            setTimeout(() => body.classList.remove('viewport-shake'), 600);
-
+        function triggerAttackFeedback(attackResult) {
             const modal = document.getElementById('attackModal');
             if(!modal) return;
             
+            // attackResult kann sein: { attackers: [], totalDmg: 0, attackDetails: [{ attacker, dmg }] }
+            // oder null/undefined wenn nicht angegriffen
+            const wasAttacked = attackResult && attackResult.totalDmg > 0;
+            
+            const body = document.body;
+            if(wasAttacked) {
+                body.classList.add('viewport-shake');
+                setTimeout(() => body.classList.remove('viewport-shake'), 600);
+            }
+            
             // Aktuelle Temperatur des Spielers
             const currentTemp = globalData?.players?.[myName]?.temp || 0;
-            const newTemp = currentTemp + totalDmg;
+            const newTemp = wasAttacked ? currentTemp + attackResult.totalDmg : currentTemp;
             const maxTemp = globalData?.config?.maxTemp || 100;
             const tempPercent = Math.min((newTemp / maxTemp) * 100, 100);
-            
-            // Formatiere Meldung je nach Anzahl der Angreifer
-            let nameText, messageText;
-            if(Array.isArray(attackers) && attackers.length > 1) {
-                const attackerList = attackers.join(' und ');
-                nameText = attackerList;
-                messageText = `haben dich gemeinsam angegriffen (+${totalDmg}°C)`;
-            } else {
-                const attacker = Array.isArray(attackers) ? attackers[0] : attackers;
-                nameText = attacker;
-                messageText = `hat dich aufgeheizt (+${totalDmg}°C)`;
-            }
             
             // Setze Modal-Inhalte
             const emojiEl = document.getElementById('attackModalEmoji');
             const nameEl = document.getElementById('attackModalName');
             const textEl = document.getElementById('attackModalText');
+            const detailsEl = document.getElementById('attackModalDetails');
             const thermoEl = document.getElementById('attackModalThermoFill');
             const tempEl = document.getElementById('attackModalTemp');
             
-            if(emojiEl) emojiEl.innerText = '🔥';
-            if(nameEl) nameEl.innerText = nameText;
-            if(textEl) textEl.innerText = messageText;
+            if(wasAttacked) {
+                // Angegriffen
+                const attackers = attackResult.attackers || [];
+                const attackDetails = attackResult.attackDetails || [];
+                
+                if(emojiEl) emojiEl.innerText = '🔥';
+                if(nameEl) nameEl.innerText = myName;
+                
+                // Prüfe ob gespiegelt wurde
+                const wasMirrored = attackDetails.some(d => d.mirrored) && attackResult.totalDmg === 0;
+                
+                if(wasMirrored) {
+                    // Angriffe wurden gespiegelt
+                    if(textEl) textEl.innerText = `Angriffe gespiegelt - kein Schaden erhalten`;
+                } else {
+                    // Gesamtschaden
+                    if(textEl) textEl.innerText = `Insgesamt ${attackResult.totalDmg}°C Schaden erhalten`;
+                }
+                
+                // Details: Wer hat wie viel Schaden verursacht
+                if(detailsEl && attackDetails.length > 0) {
+                    detailsEl.innerHTML = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #333;"><strong>Angriffe:</strong><br>' +
+                        attackDetails.map(detail => {
+                            if(detail.mirrored) {
+                                return `• ${detail.attacker}: gespiegelt (${detail.dmg}°C zurück)`;
+                            } else {
+                                return `• ${detail.attacker}: +${detail.dmg}°C`;
+                            }
+                        }).join('<br>') + '</div>';
+                } else if(detailsEl) {
+                    // Fallback wenn keine Details vorhanden
+                    if(attackers.length > 1) {
+                        detailsEl.innerHTML = `<div style="margin-top:10px; padding-top:10px; border-top:1px solid #333;">Gemeinsamer Angriff von: ${attackers.join(', ')}</div>`;
+                    } else if(attackers.length === 1) {
+                        detailsEl.innerHTML = `<div style="margin-top:10px; padding-top:10px; border-top:1px solid #333;">Angriff von: ${attackers[0]}</div>`;
+                    } else {
+                        detailsEl.innerHTML = '';
+                    }
+                }
+            } else {
+                // Nicht angegriffen
+                if(emojiEl) emojiEl.innerText = '🧊';
+                if(nameEl) nameEl.innerText = myName;
+                if(textEl) textEl.innerText = 'Cool geblieben';
+                if(detailsEl) detailsEl.innerHTML = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #333;">Keiner hat dich aufgeheizt</div>';
+            }
+            
             if(tempEl) tempEl.innerText = `${newTemp}°C`;
             
             // Animiere Thermometer
@@ -3269,7 +3313,29 @@
                             tempUpdates[`players.${attack.attacker}.temp`] = 0;
                         }
                         tempUpdates[`players.${attack.attacker}.temp`] += attack.dmg;
+                        
+                        // Für Anzeige bei gespiegelten Angreifern
+                        if(!attackResults[attack.attacker]) {
+                            attackResults[attack.attacker] = {
+                                attackers: [target],
+                                totalDmg: attack.dmg,
+                                attackDetails: [{ attacker: target, dmg: attack.dmg, mirrored: true }]
+                            };
+                        } else {
+                            attackResults[attack.attacker].totalDmg += attack.dmg;
+                            attackResults[attack.attacker].attackDetails.push({ attacker: target, dmg: attack.dmg, mirrored: true });
+                            if(!attackResults[attack.attacker].attackers.includes(target)) {
+                                attackResults[attack.attacker].attackers.push(target);
+                            }
+                        }
                     });
+                    
+                    // Für Angegriffenen: Zeige dass Angriffe gespiegelt wurden
+                    attackResults[target] = {
+                        attackers: attackerNames,
+                        totalDmg: 0, // Kein Schaden durch Spiegel
+                        attackDetails: attacks.map(a => ({ attacker: a.attacker, dmg: a.dmg, mirrored: true }))
+                    };
                     
                     // Sammle alle Angreifer für Log
                     const attackerList = attackerNames.join(' und ');
@@ -3281,13 +3347,27 @@
                     }
                     tempUpdates[`players.${target}.temp`] += totalDmg;
                     
-                    // Für Anzeige beim Angegriffenen
+                    // Für Anzeige beim Angegriffenen - mit Details
                     attackResults[target] = {
                         attackers: attackerNames,
-                        totalDmg: totalDmg
+                        totalDmg: totalDmg,
+                        attackDetails: attacks.map(a => ({ attacker: a.attacker, dmg: a.dmg }))
                     };
                 }
             }
+            
+            // Erstelle Attack-Ergebnisse für ALLE Spieler (auch die nicht angegriffenen)
+            const allPlayers = Object.keys(players);
+            allPlayers.forEach(playerName => {
+                if(!attackResults[playerName]) {
+                    // Spieler wurde nicht angegriffen
+                    attackResults[playerName] = {
+                        attackers: [],
+                        totalDmg: 0,
+                        attackDetails: []
+                    };
+                }
+            });
             
             // Führe alle Temperatur-Updates aus
             const updateData = { pendingAttacks: {}, log: arrayUnion(...logEntries) };
