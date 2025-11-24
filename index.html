@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥8</title>
+    <title>Hitzkopf 🔥9</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -2517,6 +2517,29 @@
             if(myName === data.hotseat) {
                 statusEl.innerText = "Du hast die Frage beantwortet.";
                 statusEl.style.color = "#aaa";
+                
+                // Hotseat kann nicht angreifen, markiere automatisch als "entschieden"
+                if(isPartyMode && !localActionDone) {
+                    localActionDone = true;
+                    // Verwende separate async Funktion
+                    (async () => {
+                        const ref = doc(db, "lobbies", roomId);
+                        const currentData = await getDoc(ref);
+                        const currentAttackDecisions = currentData.data()?.attackDecisions || {};
+                        if(!currentAttackDecisions[myName]) {
+                            const updatedAttackDecisions = {
+                                ...currentAttackDecisions,
+                                [myName]: true // Hotseat hat keine Angriffsentscheidung zu treffen
+                            };
+                            await updateDoc(ref, {
+                                attackDecisions: updatedAttackDecisions
+                            });
+                            console.log('Hotseat automatisch als entschieden markiert');
+                        }
+                    })().catch(err => {
+                        console.error('Fehler beim Markieren des Hotseats als entschieden:', err);
+                    });
+                }
             } else {
                 if(myVote && myVote.choice === truth) {
                     if(isPartyMode) {
