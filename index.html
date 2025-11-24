@@ -2119,10 +2119,38 @@
                     renderResult(data);
                     if(shareBtn) shareBtn.style.display = 'none';
                     if(hostStartBtn) hostStartBtn.style.display = 'none';
-                    // Host Auto-Next
-                    if(isHost && data.ready.length >= Object.keys(data.players).length) {
-                        setTimeout(() => nextRound(), 1000);
+                    
+                    // Prüfe ob alle bereit sind und executePendingAttacks aufrufen (JEDES MAL wenn sich data ändert)
+                    const readyCount = (data.ready || []).length;
+                    const playerCount = Object.keys(data.players || {}).length;
+                    const allReady = readyCount >= playerCount;
+                    const recapNotShown = !data.roundRecapShown;
+                    
+                    console.log('onSnapshot (result): Prüfe Bedingung für executePendingAttacks', {
+                        readyCount,
+                        playerCount,
+                        allReady,
+                        recapNotShown,
+                        readyArray: data.ready,
+                        roundRecapShown: data.roundRecapShown,
+                        isHost
+                    });
+                    
+                    if(allReady && recapNotShown && isHost) {
+                        console.log('onSnapshot (result): Bedingung erfüllt, rufe executePendingAttacks auf');
+                        executePendingAttacks(data).then(() => {
+                            setTimeout(() => {
+                                updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
+                            }, 500);
+                        }).catch(err => {
+                            console.error('Fehler bei executePendingAttacks:', err);
+                        });
                     }
+                    
+                    // Host Auto-Next (alte Logik - kann entfernt werden wenn executePendingAttacks funktioniert)
+                    // if(isHost && data.ready.length >= Object.keys(data.players).length) {
+                    //     setTimeout(() => nextRound(), 1000);
+                    // }
                 }
                 else if(data.status === 'winner') {
                     showScreen('screen-winner');
@@ -2368,19 +2396,23 @@
             }
 
             // Zeige Rekapitulation wenn alle bereit sind (nur einmal pro Runde)
-            const readyCount = data.ready ? data.ready.length : 0;
-            const playerCount = Object.keys(data.players || {}).length;
+            // WICHTIG: Verwende globalData statt data, da globalData immer aktuell ist
+            const currentReady = globalData?.ready || [];
+            const readyCount = Array.isArray(currentReady) ? currentReady.length : 0;
+            const playerCount = Object.keys(globalData?.players || data.players || {}).length;
             const allReady = readyCount >= playerCount;
-            const recapNotShown = !data.roundRecapShown;
+            const recapNotShown = !(globalData?.roundRecapShown || data.roundRecapShown);
             
             console.log('renderResult: Prüfe Bedingung für executePendingAttacks', {
                 readyCount,
                 playerCount,
                 allReady,
                 recapNotShown,
-                readyArray: data.ready,
-                players: Object.keys(data.players || {}),
-                roundRecapShown: data.roundRecapShown,
+                readyArray: currentReady,
+                readyArrayFromData: data.ready,
+                globalDataReady: globalData?.ready,
+                players: Object.keys(globalData?.players || data.players || {}),
+                roundRecapShown: globalData?.roundRecapShown || data.roundRecapShown,
                 isHost
             });
             
@@ -2388,7 +2420,8 @@
                 console.log('renderResult: Bedingung erfüllt, rufe executePendingAttacks auf');
                 if(isHost) {
                     // Führe gesammelte Angriffe aus bevor Rekapitulation gezeigt wird
-                    executePendingAttacks(data).then(() => {
+                    // Verwende globalData für executePendingAttacks, da es die aktuellsten Daten enthält
+                    executePendingAttacks(globalData || data).then(() => {
                         // Warte kurz bevor roundRecapShown gesetzt wird, damit alle Updates durch sind
                         setTimeout(() => {
                             updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
@@ -2401,7 +2434,7 @@
                 }
                 // Zeige Rekapitulation nach kurzer Verzögerung
                 setTimeout(() => {
-                    showRoundRecap(data);
+                    showRoundRecap(globalData || data);
                 }, 2000);
             }
 
