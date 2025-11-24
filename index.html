@@ -603,7 +603,10 @@
             scrollbar-color: #444 #1a1a1a;
             position: relative;
         }
-        #emojiGallery::after {
+        .emoji-gallery-wrapper {
+            position: relative;
+        }
+        .emoji-gallery-wrapper::after {
             content: '';
             position: absolute;
             right: 0;
@@ -612,7 +615,7 @@
             width: 50%;
             background: linear-gradient(to right, transparent, rgba(10,10,10,0.8));
             pointer-events: none;
-            z-index: 1;
+            z-index: 10;
         }
         #emojiGallery::-webkit-scrollbar {
             height: 6px;
@@ -704,7 +707,7 @@
         <h3 style="margin-bottom:15px; color:#ff8c00;">Wie heißt du?</h3>
         <input type="text" id="inpName" placeholder="Dein Name" maxlength="20" autocomplete="off">
         <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:15px; margin-bottom:8px; font-weight:500;">Wähle deinen Charakter:</label>
-        <div style="position:relative; margin-bottom:15px;">
+        <div class="emoji-gallery-wrapper" style="position:relative; margin-bottom:15px;">
             <div id="emojiGallery" style="display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:10px 0; scroll-behavior:smooth; -webkit-overflow-scrolling:touch; width:100%; max-width:100%;">
                 <!-- Wird dynamisch gefüllt -->
             </div>
@@ -1542,7 +1545,7 @@
                 currentEmojiIndex = availableEmojis.indexOf(myEmoji);
                 if(currentEmojiIndex === -1) currentEmojiIndex = 0;
             }
-            document.getElementById('inpCode').value = roomId;
+            window.selectedRoomId = roomId;
             setTimeout(() => joinGame(), 500);
         }
 
@@ -1655,10 +1658,9 @@
                 
                 if(rooms.length === 0) {
                     roomListEl.style.display = 'none';
-                    inpCodeEl.style.display = 'block';
-                    inpCodeEl.placeholder = 'Raum-Code';
+                    inpCodeEl.style.display = 'none';
                     inpPasswordEl.style.display = 'none';
-                    inpCodeEl.focus();
+                    showToast("Keine offenen Räume gefunden. Erstelle einen neuen Raum!");
                 } else {
                     roomListEl.style.display = 'block';
                     inpCodeEl.style.display = 'none';
@@ -1678,19 +1680,24 @@
             }
         };
         
-        window.selectRoom = (roomId, hasPassword) => {
-            // Zeige Code-Eingabefeld und Passwort-Feld
-            document.getElementById('inpCode').style.display = 'block';
-            document.getElementById('inpCode').placeholder = 'Raum-Code';
-            document.getElementById('inpCode').value = '';
-            document.getElementById('inpCode').focus();
+        window.selectRoom = (selectedRoomId, hasPassword) => {
+            // Speichere den ausgewählten Raum-Code
+            window.selectedRoomId = selectedRoomId;
+            
+            // Verstecke Code-Eingabefeld (nicht mehr benötigt)
+            document.getElementById('inpCode').style.display = 'none';
+            
+            // Zeige nur Passwort-Feld wenn nötig
             if(hasPassword) {
                 document.getElementById('inpPassword').style.display = 'block';
                 document.getElementById('inpPassword').placeholder = 'Passwort erforderlich';
                 document.getElementById('inpPassword').value = '';
+                document.getElementById('inpPassword').focus();
             } else {
                 document.getElementById('inpPassword').style.display = 'none';
                 document.getElementById('inpPassword').value = '';
+                // Wenn kein Passwort, direkt beitreten
+                joinGame();
             }
             // Verstecke Raumliste
             document.getElementById('roomList').style.display = 'none';
@@ -1783,11 +1790,18 @@
             const name = document.getElementById('inpName').value.trim();
             const emoji = document.getElementById('inpEmoji').value || '😊';
             const gender = "divers"; // Deaktiviert, aber behalten
-            const code = document.getElementById('inpCode').value.trim().toUpperCase();
+            
+            // Verwende ausgewählten Raum-Code oder versuche aus Input-Feld (Fallback)
+            const code = window.selectedRoomId || document.getElementById('inpCode').value.trim().toUpperCase();
             const password = document.getElementById('inpPassword').value.trim();
             
-            if(!name || !code) {
-                showToast("Bitte gib Name und Code ein!");
+            if(!name) {
+                showToast("Bitte gib deinen Namen ein!");
+                return;
+            }
+            
+            if(!code) {
+                showToast("Bitte wähle einen Raum aus der Liste aus!");
                 return;
             }
             
@@ -1795,7 +1809,7 @@
             const ref = doc(db, "lobbies", code);
             const snap = await getDoc(ref);
             if(!snap.exists()) {
-                showToast("Lobby nicht gefunden! Prüfe den Code.");
+                showToast("Lobby nicht gefunden! Bitte wähle einen anderen Raum.");
                 return;
             }
             
