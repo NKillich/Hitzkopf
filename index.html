@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥9</title>
+    <title>Hitzkopf 🔥10</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -719,7 +719,7 @@
     <div id="hotseatAlert" class="attack-alert"></div>
     <!-- Attack Modal -->
     <div id="attackModal" class="countdown-overlay" style="display:none;">
-        <div style="background:linear-gradient(145deg, #1e1e1e, #252525); padding:40px; border-radius:20px; max-width:500px; margin:20px; border:2px solid #ff4500; box-shadow:0 8px 32px rgba(0,0,0,0.8); text-align:center;">
+        <div id="attackModalContainer" style="background:linear-gradient(145deg, #1e1e1e, #252525); padding:40px; border-radius:20px; max-width:500px; margin:20px; border:2px solid #ff4500; box-shadow:0 8px 32px rgba(0,0,0,0.8); text-align:center;">
             <div id="attackModalEmoji" style="font-size:5rem; margin-bottom:20px;">🔥</div>
             <div id="attackModalName" style="font-size:2.5rem; font-weight:800; color:#ff4500; margin-bottom:15px; text-shadow:0 0 18px rgba(255,69,0,0.6);">...</div>
             <div id="attackModalText" style="font-size:1.2rem; color:#fff; margin-bottom:15px;">...</div>
@@ -1836,7 +1836,7 @@
                 host: name,
                 hostName: name, // Für Raumliste
                 status: "lobby",
-                players: { [name]: { temp: startTemp, inventory: [], gender: gender, emoji: emoji } },
+                players: { [name]: { temp: startTemp, inventory: [], gender: gender, emoji: emoji, consecutiveWrongAnswers: 0 } },
                 config: { dmg: dmg, speed: speed, startTemp: startTemp, maxTemp: maxTemp, gameMode: gameMode, categories: selectedCategories },
                 votes: {},
                 ready: [],
@@ -1913,7 +1913,7 @@
             const data = snap.data();
             const startTemp = data.config?.startTemp || 0;
             if(!data.players[name]) {
-                await updateDoc(ref, { [`players.${name}`]: { temp: startTemp, inventory: [], gender: gender, emoji: emoji } });
+                await updateDoc(ref, { [`players.${name}`]: { temp: startTemp, inventory: [], gender: gender, emoji: emoji, consecutiveWrongAnswers: 0 } });
             } else {
                 // Emoji und Geschlecht aktualisieren falls bereits vorhanden
                 await updateDoc(ref, { 
@@ -2542,6 +2542,21 @@
                 }
             } else {
                 if(myVote && myVote.choice === truth) {
+                    // Bei richtiger Antwort: consecutiveWrongAnswers zurücksetzen
+                    (async () => {
+                        const ref = doc(db, "lobbies", roomId);
+                        const currentData = await getDoc(ref);
+                        const playerData = currentData.data()?.players?.[myName] || {};
+                        if(playerData.consecutiveWrongAnswers && playerData.consecutiveWrongAnswers > 0) {
+                            await updateDoc(ref, {
+                                [`players.${myName}.consecutiveWrongAnswers`]: 0
+                            });
+                            console.log('consecutiveWrongAnswers zurückgesetzt für', myName);
+                        }
+                    })().catch(err => {
+                        console.error('Fehler beim Zurücksetzen von consecutiveWrongAnswers:', err);
+                    });
+                    
                     if(isPartyMode) {
                         // Partymodus: Direkt Angriff-Auswahl
                         statusEl.innerHTML = "✅ <strong>RICHTIG GERATEN!</strong><br><span style='font-size:0.9rem; font-weight:normal;'>Wähle einen Spieler zum Aufheizen!</span>";
@@ -3386,9 +3401,10 @@
 
         function triggerAttackFeedback(attackResult) {
             const modal = document.getElementById('attackModal');
+            const containerEl = document.getElementById('attackModalContainer');
             if(!modal) return;
             
-            // attackResult kann sein: { attackers: [], totalDmg: 0, attackDetails: [{ attacker, dmg }] }
+            // attackResult kann sein: { attackers: [], totalDmg: 0, attackDetails: [{ attacker, dmg, isPenalty }] }
             // oder null/undefined wenn nicht angegriffen
             const wasAttacked = attackResult && attackResult.totalDmg > 0;
             
@@ -3416,12 +3432,20 @@
             const tempEl = document.getElementById('attackModalTemp');
             
             if(wasAttacked) {
-                // Angegriffen
+                // Angegriffen - Roter Rahmen
+                if(containerEl) {
+                    containerEl.style.border = '2px solid #ff4500';
+                    containerEl.style.boxShadow = '0 8px 32px rgba(255,69,0,0.8)';
+                }
+                
                 const attackers = attackResult.attackers || [];
                 const attackDetails = attackResult.attackDetails || [];
                 
                 if(emojiEl) emojiEl.innerText = '🔥';
-                if(nameEl) nameEl.innerText = myName;
+                if(nameEl) {
+                    nameEl.innerText = myName;
+                    nameEl.style.color = '#ff4500';
+                }
                 
                 // Prüfe ob gespiegelt wurde
                 const wasMirrored = attackDetails.some(d => d.mirrored) && attackResult.totalDmg === 0;
@@ -3431,19 +3455,33 @@
                     if(textEl) textEl.innerText = `Angriffe gespiegelt - kein Schaden erhalten`;
                 } else {
                     // Gesamtschaden
-                    if(textEl) textEl.innerText = `Insgesamt ${attackResult.totalDmg}°C Schaden erhalten`;
+                    if(textEl) textEl.innerText = `Du wurdest aufgeheizt! Insgesamt ${attackResult.totalDmg}°C`;
                 }
                 
-                // Details: Wer hat wie viel Schaden verursacht
+                // Details: Wer hat wie viel Schaden verursacht (inkl. Strafhitze)
                 if(detailsEl && attackDetails.length > 0) {
-                    detailsEl.innerHTML = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #333;"><strong>Angriffe:</strong><br>' +
-                        attackDetails.map(detail => {
-                            if(detail.mirrored) {
-                                return `• ${detail.attacker}: gespiegelt (${detail.dmg}°C zurück)`;
-                            } else {
-                                return `• ${detail.attacker}: +${detail.dmg}°C`;
-                            }
-                        }).join('<br>') + '</div>';
+                    const regularAttacks = attackDetails.filter(d => !d.isPenalty);
+                    const penaltyAttacks = attackDetails.filter(d => d.isPenalty);
+                    
+                    let detailsHTML = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #333;"><strong>Angriffe:</strong><br>';
+                    
+                    // Normale Angriffe
+                    regularAttacks.forEach(detail => {
+                        if(detail.mirrored) {
+                            detailsHTML += `• ${detail.attacker}: gespiegelt (${detail.dmg}°C zurück)<br>`;
+                        } else {
+                            detailsHTML += `• ${detail.attacker}: +${detail.dmg}°C<br>`;
+                        }
+                    });
+                    
+                    // Strafhitze
+                    if(penaltyAttacks.length > 0) {
+                        const totalPenalty = penaltyAttacks.reduce((sum, p) => sum + p.dmg, 0);
+                        detailsHTML += `• Strafhitze: +${totalPenalty}°C<br>`;
+                    }
+                    
+                    detailsHTML += '</div>';
+                    detailsEl.innerHTML = detailsHTML;
                 } else if(detailsEl) {
                     // Fallback wenn keine Details vorhanden
                     if(attackers.length > 1) {
@@ -3454,15 +3492,39 @@
                         detailsEl.innerHTML = '';
                     }
                 }
+                
+                // Thermometer mit Änderung
+                if(thermoEl) {
+                    thermoEl.style.background = 'linear-gradient(90deg, #ffae00, #ff0000)';
+                }
+                if(tempEl) {
+                    tempEl.innerText = `${newTemp}°C`;
+                    tempEl.style.color = '#ff4500';
+                }
             } else {
-                // Nicht angegriffen
+                // Nicht angegriffen - Blauer Rahmen
+                if(containerEl) {
+                    containerEl.style.border = '2px solid #4a9eff';
+                    containerEl.style.boxShadow = '0 8px 32px rgba(74,158,255,0.8)';
+                }
+                
                 if(emojiEl) emojiEl.innerText = '🧊';
-                if(nameEl) nameEl.innerText = myName;
-                if(textEl) textEl.innerText = 'Cool geblieben';
-                if(detailsEl) detailsEl.innerHTML = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #333;">Keiner hat dich aufgeheizt</div>';
+                if(nameEl) {
+                    nameEl.innerText = myName;
+                    nameEl.style.color = '#4a9eff';
+                }
+                if(textEl) textEl.innerText = 'Cool geblieben - Keiner hat dich aufgeheizt';
+                if(detailsEl) detailsEl.innerHTML = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid #333;">Du hast diese Runde keine Hitze erhalten</div>';
+                
+                // Thermometer ohne Änderung (bleibt bei currentTemp)
+                if(thermoEl) {
+                    thermoEl.style.background = 'linear-gradient(90deg, #4a9eff, #0066cc)';
+                }
+                if(tempEl) {
+                    tempEl.innerText = `${currentTemp}°C`;
+                    tempEl.style.color = '#4a9eff';
+                }
             }
-            
-            if(tempEl) tempEl.innerText = `${newTemp}°C`;
             
             // Animiere Thermometer
             if(thermoEl) {
@@ -3636,6 +3698,71 @@
             
             // Erstelle Attack-Ergebnisse für ALLE Spieler (auch die nicht angegriffenen)
             const allPlayers = Object.keys(players);
+            
+            // Füge Strafhitze für alle Spieler hinzu, die falsch geraten haben
+            const votes = data.votes || {};
+            const truth = data.votes?.[data.hotseat]?.choice;
+            const playersUpdate = {}; // Für consecutiveWrongAnswers Updates
+            
+            allPlayers.forEach(playerName => {
+                if(playerName === data.hotseat) return; // Hotseat bekommt keine Strafhitze
+                
+                const playerVote = votes[playerName];
+                const playerData = players[playerName] || {};
+                let consecutiveWrong = playerData.consecutiveWrongAnswers || 0;
+                
+                // Prüfe ob Spieler falsch geraten hat
+                if(playerVote && playerVote.choice !== truth) {
+                    // Erhöhe consecutiveWrongAnswers (auch wenn noch 0)
+                    consecutiveWrong += 1;
+                    if(!playersUpdate[playerName]) {
+                        playersUpdate[playerName] = {};
+                    }
+                    playersUpdate[playerName].consecutiveWrongAnswers = consecutiveWrong;
+                    
+                    // Berechne Strafhitze: 1x = 10°, 3x = 20°, 5x = 30°
+                    let penaltyDmg = 10;
+                    if(consecutiveWrong >= 5) {
+                        penaltyDmg = 30;
+                    } else if(consecutiveWrong >= 3) {
+                        penaltyDmg = 20;
+                    } else {
+                        penaltyDmg = 10;
+                    }
+                    
+                    // Füge Strafhitze zu Temperatur-Update hinzu
+                    if(!tempUpdates[`players.${playerName}.temp`]) {
+                        tempUpdates[`players.${playerName}.temp`] = 0;
+                    }
+                    tempUpdates[`players.${playerName}.temp`] += penaltyDmg;
+                    
+                    // Füge Strafhitze zu attackResults hinzu
+                    if(!attackResults[playerName]) {
+                        attackResults[playerName] = {
+                            attackers: [],
+                            totalDmg: 0,
+                            attackDetails: []
+                        };
+                    }
+                    attackResults[playerName].totalDmg += penaltyDmg;
+                    attackResults[playerName].attackDetails.push({
+                        attacker: 'Strafhitze',
+                        dmg: penaltyDmg,
+                        isPenalty: true
+                    });
+                    
+                    logEntries.push(`❄️ ${playerName} erhält Strafhitze für falsche Antwort (+${penaltyDmg}°C)`);
+                } else if(playerVote && playerVote.choice === truth) {
+                    // Bei richtiger Antwort: consecutiveWrongAnswers zurücksetzen
+                    if(consecutiveWrong > 0) {
+                        if(!playersUpdate[playerName]) {
+                            playersUpdate[playerName] = {};
+                        }
+                        playersUpdate[playerName].consecutiveWrongAnswers = 0;
+                    }
+                }
+            });
+            
             allPlayers.forEach(playerName => {
                 if(!attackResults[playerName]) {
                     // Spieler wurde nicht angegriffen
@@ -3655,29 +3782,38 @@
                 updateData.log = arrayUnion(...logEntries);
             }
             
-            // Konvertiere verschachtelte Pfade zu Firebase-Update-Format
-            const playersUpdate = {};
-            for(const [path, dmg] of Object.entries(tempUpdates)) {
-                // Pfad ist z.B. "players.${target}.temp"
-                const parts = path.split('.');
-                if(parts.length === 3 && parts[0] === 'players' && parts[2] === 'temp') {
-                    const playerName = parts[1];
-                    if(!playersUpdate[playerName]) {
-                        playersUpdate[playerName] = {};
-                    }
-                    playersUpdate[playerName].temp = increment(dmg);
-                    console.log(`executePendingAttacks: Temperatur-Update für ${playerName}: +${dmg}°C`);
-                }
-            }
-            
-            // Füge Spieler-Updates hinzu
+            // Aktualisiere consecutiveWrongAnswers für alle betroffenen Spieler
             if(Object.keys(playersUpdate).length > 0) {
                 for(const [playerName, updates] of Object.entries(playersUpdate)) {
                     Object.keys(updates).forEach(key => {
                         updateData[`players.${playerName}.${key}`] = updates[key];
                     });
                 }
-                console.log('executePendingAttacks: Temperatur-Updates vorbereitet:', Object.keys(playersUpdate));
+            }
+            
+            // Konvertiere verschachtelte Pfade zu Firebase-Update-Format
+            const playersTempUpdate = {};
+            for(const [path, dmg] of Object.entries(tempUpdates)) {
+                // Pfad ist z.B. "players.${target}.temp"
+                const parts = path.split('.');
+                if(parts.length === 3 && parts[0] === 'players' && parts[2] === 'temp') {
+                    const playerName = parts[1];
+                    if(!playersTempUpdate[playerName]) {
+                        playersTempUpdate[playerName] = {};
+                    }
+                    playersTempUpdate[playerName].temp = increment(dmg);
+                    console.log(`executePendingAttacks: Temperatur-Update für ${playerName}: +${dmg}°C`);
+                }
+            }
+            
+            // Füge Spieler-Temperatur-Updates hinzu
+            if(Object.keys(playersTempUpdate).length > 0) {
+                for(const [playerName, updates] of Object.entries(playersTempUpdate)) {
+                    Object.keys(updates).forEach(key => {
+                        updateData[`players.${playerName}.${key}`] = updates[key];
+                    });
+                }
+                console.log('executePendingAttacks: Temperatur-Updates vorbereitet:', Object.keys(playersTempUpdate));
             } else {
                 console.log('executePendingAttacks: Keine Temperatur-Updates');
             }
