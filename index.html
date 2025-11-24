@@ -358,6 +358,29 @@
             transform: translateX(-50%) translateY(0);
             opacity: 1;
         }
+        #hotseatAlert {
+            border-radius: 15px;
+            padding: 20px 30px;
+            max-width: 400px;
+            text-align: center;
+        }
+        #hotseatAlert button {
+            margin-top: 15px;
+            padding: 12px 30px;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 999px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #hotseatAlert button:hover {
+            background: rgba(255,255,255,0.3);
+            border-color: rgba(255,255,255,0.7);
+            transform: scale(1.05);
+        }
         body.viewport-shake {
             animation: screenShake 0.6s cubic-bezier(.36,.07,.19,.97);
         }
@@ -641,6 +664,7 @@
 <body>
     <div class="menu-btn" onclick="toggleMenu()">⚙️</div>
     <div id="attackAlert" class="attack-alert"></div>
+    <div id="hotseatAlert" class="attack-alert"></div>
     <div id="countdownOverlay" class="countdown-overlay">
         <div id="countdownText" class="countdown-text" style="font-size:4rem; line-height:1.2;">Hitz<br>kopf</div>
         <div class="countdown-sub">Bereit machen...</div>
@@ -872,8 +896,21 @@
                 <div id="winnerTemp" style="font-size:2rem; font-weight:bold; color:#00d1ff; margin-top:15px;">0°C</div>
             </div>
             <hr style="border-color:#003d5c; margin:30px 0;">
-            <div id="rankingList" style="text-align:left; margin-top:20px;">
+            <div id="rankingList" style="text-align:left; margin-top:20px; margin-bottom:30px;">
                 <!-- Wird dynamisch gefüllt -->
+            </div>
+            
+            <!-- Voting-Bereich -->
+            <hr style="border-color:#003d5c; margin:30px 0;">
+            <h2 style="color:#ff8c00; margin-bottom:20px; font-size:1.5rem;">🎮 Noch eine Runde?</h2>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:20px; max-width:600px; margin-left:auto; margin-right:auto;">
+                <button id="btnVoteRematch" class="btn-primary" onclick="voteRematch(true)" style="padding:20px; font-size:1.2rem;">✅ Nochmal spielen</button>
+                <button id="btnVoteLeave" class="btn-secondary" onclick="voteRematch(false)" style="padding:20px; font-size:1.2rem;">🚪 Verlassen</button>
+            </div>
+            <div id="votingStatus" style="font-size:0.9rem; color:#888; margin-top:15px;">Warte auf andere Spieler...</div>
+            <div id="votingResults" style="margin-top:20px; font-size:0.85rem; color:#aaa;"></div>
+            <div id="hostRematchSettings" style="margin-top:20px;">
+                <!-- Wird dynamisch für Host gefüllt -->
             </div>
         </div>
     </div>
@@ -2038,19 +2075,16 @@
                 }
                 else if(data.status === 'winner') {
                     showScreen('screen-winner');
-                    renderWinner(data.winner, data.players);
+                    renderWinner(data.winner, data.players, data);
                     if(shareBtn) shareBtn.style.display = 'none';
                     if(hostStartBtn) hostStartBtn.style.display = 'none';
-                    // Nach 5 Sekunden zum Voting-Screen
-                    if(isHost) {
-                        setTimeout(() => {
-                            updateDoc(doc(db, "lobbies", roomId), { status: 'voting' }).catch(console.error);
-                        }, 5000);
-                    }
+                    // Winner-Screen bleibt bestehen, bis man die Lobby verlässt oder eine neue Runde startet
+                    // Voting-Funktionalität ist direkt auf dem Winner-Screen
                 }
                 else if(data.status === 'voting') {
-                    showScreen('screen-voting');
-                    renderVoting(data);
+                    // Voting wird jetzt auf dem Winner-Screen angezeigt
+                    showScreen('screen-winner');
+                    renderWinner(data.winner || Object.keys(data.players)[0], data.players, data);
                     if(shareBtn) shareBtn.style.display = 'none';
                     if(hostStartBtn) hostStartBtn.style.display = 'none';
                 }
@@ -2074,6 +2108,11 @@
                 btnB.classList.remove('selected');
                 btnLock.disabled = true;
                 // A/B Buttons werden später aktiviert, wenn hotseat gesetzt ist
+                
+                // Hotseat-Popup beim Start jeder Runde anzeigen
+                if(data.hotseat) {
+                    triggerHotseatAlert(data.hotseat, data.players);
+                }
             }
 
             if(data.votes[myName]) {
@@ -2788,7 +2827,12 @@
                 showToast("Kein aktiver Raum zum Teilen verfügbar.");
                 return;
             }
+            const roomPassword = globalData.password || "";
+            const hasPassword = roomPassword && roomPassword.trim().length > 0;
             let text = `🔥 Hitzkopf-Code: ${roomId}`;
+            if(hasPassword) {
+                text += ` | Passwort: ${roomPassword}`;
+            }
             text += " – komm in meine Lobby!";
             try {
                 if(navigator.share) {
@@ -2927,7 +2971,10 @@
                     classes.push('shake');
                 }
                 const playerEmoji = d.emoji || '😊';
-                const prefix = isHotseat ? '🥵 ' : (idx === 0 ? '🔥 ' : '');
+                // Hitzkopf nur bei heißester Person (letzter Platz, können mehrere sein)
+                const maxTemp = Math.max(...Object.values(players).map(p => p.temp || 0));
+                const isHottest = d.temp === maxTemp && d.temp > 0;
+                const prefix = isHotseat ? '🥵 ' : (isHottest ? '🔥 ' : '');
                 const nameLabel = `${prefix}${playerEmoji} ${p}${inventory}`;
                 
                 html += `
@@ -3065,6 +3112,34 @@
             if(attackAlertTimer) clearTimeout(attackAlertTimer);
             attackAlertTimer = setTimeout(() => alert.classList.remove('show'), 3000);
         }
+        
+        function triggerHotseatAlert(hotseatName, players) {
+            const alert = document.getElementById('hotseatAlert');
+            if(!alert) return;
+            
+            const playerData = players[hotseatName];
+            const playerEmoji = playerData?.emoji || '😊';
+            
+            let message;
+            if(hotseatName === myName) {
+                message = `🎯 Du bist gefragt!<br>Alle anderen müssen deine Antwort erraten.`;
+            } else {
+                message = `🎯 ${playerEmoji} ${hotseatName} ist gefragt.<br>Versuche ${hotseatName}'s Antwort zu erraten.`;
+            }
+            
+            alert.innerHTML = `
+                <div style="margin-bottom:10px;">${message}</div>
+                <button onclick="closeHotseatAlert()">Los geht's</button>
+            `;
+            alert.classList.add('show');
+        }
+        
+        window.closeHotseatAlert = () => {
+            const alert = document.getElementById('hotseatAlert');
+            if(alert) {
+                alert.classList.remove('show');
+            }
+        };
         
         // --- EXECUTE PENDING ATTACKS ---
         async function executePendingAttacks(data) {
@@ -3238,7 +3313,7 @@
         }
 
         // --- RENDER WINNER ---
-        function renderWinner(winnerName, players) {
+        function renderWinner(winnerName, players, data) {
             const nameEl = document.getElementById('winnerName');
             const emojiEl = document.getElementById('winnerEmoji');
             const tempEl = document.getElementById('winnerTemp');
@@ -3263,33 +3338,175 @@
                 });
             }
             
-            // Ranking: Andere Spieler nach Reihenfolge des Rausfliegens
+            // Ranking: Rausgeflogene Hitzköpfe mit 🔥 Emoji
             const maxTemp = globalData?.config?.maxTemp || 100;
             const eliminated = Object.keys(players)
                 .filter(p => p !== winnerName && (players[p].temp || 0) >= maxTemp)
                 .sort((a, b) => (players[b].temp || 0) - (players[a].temp || 0)); // Höchste zuerst (zuletzt rausgeflogen)
             
             if(rankingEl && eliminated.length > 0) {
-                rankingEl.innerHTML = eliminated.map((p, idx) => {
+                rankingEl.innerHTML = `
+                    <h3 style="color:#ff8c00; margin-bottom:15px; font-size:1.2rem; text-align:center;">🔥 Hitzköpfe</h3>
+                    ${eliminated.map((p, idx) => {
                     const playerData = players[p];
                     const playerEmoji = playerData?.emoji || '🥵';
                     const playerTemp = playerData?.temp || 0;
                     return `
                         <div style="padding:12px; margin-bottom:8px; background:rgba(255,69,0,0.1); border:1px solid rgba(255,69,0,0.3); border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
                             <div>
-                                <span style="font-size:1.5rem; margin-right:10px;">${playerEmoji}</span>
+                                <span style="font-size:1.5rem; margin-right:8px;">🔥 ${playerEmoji}</span>
                                 <span style="font-size:1.1rem; font-weight:bold; color:#ff8c00;">${p}</span>
                             </div>
                             <div style="font-size:1rem; color:#ff4500; font-weight:bold;">${playerTemp}°C</div>
                         </div>
                     `;
-                }).join('');
+                }).join('')}
+                `;
             } else if(rankingEl) {
                 rankingEl.innerHTML = '<div style="text-align:center; color:#888; padding:20px;">Keine weiteren Spieler</div>';
             }
             
+            // Voting-Funktionalität rendern
+            if(data) {
+                renderWinnerVoting(data);
+            }
+            
             // Konfetti starten
             startConfetti();
+        }
+        
+        // --- RENDER WINNER VOTING ---
+        function renderWinnerVoting(data) {
+            const votingStatus = document.getElementById('votingStatus');
+            const votingResults = document.getElementById('votingResults');
+            const btnRematch = document.getElementById('btnVoteRematch');
+            const btnLeave = document.getElementById('btnVoteLeave');
+            
+            const votes = data.rematchVotes || {};
+            const players = Object.keys(data.players);
+            const maxTemp = data.config?.maxTemp || 100;
+            const activePlayers = players.filter(p => (data.players[p].temp || 0) < maxTemp);
+            
+            const rematchCount = activePlayers.filter(p => votes[p] === true).length;
+            const leaveCount = activePlayers.filter(p => votes[p] === false).length;
+            const totalVotes = rematchCount + leaveCount;
+            
+            if(votingStatus) {
+                votingStatus.innerText = `Abgestimmt: ${totalVotes}/${activePlayers.length}`;
+            }
+            
+            if(votingResults) {
+                const rematchList = activePlayers.filter(p => votes[p] === true).map(p => {
+                    const playerData = data.players[p];
+                    const playerEmoji = playerData?.emoji || '😊';
+                    return `${playerEmoji} ${p}`;
+                }).join(', ') || 'Niemand';
+                
+                const leaveList = activePlayers.filter(p => votes[p] === false).map(p => {
+                    const playerData = data.players[p];
+                    const playerEmoji = playerData?.emoji || '😊';
+                    return `${playerEmoji} ${p}`;
+                }).join(', ') || 'Niemand';
+                
+                votingResults.innerHTML = `
+                    <div style="margin-bottom:10px;">✅ Nochmal spielen (${rematchCount}): ${rematchList}</div>
+                    <div>🚪 Verlassen (${leaveCount}): ${leaveList}</div>
+                `;
+            }
+            
+            // Buttons deaktivieren wenn bereits abgestimmt
+            if(votes[myName] !== undefined) {
+                if(btnRematch) btnRematch.disabled = true;
+                if(btnLeave) btnLeave.disabled = true;
+                if(votes[myName]) {
+                    if(btnRematch) btnRematch.innerText = '✅ Gewählt';
+                    if(btnLeave) btnLeave.innerText = '🚪 Verlassen';
+                } else {
+                    if(btnRematch) btnRematch.innerText = '✅ Nochmal spielen';
+                    if(btnLeave) btnLeave.innerText = '🚪 Gewählt';
+                }
+            } else {
+                if(btnRematch) btnRematch.disabled = false;
+                if(btnLeave) btnLeave.disabled = false;
+                if(btnRematch) btnRematch.innerText = '✅ Nochmal spielen';
+                if(btnLeave) btnLeave.innerText = '🚪 Verlassen';
+            }
+            
+            // Host kann Spiel starten wenn alle für Rematch gestimmt haben
+            const hostSettingsDiv = document.getElementById('hostRematchSettings');
+            if(isHost && totalVotes === activePlayers.length && rematchCount === activePlayers.length) {
+                // Host-Einstellungen für neue Runde anzeigen
+                if(!hostSettingsDiv) {
+                    const settingsDiv = document.createElement('div');
+                    settingsDiv.id = 'hostRematchSettings';
+                    settingsDiv.style.cssText = 'margin-top:20px; padding:15px; background:rgba(255,69,0,0.1); border:2px solid #ff4500; border-radius:10px;';
+                    settingsDiv.innerHTML = `
+                        <h3 style="color:#ff8c00; margin-bottom:15px; font-size:1.1rem;">⚙️ Einstellungen für neue Runde</h3>
+                        <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:10px; margin-bottom:5px; font-weight:500;">Spielmodus:</label>
+                        <div id="rematchGameModeSelection" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
+                        <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:10px; margin-bottom:5px; font-weight:500;">Kategorien wählen:</label>
+                        <div id="rematchCategorySelection" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:8px; margin-bottom:15px; max-height:200px; overflow-y:auto;"></div>
+                        <button id="btnStartRematch" class="btn-primary" style="width:100%; margin-top:15px; padding:15px; font-size:1.2rem;">🎮 Neue Runde starten</button>
+                    `;
+                    const winnerScreen = document.getElementById('screen-winner');
+                    if(winnerScreen) {
+                        const zIndexDiv = winnerScreen.querySelector('[style*="z-index:1"]');
+                        if(zIndexDiv) {
+                            zIndexDiv.appendChild(settingsDiv);
+                        } else {
+                            winnerScreen.appendChild(settingsDiv);
+                        }
+                    }
+                    
+                    // Spielmodus-Auswahl rendern
+                    const gameModeDiv = document.getElementById('rematchGameModeSelection');
+                    if(gameModeDiv) {
+                        const currentMode = data.config?.gameMode || 'party';
+                        gameModeDiv.innerHTML = `
+                            <button class="game-mode-card ${currentMode === 'party' ? 'selected' : ''}" data-mode="party" onclick="selectRematchGameMode('party')" style="padding:12px; border-radius:8px; border:2px solid ${currentMode === 'party' ? '#ff4500' : '#333'}; background:${currentMode === 'party' ? 'rgba(255,69,0,0.2)' : 'rgba(255,255,255,0.05)'}; color:#fff; cursor:pointer; transition:all 0.3s;">
+                                <div style="font-size:1.5rem; margin-bottom:5px;">🎉</div>
+                                <div class="mode-name" style="font-size:0.9rem; font-weight:bold;">Party-Modus</div>
+                                <div style="font-size:0.7rem; color:#888; margin-top:3px;">Schnell & einfach</div>
+                            </button>
+                            <button class="game-mode-card ${currentMode === 'strategic' ? 'selected' : ''}" data-mode="strategic" onclick="selectRematchGameMode('strategic')" style="padding:12px; border-radius:8px; border:2px solid ${currentMode === 'strategic' ? '#ff4500' : '#333'}; background:${currentMode === 'strategic' ? 'rgba(255,69,0,0.2)' : 'rgba(255,255,255,0.05)'}; color:#fff; cursor:pointer; transition:all 0.3s;">
+                                <div style="font-size:1.5rem; margin-bottom:5px;">🧠</div>
+                                <div class="mode-name" style="font-size:0.9rem; font-weight:bold;">Strategie-Modus</div>
+                                <div style="font-size:0.7rem; color:#888; margin-top:3px;">Mit Jokern</div>
+                            </button>
+                        `;
+                    }
+                    
+                    // Kategorie-Auswahl rendern
+                    const categoryDiv = document.getElementById('rematchCategorySelection');
+                    if(categoryDiv) {
+                        const currentCategories = data.config?.categories || [];
+                        let html = '';
+                        Object.keys(questionCategories).forEach(key => {
+                            const cat = questionCategories[key];
+                            const isSelected = currentCategories.includes(key);
+                            html += `
+                                <button class="category-card ${isSelected ? 'selected' : ''}" 
+                                    data-category="${key}" 
+                                    onclick="toggleRematchCategory('${key}')"
+                                    style="padding:10px; border-radius:8px; border:2px solid ${isSelected ? '#ff4500' : '#333'}; background:${isSelected ? 'rgba(255,69,0,0.2)' : 'rgba(255,255,255,0.05)'}; color:#fff; cursor:pointer; transition:all 0.3s; text-align:center;">
+                                    <div style="font-size:1.8rem; margin-bottom:5px;">${cat.emoji}</div>
+                                    <div style="font-size:0.75rem; font-weight:bold;">${cat.name}</div>
+                                </button>
+                            `;
+                        });
+                        categoryDiv.innerHTML = html;
+                    }
+                    
+                    // Start-Button Event
+                    const startBtn = document.getElementById('btnStartRematch');
+                    if(startBtn) {
+                        startBtn.onclick = startRematchGame;
+                    }
+                }
+            } else {
+                // Entferne Host-Einstellungen wenn nicht mehr benötigt
+                if(hostSettingsDiv) hostSettingsDiv.remove();
+            }
         }
 
         // --- CONFETTI ---
@@ -3358,16 +3575,72 @@
             
             // Host kann Spiel starten wenn alle für Rematch gestimmt haben
             if(isHost && totalVotes === activePlayers.length && rematchCount === activePlayers.length) {
-                const startBtn = document.createElement('button');
-                startBtn.className = 'btn-primary';
-                startBtn.style.cssText = 'width:100%; margin-top:20px; padding:15px; font-size:1.2rem;';
-                startBtn.innerText = '🎮 Neue Runde starten';
-                startBtn.onclick = startRematchGame;
-                if(!document.getElementById('btnStartRematch')) {
-                    startBtn.id = 'btnStartRematch';
+                // Host-Einstellungen für neue Runde anzeigen
+                const hostSettingsDiv = document.getElementById('hostRematchSettings');
+                if(!hostSettingsDiv) {
+                    const settingsDiv = document.createElement('div');
+                    settingsDiv.id = 'hostRematchSettings';
+                    settingsDiv.style.cssText = 'margin-top:20px; padding:15px; background:rgba(255,69,0,0.1); border:2px solid #ff4500; border-radius:10px;';
+                    settingsDiv.innerHTML = `
+                        <h3 style="color:#ff8c00; margin-bottom:15px; font-size:1.1rem;">⚙️ Einstellungen für neue Runde</h3>
+                        <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:10px; margin-bottom:5px; font-weight:500;">Spielmodus:</label>
+                        <div id="rematchGameModeSelection" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
+                        <label style="display:block; font-size:0.85rem; color:#aaa; margin-top:10px; margin-bottom:5px; font-weight:500;">Kategorien wählen:</label>
+                        <div id="rematchCategorySelection" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:8px; margin-bottom:15px; max-height:200px; overflow-y:auto;"></div>
+                        <button id="btnStartRematch" class="btn-primary" style="width:100%; margin-top:15px; padding:15px; font-size:1.2rem;">🎮 Neue Runde starten</button>
+                    `;
                     const votingCard = document.getElementById('screen-voting');
-                    if(votingCard) votingCard.appendChild(startBtn);
+                    if(votingCard) votingCard.appendChild(settingsDiv);
+                    
+                    // Spielmodus-Auswahl rendern
+                    const gameModeDiv = document.getElementById('rematchGameModeSelection');
+                    if(gameModeDiv) {
+                        const currentMode = data.config?.gameMode || 'party';
+                        gameModeDiv.innerHTML = `
+                            <button class="game-mode-card ${currentMode === 'party' ? 'selected' : ''}" onclick="selectRematchGameMode('party')" style="padding:12px; border-radius:8px; border:2px solid #333; background:rgba(255,255,255,0.05); color:#fff; cursor:pointer; transition:all 0.3s;">
+                                <div style="font-size:1.5rem; margin-bottom:5px;">🎉</div>
+                                <div class="mode-name" style="font-size:0.9rem; font-weight:bold;">Party-Modus</div>
+                                <div style="font-size:0.7rem; color:#888; margin-top:3px;">Schnell & einfach</div>
+                            </button>
+                            <button class="game-mode-card ${currentMode === 'strategic' ? 'selected' : ''}" onclick="selectRematchGameMode('strategic')" style="padding:12px; border-radius:8px; border:2px solid #333; background:rgba(255,255,255,0.05); color:#fff; cursor:pointer; transition:all 0.3s;">
+                                <div style="font-size:1.5rem; margin-bottom:5px;">🧠</div>
+                                <div class="mode-name" style="font-size:0.9rem; font-weight:bold;">Strategie-Modus</div>
+                                <div style="font-size:0.7rem; color:#888; margin-top:3px;">Mit Jokern</div>
+                            </button>
+                        `;
+                    }
+                    
+                    // Kategorie-Auswahl rendern
+                    const categoryDiv = document.getElementById('rematchCategorySelection');
+                    if(categoryDiv) {
+                        const currentCategories = data.config?.categories || [];
+                        let html = '';
+                        Object.keys(questionCategories).forEach(key => {
+                            const cat = questionCategories[key];
+                            const isSelected = currentCategories.includes(key);
+                            html += `
+                                <button class="category-card ${isSelected ? 'selected' : ''}" 
+                                    data-category="${key}" 
+                                    onclick="toggleRematchCategory('${key}')"
+                                    style="padding:10px; border-radius:8px; border:2px solid ${isSelected ? '#ff4500' : '#333'}; background:${isSelected ? 'rgba(255,69,0,0.2)' : 'rgba(255,255,255,0.05)'}; color:#fff; cursor:pointer; transition:all 0.3s; text-align:center;">
+                                    <div style="font-size:1.8rem; margin-bottom:5px;">${cat.emoji}</div>
+                                    <div style="font-size:0.75rem; font-weight:bold;">${cat.name}</div>
+                                </button>
+                            `;
+                        });
+                        categoryDiv.innerHTML = html;
+                    }
+                    
+                    // Start-Button Event
+                    const startBtn = document.getElementById('btnStartRematch');
+                    if(startBtn) {
+                        startBtn.onclick = startRematchGame;
+                    }
                 }
+            } else {
+                // Entferne Host-Einstellungen wenn nicht mehr benötigt
+                const hostSettingsDiv = document.getElementById('hostRematchSettings');
+                if(hostSettingsDiv) hostSettingsDiv.remove();
             }
         }
 
@@ -3377,15 +3650,86 @@
                 [`rematchVotes.${myName}`]: wantRematch
             });
         };
+        
+        // Rematch-Einstellungen
+        let rematchGameMode = null;
+        let rematchCategories = null;
+        
+        window.selectRematchGameMode = (mode) => {
+            rematchGameMode = mode;
+            const gameModeDiv = document.getElementById('rematchGameModeSelection');
+            if(gameModeDiv) {
+                gameModeDiv.querySelectorAll('button').forEach(btn => {
+                    btn.classList.remove('selected');
+                    btn.style.borderColor = '#333';
+                    btn.style.background = 'rgba(255,255,255,0.05)';
+                });
+                const selectedBtn = gameModeDiv.querySelector(`button[data-mode="${mode}"]`);
+                if(selectedBtn) {
+                    selectedBtn.classList.add('selected');
+                    selectedBtn.style.borderColor = '#ff4500';
+                    selectedBtn.style.background = 'rgba(255,69,0,0.2)';
+                }
+            }
+        };
+        
+        window.toggleRematchCategory = (category) => {
+            if(!rematchCategories) {
+                rematchCategories = [...(globalData?.config?.categories || Object.keys(questionCategories))];
+            }
+            const index = rematchCategories.indexOf(category);
+            if(index > -1) {
+                rematchCategories.splice(index, 1);
+            } else {
+                rematchCategories.push(category);
+            }
+            
+            // Update UI
+            const categoryBtn = document.querySelector(`#rematchCategorySelection button[data-category="${category}"]`);
+            if(categoryBtn) {
+                const isSelected = rematchCategories.includes(category);
+                categoryBtn.classList.toggle('selected', isSelected);
+                categoryBtn.style.borderColor = isSelected ? '#ff4500' : '#333';
+                categoryBtn.style.background = isSelected ? 'rgba(255,69,0,0.2)' : 'rgba(255,255,255,0.05)';
+            }
+        };
 
         // --- START REMATCH ---
         window.startRematchGame = async () => {
             if(!isHost) return;
+            
+            // Verwende neue Einstellungen falls gesetzt, sonst behalte alte
+            const newGameMode = rematchGameMode || globalData.config?.gameMode || 'party';
+            const newCategories = rematchCategories || globalData.config?.categories || Object.keys(questionCategories);
+            
+            // Validierung: Mindestens eine Kategorie muss ausgewählt sein
+            if(newCategories.length === 0) {
+                showToast("Bitte wähle mindestens eine Kategorie!");
+                return;
+            }
+            
+            // Berechne Config basierend auf Modus
+            let dmg, speed, startTemp, maxTemp;
+            if(newGameMode === 'party') {
+                dmg = 20;
+                speed = 10;
+                startTemp = 0;
+                maxTemp = 100;
+            } else {
+                dmg = 10;
+                speed = 10;
+                startTemp = 0;
+                maxTemp = 100;
+            }
+            
             const pClean = {};
             Object.keys(globalData.players).forEach(p => {
-                const startTemp = globalData.config?.startTemp || 0;
-                pClean[p] = { temp: startTemp, inventory: [], gender: globalData.players[p].gender || 'divers' };
+                pClean[p] = { temp: startTemp, inventory: [], emoji: globalData.players[p].emoji || '😊', gender: globalData.players[p].gender || 'divers' };
             });
+            
+            // Erste Frage aus neuen Kategorien
+            const firstQuestion = getAllQuestions(newCategories)[0] || { q: "Willkommen zu Hitzkopf!", a: "A", b: "B" };
+            const firstCategory = firstQuestion.category || null;
             
             await updateDoc(doc(db, "lobbies", roomId), {
                 status: 'lobby',
@@ -3400,8 +3744,18 @@
                 usedQuestions: [],
                 rematchVotes: {},
                 eliminatedShown: [],
-                winner: null
+                winner: null,
+                config: { dmg, speed, startTemp, maxTemp, gameMode: newGameMode, categories: newCategories },
+                currentQ: firstQuestion,
+                lastQuestionCategory: firstCategory,
+                pendingAttacks: {},
+                attackResults: {}
             });
+            
+            // Reset Rematch-Einstellungen
+            rematchGameMode = null;
+            rematchCategories = null;
+            
             document.body.classList.remove('final-mode');
             showToast("Neue Runde gestartet!");
         };
