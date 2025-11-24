@@ -1893,15 +1893,16 @@
                     // Zeige Popup für ALLE Spieler (auch die nicht angegriffenen)
                     if(data.attackResults && data.attackResults[myName] !== undefined) {
                         const result = data.attackResults[myName];
+                        console.log('Attack-Feedback für', myName, ':', result);
                         triggerAttackFeedback(result);
-                        // Entferne nach Anzeige (mit längerer Verzögerung damit alle sehen können - 5.5 Sekunden)
+                        // Entferne nach Anzeige (mit längerer Verzögerung damit alle sehen können - 8 Sekunden)
                         setTimeout(() => {
                             if(isHost) {
                                 const newResults = { ...(data.attackResults || {}) };
                                 delete newResults[myName];
                                 updateDoc(doc(db, "lobbies", roomId), { attackResults: newResults }).catch(console.error);
                             }
-                        }, 5500);
+                        }, 8000);
                     }
                     lastMyTemp = meState.temp;
                 } else {
@@ -2363,13 +2364,18 @@
                 if(isHost) {
                     // Führe gesammelte Angriffe aus bevor Rekapitulation gezeigt wird
                     executePendingAttacks(data).then(() => {
-                        updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
+                        // Warte kurz bevor roundRecapShown gesetzt wird, damit alle Updates durch sind
+                        setTimeout(() => {
+                            updateDoc(doc(db, "lobbies", roomId), { roundRecapShown: true }).catch(console.error);
+                        }, 500);
+                    }).catch(err => {
+                        console.error('Fehler bei executePendingAttacks:', err);
                     });
                 }
                 // Zeige Rekapitulation nach kurzer Verzögerung
                 setTimeout(() => {
                     showRoundRecap(data);
-                }, 1500);
+                }, 2000);
             }
 
             const gameMode = data.config?.gameMode || 'party';
@@ -2593,6 +2599,8 @@
                 [target]: targetAttacks
             };
             
+            console.log('doAttack: Angriff hinzugefügt:', { target, attacker: myName, dmg, updatedPendingAttacks });
+            
             // Ölfass entfernen wenn verwendet
             if(hasOil) {
                 await updateDoc(ref, { 
@@ -2604,6 +2612,8 @@
                     pendingAttacks: updatedPendingAttacks
                 });
             }
+            
+            console.log('doAttack: pendingAttacks aktualisiert');
         };
 
         // --- TAKE CARD ---
@@ -3154,11 +3164,14 @@
                 setTimeout(() => body.classList.remove('viewport-shake'), 600);
             }
             
-            // Aktuelle Temperatur des Spielers
+            // Aktuelle Temperatur des Spielers - lese aus globalData (wird durch onSnapshot aktualisiert)
             const currentTemp = globalData?.players?.[myName]?.temp || 0;
+            // newTemp ist die Temperatur NACH dem Angriff
             const newTemp = wasAttacked ? currentTemp + attackResult.totalDmg : currentTemp;
             const maxTemp = globalData?.config?.maxTemp || 100;
             const tempPercent = Math.min((newTemp / maxTemp) * 100, 100);
+            
+            console.log('triggerAttackFeedback:', { myName, currentTemp, totalDmg: attackResult.totalDmg, newTemp, wasAttacked });
             
             // Setze Modal-Inhalte
             const emojiEl = document.getElementById('attackModalEmoji');
@@ -3277,12 +3290,21 @@
         
         // --- EXECUTE PENDING ATTACKS ---
         async function executePendingAttacks(data) {
-            if(!isHost) return;
+            if(!isHost) {
+                console.log('executePendingAttacks: Nicht der Host, überspringe');
+                return;
+            }
+            
+            console.log('executePendingAttacks: Starte Ausführung');
             const pendingAttacks = data.pendingAttacks || {};
             const players = data.players || {};
             
+            console.log('executePendingAttacks: pendingAttacks =', pendingAttacks);
+            console.log('executePendingAttacks: players =', Object.keys(players));
+            
             // Auch wenn keine Angriffe vorhanden sind, erstelle attackResults für alle Spieler
             if(Object.keys(pendingAttacks).length === 0) {
+                console.log('executePendingAttacks: Keine Angriffe, erstelle leere attackResults');
                 const attackResults = {};
                 Object.keys(players).forEach(playerName => {
                     attackResults[playerName] = {
@@ -3292,6 +3314,7 @@
                     };
                 });
                 await updateDoc(doc(db, "lobbies", roomId), { attackResults: attackResults });
+                console.log('executePendingAttacks: Leere attackResults gespeichert');
                 return;
             }
             
@@ -3391,7 +3414,12 @@
             });
             
             // Führe alle Temperatur-Updates aus
-            const updateData = { pendingAttacks: {}, log: arrayUnion(...logEntries) };
+            const updateData = { pendingAttacks: {} };
+            
+            // Log-Einträge hinzufügen wenn vorhanden
+            if(logEntries.length > 0) {
+                updateData.log = arrayUnion(...logEntries);
+            }
             
             // Konvertiere verschachtelte Pfade zu Firebase-Update-Format
             const playersUpdate = {};
@@ -3404,6 +3432,7 @@
                         playersUpdate[playerName] = {};
                     }
                     playersUpdate[playerName].temp = increment(dmg);
+                    console.log(`executePendingAttacks: Temperatur-Update für ${playerName}: +${dmg}°C`);
                 }
             }
             
@@ -3414,13 +3443,23 @@
                         updateData[`players.${playerName}.${key}`] = updates[key];
                     });
                 }
+                console.log('executePendingAttacks: Temperatur-Updates vorbereitet:', Object.keys(playersUpdate));
+            } else {
+                console.log('executePendingAttacks: Keine Temperatur-Updates');
             }
             
             // Speichere Angriffsergebnisse für Anzeige bei ALLEN Spielern (auch die nicht angegriffenen)
             // attackResults enthält bereits alle Spieler (siehe oben)
             updateData.attackResults = attackResults;
+            console.log('executePendingAttacks: attackResults vorbereitet:', Object.keys(attackResults));
             
-            await updateDoc(ref, updateData);
+            try {
+                await updateDoc(ref, updateData);
+                console.log('executePendingAttacks: Update erfolgreich gespeichert');
+            } catch(error) {
+                console.error('executePendingAttacks: Fehler beim Speichern:', error);
+                throw error;
+            }
         }
 
         function handleCountdownOverlay(data) {
