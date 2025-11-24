@@ -1102,6 +1102,14 @@
             scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
             position: relative;
         }
+        
+        /* Spacer-Elemente für zentriertes Scrollen */
+        .emoji-spacer {
+            flex-shrink: 0;
+            width: calc(50% - 40px);
+            min-width: calc(50% - 40px);
+            pointer-events: none;
+        }
         .emoji-gallery-wrapper {
             position: relative;
         }
@@ -1222,7 +1230,6 @@
                 <p style="margin-bottom:12px;">🎯 <strong>Ziel:</strong> Errate die Antworten deiner Freunde und bringe sie zum kochen!</p>
                 <p style="margin-bottom:12px;">🔥 <strong>Verlierer:</strong> Wer als erstes 100° erreicht, fliegt raus.</p>
                 <p style="margin-bottom:12px;">🧊 <strong>Gewinner:</strong> Bewahrst du einen kühlen Kopf, entscheidest du das Spiel für dich.</p>
-                <p style="margin-bottom:0;">💡 <strong>Tipp:</strong> Bei richtigem Raten kannst du Gegner aufheizen oder Joker ziehen!</p>
             </div>
             <button onclick="closeRulesOverlay()" class="btn-primary" style="width:100%; padding:15px; font-size:1.1rem;">Verstanden ✓</button>
         </div>
@@ -1257,7 +1264,7 @@
             <div id="emojiGallery" style="display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:10px 0; scroll-behavior:smooth; -webkit-overflow-scrolling:touch; width:100%; max-width:100%;">
                 <!-- Wird dynamisch gefüllt -->
             </div>
-            <input type="hidden" id="inpEmoji" value="😊">
+            <input type="hidden" id="inpEmoji" value="">
         </div>
         
         <div class="start-actions">
@@ -1495,7 +1502,7 @@
     <script type="module">
         // --- FIREBASE SETUP ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment, deleteDoc, deleteField, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot, increment, deleteDoc, deleteField, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
@@ -1511,7 +1518,7 @@
 
         // --- STATE ---
         let myName = sessionStorage.getItem("hk_name") || "";
-        let myEmoji = sessionStorage.getItem("hk_emoji") || "😊";
+        let myEmoji = sessionStorage.getItem("hk_emoji") || null;
         let myGender = sessionStorage.getItem("hk_gender") || "divers"; // Deaktiviert, aber behalten
         let roomId = sessionStorage.getItem("hk_room") || "";
         let isHost = false;
@@ -1529,6 +1536,72 @@
         let countdownTarget = null;
         let rulesShown = false;
         let lastAttackResultKey = null; // Verhindert mehrfache Popup-Anzeige
+        let isOpeningAttackModal = false; // Verhindert gleichzeitige Modal-Öffnungen
+        let unsubscribeListener = null; // Für Cleanup des onSnapshot Listeners (Memory Leak Fix)
+        
+        // --- PERFORMANCE-OPTIMIERUNG: DOM-ELEMENTE CACHEN ---
+        // Cache für häufig verwendete DOM-Elemente (verhindert wiederholte getElementById/querySelector Aufrufe)
+        const domCache = {
+            elements: {},
+            get: function(id) {
+                if(!this.elements[id]) {
+                    this.elements[id] = document.getElementById(id);
+                }
+                return this.elements[id];
+            },
+            query: function(selector) {
+                const cacheKey = 'query_' + selector;
+                if(!this.elements[cacheKey]) {
+                    this.elements[cacheKey] = document.querySelector(selector);
+                }
+                return this.elements[cacheKey];
+            },
+            queryAll: function(selector) {
+                // querySelectorAll wird nicht gecached da es ein NodeList zurückgibt die sich ändern kann
+                return document.querySelectorAll(selector);
+            },
+            clear: function() {
+                this.elements = {};
+            }
+        };
+        
+        // --- SICHERHEITS-UTILITY-FUNKTIONEN ---
+        
+        // Funktion zum Escaping von HTML (XSS-Schutz)
+        function escapeHtml(text) {
+            if(!text || typeof text !== 'string') return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        // Funktion zur Input-Validierung und Sanitierung
+        function sanitizeInput(input, type = 'name') {
+            if(!input || typeof input !== 'string') return '';
+            
+            let sanitized = input.trim();
+            
+            if(type === 'name') {
+                // Maximal 20 Zeichen, nur alphanumerische Zeichen, Leerzeichen, Umlaute, Emojis
+                sanitized = sanitized.substring(0, 20);
+                // Entferne potenziell gefährliche Zeichen, aber erlaube Umlaute und Emojis
+                sanitized = sanitized.replace(/[<>"']/g, '');
+            } else if(type === 'emoji') {
+                // Emojis sollten nur ein Zeichen sein (oder mehrere zusammenhängende Emojis)
+                sanitized = sanitized.substring(0, 10); // Max 10 Zeichen für zusammenhängende Emojis
+            } else if(type === 'password') {
+                // Passwort: Max 50 Zeichen, entferne gefährliche Zeichen
+                sanitized = sanitized.substring(0, 50);
+                sanitized = sanitized.replace(/[<>"']/g, '');
+            }
+            
+            return sanitized;
+        }
         
         // --- EMOJI SELECTION ---
         // 15 Emojis: Primär Tiergesichter, wenn nicht genug dann mit anderen Wesen auffüllen
@@ -1557,8 +1630,18 @@
                 const cardEmoji = card.getAttribute('data-emoji');
                 if(cardEmoji === emoji) {
                     card.classList.add('selected');
-                    // Scroll zu ausgewähltem Emoji
-                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    
+                    // Zentriere das ausgewählte Emoji manuell für bessere Kontrolle
+                    requestAnimationFrame(() => {
+                        const galleryWidth = gallery.clientWidth;
+                        const cardWidth = card.offsetWidth;
+                        const cardLeft = card.offsetLeft;
+                        const scrollPosition = cardLeft - (galleryWidth / 2) + (cardWidth / 2);
+                        gallery.scrollTo({
+                            left: Math.max(0, scrollPosition),
+                            behavior: 'smooth'
+                        });
+                    });
                 } else {
                     card.classList.remove('selected');
                 }
@@ -1577,15 +1660,17 @@
             const inpEmoji = document.getElementById('inpEmoji');
             if(!gallery || !inpEmoji) return;
             
-            // Finde aktuelles Emoji
-            let currentEmoji = myEmoji || '😊';
-            if(!availableEmojis.includes(currentEmoji)) {
-                currentEmoji = availableEmojis[0];
+            // Finde aktuelles Emoji - wenn kein gespeichertes vorhanden, wähle das mittlere
+            let currentEmoji = myEmoji;
+            if(!currentEmoji || !availableEmojis.includes(currentEmoji)) {
+                // Wähle das mittlere Emoji aus der Liste
+                const middleIndex = Math.floor(availableEmojis.length / 2);
+                currentEmoji = availableEmojis[middleIndex];
             }
             currentEmojiIndex = availableEmojis.indexOf(currentEmoji);
             
-            // Erstelle Galerie
-            gallery.innerHTML = availableEmojis.map((emoji, idx) => {
+            // Erstelle Galerie mit Spacern vor und nach den Emojis für zentriertes Scrollen
+            const emojisHtml = availableEmojis.map((emoji, idx) => {
                 const isSelected = emoji === currentEmoji;
                 return `
                     <div class="emoji-card ${isSelected ? 'selected' : ''}" onclick="selectEmoji('${emoji}')" data-emoji="${emoji}">
@@ -1594,13 +1679,45 @@
                 `;
             }).join('');
             
+            // Füge Spacer vor und nach den Emojis hinzu, damit zentriertes Scrollen möglich ist
+            gallery.innerHTML = `<div class="emoji-spacer"></div>${emojisHtml}<div class="emoji-spacer"></div>`;
+            
             inpEmoji.value = currentEmoji;
             myEmoji = currentEmoji;
             
-            // Positioniere so dass nur 1.5 Emojis sichtbar sind (scroll auf Position 0)
-            setTimeout(() => {
-                gallery.scrollLeft = 0;
-            }, 100);
+            // Zentriere das ausgewählte Emoji - warte bis alles gerendert ist
+            const centerSelectedEmoji = () => {
+                const selectedCard = gallery.querySelector('.emoji-card.selected');
+                if(!selectedCard) {
+                    return;
+                }
+                
+                // Warte auf Layout-Berechnung mit mehreren Animation Frames
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            // Hole alle notwendigen Dimensionen
+                            const galleryWidth = gallery.clientWidth;
+                            const cardWidth = selectedCard.offsetWidth;
+                            const cardLeft = selectedCard.offsetLeft;
+                            
+                            // Berechne die Scroll-Position, um das Emoji zu zentrieren
+                            // cardLeft ist die Position relativ zum scrollbaren Container (inkl. Spacer)
+                            // Wir wollen das Emoji in der Mitte der sichtbaren Breite positionieren
+                            const scrollPosition = cardLeft - (galleryWidth / 2) + (cardWidth / 2);
+                            
+                            // Setze die Scroll-Position (mit Spacern sollte dies immer >= 0 sein)
+                            gallery.scrollLeft = scrollPosition;
+                        });
+                    });
+                });
+            };
+            
+            // Mehrere Versuche mit unterschiedlichen Delays, um sicherzustellen, dass es funktioniert
+            // Wichtig: Warte bis die Spacer gerendert sind
+            setTimeout(centerSelectedEmoji, 100);
+            setTimeout(centerSelectedEmoji, 300);
+            setTimeout(centerSelectedEmoji, 600);
             
             // Initialisiere Anleitung-Button Sichtbarkeit
             const anleitungBtn = document.getElementById('anleitungButton');
@@ -2244,6 +2361,9 @@
                 const querySnapshot = await getDocs(q);
                 
                 const deletePromises = [];
+                const now = Date.now();
+                const MIN_ROOM_AGE_MS = 30000; // 30 Sekunden - schütze neu erstellte Räume
+                
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
                     const players = data.players || {};
@@ -2257,6 +2377,22 @@
                     const hasHostName = data.hostName && typeof data.hostName === 'string' && data.hostName.trim().length > 0;
                     const isValidStatus = data.status === 'lobby';
                     
+                    // Prüfe ob Raum zu neu ist (geschützt vor Cleanup)
+                    let roomAge = Infinity;
+                    if(data.createdAt) {
+                        if(data.createdAt.toMillis) {
+                            // Firestore Timestamp
+                            roomAge = now - data.createdAt.toMillis();
+                        } else if(typeof data.createdAt === 'number') {
+                            // Unix Timestamp
+                            roomAge = now - data.createdAt;
+                        } else if(data.createdAt.seconds) {
+                            // Firestore Timestamp (Alternative)
+                            roomAge = now - (data.createdAt.seconds * 1000);
+                        }
+                    }
+                    const isNewRoom = roomAge < MIN_ROOM_AGE_MS;
+                    
                     // Lösche Räume wenn:
                     // 1. Keine echten Spieler vorhanden
                     // 2. ODER nur noch ein Spieler im Winner-Screen (Geisterlobby)
@@ -2264,6 +2400,7 @@
                     // 4. ODER kein gültiger Host-Name (toter Raum)
                     // 5. ODER Status nicht "lobby" (außer winner/voting die noch aktiv sein könnten)
                     // WICHTIG: Räume im "lobby"-Status mit mindestens einem Spieler (Host wartet auf Spieler) NICHT löschen
+                    // WICHTIG: Neu erstellte Räume (unter 30 Sekunden) NICHT löschen
                     const isWinnerScreenWithOnePlayer = data.status === 'winner' && realPlayers.length === 1;
                     const isLobbyWithHost = data.status === 'lobby' && realPlayers.length >= 1 && hasHostName;
                     const shouldDelete = (realPlayers.length === 0 || 
@@ -2271,7 +2408,8 @@
                                        data.status === 'closed' || 
                                        !hasHostName ||
                                        (data.status && data.status !== 'lobby' && data.status !== 'game' && data.status !== 'result' && data.status !== 'winner' && data.status !== 'voting' && data.status !== 'countdown'))
-                                       && !isLobbyWithHost; // NICHT löschen wenn Host in Lobby wartet
+                                       && !isLobbyWithHost // NICHT löschen wenn Host in Lobby wartet
+                                       && !isNewRoom; // NICHT löschen wenn Raum zu neu ist (unter 30 Sekunden)
                     
                     if(shouldDelete) {
                         deletePromises.push(deleteDoc(doc.ref));
@@ -2279,6 +2417,7 @@
                             realPlayers: realPlayers.length,
                             status: data.status,
                             hasHostName,
+                            roomAge: roomAge < Infinity ? `${Math.round(roomAge / 1000)}s` : 'unbekannt',
                             reason: realPlayers.length === 0 ? 'keine Spieler' : 
                                    isWinnerScreenWithOnePlayer ? 'Winner-Screen mit nur einem Spieler (Geisterlobby)' :
                                    data.status === 'closed' ? 'geschlossen' :
@@ -2333,12 +2472,7 @@
         
         window.loadRoomList = async () => {
             try {
-                // Bereinige leere Räume beim Laden der Liste
-                await cleanupEmptyRooms();
-                
-                // EINMALIG: Lösche die drei toten Räume manuell
-                // Dies kann nach dem ersten Durchlauf entfernt werden
-                await window.forceDeleteDeadRooms();
+                // Automatische Bereinigung deaktiviert
                 
                 const roomsRef = collection(db, "lobbies");
                 const q = query(roomsRef, where("status", "==", "lobby"));
@@ -2380,14 +2514,19 @@
                     roomListEl.style.display = 'block';
                     inpCodeEl.style.display = 'none';
                     inpPasswordEl.style.display = 'none';
-                    roomListEl.innerHTML = rooms.map(room => `
-                        <div class="card" style="padding:15px; margin-bottom:10px; cursor:pointer; background:linear-gradient(145deg, #1e1e1e, #252525);" onclick="selectRoom('${room.id}', ${room.hasPassword ? 'true' : 'false'})">
+                    roomListEl.innerHTML = rooms.map(room => {
+                        // XSS-Schutz: Escape hostName und roomId
+                        const safeHostName = escapeHtml(room.hostName);
+                        const safeRoomId = escapeHtml(room.id);
+                        return `
+                        <div class="card" style="padding:15px; margin-bottom:10px; cursor:pointer; background:linear-gradient(145deg, #1e1e1e, #252525);" onclick="selectRoom('${safeRoomId}', ${room.hasPassword ? 'true' : 'false'})">
                             <div style="font-weight:bold; font-size:1.1rem; color:#ff8c00;">
-                                ${room.hasPassword ? '🔒 ' : ''}Raum von ${room.hostName}
+                                ${room.hasPassword ? '🔒 ' : ''}Raum von ${safeHostName}
                             </div>
                             <div style="font-size:0.85rem; color:#aaa; margin-top:5px;">👥 ${room.playerCount} Spieler</div>
                         </div>
-                    `).join('');
+                    `;
+                    }).join('');
                 }
             } catch(error) {
                 console.error('Fehler beim Laden der Räume:', error);
@@ -2427,15 +2566,20 @@
 
         // --- CREATE GAME ---
         window.createGame = async () => {
-            const name = document.getElementById('inpName').value.trim();
-            const emoji = document.getElementById('inpEmoji').value || '😊';
+            const nameInput = document.getElementById('inpName').value.trim();
+            const emojiInput = document.getElementById('inpEmoji').value || '😊';
             const gender = "divers"; // Deaktiviert, aber behalten
             const gameMode = getSelectedGameMode();
             const selectedCategories = getSelectedCategories();
-            const roomPassword = document.getElementById('inpRoomPassword').value.trim();
+            const roomPasswordInput = document.getElementById('inpRoomPassword').value.trim();
+            
+            // Input-Validierung und Sanitierung (Sicherheitsfix)
+            const name = sanitizeInput(nameInput, 'name');
+            const emoji = sanitizeInput(emojiInput, 'emoji') || '😊';
+            const roomPassword = sanitizeInput(roomPasswordInput, 'password');
             
             if(!name) {
-                showToast("Bitte gib einen Namen ein!");
+                showToast("Bitte gib einen gültigen Namen ein!");
                 return;
             }
             
@@ -2476,6 +2620,7 @@
                 host: name,
                 hostName: name, // Für Raumliste
                 status: "lobby",
+                createdAt: serverTimestamp(), // Zeitstempel für Cleanup-Schutz
                 players: { [name]: { temp: startTemp, inventory: [], gender: gender, emoji: emoji, consecutiveWrongAnswers: 0 } },
                 config: { dmg: dmg, speed: speed, startTemp: startTemp, maxTemp: maxTemp, gameMode: gameMode, categories: selectedCategories },
                 votes: {},
@@ -2502,16 +2647,29 @@
 
         // --- JOIN GAME ---
         window.joinGame = async () => {
-            const name = document.getElementById('inpName').value.trim();
-            const emoji = document.getElementById('inpEmoji').value || '😊';
+            const nameInput = document.getElementById('inpName').value.trim();
+            const emojiInput = document.getElementById('inpEmoji').value || '😊';
             const gender = "divers"; // Deaktiviert, aber behalten
             
+            // Input-Validierung und Sanitierung (Sicherheitsfix)
+            const name = sanitizeInput(nameInput, 'name');
+            const emoji = sanitizeInput(emojiInput, 'emoji') || '😊';
+            
             // Verwende ausgewählten Raum-Code oder versuche aus Input-Feld (Fallback)
-            const code = window.selectedRoomId || document.getElementById('inpCode').value.trim().toUpperCase();
-            const password = document.getElementById('inpPassword').value.trim();
+            const codeInput = window.selectedRoomId || document.getElementById('inpCode').value.trim().toUpperCase();
+            const passwordInput = document.getElementById('inpPassword').value.trim();
+            
+            // Validiere Raum-Code (sollte nur alphanumerisch sein, max 6 Zeichen)
+            const code = codeInput.replace(/[^A-Z0-9]/g, '').substring(0, 6);
+            const password = sanitizeInput(passwordInput, 'password');
             
             if(!name) {
                 showToast("Bitte gib deinen Namen ein!");
+                return;
+            }
+            
+            if(!code || code.length < 4) {
+                showToast("Bitte gib einen gültigen Raum-Code ein!");
                 return;
             }
             
@@ -2660,8 +2818,11 @@
                             return;
                         }
                         
+                        // Prüfe ob bereits ein Popup-Trigger für diesen Key in Gang ist
                         if(resultKey !== lastAttackResultKey && !isModalOpen) {
+                            // Setze lastAttackResultKey SOFORT um mehrfache Auslösung zu verhindern
                             lastAttackResultKey = resultKey;
+                            
                             console.log('Attack-Feedback für', myName, ':', result);
                             console.log('Attack-Feedback Debug:', {
                                 totalDmg: result.totalDmg,
@@ -2673,17 +2834,20 @@
                                 lastAttackResultKey: lastAttackResultKey
                             });
                             
-                            // Warte kurz um sicherzustellen, dass alle Daten aktualisiert sind
-                            setTimeout(() => {
-                                // Nochmal prüfen ob Modal in der Zwischenzeit geöffnet wurde
-                                const modalCheck = document.getElementById('attackModal');
-                                const isModalOpenCheck = modalCheck && modalCheck.style.display === 'flex';
-                                if(!isModalOpenCheck) {
-                                    triggerAttackFeedback(result);
-                                } else {
-                                    console.log('Popup-Logik: Modal wurde in der Zwischenzeit geöffnet, überspringe triggerAttackFeedback');
+                            // Prüfe sofort nochmal ob Modal bereits geöffnet ist (doppelter Check)
+                            const modalDoubleCheck = document.getElementById('attackModal');
+                            const isModalOpenDoubleCheck = modalDoubleCheck && modalDoubleCheck.style.display === 'flex';
+                            
+                            if(!isModalOpenDoubleCheck && !isOpeningAttackModal) {
+                                // Öffne Modal direkt ohne setTimeout
+                                triggerAttackFeedback(result);
+                            } else {
+                                console.log('Popup-Logik: Modal bereits geöffnet oder wird geöffnet, überspringe triggerAttackFeedback');
+                                // Setze lastAttackResultKey zurück wenn Modal bereits offen ist, damit es später erneut versucht werden kann
+                                if(isModalOpenDoubleCheck) {
+                                    lastAttackResultKey = null;
                                 }
-                            }, 100);
+                            }
                             
                             // Entferne nach Anzeige (mit längerer Verzögerung damit alle sehen können - 8 Sekunden)
                             setTimeout(() => {
@@ -2883,9 +3047,12 @@
                 if(data.status === 'lobby') {
                     showScreen('screen-lobby');
                     const players = Object.keys(data.players);
-                    document.getElementById('lobbyList').innerHTML = players.map(p => 
-                        `<div>${p}${p === data.host ? ' 👑' : ''}</div>`
-                    ).join('');
+                    // XSS-Schutz: Escape alle Spielernamen und Emojis
+                    document.getElementById('lobbyList').innerHTML = players.map(p => {
+                        const safeName = escapeHtml(p);
+                        const isHost = p === data.host;
+                        return `<div>${safeName}${isHost ? ' 👑' : ''}</div>`;
+                    }).join('');
                     const readyObj = data.lobbyReady || {};
                     if(readyList) {
                         readyList.innerHTML = players.map(p => {
@@ -2893,7 +3060,9 @@
                             const icon = ready ? '✅' : '⏳';
                             const playerData = data.players[p];
                             const playerEmoji = playerData?.emoji || '😊';
-                            return `<div>${icon} ${playerEmoji} ${p}</div>`;
+                            const safeName = escapeHtml(p);
+                            const safeEmoji = escapeHtml(playerEmoji);
+                            return `<div>${icon} ${safeEmoji} ${safeName}</div>`;
                         }).join('');
                     }
                     const readyCount = players.filter(p => readyObj[p]).length;
@@ -3980,6 +4149,12 @@
 
         // --- LEAVE LOBBY ---
         window.leaveLobby = async () => {
+            // Memory Leak Fix: Cleanup des onSnapshot Listeners beim Verlassen
+            if(unsubscribeListener) {
+                unsubscribeListener();
+                unsubscribeListener = null;
+                console.log('onSnapshot Listener aufgeräumt');
+            }
             if(!confirm("Lobby wirklich verlassen?")) return;
             
             if(roomId && myName) {
@@ -4319,8 +4494,9 @@
         }
 
         function triggerAttackFeedback(attackResult) {
-            const modal = document.getElementById('attackModal');
-            const containerEl = document.getElementById('attackModalContainer');
+            // PERFORMANCE-OPTIMIERUNG: Gecachte DOM-Elemente verwenden
+            const modal = domCache.get('attackModal');
+            const containerEl = domCache.get('attackModalContainer');
             if(!modal) return;
             
             // Prüfe ob Modal bereits offen ist - verhindere mehrfache Anzeige
@@ -4328,6 +4504,15 @@
                 console.log('Modal bereits offen, überspringe triggerAttackFeedback');
                 return;
             }
+            
+            // Prüfe ob bereits ein Modal-Öffnungsprozess läuft
+            if(isOpeningAttackModal) {
+                console.log('Modal wird bereits geöffnet, überspringe triggerAttackFeedback');
+                return;
+            }
+            
+            // Markiere dass Modal geöffnet wird
+            isOpeningAttackModal = true;
             
             // attackResult kann sein: { attackers: [], totalDmg: 0, attackDetails: [{ attacker, dmg, isPenalty }] }
             // oder null/undefined wenn nicht angegriffen
@@ -4505,6 +4690,9 @@
             
             // Zeige Modal
             modal.style.display = 'flex';
+            
+            // Modal ist jetzt offen - setze Flag zurück
+            isOpeningAttackModal = false;
         }
         
         window.closeAttackModal = async () => {
