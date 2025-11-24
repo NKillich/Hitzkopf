@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hitzkopf 🔥4</title>
+    <title>Hitzkopf 🔥5</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -1889,6 +1889,14 @@
                 // Prüfe ob Angriffe ausgeführt wurden und zeige beim Angegriffenen
                 const meState = data.players?.[myName];
                 if(meState) {
+                    // Debug: Logge ready-Status wenn sich ändert
+                    if(data.ready !== undefined) {
+                        const currentReady = Array.isArray(data.ready) ? data.ready : [];
+                        if(currentReady.length > 0 || (globalData && globalData.ready && globalData.ready.length !== currentReady.length)) {
+                            console.log('onSnapshot: ready-Liste aktualisiert:', currentReady, 'Länge:', currentReady.length);
+                        }
+                    }
+                    
                     // Prüfe ob Angriffe ausgeführt wurden (durch executePendingAttacks)
                     // Zeige Popup für ALLE Spieler (auch die nicht angegriffenen)
                     if(data.attackResults && data.attackResults[myName] !== undefined) {
@@ -2676,8 +2684,25 @@
         // --- SET READY ---
         window.setReady = async () => {
             console.log('setReady: Markiere Spieler als bereit:', myName);
-            await updateDoc(doc(db, "lobbies", roomId), { 
-                ready: arrayUnion(myName) 
+            const ref = doc(db, "lobbies", roomId);
+            
+            // Lese aktuelle ready-Liste aus Firebase
+            const currentData = await getDoc(ref);
+            const currentReady = currentData.data()?.ready || [];
+            console.log('setReady: Aktuelle ready-Liste:', currentReady);
+            
+            // Prüfe ob bereits in der Liste
+            if(currentReady.includes(myName)) {
+                console.log('setReady: Spieler bereits in ready-Liste');
+                return;
+            }
+            
+            // Füge Spieler hinzu
+            const updatedReady = [...currentReady, myName];
+            console.log('setReady: Neue ready-Liste:', updatedReady);
+            
+            await updateDoc(ref, { 
+                ready: updatedReady
             });
             console.log('setReady: Bereitschaft gesetzt');
         };
