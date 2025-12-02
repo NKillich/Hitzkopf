@@ -469,6 +469,13 @@ function App() {
     // Menu
     const [menuOpen, setMenuOpen] = useState(false)
     
+    // Hintergrundmusik
+    const [musicEnabled, setMusicEnabled] = useState(() => {
+        const saved = localStorage.getItem('hk_music_enabled')
+        return saved !== null ? saved === 'true' : true // Standard: an
+    })
+    const backgroundMusicRef = useRef(null)
+    
     // Countdown-Interval für Countdown-Animation
     useEffect(() => {
         if (!showCountdown || !globalData?.countdownEnds) return
@@ -502,6 +509,92 @@ function App() {
         
         return () => clearInterval(interval)
     }, [showCountdown, globalData?.countdownEnds])
+    
+    // Sound-Helper-Funktion
+    // Spielt einen Sound ab (falls die Datei existiert)
+    const playSound = useCallback((soundName, volume = 0.5) => {
+        try {
+            // Versuche Sound abzuspielen
+            // In Vite: Assets aus public Ordner sind direkt über / zugänglich
+            const baseUrl = import.meta.env.BASE_URL || '/'
+            const audio = new Audio(`${baseUrl}sounds/${soundName}.mp3`)
+            audio.volume = volume
+            audio.play().catch(err => {
+                // Ignoriere Fehler, wenn Sound nicht gefunden wird
+                console.log(`🔇 Sound nicht gefunden: ${soundName}`)
+            })
+        } catch (err) {
+            // Ignoriere Fehler beim Erstellen des Audio-Objekts
+            console.log(`🔇 Fehler beim Abspielen von Sound: ${soundName}`)
+        }
+    }, [])
+    
+    // Hintergrundmusik steuern
+    useEffect(() => {
+        // Initialisiere Audio nur einmal
+        if (!backgroundMusicRef.current) {
+            try {
+                // In Vite: Assets aus public Ordner sind direkt über / zugänglich
+                const baseUrl = import.meta.env.BASE_URL || '/'
+                backgroundMusicRef.current = new Audio(`${baseUrl}sounds/background_music.mp3`)
+                backgroundMusicRef.current.loop = true
+                backgroundMusicRef.current.volume = 0.3 // Leiser als andere Sounds
+                
+                // Fehlerbehandlung für fehlende Datei
+                backgroundMusicRef.current.addEventListener('error', (e) => {
+                    console.log('🔇 Hintergrundmusik-Datei nicht gefunden: background_music.mp3', e)
+                })
+            } catch (err) {
+                console.log('🔇 Fehler beim Erstellen des Audio-Objekts:', err)
+            }
+        }
+        
+        const music = backgroundMusicRef.current
+        if (!music) return
+        
+        // Starte oder stoppe Musik basierend auf musicEnabled
+        if (musicEnabled) {
+            music.play().catch(err => {
+                // Automatisches Abspielen kann blockiert sein - das ist normal
+                // Der Benutzer muss erst mit der Seite interagieren
+                console.log('🔇 Automatisches Abspielen blockiert. Musik startet bei Interaktion.')
+            })
+        } else {
+            music.pause()
+        }
+    }, [musicEnabled])
+    
+    // Starte Musik nach erster Benutzerinteraktion (um Autoplay-Blockierung zu umgehen)
+    useEffect(() => {
+        const startMusicOnInteraction = () => {
+            if (musicEnabled && backgroundMusicRef.current) {
+                backgroundMusicRef.current.play().catch(() => {
+                    // Ignoriere Fehler
+                })
+            }
+        }
+        
+        if (musicEnabled) {
+            // Starte Musik bei erster Interaktion
+            const events = ['click', 'touchstart', 'keydown']
+            events.forEach(event => {
+                document.addEventListener(event, startMusicOnInteraction, { once: true })
+            })
+            
+            return () => {
+                events.forEach(event => {
+                    document.removeEventListener(event, startMusicOnInteraction)
+                })
+            }
+        }
+    }, [musicEnabled])
+    
+    // Toggle für Hintergrundmusik
+    const toggleMusic = useCallback(() => {
+        const newValue = !musicEnabled
+        setMusicEnabled(newValue)
+        localStorage.setItem('hk_music_enabled', String(newValue))
+    }, [musicEnabled])
     
     // Firebase Initialisierung
     useEffect(() => {
@@ -617,6 +710,19 @@ function App() {
                     const newReady = data.ready || []
                     if (oldReady.length !== newReady.length ||
                         oldReady.some((val, idx) => val !== newReady[idx])) {
+                        dataChanged = true
+                    }
+                }
+                
+                // WICHTIG: Prüfe auch lobbyReady für Lobby-Bereit-Status
+                if (!dataChanged) {
+                    const oldLobbyReady = globalData.lobbyReady || {}
+                    const newLobbyReady = data.lobbyReady || {}
+                    const oldLobbyReadyKeys = Object.keys(oldLobbyReady)
+                    const newLobbyReadyKeys = Object.keys(newLobbyReady)
+                    if (oldLobbyReadyKeys.length !== newLobbyReadyKeys.length ||
+                        oldLobbyReadyKeys.some(key => oldLobbyReady[key] !== newLobbyReady[key]) ||
+                        newLobbyReadyKeys.some(key => oldLobbyReady[key] !== newLobbyReady[key])) {
                         dataChanged = true
                     }
                 }
@@ -870,6 +976,18 @@ function App() {
                     updateDoc(doc(db, "lobbies", roomId), {
                         [`attackDecisions.${myName}`]: true
                     }).catch(console.error)
+                } else if (!isHotseat && guessedWrong && !attackDecisions[myName] && isPartyMode && db && roomId) {
+                    // Falsch geraten (Party Mode): Wende Strafhitze an
+                    // WICHTIG: Prüfe Ref um mehrfache Ausführung zu verhindern
+                    const penaltyKey = `${data.roundId}-${myName}`
+                    if (penaltyAppliedRef.current !== penaltyKey) {
+                        console.log('❌ [AUTO] Falsch geraten (Party Mode) - wende Strafhitze an')
+                        penaltyAppliedRef.current = penaltyKey
+                        handlePartyModeWrongAnswer().catch(console.error)
+                        setLocalActionDone(true)
+                    } else {
+                        console.log('❌ [AUTO] Strafhitze wurde bereits für diese Runde angewendet, überspringe')
+                    }
                 }
                 
                 // WICHTIG: Prüfe ob es eine neue Runde ist, um sicherzustellen, dass attackDecisions zur aktuellen Runde gehört
@@ -879,6 +997,8 @@ function App() {
                     setShowRewardChoice(false)
                     setShowAttackSelection(false)
                     setShowJokerShop(false)
+                    // Reset Ref bei neuer Runde, damit Strafhitze bei neuer falscher Antwort wieder angewendet werden kann
+                    penaltyAppliedRef.current = null
                 }
                 
                 // Strategic Mode: Zeige Belohnungsauswahl wenn richtig geraten UND noch keine Entscheidung getroffen
@@ -1504,6 +1624,7 @@ function App() {
     
     // Lobby Ready umschalten
     const toggleLobbyReady = async () => {
+        playSound('toggle', 0.4) // Sound beim Toggle
         if (!db || !roomId) return
         
         // WICHTIG: Prüfe ob Spieler ausgeschieden ist
@@ -1517,8 +1638,21 @@ function App() {
         }
         
         const current = !!(globalData?.lobbyReady?.[myName])
+        const newValue = !current
+        
+        // WICHTIG: Aktualisiere globalData sofort für sofortiges visuelles Feedback
+        if (globalData) {
+            setGlobalData({
+                ...globalData,
+                lobbyReady: {
+                    ...(globalData.lobbyReady || {}),
+                    [myName]: newValue
+                }
+            })
+        }
+        
         await updateDoc(doc(db, "lobbies", roomId), {
-            [`lobbyReady.${myName}`]: !current
+            [`lobbyReady.${myName}`]: newValue
         })
     }
     
@@ -1570,7 +1704,6 @@ function App() {
         const randomQ = unusedQuestions[Math.floor(Math.random() * unusedQuestions.length)] || allQuestions[0]
         const qIndex = allQuestions.findIndex(q => q.q === randomQ.q)
         const nextRoundId = (globalData?.roundId ?? 0) + 1
-        const countdownEnds = Date.now() + 3000
         
         console.log('🎮 [START COUNTDOWN] Starte erste Runde:', {
             hotseat: activePlayers[0],
@@ -1579,14 +1712,15 @@ function App() {
             qIndex: qIndex
         })
         
+        // WICHTIG: Direkt zu 'game' wechseln, kein Countdown
+        playSound('game_start', 0.7) // Sound beim Spielstart
         await updateDoc(doc(db, "lobbies", roomId), {
-            status: 'countdown',
+            status: 'game',
             hotseat: activePlayers[0],
             currentQ: randomQ,
             votes: {},
             ready: [],
             roundId: nextRoundId,
-            countdownEnds: countdownEnds,
             lobbyReady: {},
             usedQuestions: qIndex !== -1 ? [...usedQuestions, qIndex] : usedQuestions,
             lastQuestionCategory: randomQ.category,
@@ -1594,27 +1728,19 @@ function App() {
             attackDecisions: {},
             attackResults: {},
             roundRecapShown: false,
-            popupConfirmed: {}
+            popupConfirmed: {},
+            countdownEnds: deleteField() // Stelle sicher, dass countdownEnds gelöscht wird
         })
         
-        console.log('🎮 [START COUNTDOWN] Countdown gestartet, wechsle zu Game in 3300ms')
-        
-        setTimeout(() => {
-            console.log('🎮 [START COUNTDOWN] Wechsle zu Game-Status')
-            updateDoc(doc(db, "lobbies", roomId), { 
-                status: 'game', 
-                countdownEnds: deleteField() 
-            }).catch(err => {
-                console.error('🎮 [START COUNTDOWN] Fehler beim Wechsel zu Game:', err)
-            })
-        }, 3300)
+        console.log('🎮 [START COUNTDOWN] Spiel gestartet, direkt zu Game-Status')
     }
     
     // Antwort wählen
     // PERFORMANCE-OPTIMIERUNG: useCallback verhindert Neuerstellung bei jedem Render
     const vote = useCallback((choice) => {
         setMySelection(choice)
-    }, [])
+        playSound('click', 0.3) // Sound beim Auswählen einer Antwort
+    }, [playSound])
     
     // Antwort absenden - ATOMARES UPDATE (nur spezifischer Pfad)
     const submitVote = async () => {
@@ -1806,6 +1932,9 @@ function App() {
     // Ref für Attack-Modal, um zu verhindern, dass es mehrfach angezeigt wird
     const attackModalShownRef = useRef(null)
     
+    // Ref um zu verhindern, dass Strafhitze mehrfach angewendet wird
+    const penaltyAppliedRef = useRef(null)
+    
     // Hotseat-Popup anzeigen
     const triggerHotseatAlert = (hotseatName, players) => {
         if (hotseatName && players) {
@@ -1938,6 +2067,7 @@ function App() {
     
     // Angriff ausführen
     const doAttack = async (target) => {
+        playSound('attack', 0.6) // Sound beim Angriff
         console.log('🔥 [ATTACK] doAttack aufgerufen:', {
             attacker: myName,
             target: target,
@@ -2708,6 +2838,26 @@ function App() {
                         )}
                         
                         <hr style={{border: 'none', borderTop: '1px solid #333', margin: '20px 0'}} />
+                        <p style={{fontSize: '0.75rem', color: '#888', marginBottom: '8px', textTransform: 'uppercase'}}>Einstellungen:</p>
+                        <button 
+                            onClick={toggleMusic}
+                            style={{
+                                padding: '12px',
+                                fontSize: '0.85rem',
+                                margin: '8px 0',
+                                background: musicEnabled ? '#334400' : '#444',
+                                borderRadius: '8px',
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px'
+                            }}
+                        >
+                            {musicEnabled ? '🔊' : '🔇'} Hintergrundmusik {musicEnabled ? 'an' : 'aus'}
+                        </button>
+                        
+                        <hr style={{border: 'none', borderTop: '1px solid #333', margin: '20px 0'}} />
                         <p style={{fontSize: '0.75rem', color: '#888', marginBottom: '8px', textTransform: 'uppercase'}}>Spielverlauf:</p>
                         <div style={{maxHeight: '200px', fontSize: '0.75rem', marginBottom: '15px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px'}}>
                             {globalData?.log && globalData.log.length > 0 ? (
@@ -3078,43 +3228,123 @@ function App() {
             {currentScreen === 'lobby' && globalData && (
                 <div className="screen active card">
                     <h3 style={{marginBottom: '15px', color: '#ff8c00'}}>👥 Lobby</h3>
-                    <div style={{margin: '20px 0', fontWeight: 'bold', fontSize: '1rem'}}>
-                        {renderPlayers().map((p, idx) => {
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                        gap: '15px',
+                        margin: '20px 0'
+                    }}>
+                        {(() => {
+                            // Sortiere Spieler: Eigener Spieler zuerst, dann alle anderen
+                            const allPlayers = renderPlayers()
+                            const myPlayer = allPlayers.find(p => p.name === myName)
+                            const otherPlayers = allPlayers.filter(p => p.name !== myName)
+                            const sortedPlayers = myPlayer ? [myPlayer, ...otherPlayers] : allPlayers
+                            return sortedPlayers
+                        })().map((p, idx) => {
                             const isReady = globalData.lobbyReady?.[p.name] === true
                             const maxTemp = globalData.config?.maxTemp || 100
                             const isEliminated = (p.temp || 0) >= maxTemp
+                            const isMe = p.name === myName
                             
                             return (
                                 <div 
                                     key={p.name} 
+                                    onClick={isMe ? toggleLobbyReady : undefined}
                                     style={{
-                                        margin: '8px 0', 
-                                        padding: '12px', 
-                                        background: 'rgba(22, 27, 34, 0.6)', 
-                                        borderRadius: '8px',
-                                        opacity: isReady ? 1 : 0.5,
-                                        color: isReady ? '#fff' : '#888'
+                                        padding: '16px',
+                                        background: 'rgba(22, 27, 34, 0.6)',
+                                        borderRadius: '12px',
+                                        border: isMe ? '2px solid #ff8c00' : '1px solid rgba(255, 255, 255, 0.1)',
+                                        opacity: isEliminated ? 0.5 : (isReady ? 1 : 0.4),
+                                        transition: 'opacity 0.3s ease',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        cursor: isMe ? 'pointer' : 'default'
                                     }}
+                                    onMouseEnter={isMe ? (e) => {
+                                        if (!isEliminated) {
+                                            e.currentTarget.style.opacity = isReady ? 1 : 0.5;
+                                        }
+                                    } : undefined}
+                                    onMouseLeave={isMe ? (e) => {
+                                        if (!isEliminated) {
+                                            e.currentTarget.style.opacity = isReady ? 1 : 0.4;
+                                        }
+                                    } : undefined}
                                 >
-                                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                                        <div>
-                                            {p.emoji} {p.name} {globalData.host === p.name && '👑'}
-                                        </div>
-                                        <div style={{fontSize: '0.85rem', fontWeight: 'normal'}}>
-                                            {isReady ? '✅ Bereit' : '⏳ Nicht bereit'}
+                                    <div style={{
+                                        fontSize: '2.5rem',
+                                        marginBottom: '4px'
+                                    }}>
+                                        {p.emoji}
+                                    </div>
+                                    <div style={{
+                                        fontSize: '1rem',
+                                        fontWeight: 'bold',
+                                        color: '#fff',
+                                        textAlign: 'center',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}>
+                                        {p.name}
+                                        {globalData.host === p.name && <span style={{ fontSize: '1.2rem' }}>👑</span>}
+                                    </div>
+                                    
+                                    {/* Toggle Switch */}
+                                    <div
+                                        onClick={isMe ? (e) => {
+                                            e.stopPropagation(); // Verhindere doppeltes Toggling
+                                            toggleLobbyReady();
+                                        } : undefined}
+                                        style={{
+                                            position: 'relative',
+                                            width: '50px',
+                                            height: '28px',
+                                            borderRadius: '14px',
+                                            background: isReady ? '#22c55e' : '#d1d5db',
+                                            cursor: isMe ? 'pointer' : 'default',
+                                            transition: 'all 0.3s ease',
+                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            padding: '2px',
+                                            opacity: isMe ? 1 : 0.8,
+                                            marginTop: '4px'
+                                        }}
+                                        onMouseEnter={isMe ? (e) => {
+                                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                                        } : undefined}
+                                        onMouseLeave={isMe ? (e) => {
+                                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                                        } : undefined}
+                                    >
+                                        <div style={{
+                                            width: '24px',
+                                            height: '24px',
+                                            borderRadius: '12px',
+                                            background: '#fff',
+                                            transition: 'transform 0.3s ease',
+                                            transform: isReady ? 'translateX(22px)' : 'translateX(0)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                                        }}>
+                                            {isReady ? (
+                                                <span style={{ color: '#22c55e', fontSize: '14px', fontWeight: 'bold' }}>✓</span>
+                                            ) : (
+                                                <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 'bold' }}>✕</span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
                             )
                         })}
                     </div>
-                    <button 
-                        className={globalData.lobbyReady?.[myName] ? 'btn-secondary' : 'btn-primary'} 
-                        onClick={toggleLobbyReady}
-                        style={{marginBottom: '10px'}}
-                    >
-                        {globalData.lobbyReady?.[myName] ? '❌ Nicht bereit' : '✅ Bereit'}
-                    </button>
                     {isHost && (
                         <button 
                             className="btn-primary" 
@@ -3624,14 +3854,11 @@ function App() {
                                 localActionDone: localActionDone,
                                 hasAttackDecision: attackDecisions[myName]
                             })
-                            // WICHTIG: Prüfe auch attackDecisions, nicht nur localActionDone
-                            // handlePartyModeWrongAnswer muss aufgerufen werden, wenn attackDecisions noch nicht gesetzt ist
-                            if (isPartyMode && !attackDecisions[myName]) {
-                                console.log('❌ [RESULT UI] Rufe handlePartyModeWrongAnswer auf (attackDecisions fehlt)')
-                                handlePartyModeWrongAnswer()
-                                setLocalActionDone(true)
-                            } else if (isPartyMode && !localActionDone) {
-                                // Fallback: Falls attackDecisions gesetzt ist, aber localActionDone nicht
+                            // WICHTIG: handlePartyModeWrongAnswer wird jetzt im useEffect aufgerufen, nicht hier im Render
+                            // Die Prüfung erfolgt im useEffect-Block (siehe Zeile ~873)
+                            // Hier wird nur noch localActionDone gesetzt, falls nötig
+                            if (isPartyMode && !localActionDone && attackDecisions[myName]) {
+                                // attackDecisions ist bereits gesetzt (Strafhitze wurde angewendet)
                                 setLocalActionDone(true)
                             }
                             return (

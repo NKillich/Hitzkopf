@@ -377,6 +377,58 @@ export const questionCategories = {
             { q: "Lieber Städtetrip oder Wellness?", a: "Städtetrip 🏙️", b: "Wellness 🧘‍♀️" },
             { q: "Lieber duschen oder baden?", a: "Duschen 🚿", b: "Baden 🛁" }
         ]
+    },
+    "informatik": {
+        name: "Informatik",
+        emoji: "💻",
+        questions: [
+            { q: "Lieber Frontend oder Backend?", a: "Frontend 🎨", b: "Backend ⚙️" },
+            { q: "Lieber Python oder JavaScript?", a: "Python 🐍", b: "JavaScript 📜" },
+            { q: "Lieber Windows oder Linux?", a: "Windows 🪟", b: "Linux 🐧" },
+            { q: "Lieber GUI oder Terminal?", a: "GUI 🖱️", b: "Terminal ⌨️" },
+            { q: "Lieber statische oder dynamische Programmiersprache?", a: "Statisch 📊", b: "Dynamisch ⚡" },
+            { q: "Lieber objektorientiert oder funktional programmieren?", a: "OOP 🏗️", b: "Funktional 🔄" },
+            { q: "Lieber SQL oder NoSQL?", a: "SQL 🗄️", b: "NoSQL 📦" },
+            { q: "Lieber Git oder SVN?", a: "Git 🐙", b: "SVN 📝" },
+            { q: "Lieber IDE oder Text-Editor?", a: "IDE 🛠️", b: "Text-Editor 📝" },
+            { q: "Lieber Cloud oder On-Premise?", a: "Cloud ☁️", b: "On-Premise 🏢" },
+            { q: "Lieber Microservices oder Monolith?", a: "Microservices 🧩", b: "Monolith 🗿" },
+            { q: "Lieber Agile oder Wasserfall?", a: "Agile 🏃", b: "Wasserfall 💧" },
+            { q: "Lieber Docker oder VM?", a: "Docker 🐳", b: "VM 💻" },
+            { q: "Lieber REST oder GraphQL?", a: "REST 🌐", b: "GraphQL 📊" },
+            { q: "Lieber Mobile-App oder Web-App?", a: "Mobile 📱", b: "Web 🌐" },
+            { q: "Lieber Dark Mode oder Light Mode?", a: "Dark 🌙", b: "Light ☀️" },
+            { q: "Lieber Tabs oder Spaces?", a: "Tabs ➡️", b: "Spaces ⬜" },
+            { q: "Lieber Compiler oder Interpreter?", a: "Compiler 🔨", b: "Interpreter 🔄" },
+            { q: "Lieber Desktop oder Server?", a: "Desktop 💻", b: "Server 🖥️" },
+            { q: "Lieber Open Source oder Proprietär?", a: "Open Source 🔓", b: "Proprietär 🔒" }
+        ]
+    },
+    "minecraft": {
+        name: "Minecraft",
+        emoji: "⛏️",
+        questions: [
+            { q: "Lieber Survival oder Creative?", a: "Survival 🗡️", b: "Creative ✨" },
+            { q: "Lieber Singleplayer oder Multiplayer?", a: "Singleplayer 👤", b: "Multiplayer 👥" },
+            { q: "Lieber Java oder Bedrock?", a: "Java ☕", b: "Bedrock 📱" },
+            { q: "Lieber bauen oder erkunden?", a: "Bauen 🏗️", b: "Erkunden 🗺️" },
+            { q: "Lieber Overworld oder Nether?", a: "Overworld 🌍", b: "Nether 🔥" },
+            { q: "Lieber Schwert oder Bogen?", a: "Schwert ⚔️", b: "Bogen 🏹" },
+            { q: "Lieber Diamant oder Netherite?", a: "Diamant 💎", b: "Netherite ⚫" },
+            { q: "Lieber Redstone oder Ästhetik?", a: "Redstone 🔴", b: "Ästhetik 🎨" },
+            { q: "Lieber Farmen oder Handcrafting?", a: "Farmen 🚜", b: "Handcrafting ✋" },
+            { q: "Lieber Village oder selbst bauen?", a: "Village 🏘️", b: "Selbst bauen 🏗️" },
+            { q: "Lieber Creeper oder Zombie?", a: "Creeper 💣", b: "Zombie 🧟" },
+            { q: "Lieber Ender Dragon oder Wither?", a: "Ender Dragon 🐲", b: "Wither ☠️" },
+            { q: "Lieber Mods oder Vanilla?", a: "Mods 🔧", b: "Vanilla 🍦" },
+            { q: "Lieber PvP oder PvE?", a: "PvP ⚔️", b: "PvE 🎯" },
+            { q: "Lieber Hardcore oder Normal?", a: "Hardcore 💀", b: "Normal 😊" },
+            { q: "Lieber Stein oder Holz als Baumaterial?", a: "Stein 🪨", b: "Holz 🪵" },
+            { q: "Lieber End City oder Nether Fortress?", a: "End City 🏛️", b: "Nether Fortress 🔥" },
+            { q: "Lieber Beacon oder Enchanting Table?", a: "Beacon 🔆", b: "Enchanting Table ✨" },
+            { q: "Lieber Eisen oder Gold?", a: "Eisen ⚙️", b: "Gold 🪙" },
+            { q: "Lieber Elytra oder Totem of Undying?", a: "Elytra 🪶", b: "Totem of Undying 🛡️" }
+        ]
     }
 };
 
