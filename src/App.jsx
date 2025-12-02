@@ -476,6 +476,11 @@ function App() {
     })
     const backgroundMusicRef = useRef(null)
     
+    // Recovery-System: Tracking von ausstehenden Operationen
+    const pendingOperationsRef = useRef(new Map()) // Trackt ausstehende Firebase-Updates
+    const lastSuccessfulUpdateRef = useRef(Date.now()) // Zeitstempel des letzten erfolgreichen Updates
+    const gameStateWatchdogRef = useRef(null) // Watchdog-Intervall
+    
     // Countdown-Interval für Countdown-Animation
     useEffect(() => {
         if (!showCountdown || !globalData?.countdownEnds) return
@@ -509,6 +514,270 @@ function App() {
         
         return () => clearInterval(interval)
     }, [showCountdown, globalData?.countdownEnds])
+    
+    // Retry-Helper für Firebase-Operationen mit Tracking
+    // Versucht eine Operation mehrmals, falls sie durch Adblocker o.ä. blockiert wird
+    const retryFirebaseOperation = useCallback(async (operation, operationId = null, maxRetries = 3, delay = 1000) => {
+        const opId = operationId || `op_${Date.now()}_${Math.random()}`
+        pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            pendingOperationsRef.current.get(opId).attempts = attempt
+            try {
+                await operation()
+                // Erfolgreich!
+                lastSuccessfulUpdateRef.current = Date.now()
+                pendingOperationsRef.current.delete(opId)
+                return true // Erfolgreich
+            } catch (error) {
+                console.warn(`⚠️ [RETRY] Versuch ${attempt}/${maxRetries} fehlgeschlagen (${opId}):`, error)
+                
+                // Prüfe ob es ein Netzwerkfehler oder Blockierungsfehler ist
+                const isBlockedError = error?.code === 'permission-denied' || 
+                                      error?.code === 'unavailable' ||
+                                      error?.code === 'deadline-exceeded' ||
+                                      error?.message?.includes('network') ||
+                                      error?.message?.includes('blocked') ||
+                                      error?.message?.includes('CORS') ||
+                                      error?.message?.includes('Failed to fetch')
+                
+                if (isBlockedError && attempt < maxRetries) {
+                    // Warte vor dem nächsten Versuch
+                    await new Promise(resolve => setTimeout(resolve, delay * attempt))
+                } else if (attempt === maxRetries) {
+                    // Letzter Versuch fehlgeschlagen
+                    console.error(`❌ [RETRY] Alle Versuche fehlgeschlagen (${opId}):`, error)
+                    pendingOperationsRef.current.delete(opId)
+                    return false // Fehlgeschlagen
+                } else {
+                    // Anderer Fehler - nicht retryen
+                    pendingOperationsRef.current.delete(opId)
+                    throw error
+                }
+            }
+        }
+        pendingOperationsRef.current.delete(opId)
+        return false
+    }, [])
+    
+    // Recovery-Funktion: Synchronisiert State mit Firebase und führt fehlgeschlagene Operationen erneut aus
+    const recoverGameState = useCallback(async () => {
+        if (!db || !roomId || !globalData) return
+        
+        console.log('🔄 [RECOVERY] Starte Recovery-Prozess...')
+        
+        try {
+            // Lade aktuelle Daten direkt aus Firebase
+            const currentDoc = await getDoc(doc(db, "lobbies", roomId))
+            if (!currentDoc.exists()) {
+                console.log('🔄 [RECOVERY] Lobby existiert nicht mehr')
+                return
+            }
+            
+            const firebaseData = currentDoc.data()
+            const currentStatus = firebaseData.status
+            const currentRoundId = firebaseData.roundId
+            
+            console.log('🔄 [RECOVERY] Firebase-Daten geladen:', {
+                status: currentStatus,
+                roundId: currentRoundId,
+                localStatus: globalData.status,
+                localRoundId: globalData.roundId
+            })
+            
+            // Synchronisiere globalData mit Firebase
+            setGlobalData(firebaseData)
+            lastSuccessfulUpdateRef.current = Date.now()
+            
+            // Prüfe ob das Spiel in einem problematischen Zustand ist
+            if (currentStatus === 'result' && isHost && firebaseData.host === myName) {
+                // Prüfe ob alle bereit sind, aber nichts passiert
+                const maxTemp = firebaseData.config?.maxTemp || 100
+                const activePlayers = Object.keys(firebaseData.players || {}).filter(p => {
+                    const temp = firebaseData.players?.[p]?.temp || 0
+                    return temp < maxTemp
+                })
+                const readyCount = (firebaseData.ready || []).filter(p => {
+                    const temp = firebaseData.players?.[p]?.temp || 0
+                    return temp < maxTemp
+                }).length
+                const roundRecapShown = firebaseData.roundRecapShown ?? false
+                const hasAttackResults = firebaseData.attackResults && Object.keys(firebaseData.attackResults).length > 0
+                const popupConfirmed = firebaseData.popupConfirmed || {}
+                
+                // Prüfe ob Popups bestätigt wurden
+                const allPopupConfirmed = !hasAttackResults || activePlayers.every(p => {
+                    if (!firebaseData.attackResults?.[p]) return true
+                    return popupConfirmed[p] === true
+                })
+                
+                // Wenn alle bereit sind und Popups bestätigt, aber nichts passiert → Recovery
+                if (readyCount >= activePlayers.length && 
+                    activePlayers.length > 0 && 
+                    roundRecapShown && 
+                    allPopupConfirmed &&
+                    !pendingOperationsRef.current.has('nextRound')) {
+                    console.log('🔄 [RECOVERY] Spiel hängt - alle bereit, aber keine nächste Runde. Starte Recovery...')
+                    // Recovery: Führe nextRound-Logik direkt aus
+                    try {
+                        const opId = `nextRound_recovery_${Date.now()}`
+                        pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
+                        
+                        const currentHotseatRaw = firebaseData.hotseat || ''
+                        const currentHotseat = typeof currentHotseatRaw === 'string' ? currentHotseatRaw : (currentHotseatRaw?.name || String(currentHotseatRaw || ''))
+                        let nextHotseatIndex = activePlayers.indexOf(currentHotseat)
+                        if (nextHotseatIndex === -1) nextHotseatIndex = 0
+                        nextHotseatIndex = (nextHotseatIndex + 1) % activePlayers.length
+                        const nextHotseat = activePlayers[nextHotseatIndex]
+                        
+                        const usedQuestions = firebaseData.usedQuestions || []
+                        const activeCategories = firebaseData.config?.categories || Object.keys(questionCategories)
+                        const allQuestions = getAllQuestions(activeCategories)
+                        const unusedQuestions = allQuestions.filter((q, idx) => !usedQuestions.includes(idx))
+                        const randomQ = unusedQuestions[Math.floor(Math.random() * unusedQuestions.length)] || allQuestions[0]
+                        const qIndex = allQuestions.findIndex(q => q.q === randomQ.q)
+                        const nextRoundId = (firebaseData.roundId ?? 0) + 1
+                        
+                        // Hinweis: Eiswürfel-Automatik wird beim nächsten Listener-Update angewendet
+                        // (applyIceCooling ist hier nicht verfügbar, aber nicht kritisch für Recovery)
+                        
+                        const updateData = {
+                            status: 'game',
+                            hotseat: nextHotseat,
+                            currentQ: randomQ,
+                            roundId: nextRoundId,
+                            lastQuestionCategory: randomQ.category,
+                            roundRecapShown: false,
+                            votes: deleteField(),
+                            ready: [],
+                            lobbyReady: {},
+                            pendingAttacks: {},
+                            attackDecisions: {},
+                            attackResults: {},
+                            popupConfirmed: {},
+                            countdownEnds: deleteField()
+                        }
+                        
+                        if (qIndex !== -1) {
+                            updateData.usedQuestions = [...usedQuestions, qIndex]
+                        }
+                        
+                        const success = await retryFirebaseOperation(async () => {
+                            await updateDoc(doc(db, "lobbies", roomId), updateData)
+                        }, opId, 3, 1000)
+                        
+                        if (success) {
+                            pendingOperationsRef.current.delete(opId)
+                            console.log('✅ [RECOVERY] Nächste Runde erfolgreich gestartet')
+                        } else {
+                            console.error('❌ [RECOVERY] Nächste Runde fehlgeschlagen')
+                        }
+                    } catch (err) {
+                        console.error('❌ [RECOVERY] Fehler beim Starten der nächsten Runde:', err)
+                    }
+                }
+            }
+            
+            // Prüfe ob executePendingAttacks fehlgeschlagen ist
+            if (currentStatus === 'result' && isHost && firebaseData.host === myName) {
+                const allDecided = Object.keys(firebaseData.attackDecisions || {}).length >= Object.keys(firebaseData.players || {}).length
+                const roundRecapShown = firebaseData.roundRecapShown ?? false
+                const hasTruth = firebaseData.votes?.[firebaseData.hotseat]?.choice !== undefined
+                
+                if (allDecided && !roundRecapShown && hasTruth && !pendingOperationsRef.current.has('executeAttacks')) {
+                    console.log('🔄 [RECOVERY] executePendingAttacks fehlgeschlagen. Versuche erneut...')
+                    // Recovery: Führe executePendingAttacks-Logik direkt aus (vereinfacht)
+                    // Da diese Funktion sehr komplex ist, versuchen wir nur die wichtigsten Updates
+                    try {
+                        const opId = `executeAttacks_recovery_${firebaseData.roundId || Date.now()}`
+                        pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
+                        
+                        // Setze nur roundRecapShown auf true, damit das Spiel weitergeht
+                        // Die eigentliche Angriffs-Logik sollte beim nächsten Listener-Update ausgelöst werden
+                        const updateData = {
+                            roundRecapShown: true
+                        }
+                        
+                        const success = await retryFirebaseOperation(async () => {
+                            await updateDoc(doc(db, "lobbies", roomId), updateData)
+                        }, opId, 3, 1000)
+                        
+                        if (success) {
+                            pendingOperationsRef.current.delete(opId)
+                            console.log('✅ [RECOVERY] roundRecapShown gesetzt - Spiel sollte weitergehen')
+                        } else {
+                            console.error('❌ [RECOVERY] executePendingAttacks Recovery fehlgeschlagen')
+                        }
+                    } catch (err) {
+                        console.error('❌ [RECOVERY] Fehler bei executePendingAttacks Recovery:', err)
+                    }
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ [RECOVERY] Fehler beim Recovery:', error)
+        }
+    }, [db, roomId, globalData, isHost, myName])
+    
+    // Watchdog: Prüft regelmäßig, ob das Spiel hängt
+    useEffect(() => {
+        if (!db || !roomId || !globalData) {
+            if (gameStateWatchdogRef.current) {
+                clearInterval(gameStateWatchdogRef.current)
+                gameStateWatchdogRef.current = null
+            }
+            return
+        }
+        
+        // Watchdog läuft alle 5 Sekunden
+        gameStateWatchdogRef.current = setInterval(() => {
+            const timeSinceLastUpdate = Date.now() - lastSuccessfulUpdateRef.current
+            const hasPendingOps = pendingOperationsRef.current.size > 0
+            
+            // Prüfe ob zu lange kein Update erfolgreich war (mehr als 10 Sekunden)
+            if (timeSinceLastUpdate > 10000 && hasPendingOps) {
+                console.warn('⚠️ [WATCHDOG] Lange Zeit kein erfolgreiches Update. Prüfe auf Probleme...')
+                // Prüfe ob Firebase erreichbar ist
+                getDoc(doc(db, "lobbies", roomId)).then(() => {
+                    console.log('✅ [WATCHDOG] Firebase erreichbar')
+                    // Firebase ist erreichbar, aber Updates schlagen fehl → Recovery
+                    recoverGameState()
+                }).catch(err => {
+                    console.error('❌ [WATCHDOG] Firebase nicht erreichbar:', err)
+                })
+            }
+            
+            // Prüfe ob das Spiel in einem problematischen Zustand ist
+            if (globalData.status === 'result' && isHost) {
+                const maxTemp = globalData.config?.maxTemp || 100
+                const activePlayers = Object.keys(globalData.players || {}).filter(p => {
+                    const temp = globalData.players?.[p]?.temp || 0
+                    return temp < maxTemp
+                })
+                const readyCount = (globalData.ready || []).filter(p => {
+                    const temp = globalData.players?.[p]?.temp || 0
+                    return temp < maxTemp
+                }).length
+                const roundRecapShown = globalData.roundRecapShown ?? false
+                
+                // Wenn alle bereit sind, aber seit 15 Sekunden nichts passiert → Recovery
+                if (readyCount >= activePlayers.length && 
+                    activePlayers.length > 0 && 
+                    roundRecapShown &&
+                    timeSinceLastUpdate > 15000) {
+                    console.warn('⚠️ [WATCHDOG] Spiel scheint zu hängen - alle bereit, aber keine Aktion. Starte Recovery...')
+                    recoverGameState()
+                }
+            }
+        }, 5000)
+        
+        return () => {
+            if (gameStateWatchdogRef.current) {
+                clearInterval(gameStateWatchdogRef.current)
+                gameStateWatchdogRef.current = null
+            }
+        }
+    }, [db, roomId, globalData, isHost, recoverGameState])
     
     // Sound-Helper-Funktion
     // Spielt einen Sound ab (falls die Datei existiert)
@@ -621,6 +890,9 @@ function App() {
                 setCurrentScreen('start')
                 return
             }
+            
+            // Update erfolgreich erhalten → aktualisiere Zeitstempel
+            lastSuccessfulUpdateRef.current = Date.now()
             
             const data = snapshot.data()
             
@@ -1325,11 +1597,22 @@ function App() {
                     if (!window[timeoutKey]) {
                         window[timeoutKey] = true
                         console.log('⏭️ [AUTO-NEXT] Alle bereit und Popups bestätigt, starte nächste Runde in 1000ms')
-                        const timeoutId = setTimeout(() => {
+                        const timeoutId = setTimeout(async () => {
                             console.log('⏭️ [AUTO-NEXT] Starte nächste Runde')
-                            nextRound().catch(err => {
+                            try {
+                                await nextRound()
+                            } catch (err) {
                                 console.error('⏭️ [AUTO-NEXT] Fehler:', err)
-                            })
+                                // Versuche es erneut nach 2 Sekunden
+                                setTimeout(async () => {
+                                    console.log('⏭️ [AUTO-NEXT] Retry nach Fehler...')
+                                    try {
+                                        await nextRound()
+                                    } catch (retryErr) {
+                                        console.error('⏭️ [AUTO-NEXT] Retry auch fehlgeschlagen:', retryErr)
+                                    }
+                                }, 2000)
+                            }
                             delete window[timeoutKey]
                         }, 1000)
                         timeoutIds.push(timeoutId)
@@ -1871,22 +2154,30 @@ function App() {
         if (isReady) {
             // Entferne aus ready-Liste
             const updatedReady = currentReady.filter(n => n !== myName)
-            await updateDoc(ref, {
-                ready: updatedReady
-            }).then(() => {
-                console.log('👍 [SET READY] Nicht mehr bereit gesetzt')
-            }).catch(err => {
-                console.error('👍 [SET READY] Fehler:', err)
+            await retryFirebaseOperation(async () => {
+                await updateDoc(ref, {
+                    ready: updatedReady
+                })
+            }, 3, 500).then(success => {
+                if (success) {
+                    console.log('👍 [SET READY] Nicht mehr bereit gesetzt')
+                } else {
+                    console.error('👍 [SET READY] Fehler: Update nach mehreren Versuchen fehlgeschlagen')
+                }
             })
         } else {
             // Füge zu ready-Liste hinzu
             const updatedReady = [...currentReady, myName]
-            await updateDoc(ref, {
-                ready: updatedReady
-            }).then(() => {
-                console.log('👍 [SET READY] Bereit gesetzt')
-            }).catch(err => {
-                console.error('👍 [SET READY] Fehler:', err)
+            await retryFirebaseOperation(async () => {
+                await updateDoc(ref, {
+                    ready: updatedReady
+                })
+            }, 3, 500).then(success => {
+                if (success) {
+                    console.log('👍 [SET READY] Bereit gesetzt')
+                } else {
+                    console.error('👍 [SET READY] Fehler: Update nach mehreren Versuchen fehlgeschlagen')
+                }
             })
         }
     }
@@ -2143,6 +2434,8 @@ function App() {
     
     // Nächste Runde starten - NUR VOM HOST
     const nextRound = async () => {
+        const opId = `nextRound_${Date.now()}`
+        pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
         console.log('🔄 [NEXT ROUND] Starte nextRound:', {
             isHost: isHost,
             hasDb: !!db,
@@ -2265,12 +2558,36 @@ function App() {
             usedQuestions: updateData.usedQuestions?.length || 0
         })
         
-        await updateDoc(doc(db, "lobbies", roomId), updateData)
-        console.log('🔄 [NEXT ROUND] Firebase aktualisiert, direkt zu Game-Status (kein Countdown)')
+        // WICHTIG: Retry-Mechanismus für blockierte Anfragen
+        const success = await retryFirebaseOperation(async () => {
+            await updateDoc(doc(db, "lobbies", roomId), updateData)
+        }, opId, 3, 1000)
+        
+        if (success) {
+            pendingOperationsRef.current.delete(opId)
+            console.log('🔄 [NEXT ROUND] Firebase aktualisiert, direkt zu Game-Status (kein Countdown)')
+        } else {
+            console.error('❌ [NEXT ROUND] Firebase-Update fehlgeschlagen nach mehreren Versuchen')
+            // Versuche es erneut nach längerer Pause
+            setTimeout(async () => {
+                console.log('🔄 [NEXT ROUND] Retry nach 3 Sekunden...')
+                try {
+                    await updateDoc(doc(db, "lobbies", roomId), updateData)
+                    lastSuccessfulUpdateRef.current = Date.now()
+                    pendingOperationsRef.current.delete(opId)
+                    console.log('✅ [NEXT ROUND] Retry erfolgreich')
+                } catch (err) {
+                    console.error('❌ [NEXT ROUND] Retry auch fehlgeschlagen:', err)
+                    // Watchdog wird das Problem erkennen und Recovery starten
+                }
+            }, 3000)
+        }
     }
     
     // executePendingAttacks - Hitze verteilen - NUR VOM HOST
     const executePendingAttacks = async (data) => {
+        const opId = `executeAttacks_${data?.roundId || Date.now()}`
+        pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
         console.log('⚔️ [EXECUTE ATTACKS] Starte executePendingAttacks:', {
             roundId: data?.roundId,
             isHost: isHost,
@@ -2565,7 +2882,29 @@ function App() {
             }
         }
         
-        await updateDoc(doc(db, "lobbies", roomId), updateData)
+        // WICHTIG: Retry-Mechanismus für blockierte Anfragen
+        const success = await retryFirebaseOperation(async () => {
+            await updateDoc(doc(db, "lobbies", roomId), updateData)
+        }, opId, 3, 1000)
+        
+        if (success) {
+            pendingOperationsRef.current.delete(opId)
+        } else {
+            console.error('❌ [EXECUTE ATTACKS] Firebase-Update fehlgeschlagen nach mehreren Versuchen')
+            // Versuche es erneut nach längerer Pause
+            setTimeout(async () => {
+                console.log('⚔️ [EXECUTE ATTACKS] Retry nach 3 Sekunden...')
+                try {
+                    await updateDoc(doc(db, "lobbies", roomId), updateData)
+                    lastSuccessfulUpdateRef.current = Date.now()
+                    pendingOperationsRef.current.delete(opId)
+                    console.log('✅ [EXECUTE ATTACKS] Retry erfolgreich')
+                } catch (err) {
+                    console.error('❌ [EXECUTE ATTACKS] Retry auch fehlgeschlagen:', err)
+                    // Watchdog wird das Problem erkennen und Recovery starten
+                }
+            }, 3000)
+        }
         
         // WICHTIG: Prüfe nach den Temperatur-Updates, ob nur noch ein Spieler übrig ist
         // Lese aktualisierte Daten aus Firebase, um die neuen Temperaturen zu bekommen
