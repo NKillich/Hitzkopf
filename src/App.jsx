@@ -468,11 +468,20 @@ function App() {
     
     // Menu
     const [menuOpen, setMenuOpen] = useState(false)
+    const [menuPage, setMenuPage] = useState('main') // 'main', 'settings', 'volume', 'log'
     
     // Hintergrundmusik
     const [musicEnabled, setMusicEnabled] = useState(() => {
         const saved = localStorage.getItem('hk_music_enabled')
         return saved !== null ? saved === 'true' : true // Standard: an
+    })
+    const [musicVolume, setMusicVolume] = useState(() => {
+        const saved = localStorage.getItem('hk_music_volume')
+        return saved !== null ? parseInt(saved) : 10 // Standard: 10 (max)
+    })
+    const [soundVolume, setSoundVolume] = useState(() => {
+        const saved = localStorage.getItem('hk_sound_volume')
+        return saved !== null ? parseInt(saved) : 10 // Standard: 10 (max)
     })
     const backgroundMusicRef = useRef(null)
     
@@ -787,7 +796,7 @@ function App() {
             // In Vite: Assets aus public Ordner sind direkt über / zugänglich
             const baseUrl = import.meta.env.BASE_URL || '/'
             const audio = new Audio(`${baseUrl}sounds/${soundName}.mp3`)
-            audio.volume = volume
+            audio.volume = (volume * soundVolume) / 10
             audio.play().catch(err => {
                 // Ignoriere Fehler, wenn Sound nicht gefunden wird
                 console.log(`🔇 Sound nicht gefunden: ${soundName}`)
@@ -796,7 +805,7 @@ function App() {
             // Ignoriere Fehler beim Erstellen des Audio-Objekts
             console.log(`🔇 Fehler beim Abspielen von Sound: ${soundName}`)
         }
-    }, [])
+    }, [soundVolume])
     
     // Hintergrundmusik steuern
     useEffect(() => {
@@ -807,7 +816,7 @@ function App() {
                 const baseUrl = import.meta.env.BASE_URL || '/'
                 backgroundMusicRef.current = new Audio(`${baseUrl}sounds/background_music.mp3`)
                 backgroundMusicRef.current.loop = true
-                backgroundMusicRef.current.volume = 0.3 // Leiser als andere Sounds
+                backgroundMusicRef.current.volume = musicVolume / 10
                 
                 // Fehlerbehandlung für fehlende Datei
                 backgroundMusicRef.current.addEventListener('error', (e) => {
@@ -821,6 +830,9 @@ function App() {
         const music = backgroundMusicRef.current
         if (!music) return
         
+        // Setze Lautstärke basierend auf musicVolume
+        music.volume = musicVolume / 10
+        
         // Starte oder stoppe Musik basierend auf musicEnabled
         if (musicEnabled) {
             music.play().catch(err => {
@@ -831,7 +843,7 @@ function App() {
         } else {
             music.pause()
         }
-    }, [musicEnabled])
+    }, [musicEnabled, musicVolume])
     
     // Starte Musik nach erster Benutzerinteraktion (um Autoplay-Blockierung zu umgehen)
     useEffect(() => {
@@ -864,6 +876,19 @@ function App() {
         setMusicEnabled(newValue)
         localStorage.setItem('hk_music_enabled', String(newValue))
     }, [musicEnabled])
+    
+    const handleMusicVolumeChange = useCallback((value) => {
+        setMusicVolume(value)
+        localStorage.setItem('hk_music_volume', String(value))
+        if (backgroundMusicRef.current) {
+            backgroundMusicRef.current.volume = value / 10
+        }
+    }, [])
+    
+    const handleSoundVolumeChange = useCallback((value) => {
+        setSoundVolume(value)
+        localStorage.setItem('hk_sound_volume', String(value))
+    }, [])
     
     // Firebase Initialisierung
     useEffect(() => {
@@ -3161,55 +3186,376 @@ function App() {
             )}
             
             {menuOpen && (
-    <>
-                    <div className="overlay open" onClick={() => setMenuOpen(false)}></div>
-                    <div className={`admin-drawer ${menuOpen ? 'open' : ''}`}>
-                        <h3 style={{color: '#ff4500', borderBottom: '2px solid #333', paddingBottom: '12px', marginBottom: '15px'}}>⚙️ Menü</h3>
-                        
-                        {isHost && (
-      <div>
-                                <p style={{fontSize: '0.75rem', color: '#888', marginBottom: '8px', textTransform: 'uppercase'}}>Host-Steuerung:</p>
-                                <button onClick={forceNextRound} style={{padding: '12px', fontSize: '0.85rem', margin: '8px 0', background: '#333', borderRadius: '8px', width: '100%'}}>⏩ Runde erzwingen</button>
-                                <button onClick={resetGame} style={{padding: '12px', fontSize: '0.85rem', margin: '8px 0', background: '#550000', borderRadius: '8px', width: '100%'}}>🔄 Spiel neustarten</button>
-                                <button onClick={killLobby} style={{padding: '12px', fontSize: '0.85rem', margin: '8px 0', background: '#880000', borderRadius: '8px', width: '100%'}}>🧨 Lobby löschen</button>
-                                <hr style={{border: 'none', borderTop: '1px solid #333', margin: '20px 0'}} />
-      </div>
+                <>
+                    <div className="overlay open" onClick={() => {
+                        setMenuOpen(false)
+                        setMenuPage('main')
+                    }}></div>
+                    <div style={{
+                        position: 'fixed',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: 'min(90vw, 400px)',
+                        maxHeight: '85vh',
+                        background: 'var(--glass-bg)',
+                        backdropFilter: 'blur(30px) saturate(180%)',
+                        WebkitBackdropFilter: 'blur(30px) saturate(180%)',
+                        border: '1.5px solid var(--glass-border)',
+                        borderRadius: '24px',
+                        padding: '24px',
+                        zIndex: 2002,
+                        boxShadow: 'var(--shadow-xl)',
+                        overflowY: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '16px'
+                    }}>
+                        {menuPage === 'main' && (
+                            <>
+                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                    <h3 style={{color: '#fff', margin: 0}}>⚙️ Menü</h3>
+                                    <button 
+                                        onClick={() => {
+                                            setMenuOpen(false)
+                                            setMenuPage('main')
+                                        }}
+                                        style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            color: '#aaa',
+                                            fontSize: '1.5rem',
+                                            cursor: 'pointer',
+                                            padding: '0',
+                                            width: '32px',
+                                            height: '32px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >✕</button>
+                                </div>
+                                
+                                <button 
+                                    onClick={() => setMenuPage('settings')}
+                                    style={{
+                                        padding: '16px',
+                                        fontSize: '1rem',
+                                        background: 'rgba(22, 27, 34, 0.6)',
+                                        borderRadius: '12px',
+                                        width: '100%',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.3s ease',
+                                        textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.8)'
+                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.6)'
+                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
+                                    }}
+                                >
+                                    ⚙️ Einstellungen
+                                </button>
+                                
+                                <button 
+                                    onClick={() => setMenuPage('volume')}
+                                    style={{
+                                        padding: '16px',
+                                        fontSize: '1rem',
+                                        background: 'rgba(22, 27, 34, 0.6)',
+                                        borderRadius: '12px',
+                                        width: '100%',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.3s ease',
+                                        textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.8)'
+                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.6)'
+                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
+                                    }}
+                                >
+                                    🔊 Lautstärke
+                                </button>
+                                
+                                <button 
+                                    onClick={() => setMenuPage('log')}
+                                    style={{
+                                        padding: '16px',
+                                        fontSize: '1rem',
+                                        background: 'rgba(22, 27, 34, 0.6)',
+                                        borderRadius: '12px',
+                                        width: '100%',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.3s ease',
+                                        textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.8)'
+                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.6)'
+                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
+                                    }}
+                                >
+                                    📜 Spielverlauf
+                                </button>
+                                
+                                <div style={{marginTop: '8px'}}></div>
+                                
+                                <button 
+                                    onClick={leaveLobby}
+                                    style={{
+                                        padding: '16px',
+                                        fontSize: '1rem',
+                                        background: 'rgba(136, 0, 0, 0.6)',
+                                        borderRadius: '12px',
+                                        width: '100%',
+                                        border: '1px solid rgba(255, 0, 0, 0.3)',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.3s ease',
+                                        textAlign: 'left'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = 'rgba(136, 0, 0, 0.8)'
+                                        e.currentTarget.style.borderColor = 'rgba(255, 0, 0, 0.5)'
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'rgba(136, 0, 0, 0.6)'
+                                        e.currentTarget.style.borderColor = 'rgba(255, 0, 0, 0.3)'
+                                    }}
+                                >
+                                    👋 Spiel verlassen
+                                </button>
+                            </>
                         )}
                         
-                        <hr style={{border: 'none', borderTop: '1px solid #333', margin: '20px 0'}} />
-                        <p style={{fontSize: '0.75rem', color: '#888', marginBottom: '8px', textTransform: 'uppercase'}}>Einstellungen:</p>
-                        <button 
-                            onClick={toggleMusic}
-                            style={{
-                                padding: '12px',
-                                fontSize: '0.85rem',
-                                margin: '8px 0',
-                                background: musicEnabled ? '#334400' : '#444',
-                                borderRadius: '8px',
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px'
-                            }}
-                        >
-                            {musicEnabled ? '🔊' : '🔇'} Hintergrundmusik {musicEnabled ? 'an' : 'aus'}
-                        </button>
+                        {menuPage === 'settings' && (
+                            <>
+                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                    <h3 style={{color: '#fff', margin: 0}}>⚙️ Einstellungen</h3>
+                                    <button 
+                                        onClick={() => setMenuPage('main')}
+                                        style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            color: '#aaa',
+                                            fontSize: '1.2rem',
+                                            cursor: 'pointer',
+                                            padding: '0',
+                                            width: '32px',
+                                            height: '32px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >←</button>
+                                </div>
+                                
+                                {isHost && (
+                                    <>
+                                        <button 
+                                            onClick={forceNextRound}
+                                            style={{
+                                                padding: '12px',
+                                                fontSize: '0.9rem',
+                                                margin: '8px 0',
+                                                background: '#333',
+                                                borderRadius: '8px',
+                                                width: '100%',
+                                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                color: '#fff',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            ⏩ Runde erzwingen
+                                        </button>
+                                        <button 
+                                            onClick={resetGame}
+                                            style={{
+                                                padding: '12px',
+                                                fontSize: '0.9rem',
+                                                margin: '8px 0',
+                                                background: '#550000',
+                                                borderRadius: '8px',
+                                                width: '100%',
+                                                border: '1px solid rgba(255, 0, 0, 0.3)',
+                                                color: '#fff',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            🔄 Spiel neustarten
+                                        </button>
+                                        <button 
+                                            onClick={killLobby}
+                                            style={{
+                                                padding: '12px',
+                                                fontSize: '0.9rem',
+                                                margin: '8px 0',
+                                                background: '#880000',
+                                                borderRadius: '8px',
+                                                width: '100%',
+                                                border: '1px solid rgba(255, 0, 0, 0.3)',
+                                                color: '#fff',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            🧨 Lobby löschen
+                                        </button>
+                                    </>
+                                )}
+                                
+                                <button 
+                                    onClick={toggleMusic}
+                                    style={{
+                                        padding: '12px',
+                                        fontSize: '0.9rem',
+                                        margin: '8px 0',
+                                        background: musicEnabled ? '#334400' : '#444',
+                                        borderRadius: '8px',
+                                        width: '100%',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px'
+                                    }}
+                                >
+                                    {musicEnabled ? '🔊' : '🔇'} Hintergrundmusik {musicEnabled ? 'an' : 'aus'}
+                                </button>
+                            </>
+                        )}
                         
-                        <hr style={{border: 'none', borderTop: '1px solid #333', margin: '20px 0'}} />
-                        <p style={{fontSize: '0.75rem', color: '#888', marginBottom: '8px', textTransform: 'uppercase'}}>Spielverlauf:</p>
-                        <div style={{maxHeight: '200px', fontSize: '0.75rem', marginBottom: '15px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px'}}>
-                            {globalData?.log && globalData.log.length > 0 ? (
-                                globalData.log.slice(-10).map((entry, idx) => (
-                                    <div key={idx} style={{marginBottom: '5px', color: '#aaa'}}>{entry}</div>
-                                ))
-                            ) : (
-                                <div style={{color: '#666'}}>Keine Einträge</div>
-                            )}
-                        </div>
+                        {menuPage === 'volume' && (
+                            <>
+                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                    <h3 style={{color: '#fff', margin: 0}}>🔊 Lautstärke</h3>
+                                    <button 
+                                        onClick={() => setMenuPage('main')}
+                                        style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            color: '#aaa',
+                                            fontSize: '1.2rem',
+                                            cursor: 'pointer',
+                                            padding: '0',
+                                            width: '32px',
+                                            height: '32px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >←</button>
+                                </div>
+                                
+                                <div style={{marginBottom: '24px'}}>
+                                    <h4 style={{color: '#fff', marginBottom: '12px', fontSize: '1rem'}}>Hintergrundmusik</h4>
+                                    <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                                        <span style={{fontSize: '1.2rem'}}>🔇</span>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="10"
+                                            value={musicVolume}
+                                            onChange={(e) => handleMusicVolumeChange(parseInt(e.target.value))}
+                                            style={{
+                                                flex: 1,
+                                                height: '6px',
+                                                background: '#333',
+                                                borderRadius: '3px',
+                                                outline: 'none',
+                                                WebkitAppearance: 'none',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span style={{fontSize: '1.2rem'}}>🔊</span>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h4 style={{color: '#fff', marginBottom: '12px', fontSize: '1rem'}}>Soundeffekte</h4>
+                                    <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                                        <span style={{fontSize: '1.2rem'}}>🔇</span>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="10"
+                                            value={soundVolume}
+                                            onChange={(e) => handleSoundVolumeChange(parseInt(e.target.value))}
+                                            style={{
+                                                flex: 1,
+                                                height: '6px',
+                                                background: '#333',
+                                                borderRadius: '3px',
+                                                outline: 'none',
+                                                WebkitAppearance: 'none',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span style={{fontSize: '1.2rem'}}>🔊</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                         
-                        <button onClick={leaveLobby} style={{padding: '12px', fontSize: '0.85rem', margin: '8px 0', background: '#444', borderRadius: '8px', width: '100%'}}>👋 Lobby verlassen</button>
-      </div>
+                        {menuPage === 'log' && (
+                            <>
+                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                    <h3 style={{color: '#fff', margin: 0}}>📜 Spielverlauf</h3>
+                                    <button 
+                                        onClick={() => setMenuPage('main')}
+                                        style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            color: '#aaa',
+                                            fontSize: '1.2rem',
+                                            cursor: 'pointer',
+                                            padding: '0',
+                                            width: '32px',
+                                            height: '32px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >←</button>
+                                </div>
+                                
+                                <div style={{
+                                    maxHeight: '400px',
+                                    fontSize: '0.85rem',
+                                    overflowY: 'auto',
+                                    background: 'rgba(0,0,0,0.3)',
+                                    padding: '12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                                }}>
+                                    {globalData?.log && globalData.log.length > 0 ? (
+                                        globalData.log.slice(-20).map((entry, idx) => (
+                                            <div key={idx} style={{marginBottom: '8px', color: '#aaa', lineHeight: '1.4'}}>{entry}</div>
+                                        ))
+                                    ) : (
+                                        <div style={{color: '#666'}}>Keine Einträge</div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </>
             )}
             
@@ -3594,7 +3940,7 @@ function App() {
                                         padding: '16px',
                                         background: 'rgba(22, 27, 34, 0.6)',
                                         borderRadius: '12px',
-                                        border: isMe ? '2px solid #ff8c00' : '1px solid rgba(255, 255, 255, 0.1)',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
                                         opacity: isEliminated ? 0.5 : (isReady ? 1 : 0.4),
                                         transition: 'opacity 0.3s ease',
                                         display: 'flex',
@@ -3722,17 +4068,20 @@ function App() {
                             // WICHTIG: isHotseat nur basierend auf currentHotseat berechnen, nicht auf globalData.hotseat
                             // Das verhindert unnötige Re-Renders, wenn sich nur Votes ändern
                             const isHotseat = player.name === currentHotseat
+                            const hasAnswered = !!globalData.votes?.[player.name]
                             
                             return (
                                 <div key={player.name} className={`thermo-item ${isHotseat ? 'is-hotseat' : ''}`} style={{
-                                    border: isHotseat ? '2px solid #ff8c00' : '1px solid #333',
+                                    border: hasAnswered ? '2px solid #22c55e' : '1px solid #333',
                                     borderRadius: '10px',
                                     padding: '12px',
-                                    background: 'rgba(22, 27, 34, 0.6)'
+                                    background: hasAnswered ? 'rgba(34, 197, 94, 0.2)' : 'rgba(22, 27, 34, 0.6)',
+                                    opacity: hasAnswered ? 1 : 0.5,
+                                    transition: 'opacity 0.3s ease'
                                 }}>
                                     <div className="thermo-top" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
                                         <span style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                                            {isHotseat && <span style={{color: '#ff8c00'}}>🔥</span>}
+                                            {isHotseat && <span>🔥</span>}
                                             <span>{player.emoji} {player.name}</span>
                                         </span>
                                         <span style={{fontWeight: 'bold', color: tempPercent >= 100 ? '#ff0000' : '#fff'}}>{player.temp}°C</span>
@@ -3783,14 +4132,14 @@ function App() {
                             <div style={{
                                 marginBottom: '15px',
                                 padding: '10px 15px',
-                                background: isHotseat ? 'rgba(255, 140, 0, 0.2)' : 'rgba(22, 27, 34, 0.6)',
-                                border: isHotseat ? '2px solid #ff8c00' : '1px solid #333',
+                                background: 'rgba(22, 27, 34, 0.6)',
+                                border: '1px solid #333',
                                 borderRadius: '10px',
                                 textAlign: 'center'
                             }}>
                                 <p style={{
                                     margin: 0,
-                                    color: isHotseat ? '#ff8c00' : '#aaa',
+                                    color: '#aaa',
                                     fontSize: '0.95rem',
                                     fontWeight: isHotseat ? 'bold' : 'normal'
                                 }}>
@@ -3920,7 +4269,7 @@ function App() {
                         if (isHotseat) {
                             return (
                                 <div style={{margin: '20px 0', padding: '15px', background: 'rgba(22, 27, 34, 0.6)', borderRadius: '10px'}}>
-                                    <p style={{color: '#aaa'}}>Du hast die Frage beantwortet.</p>
+                                    <p style={{color: '#aaa'}}>Du hast die Frage beantwortet. Warte auf die anderen Spieler...</p>
                                 </div>
                             )
                         } else if (myVote && truth !== undefined && truth !== null && String(myVote.choice) === String(truth)) {
