@@ -1519,26 +1519,37 @@ function App() {
             // Host Auto-Advance: Wenn alle Spieler geantwortet haben, automatisch zu Result
             // WICHTIG: Nur Host führt Auto-Advance aus
             // WICHTIG: Hotseat MUSS auch geantwortet haben!
+            // WICHTIG: Nur aktive Spieler (nicht eliminiert) zählen!
             if (data.status === 'game' && isHost && data.host === myName && data.votes) {
-                const playerCount = Object.keys(data.players || {}).length
-                const voteCount = Object.keys(data.votes || {}).length
+                const maxTemp = data.config?.maxTemp || 100
+                // WICHTIG: Zähle nur aktive Spieler (nicht eliminiert)
+                const activePlayers = Object.keys(data.players || {}).filter(p => {
+                    const temp = data.players?.[p]?.temp || 0
+                    return temp < maxTemp
+                })
+                const playerCount = activePlayers.length
+                // WICHTIG: Zähle nur Votes von aktiven Spielern
+                const voteCount = activePlayers.filter(p => {
+                    return data.votes?.[p]?.choice !== undefined
+                }).length
                 // WICHTIG: Stelle sicher, dass hotseat ein String ist
                 const hotseat = typeof data.hotseat === 'string' ? data.hotseat : (data.hotseat?.name || String(data.hotseat || ''))
-                const hotseatHasVoted = hotseat && data.votes?.[hotseat]?.choice !== undefined
+                const hotseatHasVoted = hotseat && activePlayers.includes(hotseat) && data.votes?.[hotseat]?.choice !== undefined
                 
                 console.log('⏩ [AUTO-ADVANCE] Prüfung:', {
                     roundId: data.roundId,
                     status: data.status,
+                    activePlayers: activePlayers,
                     playerCount: playerCount,
                     voteCount: voteCount,
                     hotseat: hotseat,
                     hotseatHasVoted: hotseatHasVoted,
                     votes: Object.keys(data.votes || {}),
-                    players: Object.keys(data.players || {}),
+                    allPlayers: Object.keys(data.players || {}),
                     hotseatVote: data.votes?.[hotseat]
                 })
                 
-                // WICHTIG: Alle Spieler (inklusive Hotseat) müssen geantwortet haben
+                // WICHTIG: Alle aktiven Spieler (inklusive Hotseat) müssen geantwortet haben
                 if (voteCount >= playerCount && playerCount > 0 && hotseatHasVoted) {
                     // Verhindere mehrfache Ausführung
                     const timeoutKey = `autoAdvance_${data.roundId}`
@@ -2089,9 +2100,23 @@ function App() {
     // Antwort wählen
     // PERFORMANCE-OPTIMIERUNG: useCallback verhindert Neuerstellung bei jedem Render
     const vote = useCallback((choice) => {
+        // WICHTIG: Prüfe ob Spieler eliminiert ist
+        if (globalData) {
+            const maxTemp = globalData.config?.maxTemp || 100
+            const myTemp = globalData.players?.[myName]?.temp || 0
+            if (myTemp >= maxTemp) {
+                console.warn('📝 [VOTE] Spieler ist eliminiert, kann nicht abstimmen:', {
+                    myName: myName,
+                    temp: myTemp,
+                    maxTemp: maxTemp
+                })
+                alert("Du bist ausgeschieden und kannst nicht mehr abstimmen!")
+                return
+            }
+        }
         setMySelection(choice)
         playSound('click', 0.3) // Sound beim Auswählen einer Antwort
-    }, [playSound])
+    }, [playSound, globalData, myName])
     
     // Antwort absenden - ATOMARES UPDATE (nur spezifischer Pfad)
     const submitVote = async () => {
@@ -2117,6 +2142,19 @@ function App() {
         }
         
         const currentData = currentDoc.data()
+        // WICHTIG: Prüfe ob Spieler eliminiert ist (100°C oder mehr)
+        const maxTemp = currentData?.config?.maxTemp || 100
+        const myTemp = currentData?.players?.[myName]?.temp || 0
+        if (myTemp >= maxTemp) {
+            console.warn('📝 [SUBMIT VOTE] Spieler ist eliminiert, kann nicht abstimmen:', {
+                myName: myName,
+                temp: myTemp,
+                maxTemp: maxTemp
+            })
+            alert("Du bist ausgeschieden und kannst nicht mehr abstimmen!")
+            return
+        }
+        
         const existingVote = currentData?.votes?.[myName]
         const currentRoundId = currentData?.roundId || 0
         
@@ -2544,10 +2582,19 @@ function App() {
             playerTemps: players.map(p => ({ name: p, temp: currentData?.players[p]?.temp || 0 }))
         })
         
-        if (activePlayers.length === 0) {
-            // Alle sind raus, nimm alle Spieler
-            console.log('🔄 [NEXT ROUND] Alle Spieler sind raus, nehme alle Spieler')
-            activePlayers.push(...players)
+        // WICHTIG: Prüfe auf Spielende - wenn nur noch 1 oder 0 aktive Spieler, beende das Spiel
+        if (activePlayers.length <= 1) {
+            const winnerName = activePlayers.length === 1 ? activePlayers[0] : null
+            console.log('🏆 [NEXT ROUND] Spielende erkannt:', {
+                activePlayers: activePlayers.length,
+                winner: winnerName,
+                allPlayers: players.map(p => ({ name: p, temp: currentData?.players[p]?.temp || 0 }))
+            })
+            
+            await updateDoc(doc(db, "lobbies", roomId), {
+                status: 'winner'
+            })
+            return
         }
         
         // WICHTIG: Rotiere Hotseat - finde nächsten Spieler
@@ -3790,7 +3837,7 @@ function App() {
                     </div>
                     
                     <div className="start-actions">
-                        <button className="btn-primary" onClick={() => setCurrentScreen('create')} disabled={!myName.trim()}>
+                        <button className="btn-secondary" onClick={() => setCurrentScreen('create')} disabled={!myName.trim()}>
                             🎮 Spiel erstellen
                         </button>
                         <button className="btn-secondary" onClick={() => { setCurrentScreen('join'); loadRoomList(); }} disabled={!myName.trim()}>
@@ -4106,6 +4153,77 @@ function App() {
                 // PERFORMANCE-FIX: Memoize hotseat-Status, damit sich Markierung nicht ändert, wenn nur Votes geändert werden
                 const currentHotseat = globalData.hotseat
                 const maxTemp = globalData.config?.maxTemp || 100
+                const myTemp = globalData.players?.[myName]?.temp || 0
+                const isEliminated = myTemp >= maxTemp
+                
+                // WICHTIG: Eliminierte Spieler sehen nur Spectator-Ansicht
+                if (isEliminated) {
+                    return (
+                        <div className="screen active card">
+                            <h3 style={{marginBottom: '15px', color: '#ff0000'}}>🔥 Du bist ausgeschieden!</h3>
+                            <div style={{padding: '20px', background: 'rgba(139, 0, 0, 0.3)', borderRadius: '10px', marginBottom: '20px'}}>
+                                <p style={{color: '#fff', fontSize: '1.1rem', marginBottom: '10px'}}>Du hast {myTemp}°C erreicht und bist ausgeschieden.</p>
+                                <p style={{color: '#aaa', fontSize: '0.9rem'}}>Du kannst dem Spiel als Zuschauer folgen.</p>
+                            </div>
+                            <div className="thermo-grid">
+                                {renderPlayers().map((player) => {
+                                    const tempPercent = Math.min((player.temp / maxTemp) * 100, 100)
+                                    const isHotseat = player.name === currentHotseat
+                                    const hasAnswered = !!globalData.votes?.[player.name]
+                                    
+                                    return (
+                                        <div key={player.name} className={`thermo-item ${isHotseat ? 'is-hotseat' : ''}`} style={{
+                                            border: hasAnswered ? '2px solid #22c55e' : '1px solid #333',
+                                            borderRadius: '10px',
+                                            padding: '12px',
+                                            background: hasAnswered ? 'rgba(34, 197, 94, 0.2)' : 'rgba(22, 27, 34, 0.6)',
+                                            opacity: hasAnswered ? 1 : 0.5,
+                                            transition: 'opacity 0.3s ease'
+                                        }}>
+                                            <div className="thermo-top" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                                <span style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                                    {isHotseat && <span>🔥</span>}
+                                                    <span>{player.emoji} {player.name}</span>
+                                                </span>
+                                                <span style={{fontWeight: 'bold', color: tempPercent >= 100 ? '#ff0000' : '#fff'}}>{player.temp}°C</span>
+                                            </div>
+                                            <div className="thermo-bar" style={{
+                                                width: '100%',
+                                                height: '20px',
+                                                background: '#333',
+                                                borderRadius: '10px',
+                                                overflow: 'hidden'
+                                            }}>
+                                                <div className="thermo-fill" style={{
+                                                    width: `${tempPercent}%`,
+                                                    height: '100%',
+                                                    background: (() => {
+                                                        if (tempPercent >= 100) {
+                                                            return 'linear-gradient(90deg, #ff0000, #ff4500)'
+                                                        } else if (tempPercent >= 75) {
+                                                            return 'linear-gradient(90deg, #ff8c00, #ff4500, #ff0000)'
+                                                        } else if (tempPercent >= 50) {
+                                                            return 'linear-gradient(90deg, #ffae00, #ff8c00, #ff4500)'
+                                                        } else if (tempPercent >= 25) {
+                                                            return 'linear-gradient(90deg, #4a9eff, #ffae00, #ff8c00)'
+                                                        } else {
+                                                            return 'linear-gradient(90deg, #4a9eff, #0066cc)'
+                                                        }
+                                                    })(),
+                                                    transition: 'width 0.5s ease-out'
+                                                }}></div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                            <div style={{marginTop: '20px', padding: '15px', background: 'rgba(22, 27, 34, 0.6)', borderRadius: '10px'}}>
+                                <h4 style={{color: '#ff8c00', marginBottom: '10px'}}>Aktuelle Frage:</h4>
+                                <p style={{color: '#fff', fontSize: '1.1rem'}}>{globalData.currentQ?.q || 'Lade Frage...'}</p>
+                            </div>
+                        </div>
+                    )
+                }
                 
                 return (
                 <div className="screen active card">
@@ -4227,12 +4345,14 @@ function App() {
                                 <button 
                                     className={`btn-option ${mySelection === 'A' ? 'selected' : ''}`} 
                                     onClick={() => vote('A')}
+                                    disabled={isEliminated}
                                 >
                                     {globalData.currentQ?.a || 'A'}
                                 </button>
                                 <button 
                                     className={`btn-option ${mySelection === 'B' ? 'selected' : ''}`} 
                                     onClick={() => vote('B')}
+                                    disabled={isEliminated}
                                 >
                                     {globalData.currentQ?.b || 'B'}
                                 </button>
@@ -4241,7 +4361,7 @@ function App() {
                                 className="btn-primary" 
                                 onClick={submitVote} 
                                 style={{marginTop: '20px'}}
-                                disabled={!mySelection}
+                                disabled={!mySelection || isEliminated}
                             >
                                 🔒 Antwort absenden
                             </button>
