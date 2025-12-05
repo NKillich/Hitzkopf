@@ -1565,8 +1565,9 @@ function App() {
                 }
             }
             
-            // Host Auto-Next: Wenn alle Spieler bereit sind UND Popups bestätigt wurden, automatisch nächste Runde
+            // Host Auto-Next: Wenn alle Spieler ihre Antwort abgegeben haben UND Popups bestätigt wurden, automatisch nächste Runde
             // WICHTIG: Nur Host führt Auto-Next aus
+            // WICHTIG: Prüfe auf votes statt ready - wenn alle abgestimmt haben, geht es weiter
             const roundRecapShownForNext = data.roundRecapShown ?? false
             const canAutoNext = data.status === 'result' && isHost && data.host === myName && roundRecapShownForNext
             
@@ -1587,10 +1588,9 @@ function App() {
                     return temp < maxTemp
                 })
                 const playerCount = activePlayers.length
-                const readyCount = (data.ready || []).filter(p => {
-                    // Zähle nur Bereit-Status von aktiven Spielern
-                    const temp = data.players?.[p]?.temp || 0
-                    return temp < maxTemp
+                // WICHTIG: Prüfe auf votes statt ready - alle müssen abgestimmt haben
+                const voteCount = activePlayers.filter(p => {
+                    return data.votes?.[p]?.choice !== undefined
                 }).length
                 const popupConfirmed = data.popupConfirmed || {}
                 // WICHTIG: Prüfe ob alle Popups bestätigt wurden ODER ob keine Attack-Results existieren (keine Popups nötig)
@@ -1607,21 +1607,21 @@ function App() {
                     roundRecapShown: data.roundRecapShown,
                     activePlayers: activePlayers,
                     playerCount: playerCount,
-                    readyCount: readyCount,
-                    ready: data.ready || [],
+                    voteCount: voteCount,
+                    votes: Object.keys(data.votes || {}),
                     hasAttackResults: hasAttackResults,
                     allPopupConfirmed: allPopupConfirmed,
                     popupConfirmed: popupConfirmed,
                     attackResults: Object.keys(data.attackResults || {})
                 })
                 
-                // Alle aktiven Spieler müssen bereit sein UND alle Popups bestätigt haben (falls nötig)
-                if (readyCount >= playerCount && playerCount > 0 && allPopupConfirmed) {
+                // Alle aktiven Spieler müssen abgestimmt haben UND alle Popups bestätigt haben (falls nötig)
+                if (voteCount >= playerCount && playerCount > 0 && allPopupConfirmed) {
                     // Verhindere mehrfache Ausführung
                     const timeoutKey = `autoNext_${data.roundId}`
                     if (!window[timeoutKey]) {
                         window[timeoutKey] = true
-                        console.log('⏭️ [AUTO-NEXT] Alle bereit und Popups bestätigt, starte nächste Runde in 1000ms')
+                        console.log('⏭️ [AUTO-NEXT] Alle haben abgestimmt und Popups bestätigt, starte nächste Runde in 1000ms')
                         const timeoutId = setTimeout(async () => {
                             console.log('⏭️ [AUTO-NEXT] Starte nächste Runde')
                             try {
@@ -1646,12 +1646,12 @@ function App() {
                     }
                 } else {
                     console.log('⏭️ [AUTO-NEXT] Bedingungen nicht erfüllt:', {
-                        readyCheck: readyCount >= playerCount,
+                        voteCheck: voteCount >= playerCount,
                         popupCheck: allPopupConfirmed,
-                        readyCount: readyCount,
+                        voteCount: voteCount,
                         playerCount: playerCount,
                         hasAttackResults: hasAttackResults,
-                        ready: data.ready || [],
+                        votes: Object.keys(data.votes || {}),
                         popupConfirmed: popupConfirmed,
                         missingPopups: Object.keys(data.players || {}).filter(p => {
                             if (!data.attackResults?.[p]) return false
@@ -1684,9 +1684,10 @@ function App() {
         }
     }, [db, roomId, myName, isHost, globalData?.status, globalData?.roundId, globalData?.hotseat, currentScreen, showCountdown])
     
-    // Emoji auswählen - mit zentriertem Scrollen
+    // Emoji auswählen - mit zentriertem Scrollen und Endless Scrolling
     const emojiGalleryRef = useRef(null)
     const [emojiScrollIndex, setEmojiScrollIndex] = useState(Math.floor(availableEmojis.length / 2))
+    const isScrollingRef = useRef(false)
     
     // Initialisiere mit mittlerem Emoji - IMMER mittlerer Charakter als erstes
     useEffect(() => {
@@ -1707,14 +1708,60 @@ function App() {
                 setMyEmoji(middleEmoji)
             }
         }
+        
+        // Initialisiere Scroll-Position zur mittleren Gruppe für Endless Scrolling
+        if (emojiGalleryRef.current && currentScreen === 'start') {
+            setTimeout(() => {
+                const gallery = emojiGalleryRef.current
+                if (gallery) {
+                    const cardWidth = 80 + 10 // card width + gap
+                    const middleGroupStart = availableEmojis.length * cardWidth
+                    gallery.scrollLeft = middleGroupStart
+                }
+            }, 200)
+        }
     }, [currentScreen])
     
-    // Zentriere das ausgewählte Emoji
+    // Endless Scrolling Handler - springt nahtlos von Ende zu Anfang und umgekehrt
+    useEffect(() => {
+        const gallery = emojiGalleryRef.current
+        if (!gallery || currentScreen !== 'start') return
+        
+        const handleScroll = () => {
+            if (isScrollingRef.current) return
+            
+            const scrollLeft = gallery.scrollLeft
+            const scrollWidth = gallery.scrollWidth
+            const clientWidth = gallery.clientWidth
+            const singleGroupWidth = scrollWidth / 3 // 3 Gruppen von Emojis
+            
+            // Wenn am Anfang der ersten Gruppe, springe zur Mitte der zweiten Gruppe
+            if (scrollLeft < singleGroupWidth * 0.1) {
+                isScrollingRef.current = true
+                gallery.scrollLeft = singleGroupWidth + (scrollLeft % singleGroupWidth)
+                setTimeout(() => { isScrollingRef.current = false }, 100)
+            }
+            // Wenn am Ende der letzten Gruppe, springe zur Mitte der zweiten Gruppe
+            else if (scrollLeft > singleGroupWidth * 2.9) {
+                isScrollingRef.current = true
+                gallery.scrollLeft = singleGroupWidth + (scrollLeft % singleGroupWidth)
+                setTimeout(() => { isScrollingRef.current = false }, 100)
+            }
+        }
+        
+        gallery.addEventListener('scroll', handleScroll)
+        return () => gallery.removeEventListener('scroll', handleScroll)
+    }, [currentScreen])
+    
+    // Zentriere das ausgewählte Emoji - Endless Scrolling
     useEffect(() => {
         if (emojiGalleryRef.current && emojiScrollIndex >= 0 && currentScreen === 'start') {
             const gallery = emojiGalleryRef.current
             const cards = gallery.querySelectorAll('.emoji-card')
-            const selectedCard = cards[emojiScrollIndex]
+            // Finde die erste Karte mit dem gewählten Index (in der mittleren Gruppe)
+            const middleGroupStart = availableEmojis.length
+            const targetAbsoluteIndex = middleGroupStart + emojiScrollIndex
+            const selectedCard = cards[targetAbsoluteIndex]
             
             if (selectedCard) {
                 // Warte auf Layout-Berechnung
@@ -1745,23 +1792,19 @@ function App() {
         }
     }
     
-    // Scroll-Funktionen für Emoji-Galerie
+    // Scroll-Funktionen für Emoji-Galerie - Endless Scrolling
     const scrollEmojiLeft = () => {
-        if (emojiScrollIndex > 0) {
-            const newIndex = emojiScrollIndex - 1
-            setEmojiScrollIndex(newIndex)
-            setMyEmoji(availableEmojis[newIndex])
-            sessionStorage.setItem("hk_emoji", availableEmojis[newIndex])
-        }
+        const newIndex = emojiScrollIndex > 0 ? emojiScrollIndex - 1 : availableEmojis.length - 1
+        setEmojiScrollIndex(newIndex)
+        setMyEmoji(availableEmojis[newIndex])
+        sessionStorage.setItem("hk_emoji", availableEmojis[newIndex])
     }
     
     const scrollEmojiRight = () => {
-        if (emojiScrollIndex < availableEmojis.length - 1) {
-            const newIndex = emojiScrollIndex + 1
-            setEmojiScrollIndex(newIndex)
-            setMyEmoji(availableEmojis[newIndex])
-            sessionStorage.setItem("hk_emoji", availableEmojis[newIndex])
-        }
+        const newIndex = emojiScrollIndex < availableEmojis.length - 1 ? emojiScrollIndex + 1 : 0
+        setEmojiScrollIndex(newIndex)
+        setMyEmoji(availableEmojis[newIndex])
+        sessionStorage.setItem("hk_emoji", availableEmojis[newIndex])
     }
     
     // Name speichern
@@ -3706,9 +3749,8 @@ function App() {
                                 scrollBehavior: 'smooth', 
                                 width: '100%', 
                                 maxWidth: '100%',
-                                scrollbarWidth: 'thin',
-                                scrollbarColor: 'rgba(255, 255, 255, 0.3) transparent',
-                                msOverflowStyle: 'auto',
+                                scrollbarWidth: 'none',
+                                msOverflowStyle: 'none',
                                 WebkitOverflowScrolling: 'touch',
                                 margin: '0',
                                 paddingLeft: '0',
@@ -3726,26 +3768,32 @@ function App() {
                             }}
                         >
                             <div className="emoji-spacer" style={{minWidth: 'calc(50% - 60px)'}}></div>
-                            {availableEmojis.map((emoji, index) => (
-                                <div
-                                    key={emoji}
-                                    className={`emoji-card ${index === emojiScrollIndex ? 'selected' : ''}`}
-                                    onClick={() => selectEmoji(emoji)}
-                                    data-emoji={emoji}
-                                    data-index={index}
-                                >
-                                    {emoji}
-                                </div>
-                            ))}
+                            {/* Endless Scrolling: Emojis duplizieren für nahtloses Scrollen */}
+                            {[...availableEmojis, ...availableEmojis, ...availableEmojis].map((emoji, absoluteIndex) => {
+                                const index = absoluteIndex % availableEmojis.length
+                                const isSelected = index === emojiScrollIndex
+                                return (
+                                    <div
+                                        key={`${emoji}-${absoluteIndex}`}
+                                        className={`emoji-card ${isSelected ? 'selected' : ''}`}
+                                        onClick={() => selectEmoji(emoji)}
+                                        data-emoji={emoji}
+                                        data-index={index}
+                                        data-absolute-index={absoluteIndex}
+                                    >
+                                        {emoji}
+                                    </div>
+                                )
+                            })}
                             <div className="emoji-spacer" style={{minWidth: 'calc(50% - 60px)'}}></div>
                         </div>
                     </div>
                     
                     <div className="start-actions">
-                        <button className="btn-primary" onClick={() => setCurrentScreen('create')}>
+                        <button className="btn-primary" onClick={() => setCurrentScreen('create')} disabled={!myName.trim()}>
                             🎮 Spiel erstellen
                         </button>
-                        <button className="btn-secondary" onClick={() => { setCurrentScreen('join'); loadRoomList(); }}>
+                        <button className="btn-secondary" onClick={() => { setCurrentScreen('join'); loadRoomList(); }} disabled={!myName.trim()}>
                             🚪 Spiel beitreten
                         </button>
                     </div>
@@ -3812,7 +3860,7 @@ function App() {
                         style={{marginBottom: '15px'}} 
                         autoComplete="new-password"
                     />
-                    <button className="btn-primary" onClick={createGame} style={{marginTop: '15px'}}>
+                    <button className="btn-primary" onClick={createGame} style={{marginTop: '15px'}} disabled={!myName.trim() || selectedCategories.length === 0}>
                         🎮 Spiel erstellen
                     </button>
                     <button 
@@ -3888,7 +3936,7 @@ function App() {
                                     />
                                 </>
                             )}
-                            <button className="btn-secondary" onClick={() => joinGame(roomCode)}>
+                            <button className="btn-secondary" onClick={() => joinGame(roomCode)} disabled={!myName.trim() || !roomCode}>
                                 🚪 Beitreten
                             </button>
                         </>
@@ -4260,11 +4308,13 @@ function App() {
                     
                     {/* Status-Anzeige */}
                     {(() => {
-                        const truth = globalData.votes?.[globalData.hotseat]?.choice
+                        // WICHTIG: Stelle sicher, dass hotseat ein String ist
+                        const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
+                        const truth = globalData.votes?.[hotseatName]?.choice
                         const myVote = globalData.votes?.[myName]
                         const gameMode = globalData.config?.gameMode || 'party'
                         const isPartyMode = gameMode === 'party'
-                        const isHotseat = myName === globalData.hotseat
+                        const isHotseat = myName === hotseatName
                         
                         if (isHotseat) {
                             return (
@@ -4325,7 +4375,17 @@ function App() {
                                                 <span>Wen aufheizen?</span>
                                             </div>
                                             <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px'}}>
-                                                {renderPlayers().filter(p => p.name !== myName).map((player) => {
+                                                {(() => {
+                                                    const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
+                                                    const attackablePlayers = renderPlayers().filter(p => p.name !== myName && p.name !== hotseatName)
+                                                    if (attackablePlayers.length === 0) {
+                                                        return (
+                                                            <div key="no-players" style={{gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#aaa'}}>
+                                                                Keine Spieler zum Angreifen verfügbar
+                                                            </div>
+                                                        )
+                                                    }
+                                                    return attackablePlayers.map((player) => {
                                                     const baseDmg = isPartyMode ? 20 : (globalData.config?.dmg || 10)
                                                     const attackerState = globalData.players?.[myName] || {}
                                                     const hasOil = attackerState.inventory?.includes('card_oil')
@@ -4362,7 +4422,8 @@ function App() {
                                                             <div style={{fontSize: '0.9rem', color: '#ff8c00', fontWeight: 'bold'}}>+{dmg}°</div>
                                                         </div>
                                                     )
-                                                })}
+                                                })
+                                                })()}
                                             </div>
                                         </div>
                                     </div>
@@ -4416,7 +4477,17 @@ function App() {
                                             <div style={{background: '#3a1a1a', padding: '10px', borderRadius: '10px', marginBottom: '15px'}}>
                                                 <h4 style={{margin: '0 0 10px 0'}}>🔥 Wen aufheizen?</h4>
                                                 <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '10px'}}>
-                                                    {renderPlayers().filter(p => p.name !== myName).map((player) => {
+                                                    {(() => {
+                                                        const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
+                                                        const attackablePlayers = renderPlayers().filter(p => p.name !== myName && p.name !== hotseatName)
+                                                        if (attackablePlayers.length === 0) {
+                                                            return (
+                                                                <div key="no-players" style={{gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#aaa'}}>
+                                                                    Keine Spieler zum Angreifen verfügbar
+                                                                </div>
+                                                            )
+                                                        }
+                                                        return attackablePlayers.map((player) => {
                                                         const baseDmg = globalData.config?.dmg || 10
                                                         const attackerState = globalData.players?.[myName] || {}
                                                         const hasOil = attackerState.inventory?.includes('card_oil')
@@ -4440,7 +4511,8 @@ function App() {
                                                                 <div style={{fontSize: '0.8rem', color: '#ff8c00'}}>+{dmg}°</div>
                                                             </div>
                                                         )
-                                                    })}
+                                                    })
+                                                    })()}
                                                 </div>
                                                 <div style={{display: 'flex', gap: '5px', marginTop: '10px'}}>
                                                     <button 
@@ -4561,6 +4633,13 @@ function App() {
                                     <div style={{fontSize: '3rem', marginBottom: '10px'}}>❌</div>
                                     <p style={{color: '#ff0000', fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '10px'}}>FALSCH GERATEN</p>
                                     {isPartyMode && <p style={{color: '#fff', fontSize: '0.9rem'}}>Du erhältst 10°C Strafhitze.</p>}
+                                </div>
+                            )
+                        } else if (myVote && (truth === undefined || truth === null)) {
+                            // Hotseat hat noch nicht geantwortet, aber Spieler hat abgestimmt
+                            return (
+                                <div style={{margin: '20px 0', padding: '15px', background: 'rgba(22, 27, 34, 0.6)', borderRadius: '10px'}}>
+                                    <p style={{color: '#aaa'}}>Du hast die Frage beantwortet. Warte auf die anderen Spieler...</p>
                                 </div>
                             )
                         } else {
