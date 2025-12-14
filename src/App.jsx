@@ -1895,11 +1895,10 @@ function App() {
         }
     }, [db, roomId, myName, isHost, globalData?.status, globalData?.roundId, globalData?.hotseat, currentScreen, showCountdown])
     
-    // Emoji auswählen - mit zentriertem Scrollen und Endless Scrolling
+    // Emoji auswählen - mit zentriertem Scrollen
     const emojiGalleryRef = useRef(null)
     const [emojiScrollIndex, setEmojiScrollIndex] = useState(Math.floor(availableEmojis.length / 2))
     const isScrollingRef = useRef(false)
-    const isInitializingRef = useRef(false) // Verhindert, dass Endless-Scrolling während der Initialisierung greift
     
     // Initialisiere mit mittlerem Emoji - IMMER mittlerer Charakter als erstes
     useEffect(() => {
@@ -1915,16 +1914,7 @@ function App() {
                 sessionStorage.setItem("hk_emoji", middleEmoji)
             }
             
-            // Initialisiere Scroll-Position zur mittleren Gruppe für Endless Scrolling
             // Die Zentrierung wird vom separaten useEffect übernommen
-            if (emojiGalleryRef.current) {
-                isInitializingRef.current = true // Blockiere Endless-Scrolling während der Initialisierung
-                
-                // Warte, bis die Karten gerendert sind, dann wird die Zentrierung automatisch ausgelöst
-                setTimeout(() => {
-                    isInitializingRef.current = false
-                }, 300)
-            }
         } else if (!myEmoji || !availableEmojis.includes(myEmoji)) {
             // Nur wenn kein gültiges Emoji vorhanden ist, setze auf Mitte
             setMyEmoji(middleEmoji)
@@ -1942,53 +1932,16 @@ function App() {
         }
     }, [currentScreen])
     
-    // Endless Scrolling Handler - springt nahtlos von Ende zu Anfang und umgekehrt
-    useEffect(() => {
-        const gallery = emojiGalleryRef.current
-        if (!gallery || currentScreen !== 'start') return
-        
-        const handleScroll = () => {
-            if (isScrollingRef.current || isInitializingRef.current) {
-                return
-            }
-            
-            const scrollLeft = gallery.scrollLeft
-            const scrollWidth = gallery.scrollWidth
-            const singleGroupWidth = scrollWidth / 3 // 3 Gruppen von Emojis
-            
-            // Wenn am Anfang der ersten Gruppe, springe zur Mitte der zweiten Gruppe
-            if (scrollLeft < singleGroupWidth * 0.1) {
-                isScrollingRef.current = true
-                gallery.scrollLeft = singleGroupWidth + (scrollLeft % singleGroupWidth)
-                setTimeout(() => { isScrollingRef.current = false }, 100)
-            }
-            // Wenn am Ende der letzten Gruppe, springe zur Mitte der zweiten Gruppe
-            else if (scrollLeft > singleGroupWidth * 2.9) {
-                isScrollingRef.current = true
-                gallery.scrollLeft = singleGroupWidth + (scrollLeft % singleGroupWidth)
-                setTimeout(() => { isScrollingRef.current = false }, 100)
-            }
-        }
-        
-        gallery.addEventListener('scroll', handleScroll)
-        return () => gallery.removeEventListener('scroll', handleScroll)
-    }, [currentScreen])
-    
-    // Zentriere das ausgewählte Emoji - Endless Scrolling
+    // Zentriere das ausgewählte Emoji
     useEffect(() => {
         if (emojiGalleryRef.current && emojiScrollIndex >= 0 && currentScreen === 'start') {
             const gallery = emojiGalleryRef.current
             const cards = gallery.querySelectorAll('.emoji-card')
-            // Finde die erste Karte mit dem gewählten Index (in der mittleren Gruppe)
-            const middleGroupStart = availableEmojis.length
-            const targetAbsoluteIndex = middleGroupStart + emojiScrollIndex
-            
-            const selectedCard = cards[targetAbsoluteIndex]
+            const selectedCard = cards[emojiScrollIndex]
             
             if (selectedCard) {
-                // Blockiere Endless-Scrolling während der Zentrierung
+                // Blockiere Scroll-Events während der Zentrierung
                 isScrollingRef.current = true
-                isInitializingRef.current = true
                 
                 // Warte auf Layout-Berechnung und setze dann die Scroll-Position
                 setTimeout(() => {
@@ -2009,10 +1962,9 @@ function App() {
                                     gallery.scrollLeft = finalScrollPosition
                                 }
                                 
-                                // Reaktiviere Endless-Scrolling nach der Positionierung
+                                // Reaktiviere Scroll-Events nach der Positionierung
                                 setTimeout(() => {
                                     isScrollingRef.current = false
-                                    isInitializingRef.current = false
                                 }, 100)
                             }, 50)
                         })
@@ -2031,7 +1983,7 @@ function App() {
         }
     }
     
-    // Scroll-Funktionen für Emoji-Galerie - Endless Scrolling
+    // Scroll-Funktionen für Emoji-Galerie
     const scrollEmojiLeft = () => {
         const newIndex = emojiScrollIndex > 0 ? emojiScrollIndex - 1 : availableEmojis.length - 1
         setEmojiScrollIndex(newIndex)
@@ -4092,26 +4044,27 @@ function App() {
                                 e.currentTarget.style.cursor = 'grab'
                             }}
                         >
-                            <div className="emoji-spacer" style={{minWidth: 'calc(50% - 60px)'}}></div>
-                            {/* Endless Scrolling: Emojis duplizieren für nahtloses Scrollen */}
-                            {[...availableEmojis, ...availableEmojis, ...availableEmojis].map((emoji, absoluteIndex) => {
-                                const index = absoluteIndex % availableEmojis.length
+                            {/* Spacer am Anfang, damit der erste Charakter zentriert werden kann */}
+                            <div className="emoji-spacer" style={{minWidth: 'calc(50% - 40px)', flexShrink: 0}}></div>
+                            
+                            {availableEmojis.map((emoji, index) => {
                                 const isSelected = index === emojiScrollIndex
                                 
                                 return (
                                     <div
-                                        key={`${emoji}-${absoluteIndex}`}
+                                        key={`${emoji}-${index}`}
                                         className={`emoji-card ${isSelected ? 'selected' : ''}`}
                                         onClick={() => selectEmoji(emoji)}
                                         data-emoji={emoji}
                                         data-index={index}
-                                        data-absolute-index={absoluteIndex}
                                     >
                                         {emoji}
                                     </div>
                                 )
                             })}
-                            <div className="emoji-spacer" style={{minWidth: 'calc(50% - 60px)'}}></div>
+                            
+                            {/* Spacer am Ende, damit der letzte Charakter zentriert werden kann */}
+                            <div className="emoji-spacer" style={{minWidth: 'calc(50% - 40px)', flexShrink: 0}}></div>
                         </div>
                     </div>
                     
