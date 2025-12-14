@@ -1612,6 +1612,11 @@ function App() {
                     return popupConfirmed[p] === true
                 })
                 
+                // WICHTIG: Prüfe ob alle aktiven Spieler bereit sind
+                const readyList = data.ready || []
+                const readyCount = activePlayers.filter(p => readyList.includes(p)).length
+                const allReady = readyCount >= playerCount && playerCount > 0
+                
                 console.log('⏭️ [AUTO-NEXT] Prüfung:', {
                     roundId: data.roundId,
                     status: data.status,
@@ -1623,11 +1628,14 @@ function App() {
                     hasAttackResults: hasAttackResults,
                     allPopupConfirmed: allPopupConfirmed,
                     popupConfirmed: popupConfirmed,
-                    attackResults: Object.keys(data.attackResults || {})
+                    attackResults: Object.keys(data.attackResults || {}),
+                    readyList: readyList,
+                    readyCount: readyCount,
+                    allReady: allReady
                 })
                 
-                // Alle aktiven Spieler müssen abgestimmt haben UND alle Popups bestätigt haben (falls nötig)
-                if (voteCount >= playerCount && playerCount > 0 && allPopupConfirmed) {
+                // Alle aktiven Spieler müssen abgestimmt haben UND alle Popups bestätigt haben (falls nötig) UND alle bereit sein
+                if (voteCount >= playerCount && playerCount > 0 && allPopupConfirmed && allReady) {
                     // Verhindere mehrfache Ausführung
                     const timeoutKey = `autoNext_${data.roundId}`
                     if (!window[timeoutKey]) {
@@ -1659,15 +1667,19 @@ function App() {
                     console.log('⏭️ [AUTO-NEXT] Bedingungen nicht erfüllt:', {
                         voteCheck: voteCount >= playerCount,
                         popupCheck: allPopupConfirmed,
+                        readyCheck: allReady,
                         voteCount: voteCount,
                         playerCount: playerCount,
+                        readyCount: readyCount,
+                        readyList: readyList,
                         hasAttackResults: hasAttackResults,
                         votes: Object.keys(data.votes || {}),
                         popupConfirmed: popupConfirmed,
                         missingPopups: Object.keys(data.players || {}).filter(p => {
                             if (!data.attackResults?.[p]) return false
                             return popupConfirmed[p] !== true
-                        })
+                        }),
+                        missingReady: activePlayers.filter(p => !readyList.includes(p))
                     })
                 }
             } else {
@@ -4497,7 +4509,25 @@ function App() {
                                             <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px'}}>
                                                 {(() => {
                                                     const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
-                                                    const attackablePlayers = renderPlayers().filter(p => p.name !== myName && p.name !== hotseatName)
+                                                    const maxTemp = globalData?.config?.maxTemp || 100
+                                                    const allPlayers = renderPlayers()
+                                                    // Zähle aktive (nicht eliminierte) Spieler
+                                                    const activePlayers = allPlayers.filter(p => (globalData?.players?.[p.name]?.temp || 0) < maxTemp)
+                                                    const activePlayerCount = activePlayers.length
+                                                    
+                                                    // In einem 2-Spieler-Spiel: Hotseat ist angreifbar
+                                                    // In mehr als 2 Spielern: Hotseat ist NICHT angreifbar
+                                                    const canAttackHotseat = activePlayerCount <= 2
+                                                    
+                                                    // Filtere: Nicht mich selbst, nicht eliminierte Spieler, und in 3+ Spieler-Spielen nicht den Hotseat
+                                                    const attackablePlayers = allPlayers.filter(p => {
+                                                        if (p.name === myName) return false // Nicht mich selbst
+                                                        const playerTemp = globalData?.players?.[p.name]?.temp || 0
+                                                        if (playerTemp >= maxTemp) return false // Nicht eliminierte Spieler
+                                                        if (!canAttackHotseat && p.name === hotseatName) return false // In 3+ Spielern nicht den Hotseat
+                                                        return true
+                                                    })
+                                                    
                                                     if (attackablePlayers.length === 0) {
                                                         return (
                                                             <div key="no-players" style={{gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#aaa'}}>
