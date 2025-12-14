@@ -7,6 +7,81 @@ import hkBackground from './assets/hk_background_fullwidth.png'
 import hkLogo from './assets/hk_logo_vertical.png'
 import hkLogoHorizontal from './assets/hk_logo_horizontal.png'
 
+// Constants
+const GAME_CONSTANTS = {
+    MAX_TEMP_DEFAULT: 100,
+    MAX_TEMP_STRATEGIC: 120,
+    ATTACK_DMG_PARTY: 20,
+    ATTACK_DMG_STRATEGIC: 10,
+    PENALTY_DMG: 10,
+    PRESENCE_HEARTBEAT_INTERVAL: 10000,
+    CONNECTION_CHECK_INTERVAL: 2000,
+    RETRY_DELAY_MULTIPLIER: 1,
+    HOST_INACTIVE_THRESHOLD: 5000,
+    CONNECTION_SLOW_THRESHOLD: 5000,
+    CONNECTION_OFFLINE_THRESHOLD: 10000,
+    MAX_PLAYER_NAME_LENGTH: 20,
+}
+
+const GAME_STATUS = {
+    LOBBY: 'lobby',
+    COUNTDOWN: 'countdown',
+    GAME: 'game',
+    RESULT: 'result',
+    WINNER: 'winner'
+}
+
+const GAME_MODE = {
+    PARTY: 'party',
+    STRATEGIC: 'strategisch'
+}
+
+// Debug Logger (nur in Development)
+const DEBUG = import.meta.env.DEV
+const logger = {
+    log: DEBUG ? console.log : () => {},
+    warn: DEBUG ? console.warn : () => {},
+    error: DEBUG ? console.error : () => {},
+    debug: DEBUG ? console.debug : () => {},
+}
+
+// Helper Functions
+const getActivePlayers = (players, maxTemp = GAME_CONSTANTS.MAX_TEMP_DEFAULT, eliminatedPlayers = []) => {
+    return Object.keys(players || {}).filter(p => {
+        const temp = players?.[p]?.temp || 0
+        return temp < maxTemp && !eliminatedPlayers.includes(p)
+    }).sort()
+}
+
+const getHotseatName = (hotseat) => {
+    return typeof hotseat === 'string' ? hotseat : (hotseat?.name || String(hotseat || ''))
+}
+
+const votesEqual = (votesA, votesB) => {
+    const keysA = Object.keys(votesA || {})
+    const keysB = Object.keys(votesB || {})
+    if (keysA.length !== keysB.length) return false
+    return keysA.every(k => votesA[k]?.choice === votesB[k]?.choice)
+}
+
+const generateAttackResultKey = (roundId, result, roundRecapShown) => {
+    // Statt JSON.stringify verwenden wir eine einfachere Methode
+    const attackCount = result.attackDetails?.length || 0
+    const hasOil = result.attackDetails?.some(a => a.hasOil) || false
+    return `${roundId}-${result.totalDmg}-${attackCount}-${hasOil}-${roundRecapShown}`
+}
+
+const sanitizePlayerName = (name) => {
+    if (!name) return ''
+    return name.trim()
+        .slice(0, GAME_CONSTANTS.MAX_PLAYER_NAME_LENGTH)
+        .replace(/[<>]/g, '')
+}
+
+const generateOperationId = (prefix = 'op') => {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+}
+
 // Firebase Config
 const firebaseConfig = {
     apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
@@ -436,6 +511,10 @@ function App() {
     const [connectionStatus, setConnectionStatus] = useState('online') // 'online', 'offline', 'slow'
     const lastHostActivityRef = useRef(Date.now()) // Zeitstempel der letzten Host-Aktivität
     
+    // Refs für Timeout-Tracking (statt window-Objekte)
+    const timeoutKeysRef = useRef(new Set())
+    const timeoutIdsRef = useRef([])
+    
     // Start Screen
     const [showHostSettings, setShowHostSettings] = useState(false)
     const [showJoinPanel, setShowJoinPanel] = useState(false)
@@ -499,8 +578,16 @@ function App() {
         if (!showCountdown || !globalData?.countdownEnds) return
         
         const countdownEnds = globalData.countdownEnds
+        // Null-Check für countdownEnds
+        if (!countdownEnds) {
+            logger.warn('⚠️ [COUNTDOWN] countdownEnds ist undefined/null')
+            return
+        }
         const updateCountdown = () => {
-            const remainingMs = countdownEnds - Date.now()
+            // WICHTIG: Unterstütze sowohl Firestore Timestamps als auch Zahlen
+            // Wenn countdownEnds ein Firestore Timestamp ist, verwende toMillis()
+            const endTime = countdownEnds?.toMillis ? countdownEnds.toMillis() : countdownEnds
+            const remainingMs = endTime - Date.now()
             const seconds = Math.max(0, Math.ceil(remainingMs / 1000))
             if (seconds > 0) {
                 setCountdownText(seconds.toString())
@@ -515,7 +602,9 @@ function App() {
         
         updateCountdown()
         const interval = setInterval(() => {
-            const remainingMs = countdownEnds - Date.now()
+            // WICHTIG: Unterstütze sowohl Firestore Timestamps als auch Zahlen
+            const endTime = countdownEnds?.toMillis ? countdownEnds.toMillis() : countdownEnds
+            const remainingMs = endTime - Date.now()
             if (remainingMs <= 0) {
                 clearInterval(interval)
                 setShowCountdown(false)
@@ -531,7 +620,7 @@ function App() {
     // Retry-Helper für Firebase-Operationen mit Tracking
     // Versucht eine Operation mehrmals, falls sie durch Adblocker o.ä. blockiert wird
     const retryFirebaseOperation = useCallback(async (operation, operationId = null, maxRetries = 3, delay = 1000) => {
-        const opId = operationId || `op_${Date.now()}_${Math.random()}`
+        const opId = operationId || generateOperationId()
         pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -543,7 +632,7 @@ function App() {
                 pendingOperationsRef.current.delete(opId)
                 return true // Erfolgreich
             } catch (error) {
-                console.warn(`⚠️ [RETRY] Versuch ${attempt}/${maxRetries} fehlgeschlagen (${opId}):`, error)
+                logger.warn(`⚠️ [RETRY] Versuch ${attempt}/${maxRetries} fehlgeschlagen (${opId}):`, error)
                 
                 // Prüfe ob es ein Netzwerkfehler oder Blockierungsfehler ist
                 const isBlockedError = error?.code === 'permission-denied' || 
@@ -559,7 +648,7 @@ function App() {
                     await new Promise(resolve => setTimeout(resolve, delay * attempt))
                 } else if (attempt === maxRetries) {
                     // Letzter Versuch fehlgeschlagen
-                    console.error(`❌ [RETRY] Alle Versuche fehlgeschlagen (${opId}):`, error)
+                    logger.error(`❌ [RETRY] Alle Versuche fehlgeschlagen (${opId}):`, error)
                     pendingOperationsRef.current.delete(opId)
                     return false // Fehlgeschlagen
                 } else {
@@ -577,13 +666,13 @@ function App() {
     const recoverGameState = useCallback(async () => {
         if (!db || !roomId || !globalData) return
         
-        console.log('🔄 [RECOVERY] Starte Recovery-Prozess...')
+        logger.log('🔄 [RECOVERY] Starte Recovery-Prozess...')
         
         try {
             // Lade aktuelle Daten direkt aus Firebase
             const currentDoc = await getDoc(doc(db, "lobbies", roomId))
             if (!currentDoc.exists()) {
-                console.log('🔄 [RECOVERY] Lobby existiert nicht mehr')
+                logger.log('🔄 [RECOVERY] Lobby existiert nicht mehr')
                 return
             }
             
@@ -591,7 +680,7 @@ function App() {
             const currentStatus = firebaseData.status
             const currentRoundId = firebaseData.roundId
             
-            console.log('🔄 [RECOVERY] Firebase-Daten geladen:', {
+            logger.log('🔄 [RECOVERY] Firebase-Daten geladen:', {
                 status: currentStatus,
                 roundId: currentRoundId,
                 localStatus: globalData.status,
@@ -630,7 +719,7 @@ function App() {
                     roundRecapShown && 
                     allPopupConfirmed &&
                     !pendingOperationsRef.current.has('nextRound')) {
-                    console.log('🔄 [RECOVERY] Spiel hängt - alle bereit, aber keine nächste Runde. Starte Recovery...')
+                    logger.log('🔄 [RECOVERY] Spiel hängt - alle bereit, aber keine nächste Runde. Starte Recovery...')
                     // Recovery: Führe nextRound-Logik direkt aus
                     try {
                         const opId = `nextRound_recovery_${Date.now()}`
@@ -681,12 +770,12 @@ function App() {
                         
                         if (success) {
                             pendingOperationsRef.current.delete(opId)
-                            console.log('✅ [RECOVERY] Nächste Runde erfolgreich gestartet')
+                            logger.log('✅ [RECOVERY] Nächste Runde erfolgreich gestartet')
                         } else {
-                            console.error('❌ [RECOVERY] Nächste Runde fehlgeschlagen')
+                            logger.error('❌ [RECOVERY] Nächste Runde fehlgeschlagen')
                         }
                     } catch (err) {
-                        console.error('❌ [RECOVERY] Fehler beim Starten der nächsten Runde:', err)
+                        logger.error('❌ [RECOVERY] Fehler beim Starten der nächsten Runde:', err)
                     }
                 }
             }
@@ -698,7 +787,7 @@ function App() {
                 const hasTruth = firebaseData.votes?.[firebaseData.hotseat]?.choice !== undefined
                 
                 if (allDecided && !roundRecapShown && hasTruth && !pendingOperationsRef.current.has('executeAttacks')) {
-                    console.log('🔄 [RECOVERY] executePendingAttacks fehlgeschlagen. Versuche erneut...')
+                    logger.log('🔄 [RECOVERY] executePendingAttacks fehlgeschlagen. Versuche erneut...')
                     // Recovery: Führe executePendingAttacks-Logik direkt aus (vereinfacht)
                     // Da diese Funktion sehr komplex ist, versuchen wir nur die wichtigsten Updates
                     try {
@@ -717,18 +806,18 @@ function App() {
                         
                         if (success) {
                             pendingOperationsRef.current.delete(opId)
-                            console.log('✅ [RECOVERY] roundRecapShown gesetzt - Spiel sollte weitergehen')
+                            logger.log('✅ [RECOVERY] roundRecapShown gesetzt - Spiel sollte weitergehen')
                         } else {
-                            console.error('❌ [RECOVERY] executePendingAttacks Recovery fehlgeschlagen')
+                            logger.error('❌ [RECOVERY] executePendingAttacks Recovery fehlgeschlagen')
                         }
                     } catch (err) {
-                        console.error('❌ [RECOVERY] Fehler bei executePendingAttacks Recovery:', err)
+                        logger.error('❌ [RECOVERY] Fehler bei executePendingAttacks Recovery:', err)
                     }
                 }
             }
             
         } catch (error) {
-            console.error('❌ [RECOVERY] Fehler beim Recovery:', error)
+            logger.error('❌ [RECOVERY] Fehler beim Recovery:', error)
         }
     }, [db, roomId, globalData, isHost, myName])
     
@@ -749,14 +838,14 @@ function App() {
             
             // Prüfe ob zu lange kein Update erfolgreich war (mehr als 10 Sekunden)
             if (timeSinceLastUpdate > 10000 && hasPendingOps) {
-                console.warn('⚠️ [WATCHDOG] Lange Zeit kein erfolgreiches Update. Prüfe auf Probleme...')
+                logger.warn('⚠️ [WATCHDOG] Lange Zeit kein erfolgreiches Update. Prüfe auf Probleme...')
                 // Prüfe ob Firebase erreichbar ist
                 getDoc(doc(db, "lobbies", roomId)).then(() => {
-                    console.log('✅ [WATCHDOG] Firebase erreichbar')
+                    logger.log('✅ [WATCHDOG] Firebase erreichbar')
                     // Firebase ist erreichbar, aber Updates schlagen fehl → Recovery
                     recoverGameState()
                 }).catch(err => {
-                    console.error('❌ [WATCHDOG] Firebase nicht erreichbar:', err)
+                    logger.error('❌ [WATCHDOG] Firebase nicht erreichbar:', err)
                 })
             }
             
@@ -778,7 +867,7 @@ function App() {
                     activePlayers.length > 0 && 
                     roundRecapShown &&
                     timeSinceLastUpdate > 15000) {
-                    console.warn('⚠️ [WATCHDOG] Spiel scheint zu hängen - alle bereit, aber keine Aktion. Starte Recovery...')
+                    logger.warn('⚠️ [WATCHDOG] Spiel scheint zu hängen - alle bereit, aber keine Aktion. Starte Recovery...')
                     recoverGameState()
                 }
             }
@@ -803,11 +892,11 @@ function App() {
             audio.volume = (volume * soundVolume) / 10
             audio.play().catch(err => {
                 // Ignoriere Fehler, wenn Sound nicht gefunden wird
-                console.log(`🔇 Sound nicht gefunden: ${soundName}`)
+                logger.log(`🔇 Sound nicht gefunden: ${soundName}`)
             })
         } catch (err) {
             // Ignoriere Fehler beim Erstellen des Audio-Objekts
-            console.log(`🔇 Fehler beim Abspielen von Sound: ${soundName}`)
+            logger.log(`🔇 Fehler beim Abspielen von Sound: ${soundName}`)
         }
     }, [soundVolume])
     
@@ -824,10 +913,10 @@ function App() {
                 
                 // Fehlerbehandlung für fehlende Datei
                 backgroundMusicRef.current.addEventListener('error', (e) => {
-                    console.log('🔇 Hintergrundmusik-Datei nicht gefunden: background_music.mp3', e)
+                    logger.log('🔇 Hintergrundmusik-Datei nicht gefunden: background_music.mp3', e)
                 })
             } catch (err) {
-                console.log('🔇 Fehler beim Erstellen des Audio-Objekts:', err)
+                logger.log('🔇 Fehler beim Erstellen des Audio-Objekts:', err)
             }
         }
         
@@ -842,7 +931,7 @@ function App() {
             music.play().catch(err => {
                 // Automatisches Abspielen kann blockiert sein - das ist normal
                 // Der Benutzer muss erst mit der Seite interagieren
-                console.log('🔇 Automatisches Abspielen blockiert. Musik startet bei Interaktion.')
+                logger.log('🔇 Automatisches Abspielen blockiert. Musik startet bei Interaktion.')
             })
         } else {
             music.pause()
@@ -906,8 +995,9 @@ function App() {
     useEffect(() => {
         if (!db || !roomId) return
         
-        // WICHTIG: Speichere alle Timeout-IDs für Cleanup
-        const timeoutIds = []
+        // Timeout-IDs werden im Ref gespeichert (bereits oben definiert)
+        // Reset beim Start
+        timeoutIdsRef.current = []
         
         const unsubscribe = onSnapshot(
             doc(db, "lobbies", roomId),
@@ -927,7 +1017,7 @@ function App() {
                 
                 if (!snapshot.exists()) {
                     // Lobby existiert nicht mehr
-                    console.log('🚨 [FIREBASE] Lobby existiert nicht mehr, zurück zum Start')
+                    logger.log('🚨 [FIREBASE] Lobby existiert nicht mehr, zurück zum Start')
                     sessionStorage.removeItem("hk_room")
                     setRoomId("")
                     setGlobalData(null)
@@ -956,7 +1046,7 @@ function App() {
                                 oldVoteKeys.some(key => oldVotes[key]?.choice !== newVotes[key]?.choice)
             
             if (votesChanged) {
-                console.log('🗳️ [VOTES] Votes geändert:', {
+                logger.log('🗳️ [VOTES] Votes geändert:', {
                     roundId: data.roundId,
                     oldVotes: oldVoteKeys,
                     newVotes: newVoteKeys
@@ -966,18 +1056,18 @@ function App() {
             // Aktualisiere isHost basierend auf Daten
             const newIsHost = data.host === myName
             if (newIsHost !== isHost) {
-                console.log('👑 [HOST] Host-Status geändert:', newIsHost ? 'Ich bin jetzt Host' : 'Ich bin kein Host mehr')
+                logger.log('👑 [HOST] Host-Status geändert:', newIsHost ? 'Ich bin jetzt Host' : 'Ich bin kein Host mehr')
             }
             setIsHost(newIsHost)
             
             if (oldStatus !== newStatus) {
-                console.log('📊 [STATUS] Status-Wechsel:', oldStatus, '→', newStatus, '| RoundId:', newRoundId)
+                logger.log('📊 [STATUS] Status-Wechsel:', oldStatus, '→', newStatus, '| RoundId:', newRoundId)
             }
             if (oldHotseat !== newHotseat) {
-                console.log('🎯 [HOTSEAT] Hotseat geändert:', oldHotseat, '→', newHotseat, '| RoundId:', newRoundId)
+                logger.log('🎯 [HOTSEAT] Hotseat geändert:', oldHotseat, '→', newHotseat, '| RoundId:', newRoundId)
             }
             if (oldRoundId !== newRoundId) {
-                console.log('🔄 [ROUND] Neue Runde:', oldRoundId, '→', newRoundId)
+                logger.log('🔄 [ROUND] Neue Runde:', oldRoundId, '→', newRoundId)
             }
             
             // WICHTIG: Setze globalData nur wenn sich wirklich etwas geändert hat
@@ -1048,12 +1138,12 @@ function App() {
             // Screen-Wechsel basierend auf Status
             if (data.status === 'lobby') {
                 if (currentScreen !== 'lobby') {
-                    console.log('🏠 [SCREEN] Wechsel zu Lobby')
+                    logger.log('🏠 [SCREEN] Wechsel zu Lobby')
                 }
                 setCurrentScreen('lobby')
             } else if (data.status === 'countdown') {
                 if (currentScreen !== 'lobby') {
-                    console.log('⏳ [SCREEN] Wechsel zu Countdown (Lobby)')
+                    logger.log('⏳ [SCREEN] Wechsel zu Countdown (Lobby)')
                 }
                 setCurrentScreen('lobby') // Countdown wird in Lobby angezeigt
                 
@@ -1067,7 +1157,7 @@ function App() {
                 }
             } else if (data.status === 'game') {
                 if (currentScreen !== 'game') {
-                    console.log('🎮 [SCREEN] Wechsel zu Game | RoundId:', data.roundId, '| Hotseat:', data.hotseat)
+                    logger.log('🎮 [SCREEN] Wechsel zu Game | RoundId:', data.roundId, '| Hotseat:', data.hotseat)
                 }
                 setCurrentScreen('game')
                 
@@ -1077,7 +1167,7 @@ function App() {
                     globalData.status === data.status &&
                     globalData.roundId === data.roundId &&
                     globalData.hotseat === data.hotseat &&
-                    JSON.stringify({...globalData, votes: {}}) === JSON.stringify({...data, votes: {}}) &&
+                    votesEqual({...globalData, votes: {}}, {...data, votes: {}}) &&
                     globalData.votes?.[myName]?.choice === data.votes?.[myName]?.choice
                 
                 // WICHTIG: Prüfe auch, ob globalData noch nicht gesetzt ist, aber roundId gleich lastRoundId ist
@@ -1086,7 +1176,7 @@ function App() {
                 
                 if (onlyVotesChanged || isInitialLoad) {
                     // Nur andere Votes haben sich geändert ODER es ist der erste Load mit gleicher Runde
-                    console.log('🎮 [GAME SCREEN] Nur andere Votes geändert oder Initial-Load, überspringe Selection-Logik:', {
+                    logger.log('🎮 [GAME SCREEN] Nur andere Votes geändert oder Initial-Load, überspringe Selection-Logik:', {
                         mySelection: mySelection,
                         myVote: data.votes?.[myName]?.choice,
                         otherVotes: Object.keys(data.votes || {}).filter(v => v !== myName),
@@ -1099,7 +1189,7 @@ function App() {
                     // Überspringe den Rest der Game-Screen-Logik
                 } else {
                 
-                console.log('🎮 [GAME SCREEN] Game-Screen Update:', {
+                logger.log('🎮 [GAME SCREEN] Game-Screen Update:', {
                     roundId: data.roundId,
                     oldRoundId: globalData?.roundId,
                     hotseat: data.hotseat,
@@ -1116,7 +1206,7 @@ function App() {
                 const isNewRound = globalData && data.roundId !== oldRoundId && oldRoundId !== null && oldRoundId !== undefined
                 
                 if (isNewRound) {
-                    console.log('🎮 [GAME SCREEN] Neue Runde erkannt:', {
+                    logger.log('🎮 [GAME SCREEN] Neue Runde erkannt:', {
                         oldRoundId: oldRoundId,
                         newRoundId: data.roundId,
                         hasMyVote: !!data.votes?.[myName],
@@ -1128,7 +1218,7 @@ function App() {
                     // Die Auswahl der letzten Runde darf nicht in die neue Runde übernommen werden
                     // WICHTIG: Setze mySelection IMMER auf null, auch wenn ein Vote existiert
                     // Die Auswahl soll in jeder Runde neutral sein
-                    console.log('🎮 [GAME SCREEN] Reset mySelection (neue Runde erkannt)')
+                    logger.log('🎮 [GAME SCREEN] Reset mySelection (neue Runde erkannt)')
                     setMySelection(null)
                     setLocalActionDone(false)
                     // WICHTIG: Reset alle Reward/Attack States bei neuer Runde, damit Spieler wieder auswählen kann
@@ -1138,7 +1228,7 @@ function App() {
                 } else {
                     // WICHTIG: Wenn globalData noch nicht gesetzt ist, initialisiere lastRoundId
                     if (!globalData && data.roundId !== lastRoundId) {
-                        console.log('🎮 [GAME SCREEN] Initialisiere lastRoundId:', data.roundId)
+                        logger.log('🎮 [GAME SCREEN] Initialisiere lastRoundId:', data.roundId)
                         setLastRoundId(data.roundId)
                     }
                     // Bei gleicher Runde: Behalte Selection wenn bereits abgestimmt
@@ -1148,29 +1238,29 @@ function App() {
                         if (data.votes?.[myName]) {
                             // Spieler hat bereits abgestimmt - synchronisiere nur wenn Selection fehlt oder falsch ist
                             if (!mySelection) {
-                                console.log('🎮 [GAME SCREEN] Restore Selection aus Vote (gleiche Runde):', data.votes[myName].choice)
+                                logger.log('🎮 [GAME SCREEN] Restore Selection aus Vote (gleiche Runde):', data.votes[myName].choice)
                                 setMySelection(data.votes[myName].choice)
                             } else if (mySelection !== data.votes[myName].choice) {
                                 // Vote existiert, aber Selection stimmt nicht überein - synchronisiere
-                                console.log('🎮 [GAME SCREEN] Synchronisiere Selection mit Vote (gleiche Runde):', {
+                                logger.log('🎮 [GAME SCREEN] Synchronisiere Selection mit Vote (gleiche Runde):', {
                                     mySelection: mySelection,
                                     voteChoice: data.votes[myName].choice
                                 })
                                 setMySelection(data.votes[myName].choice)
                             } else {
                                 // Selection stimmt bereits überein - keine Änderung
-                                console.log('🎮 [GAME SCREEN] Selection bereits korrekt (gleiche Runde):', mySelection)
+                                logger.log('🎮 [GAME SCREEN] Selection bereits korrekt (gleiche Runde):', mySelection)
                             }
                         } else {
                             // Spieler hat noch nicht abgestimmt - BEHALTE Selection auf jeden Fall!
                             // WICHTIG: Setze Selection NIEMALS auf null, wenn andere Spieler abstimmen!
                             // WICHTIG: Prüfe ob mySelection bereits gesetzt ist - wenn ja, NIE zurücksetzen!
                             if (mySelection) {
-                                console.log('🎮 [GAME SCREEN] Behalte Selection (noch nicht abgestimmt, gleiche Runde):', mySelection, '| Andere Votes:', Object.keys(data.votes || {}))
+                                logger.log('🎮 [GAME SCREEN] Behalte Selection (noch nicht abgestimmt, gleiche Runde):', mySelection, '| Andere Votes:', Object.keys(data.votes || {}))
                                 // WICHTIG: Stelle sicher, dass mySelection NICHT zurückgesetzt wird
                                 // Die Selection bleibt bestehen, auch wenn andere Spieler abstimmen
                             } else {
-                                console.log('🎮 [GAME SCREEN] Keine Selection (noch nicht abgestimmt, gleiche Runde)')
+                                logger.log('🎮 [GAME SCREEN] Keine Selection (noch nicht abgestimmt, gleiche Runde)')
                             }
                             // WICHTIG: KEINE setMySelection(null) hier - das würde die Selection bei anderen Spielern löschen!
                         }
@@ -1178,7 +1268,7 @@ function App() {
                         // WICHTIG: Neue Runde erkannt, aber Code ist in else-Block - mySelection sollte bereits auf null gesetzt sein
                         // Falls nicht, setze es hier nochmal auf null, um sicherzustellen, dass keine alte Selection angezeigt wird
                         if (mySelection !== null) {
-                            console.log('🎮 [GAME SCREEN] Reset mySelection (neue Runde im else-Block erkannt)')
+                            logger.log('🎮 [GAME SCREEN] Reset mySelection (neue Runde im else-Block erkannt)')
                             setMySelection(null)
                         }
                     }
@@ -1192,7 +1282,7 @@ function App() {
                 if (data.hotseat && data.players && currentRoundId !== hotseatModalShownRef.current && !showHotseatModal) {
                     hotseatModalShownRef.current = currentRoundId
                     const isMeHotseat = myName === data.hotseat
-                    console.log('🎯 [HOTSEAT MODAL] Neue Runde erkannt:', {
+                    logger.log('🎯 [HOTSEAT MODAL] Neue Runde erkannt:', {
                         roundId: currentRoundId,
                         hotseat: data.hotseat,
                         isMeHotseat: isMeHotseat,
@@ -1206,24 +1296,24 @@ function App() {
                         if (!showHotseatModal) {
                             triggerHotseatAlert(data.hotseat, data.players)
                         } else {
-                            console.log('🎯 [HOTSEAT MODAL] Modal wird bereits angezeigt, überspringe triggerHotseatAlert')
+                            logger.log('🎯 [HOTSEAT MODAL] Modal wird bereits angezeigt, überspringe triggerHotseatAlert')
                         }
                     }, 100)
                 } else if (data.hotseat && currentRoundId === hotseatModalShownRef.current) {
-                    console.log('🎯 [HOTSEAT MODAL] Bereits für diese Runde angezeigt, überspringe:', {
+                    logger.log('🎯 [HOTSEAT MODAL] Bereits für diese Runde angezeigt, überspringe:', {
                         roundId: currentRoundId,
                         hotseatModalShownRef: hotseatModalShownRef.current,
                         showHotseatModal: showHotseatModal
                     })
                 } else if (showHotseatModal && currentRoundId !== hotseatModalShownRef.current) {
                     // Modal wird angezeigt, aber es ist eine neue Runde - schließe Modal und setze Ref zurück
-                    console.log('🎯 [HOTSEAT MODAL] Neue Runde erkannt während Modal offen, schließe Modal')
+                    logger.log('🎯 [HOTSEAT MODAL] Neue Runde erkannt während Modal offen, schließe Modal')
                     setShowHotseatModal(false)
                     hotseatModalShownRef.current = null
                 }
             } else if (data.status === 'result') {
                 if (currentScreen !== 'result') {
-                    console.log('📊 [SCREEN] Wechsel zu Result | RoundId:', data.roundId)
+                    logger.log('📊 [SCREEN] Wechsel zu Result | RoundId:', data.roundId)
                 }
                 setCurrentScreen('result')
                 
@@ -1242,7 +1332,7 @@ function App() {
                 const attackDecisions = data.attackDecisions || {}
                 const roundRecapShown = data.roundRecapShown ?? false
                 
-                console.log('📊 [RESULT] Result-Screen Analyse:', {
+                logger.log('📊 [RESULT] Result-Screen Analyse:', {
                     roundId: data.roundId,
                     isHotseat: isHotseat,
                     isPartyMode: isPartyMode,
@@ -1267,7 +1357,7 @@ function App() {
                 
                 // WICHTIG: Prüfe ob Hotseat überhaupt geantwortet hat
                 if (!hasTruth && !isHotseat) {
-                    console.warn('⚠️ [RESULT] Hotseat hat noch keine Antwort abgegeben, warte...', {
+                    logger.warn('⚠️ [RESULT] Hotseat hat noch keine Antwort abgegeben, warte...', {
                         hotseat: data.hotseat,
                         hotseatVote: hotseatVote,
                         allVotes: Object.keys(data.votes || {}),
@@ -1277,29 +1367,29 @@ function App() {
                     // KEINE Strafhitze anwenden, wenn truth undefined ist!
                 } else if (isHotseat && !attackDecisions[myName] && db && roomId) {
                     // Hotseat: Automatisch als entschieden markieren
-                    console.log('✅ [AUTO] Hotseat automatisch als entschieden markiert')
+                    logger.log('✅ [AUTO] Hotseat automatisch als entschieden markiert')
                     setLocalActionDone(true) // WICHTIG: Setze localActionDone für Hotseat, damit "Bereit"-Button angezeigt wird
                     updateDoc(doc(db, "lobbies", roomId), {
                         [`attackDecisions.${myName}`]: true
-                    }).catch(console.error)
+                    }).catch(logger.error)
                 } else if (!isHotseat && guessedWrong && !attackDecisions[myName] && !isPartyMode && db && roomId) {
                     // Falsch geraten (Strategic Mode): Automatisch als entschieden markieren
                     // Im Party Mode wird es bereits in handlePartyModeWrongAnswer gesetzt
-                    console.log('❌ [AUTO] Falsch geraten (Strategic Mode) - automatisch als entschieden markiert')
+                    logger.log('❌ [AUTO] Falsch geraten (Strategic Mode) - automatisch als entschieden markiert')
                     updateDoc(doc(db, "lobbies", roomId), {
                         [`attackDecisions.${myName}`]: true
-                    }).catch(console.error)
+                    }).catch(logger.error)
                 } else if (!isHotseat && guessedWrong && !attackDecisions[myName] && isPartyMode && db && roomId) {
                     // Falsch geraten (Party Mode): Wende Strafhitze an
                     // WICHTIG: Prüfe Ref um mehrfache Ausführung zu verhindern
                     const penaltyKey = `${data.roundId}-${myName}`
                     if (penaltyAppliedRef.current !== penaltyKey) {
-                        console.log('❌ [AUTO] Falsch geraten (Party Mode) - wende Strafhitze an')
+                        logger.log('❌ [AUTO] Falsch geraten (Party Mode) - wende Strafhitze an')
                         penaltyAppliedRef.current = penaltyKey
-                        handlePartyModeWrongAnswer().catch(console.error)
+                        handlePartyModeWrongAnswer().catch(logger.error)
                         setLocalActionDone(true)
                     } else {
-                        console.log('❌ [AUTO] Strafhitze wurde bereits für diese Runde angewendet, überspringe')
+                        logger.log('❌ [AUTO] Strafhitze wurde bereits für diese Runde angewendet, überspringe')
                     }
                 }
                 
@@ -1318,7 +1408,7 @@ function App() {
                 // WICHTIG: Prüfe auch ob es eine neue Runde ist, damit die Auswahl bei jeder Runde möglich ist
                 if (!isHotseat && guessedCorrectly && !isPartyMode && !attackDecisions[myName] && !showRewardChoice && !showAttackSelection && !showJokerShop) {
                     // Strategic Mode: Zeige Belohnungsauswahl
-                    console.log('🎁 [REWARD] Zeige Belohnungsauswahl (Strategic Mode)', {
+                    logger.log('🎁 [REWARD] Zeige Belohnungsauswahl (Strategic Mode)', {
                         roundId: data.roundId,
                         lastRoundId: lastRoundId,
                         isNewRound: isNewRoundForReward,
@@ -1346,9 +1436,9 @@ function App() {
                 // Sobald roundRecapShown true ist, wurden die Angriffe bereits verarbeitet
                 if (data.attackResults && data.attackResults[myName] !== undefined && roundRecapShown && !popupConfirmed) {
                     const result = data.attackResults[myName]
-                    const resultKey = `${data.roundId}-${result.totalDmg}-${JSON.stringify(result.attackDetails || [])}-${roundRecapShown}`
+                    const resultKey = generateAttackResultKey(data.roundId, result, roundRecapShown)
                     
-                    console.log('💥 [ATTACK MODAL] Attack-Result gefunden:', {
+                    logger.log('💥 [ATTACK MODAL] Attack-Result gefunden:', {
                         roundId: data.roundId,
                         result: result,
                         resultKey: resultKey,
@@ -1372,7 +1462,7 @@ function App() {
                                            !popupConfirmed
                     
                     if (shouldShowModal) {
-                        console.log('💥 [ATTACK MODAL] Modal wird angezeigt für Runde:', data.roundId, '| Schaden:', result.totalDmg, '°C')
+                        logger.log('💥 [ATTACK MODAL] Modal wird angezeigt für Runde:', data.roundId, '| Schaden:', result.totalDmg, '°C')
                         // Setze Ref SOFORT, um mehrfache Anzeige zu verhindern
                         attackModalShownRef.current = resultKey
                         setLastAttackResultKey(resultKey)
@@ -1382,11 +1472,11 @@ function App() {
                         const timeoutId = setTimeout(() => {
                             // Prüfe nochmal, ob Modal nicht bereits angezeigt wird UND Ref noch stimmt UND Popup nicht bestätigt
                             if (!showAttackModal && attackModalShownRef.current === resultKey && !popupConfirmed) {
-                                console.log('💥 [ATTACK MODAL] Modal wird jetzt sichtbar gemacht')
+                                logger.log('💥 [ATTACK MODAL] Modal wird jetzt sichtbar gemacht')
                                 setShowAttackModal(true)
                                 setIsOpeningAttackModal(false)
                             } else {
-                                console.log('💥 [ATTACK MODAL] Modal wird bereits angezeigt, Ref geändert oder Popup bestätigt, überspringe setShowAttackModal:', {
+                                logger.log('💥 [ATTACK MODAL] Modal wird bereits angezeigt, Ref geändert oder Popup bestätigt, überspringe setShowAttackModal:', {
                                     showAttackModal: showAttackModal,
                                     refMatches: attackModalShownRef.current === resultKey,
                                     popupConfirmed: popupConfirmed
@@ -1394,9 +1484,9 @@ function App() {
                                 setIsOpeningAttackModal(false)
                             }
                         }, 300)
-                        timeoutIds.push(timeoutId)
+                        timeoutIdsRef.current.push(timeoutId)
                     } else {
-                        console.log('💥 [ATTACK MODAL] Modal wird NICHT angezeigt:', {
+                        logger.log('💥 [ATTACK MODAL] Modal wird NICHT angezeigt:', {
                             resultKeyMatches: resultKey === attackModalShownRef.current,
                             isOpening: isOpeningAttackModal,
                             alreadyShown: showAttackModal,
@@ -1420,7 +1510,7 @@ function App() {
                     // Prüfe ob der Spieler wirklich eliminiert ist (temp >= maxTemp)
                     // WICHTIG: Zeige Modal nur einmal pro Eliminierung (prüfe mit eliminationKey)
                     if (playerTemp >= maxTemp && lastEliminationShown !== eliminationKey) {
-                        console.log('🔥 [ELIMINATION MODAL] Zeige Eliminierungs-Modal:', {
+                        logger.log('🔥 [ELIMINATION MODAL] Zeige Eliminierungs-Modal:', {
                             eliminatedPlayer: eliminatedPlayerName,
                             isMe: isMeEliminated,
                             temp: playerTemp,
@@ -1433,7 +1523,7 @@ function App() {
                     }
                 } else {
                     // Kein Attack-Result oder roundRecapShown ist false oder Popup bereits bestätigt
-                    console.log('💥 [ATTACK MODAL] Kein Modal:', {
+                    logger.log('💥 [ATTACK MODAL] Kein Modal:', {
                         hasAttackResults: !!data.attackResults,
                         hasMyResult: data.attackResults?.[myName] !== undefined,
                         roundRecapShown: roundRecapShown,
@@ -1454,10 +1544,10 @@ function App() {
                 
                 // WICHTIG: Prüfe ob Hotseat überhaupt geantwortet hat, bevor executePendingAttacks ausgeführt wird
                 if (!hasTruth && allDecided) {
-                    console.warn('⚠️ [EXECUTE ATTACKS] Alle haben entschieden, aber Hotseat hat noch keine Antwort - warte...')
+                    logger.warn('⚠️ [EXECUTE ATTACKS] Alle haben entschieden, aber Hotseat hat noch keine Antwort - warte...')
                 }
                 
-                console.log('⚔️ [EXECUTE ATTACKS] Prüfung:', {
+                logger.log('⚔️ [EXECUTE ATTACKS] Prüfung:', {
                     roundId: data.roundId,
                     playerCount: playerCount,
                     playersWithDecision: playersWithDecision.length,
@@ -1478,7 +1568,7 @@ function App() {
                 
                 // HOST-FAILOVER: Prüfe ob Host inaktiv ist (>5 Sekunden keine Aktivität)
                 const lastHostActivity = data.lastHostActivity
-                const hostInactive = lastHostActivity && lastHostActivity.toMillis ? (Date.now() - lastHostActivity.toMillis()) > 5000 : true
+                const hostInactive = lastHostActivity && lastHostActivity.toMillis ? (Date.now() - lastHostActivity.toMillis()) > GAME_CONSTANTS.HOST_INACTIVE_THRESHOLD : true
                 const hostName = data.host
                 const isHostActive = !hostInactive && hostName === myName
                 
@@ -1495,7 +1585,7 @@ function App() {
                 // WICHTIG: Auch ausführen wenn alle geantwortet haben (für Strafhitze-Fall ohne normale Angriffe)
                 const canExecuteAttacks = (allDecided || allVoted) && recapNotShown && hasTruth && (isHostActive || (hostInactive && isFirstBackupHost))
                 
-                console.log('⚔️ [EXECUTE ATTACKS] Detaillierte Prüfung:', {
+                logger.log('⚔️ [EXECUTE ATTACKS] Detaillierte Prüfung:', {
                     roundId: data.roundId,
                     allDecided: allDecided,
                     allVoted: allVoted,
@@ -1514,24 +1604,24 @@ function App() {
                 if (canExecuteAttacks) {
                     // Verhindere mehrfache Ausführung
                     const timeoutKey = `executeAttacks_${data.roundId}`
-                    if (!window[timeoutKey]) {
-                        window[timeoutKey] = true
-                        console.log('⚔️ [EXECUTE ATTACKS] Starte executePendingAttacks in 500ms (Hotseat hat geantwortet)')
+                    if (!timeoutKeysRef.current.has(timeoutKey)) {
+                        timeoutKeysRef.current.add(timeoutKey)
+                        logger.log('⚔️ [EXECUTE ATTACKS] Starte executePendingAttacks in 500ms (Hotseat hat geantwortet)')
                         const timeoutId = setTimeout(() => {
-                            console.log('⚔️ [EXECUTE ATTACKS] Führe executePendingAttacks aus')
+                            logger.log('⚔️ [EXECUTE ATTACKS] Führe executePendingAttacks aus')
                             executePendingAttacks(data).catch(err => {
-                                console.error('⚔️ [EXECUTE ATTACKS] Fehler:', err)
+                                logger.error('⚔️ [EXECUTE ATTACKS] Fehler:', err)
                             })
-                            delete window[timeoutKey]
+                            timeoutKeysRef.current.delete(timeoutKey)
                         }, 500)
-                        timeoutIds.push(timeoutId)
+                        timeoutIdsRef.current.push(timeoutId)
                     } else {
-                        console.log('⚔️ [EXECUTE ATTACKS] Bereits geplant, überspringe')
+                        logger.log('⚔️ [EXECUTE ATTACKS] Bereits geplant, überspringe')
                     }
                 } else if (allDecided && recapNotShown && !hasTruth && isHost && data.host === myName) {
-                    console.warn('⚠️ [EXECUTE ATTACKS] Alle haben entschieden, aber Hotseat hat noch keine Antwort - warte auf Hotseat')
+                    logger.warn('⚠️ [EXECUTE ATTACKS] Alle haben entschieden, aber Hotseat hat noch keine Antwort - warte auf Hotseat')
                 } else {
-                    console.log('⚔️ [EXECUTE ATTACKS] Wird NICHT ausgeführt:', {
+                    logger.log('⚔️ [EXECUTE ATTACKS] Wird NICHT ausgeführt:', {
                         roundId: data.roundId,
                         reason: !canExecuteAttacks ? 'Bedingungen nicht erfüllt' : 'Unbekannt',
                         allDecided: allDecided,
@@ -1551,35 +1641,29 @@ function App() {
             // WICHTIG: Hotseat MUSS auch geantwortet haben!
             // WICHTIG: Nur aktive Spieler (nicht eliminiert) zählen!
             const lastHostActivityAdvance = data.lastHostActivity
-            const hostInactiveAdvance = lastHostActivityAdvance && lastHostActivityAdvance.toMillis ? (Date.now() - lastHostActivityAdvance.toMillis()) > 5000 : true
+            const hostInactiveAdvance = lastHostActivityAdvance && lastHostActivityAdvance.toMillis ? (Date.now() - lastHostActivityAdvance.toMillis()) > GAME_CONSTANTS.HOST_INACTIVE_THRESHOLD : true
             const hostNameAdvance = data.host
-            const maxTempAdvance = data.config?.maxTemp || 100
-            const sortedActivePlayersAdvance = Object.keys(data.players || {}).filter(p => {
-                const temp = data.players?.[p]?.temp || 0
-                return temp < maxTempAdvance
-            }).sort()
+            const maxTempAdvance = data.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
+            const sortedActivePlayersAdvance = getActivePlayers(data.players, maxTempAdvance)
             const myIndexAdvance = sortedActivePlayersAdvance.indexOf(myName)
             const isFirstBackupHostAdvance = myIndexAdvance === 0 && sortedActivePlayersAdvance.length > 0 && sortedActivePlayersAdvance[0] !== hostNameAdvance
             const isHostActiveAdvance = !hostInactiveAdvance && hostNameAdvance === myName
             const canAutoAdvance = data.status === 'game' && data.votes && (isHostActiveAdvance || (hostInactiveAdvance && isFirstBackupHostAdvance))
             
             if (canAutoAdvance) {
-                const maxTemp = data.config?.maxTemp || 100
+                const maxTemp = data.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
                 // WICHTIG: Zähle nur aktive Spieler (nicht eliminiert)
-                const activePlayers = Object.keys(data.players || {}).filter(p => {
-                    const temp = data.players?.[p]?.temp || 0
-                    return temp < maxTemp
-                })
+                const activePlayers = getActivePlayers(data.players, maxTemp)
                 const playerCount = activePlayers.length
                 // WICHTIG: Zähle nur Votes von aktiven Spielern
                 const voteCount = activePlayers.filter(p => {
                     return data.votes?.[p]?.choice !== undefined
                 }).length
                 // WICHTIG: Stelle sicher, dass hotseat ein String ist
-                const hotseat = typeof data.hotseat === 'string' ? data.hotseat : (data.hotseat?.name || String(data.hotseat || ''))
+                const hotseat = getHotseatName(data.hotseat)
                 const hotseatHasVoted = hotseat && activePlayers.includes(hotseat) && data.votes?.[hotseat]?.choice !== undefined
                 
-                console.log('⏩ [AUTO-ADVANCE] Prüfung:', {
+                logger.log('⏩ [AUTO-ADVANCE] Prüfung:', {
                     roundId: data.roundId,
                     status: data.status,
                     activePlayers: activePlayers,
@@ -1596,11 +1680,11 @@ function App() {
                 if (voteCount >= playerCount && playerCount > 0 && hotseatHasVoted) {
                     // Verhindere mehrfache Ausführung
                     const timeoutKey = `autoAdvance_${data.roundId}`
-                    if (!window[timeoutKey]) {
-                        window[timeoutKey] = true
-                        console.log('⏩ [AUTO-ADVANCE] Alle haben geantwortet (inkl. Hotseat), wechsle zu Result in 1000ms')
+                    if (!timeoutKeysRef.current.has(timeoutKey)) {
+                        timeoutKeysRef.current.add(timeoutKey)
+                        logger.log('⏩ [AUTO-ADVANCE] Alle haben geantwortet (inkl. Hotseat), wechsle zu Result in 1000ms')
                         const timeoutId = setTimeout(async () => {
-                            console.log('⏩ [AUTO-ADVANCE] Wechsle jetzt zu Result-Screen')
+                            logger.log('⏩ [AUTO-ADVANCE] Wechsle jetzt zu Result-Screen')
                             try {
                                 await retryFirebaseOperation(
                                     () => updateDoc(doc(db, "lobbies", roomId), { 
@@ -1611,23 +1695,23 @@ function App() {
                                     5, // Mehr Retries bei schlechtem Internet
                                     2000 // Längere Delay bei Retries
                                 )
-                                console.log('⏩ [AUTO-ADVANCE] Erfolgreich zu Result gewechselt')
+                                logger.log('⏩ [AUTO-ADVANCE] Erfolgreich zu Result gewechselt')
                             } catch (err) {
-                                console.error('⏩ [AUTO-ADVANCE] Fehler nach allen Retries:', err)
+                                logger.error('⏩ [AUTO-ADVANCE] Fehler nach allen Retries:', err)
                                 // Setze Status auf 'slow' um zu signalisieren, dass es Probleme gibt
                                 setConnectionStatus('slow')
                             }
-                            delete window[timeoutKey]
+                            timeoutKeysRef.current.delete(timeoutKey)
                         }, 1000)
-                        timeoutIds.push(timeoutId)
+                        timeoutIdsRef.current.push(timeoutId)
                     } else {
-                        console.log('⏩ [AUTO-ADVANCE] Bereits geplant, überspringe')
+                        logger.log('⏩ [AUTO-ADVANCE] Bereits geplant, überspringe')
                     }
                 } else {
                     if (!hotseatHasVoted) {
-                        console.log('⏩ [AUTO-ADVANCE] Hotseat hat noch nicht geantwortet:', hotseat, '| Warte...')
+                        logger.log('⏩ [AUTO-ADVANCE] Hotseat hat noch nicht geantwortet:', hotseat, '| Warte...')
                     } else {
-                        console.log('⏩ [AUTO-ADVANCE] Noch nicht alle geantwortet:', voteCount, '/', playerCount)
+                        logger.log('⏩ [AUTO-ADVANCE] Noch nicht alle geantwortet:', voteCount, '/', playerCount)
                     }
                 }
             }
@@ -1639,22 +1723,19 @@ function App() {
             
             // Prüfe Host-Aktivität
             const lastHostActivityNext = data.lastHostActivity
-            const hostInactiveNext = lastHostActivityNext && lastHostActivityNext.toMillis ? (Date.now() - lastHostActivityNext.toMillis()) > 5000 : true
+            const hostInactiveNext = lastHostActivityNext && lastHostActivityNext.toMillis ? (Date.now() - lastHostActivityNext.toMillis()) > GAME_CONSTANTS.HOST_INACTIVE_THRESHOLD : true
             const hostNameNext = data.host
             
             // Sortiere Spieler für konsistente Failover-Reihenfolge
-            const maxTempNext = data.config?.maxTemp || 100
-            const sortedActivePlayersNext = Object.keys(data.players || {}).filter(p => {
-                const temp = data.players?.[p]?.temp || 0
-                return temp < maxTempNext
-            }).sort()
+            const maxTempNext = data.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
+            const sortedActivePlayersNext = getActivePlayers(data.players, maxTempNext)
             const myIndexNext = sortedActivePlayersNext.indexOf(myName)
             const isFirstBackupHostNext = myIndexNext === 0 && sortedActivePlayersNext.length > 0 && sortedActivePlayersNext[0] !== hostNameNext
             const isHostActiveNext = !hostInactiveNext && hostNameNext === myName
             
             const canAutoNext = data.status === 'result' && roundRecapShownForNext && (isHostActiveNext || (hostInactiveNext && isFirstBackupHostNext))
             
-            console.log('⏭️ [AUTO-NEXT] Basis-Prüfung:', {
+            logger.log('⏭️ [AUTO-NEXT] Basis-Prüfung:', {
                 roundId: data.roundId,
                 status: data.status,
                 isHost: isHost,
@@ -1689,7 +1770,7 @@ function App() {
                 const readyCount = activePlayers.filter(p => readyList.includes(p)).length
                 const allReady = readyCount >= playerCount && playerCount > 0
                 
-                console.log('⏭️ [AUTO-NEXT] Prüfung:', {
+                logger.log('⏭️ [AUTO-NEXT] Prüfung:', {
                     roundId: data.roundId,
                     status: data.status,
                     roundRecapShown: data.roundRecapShown,
@@ -1710,11 +1791,11 @@ function App() {
                 if (voteCount >= playerCount && playerCount > 0 && allPopupConfirmed && allReady) {
                     // Verhindere mehrfache Ausführung
                     const timeoutKey = `autoNext_${data.roundId}`
-                    if (!window[timeoutKey]) {
-                        window[timeoutKey] = true
-                        console.log('⏭️ [AUTO-NEXT] Alle haben abgestimmt und Popups bestätigt, starte nächste Runde in 1000ms')
+                    if (!timeoutKeysRef.current.has(timeoutKey)) {
+                        timeoutKeysRef.current.add(timeoutKey)
+                        logger.log('⏭️ [AUTO-NEXT] Alle haben abgestimmt und Popups bestätigt, starte nächste Runde in 1000ms')
                         const timeoutId = setTimeout(async () => {
-                            console.log('⏭️ [AUTO-NEXT] Starte nächste Runde')
+                            logger.log('⏭️ [AUTO-NEXT] Starte nächste Runde')
                             try {
                                 // Verwende retryFirebaseOperation für robustere Fehlerbehandlung
                                 await retryFirebaseOperation(
@@ -1723,20 +1804,20 @@ function App() {
                                     5, // Mehr Retries bei schlechtem Internet
                                     2000 // Längere Delay bei Retries
                                 )
-                                console.log('⏭️ [AUTO-NEXT] Nächste Runde erfolgreich gestartet')
+                                logger.log('⏭️ [AUTO-NEXT] Nächste Runde erfolgreich gestartet')
                             } catch (err) {
-                                console.error('⏭️ [AUTO-NEXT] Fehler nach allen Retries:', err)
+                                logger.error('⏭️ [AUTO-NEXT] Fehler nach allen Retries:', err)
                                 // Setze Status auf 'slow' um zu signalisieren, dass es Probleme gibt
                                 setConnectionStatus('slow')
                             }
-                            delete window[timeoutKey]
+                            timeoutKeysRef.current.delete(timeoutKey)
                         }, 1000)
-                        timeoutIds.push(timeoutId)
+                        timeoutIdsRef.current.push(timeoutId)
                     } else {
-                        console.log('⏭️ [AUTO-NEXT] Bereits geplant, überspringe')
+                        logger.log('⏭️ [AUTO-NEXT] Bereits geplant, überspringe')
                     }
                 } else {
-                    console.log('⏭️ [AUTO-NEXT] Bedingungen nicht erfüllt:', {
+                    logger.log('⏭️ [AUTO-NEXT] Bedingungen nicht erfüllt:', {
                         voteCheck: voteCount >= playerCount,
                         popupCheck: allPopupConfirmed,
                         readyCheck: allReady,
@@ -1755,7 +1836,7 @@ function App() {
                     })
                 }
             } else {
-                console.log('⏭️ [AUTO-NEXT] Basis-Bedingungen nicht erfüllt:', {
+                logger.log('⏭️ [AUTO-NEXT] Basis-Bedingungen nicht erfüllt:', {
                     roundId: data.roundId,
                     status: data.status,
                     isHost: isHost,
@@ -1773,28 +1854,41 @@ function App() {
         // Verbindungsstatus-Überwachung
         const connectionCheckInterval = setInterval(() => {
             const timeSinceLastUpdate = Date.now() - lastSuccessfulUpdateRef.current
-            if (timeSinceLastUpdate > 10000) {
+            if (timeSinceLastUpdate > GAME_CONSTANTS.CONNECTION_OFFLINE_THRESHOLD) {
                 setConnectionStatus('offline')
-                console.warn('⚠️ [CONNECTION] Keine Updates seit', Math.round(timeSinceLastUpdate / 1000), 'Sekunden')
-            } else if (timeSinceLastUpdate > 5000) {
+                logger.warn('⚠️ [CONNECTION] Keine Updates seit', Math.round(timeSinceLastUpdate / 1000), 'Sekunden')
+            } else if (timeSinceLastUpdate > GAME_CONSTANTS.CONNECTION_SLOW_THRESHOLD) {
                 setConnectionStatus('slow')
             } else {
                 setConnectionStatus('online')
             }
-        }, 2000)
+        }, GAME_CONSTANTS.CONNECTION_CHECK_INTERVAL)
+        
+        // PRESENCE-SYSTEM: Heartbeat - Aktualisiere lastSeen regelmäßig
+        // Dies ermöglicht es anderen Spielern zu sehen, wer online ist
+        const presenceHeartbeatInterval = setInterval(async () => {
+            if (db && roomId && myName) {
+                try {
+                    await updateDoc(doc(db, "lobbies", roomId), {
+                        [`players.${myName}.lastSeen`]: serverTimestamp()
+                    })
+                } catch (err) {
+                    // Fehler beim Heartbeat sind nicht kritisch - nur loggen
+                    logger.debug('💓 [PRESENCE] Heartbeat-Fehler (nicht kritisch):', err)
+                }
+            }
+        }, GAME_CONSTANTS.PRESENCE_HEARTBEAT_INTERVAL)
         
         // Cleanup-Funktion: Räume alle Timeouts auf und beende den Listener
         return () => {
             unsubscribe()
             clearInterval(connectionCheckInterval)
+            clearInterval(presenceHeartbeatInterval)
             // WICHTIG: Räume alle Timeouts auf, um Memory Leaks zu vermeiden
-            timeoutIds.forEach(id => clearTimeout(id))
-            // Räume auch window[timeoutKey] auf
-            Object.keys(window).forEach(key => {
-                if (key.startsWith('executeAttacks_') || key.startsWith('autoAdvance_') || key.startsWith('autoNext_')) {
-                    delete window[key]
-                }
-            })
+            timeoutIdsRef.current.forEach(id => clearTimeout(id))
+            timeoutIdsRef.current = []
+            // Räume auch timeoutKeys auf
+            timeoutKeysRef.current.clear()
         }
     }, [db, roomId, myName, isHost, globalData?.status, globalData?.roundId, globalData?.hotseat, currentScreen, showCountdown])
     
@@ -1962,9 +2056,9 @@ function App() {
             return
         }
         
-        const dmg = gameMode === 'strategisch' ? 10 : 20
-        const speed = gameMode === 'strategisch' ? 1.0 : 1.5
-        const maxTemp = gameMode === 'strategisch' ? 120 : 100
+        const dmg = gameMode === GAME_MODE.STRATEGIC ? GAME_CONSTANTS.ATTACK_DMG_STRATEGIC : GAME_CONSTANTS.ATTACK_DMG_PARTY
+        const speed = gameMode === GAME_MODE.STRATEGIC ? 1.0 : 1.5
+        const maxTemp = gameMode === GAME_MODE.STRATEGIC ? GAME_CONSTANTS.MAX_TEMP_STRATEGIC : GAME_CONSTANTS.MAX_TEMP_DEFAULT
         
         const code = Math.random().toString(36).substring(2, 6).toUpperCase()
         setRoomId(code)
@@ -1980,7 +2074,14 @@ function App() {
             hostName: myName,
             status: "lobby",
             createdAt: serverTimestamp(),
-            players: { [myName]: { temp: 0, inventory: [], emoji: myEmoji } },
+            players: { 
+                [myName]: { 
+                    temp: 0, 
+                    inventory: [], 
+                    emoji: myEmoji,
+                    lastSeen: serverTimestamp() // Presence-Tracking
+                } 
+            },
             config: { dmg, speed, startTemp: 0, maxTemp, gameMode, categories: selectedCategories },
             votes: {},
             ready: [],
@@ -2033,7 +2134,8 @@ function App() {
         setIsHost(false)
         
         await updateDoc(ref, {
-            [`players.${myName}`]: { temp: 0, inventory: [], emoji: myEmoji }
+            [`players.${myName}`]: { temp: 0, inventory: [], emoji: myEmoji },
+            [`players.${myName}.lastSeen`]: serverTimestamp() // Presence-Tracking
         })
         
         // Screen wird durch Listener automatisch auf 'lobby' gesetzt
@@ -2067,9 +2169,9 @@ function App() {
         querySnapshot.forEach((doc) => {
             const data = doc.data()
             if (data.hostName === 'Host' && data.status === 'lobby') {
-                console.log('🗑️ [CLEANUP] Lösche alten Raum von "Host":', doc.id)
+                logger.log('🗑️ [CLEANUP] Lösche alten Raum von "Host":', doc.id)
                 deleteDoc(doc.ref).catch(err => {
-                    console.error('Fehler beim Löschen des alten Raums:', err)
+                    logger.error('Fehler beim Löschen des alten Raums:', err)
                 })
             }
         })
@@ -2123,14 +2225,14 @@ function App() {
     
     // Spiel starten (nur Host)
     const startCountdown = async () => {
-        console.log('🎮 [START COUNTDOWN] Starte Spiel:', {
+        logger.log('🎮 [START COUNTDOWN] Starte Spiel:', {
             isHost: isHost,
             hasDb: !!db,
             roomId: roomId
         })
         
         if (!db || !roomId || !isHost) {
-            console.warn('🎮 [START COUNTDOWN] Nicht der Host oder fehlende Parameter')
+            logger.warn('🎮 [START COUNTDOWN] Nicht der Host oder fehlende Parameter')
             return
         }
         
@@ -2144,7 +2246,7 @@ function App() {
         const lobbyReady = globalData?.lobbyReady || {}
         const readyCount = activePlayers.filter(p => lobbyReady[p]).length
         
-        console.log('🎮 [START COUNTDOWN] Prüfung:', {
+        logger.log('🎮 [START COUNTDOWN] Prüfung:', {
             allPlayers: allPlayers,
             activePlayers: activePlayers,
             readyCount: readyCount,
@@ -2153,7 +2255,7 @@ function App() {
         })
         
         if (readyCount < activePlayers.length || activePlayers.length < 2) {
-            console.warn('🎮 [START COUNTDOWN] Nicht alle aktiven Spieler bereit:', readyCount, '/', activePlayers.length)
+            logger.warn('🎮 [START COUNTDOWN] Nicht alle aktiven Spieler bereit:', readyCount, '/', activePlayers.length)
             alert(`Alle aktiven Spieler müssen bereit sein! (${readyCount}/${activePlayers.length})`)
             return
         }
@@ -2170,7 +2272,7 @@ function App() {
         const qIndex = allQuestions.findIndex(q => q.q === randomQ.q)
         const nextRoundId = (globalData?.roundId ?? 0) + 1
         
-        console.log('🎮 [START COUNTDOWN] Starte erste Runde:', {
+        logger.log('🎮 [START COUNTDOWN] Starte erste Runde:', {
             hotseat: activePlayers[0],
             question: randomQ.q,
             roundId: nextRoundId,
@@ -2197,7 +2299,7 @@ function App() {
             countdownEnds: deleteField() // Stelle sicher, dass countdownEnds gelöscht wird
         })
         
-        console.log('🎮 [START COUNTDOWN] Spiel gestartet, direkt zu Game-Status')
+        logger.log('🎮 [START COUNTDOWN] Spiel gestartet, direkt zu Game-Status')
     }
     
     // Antwort wählen
@@ -2208,7 +2310,7 @@ function App() {
             const maxTemp = globalData.config?.maxTemp || 100
             const myTemp = globalData.players?.[myName]?.temp || 0
             if (myTemp >= maxTemp) {
-                console.warn('📝 [VOTE] Spieler ist eliminiert, kann nicht abstimmen:', {
+                logger.warn('📝 [VOTE] Spieler ist eliminiert, kann nicht abstimmen:', {
                     myName: myName,
                     temp: myTemp,
                     maxTemp: maxTemp
@@ -2223,7 +2325,7 @@ function App() {
     
     // Antwort absenden - ATOMARES UPDATE (nur spezifischer Pfad)
     const submitVote = async () => {
-        console.log('📝 [SUBMIT VOTE] Starte submitVote:', {
+        logger.log('📝 [SUBMIT VOTE] Starte submitVote:', {
             mySelection: mySelection,
             myName: myName,
             roomId: roomId,
@@ -2231,7 +2333,7 @@ function App() {
         })
         
         if (!db || !roomId) {
-            console.warn('📝 [SUBMIT VOTE] Fehlende Parameter (db oder roomId)')
+            logger.warn('📝 [SUBMIT VOTE] Fehlende Parameter (db oder roomId)')
             alert("Fehler: Datenbank-Verbindung fehlt!")
             return
         }
@@ -2239,7 +2341,7 @@ function App() {
         // Prüfe ob bereits abgestimmt wurde (lokal UND in Firebase)
         const currentDoc = await getDoc(doc(db, "lobbies", roomId))
         if (!currentDoc.exists()) {
-            console.error('📝 [SUBMIT VOTE] Lobby existiert nicht mehr')
+            logger.error('📝 [SUBMIT VOTE] Lobby existiert nicht mehr')
             alert("Lobby existiert nicht mehr!")
             return
         }
@@ -2249,7 +2351,7 @@ function App() {
         const maxTemp = currentData?.config?.maxTemp || 100
         const myTemp = currentData?.players?.[myName]?.temp || 0
         if (myTemp >= maxTemp) {
-            console.warn('📝 [SUBMIT VOTE] Spieler ist eliminiert, kann nicht abstimmen:', {
+            logger.warn('📝 [SUBMIT VOTE] Spieler ist eliminiert, kann nicht abstimmen:', {
                 myName: myName,
                 temp: myTemp,
                 maxTemp: maxTemp
@@ -2261,7 +2363,7 @@ function App() {
         const existingVote = currentData?.votes?.[myName]
         const currentRoundId = currentData?.roundId || 0
         
-        console.log('📝 [SUBMIT VOTE] Prüfe bestehende Votes:', {
+        logger.log('📝 [SUBMIT VOTE] Prüfe bestehende Votes:', {
             existingVote: existingVote,
             allVotes: Object.keys(currentData?.votes || {}),
             roundId: currentRoundId,
@@ -2271,7 +2373,7 @@ function App() {
         
         // WICHTIG: Prüfe ob bereits in dieser Runde abgestimmt wurde
         if (existingVote && currentRoundId === (globalData?.roundId || 0)) {
-            console.warn('📝 [SUBMIT VOTE] Bereits in dieser Runde abgestimmt:', existingVote)
+            logger.warn('📝 [SUBMIT VOTE] Bereits in dieser Runde abgestimmt:', existingVote)
             alert("Du hast bereits abgestimmt!")
             return
         }
@@ -2279,9 +2381,9 @@ function App() {
         // WICHTIG: Prüfe ob mySelection noch gesetzt ist (könnte durch Re-Render zurückgesetzt worden sein)
         // RACE-CONDITION-FIX: Verhindere rekursive setTimeout-Loops
         if (!mySelection) {
-            console.warn('📝 [SUBMIT VOTE] mySelection ist null - versuche aus existingVote zu restaurieren')
+            logger.warn('📝 [SUBMIT VOTE] mySelection ist null - versuche aus existingVote zu restaurieren')
             if (existingVote?.choice) {
-                console.log('📝 [SUBMIT VOTE] Restore mySelection aus existingVote:', existingVote.choice)
+                logger.log('📝 [SUBMIT VOTE] Restore mySelection aus existingVote:', existingVote.choice)
                 setMySelection(existingVote.choice)
                 // WICHTIG: Verwende existingVote.choice direkt statt rekursivem setTimeout
                 // Das verhindert unendliche Loops und Race Conditions
@@ -2289,7 +2391,7 @@ function App() {
                 // Fahre mit dem Vote fort, anstatt rekursiv submitVote aufzurufen
                 // (Der Code wird nach setMySelection fortgesetzt)
             } else {
-                console.error('📝 [SUBMIT VOTE] mySelection ist null und keine existingVote vorhanden')
+                logger.error('📝 [SUBMIT VOTE] mySelection ist null und keine existingVote vorhanden')
                 alert("Bitte wähle zuerst eine Antwort!")
                 return
             }
@@ -2298,12 +2400,12 @@ function App() {
         // WICHTIG: Verwende restoredChoice falls vorhanden, sonst mySelection
         const voteChoice = mySelection || existingVote?.choice
         if (!voteChoice) {
-            console.error('📝 [SUBMIT VOTE] Keine Wahl verfügbar')
+            logger.error('📝 [SUBMIT VOTE] Keine Wahl verfügbar')
             alert("Bitte wähle zuerst eine Antwort!")
             return
         }
         
-        console.log('📝 [SUBMIT VOTE] Sende Vote an Firebase:', {
+        logger.log('📝 [SUBMIT VOTE] Sende Vote an Firebase:', {
             choice: String(voteChoice),
             strategy: myStrategy || 'none',
             roundId: currentRoundId
@@ -2339,9 +2441,9 @@ function App() {
                 })
             })
             
-            console.log('📝 [SUBMIT VOTE] Vote erfolgreich gesendet (Transaction)')
+            logger.log('📝 [SUBMIT VOTE] Vote erfolgreich gesendet (Transaction)')
         } catch (err) {
-            console.error("📝 [SUBMIT VOTE] Fehler beim Absenden der Antwort:", err)
+            logger.error("📝 [SUBMIT VOTE] Fehler beim Absenden der Antwort:", err)
             if (err.message === "Du hast bereits abgestimmt!") {
                 alert("Du hast bereits abgestimmt!")
             } else {
@@ -2352,10 +2454,10 @@ function App() {
     
     // Bereit setzen (für Result-Screen)
     const setReady = async () => {
-        console.log('👍 [SET READY] setReady aufgerufen für', myName)
+        logger.log('👍 [SET READY] setReady aufgerufen für', myName)
         
         if (!db || !roomId) {
-            console.warn('👍 [SET READY] Fehlende Parameter')
+            logger.warn('👍 [SET READY] Fehlende Parameter')
             return
         }
         
@@ -2365,7 +2467,7 @@ function App() {
         const currentDoc = await getDoc(ref)
         
         if (!currentDoc.exists()) {
-            console.error('👍 [SET READY] Lobby existiert nicht mehr')
+            logger.error('👍 [SET READY] Lobby existiert nicht mehr')
             return
         }
         
@@ -2373,7 +2475,7 @@ function App() {
         const currentReady = currentData?.ready || []
         const isReady = currentReady.includes(myName)
         
-        console.log('👍 [SET READY] Aktueller Status:', {
+        logger.log('👍 [SET READY] Aktueller Status:', {
             isReady: isReady,
             currentReady: currentReady,
             willToggle: !isReady
@@ -2389,9 +2491,9 @@ function App() {
                 })
             }, 3, 500).then(success => {
                 if (success) {
-                    console.log('👍 [SET READY] Nicht mehr bereit gesetzt')
+                    logger.log('👍 [SET READY] Nicht mehr bereit gesetzt')
                 } else {
-                    console.error('👍 [SET READY] Fehler: Update nach mehreren Versuchen fehlgeschlagen')
+                    logger.error('👍 [SET READY] Fehler: Update nach mehreren Versuchen fehlgeschlagen')
                 }
             })
         } else {
@@ -2403,9 +2505,9 @@ function App() {
                 })
             }, 3, 500).then(success => {
                 if (success) {
-                    console.log('👍 [SET READY] Bereit gesetzt')
+                    logger.log('👍 [SET READY] Bereit gesetzt')
                 } else {
-                    console.error('👍 [SET READY] Fehler: Update nach mehreren Versuchen fehlgeschlagen')
+                    logger.error('👍 [SET READY] Fehler: Update nach mehreren Versuchen fehlgeschlagen')
                 }
             })
         }
@@ -2460,11 +2562,11 @@ function App() {
         if (hotseatName && players) {
             // WICHTIG: Prüfe ob Modal bereits angezeigt wird, um mehrfache Anzeige zu verhindern
             if (showHotseatModal) {
-                console.log('🎯 [HOTSEAT MODAL] triggerHotseatAlert übersprungen - Modal wird bereits angezeigt')
+                logger.log('🎯 [HOTSEAT MODAL] triggerHotseatAlert übersprungen - Modal wird bereits angezeigt')
                 return
             }
             const isMeHotseat = myName === hotseatName
-            console.log('🎯 [HOTSEAT MODAL] triggerHotseatAlert aufgerufen:', {
+            logger.log('🎯 [HOTSEAT MODAL] triggerHotseatAlert aufgerufen:', {
                 hotseatName: hotseatName,
                 isMeHotseat: isMeHotseat,
                 myName: myName,
@@ -2472,21 +2574,21 @@ function App() {
                 showHotseatModal: showHotseatModal
             })
             setShowHotseatModal(true)
-            console.log('🎯 [HOTSEAT MODAL] showHotseatModal auf true gesetzt')
+            logger.log('🎯 [HOTSEAT MODAL] showHotseatModal auf true gesetzt')
         } else {
-            console.warn('🎯 [HOTSEAT MODAL] triggerHotseatAlert fehlgeschlagen - fehlende Parameter:', { hotseatName, players })
+            logger.warn('🎯 [HOTSEAT MODAL] triggerHotseatAlert fehlgeschlagen - fehlende Parameter:', { hotseatName, players })
         }
     }
     
     // Hotseat-Modal schließen
     const closeHotseatModal = () => {
-        console.log('🎯 [HOTSEAT MODAL] Modal wird geschlossen')
+        logger.log('🎯 [HOTSEAT MODAL] Modal wird geschlossen')
         setShowHotseatModal(false)
     }
     
     // Attack-Modal schließen
     const closeAttackModal = async () => {
-        console.log('💥 [ATTACK MODAL] Modal wird geschlossen')
+        logger.log('💥 [ATTACK MODAL] Modal wird geschlossen')
         setShowAttackModal(false)
         setIsOpeningAttackModal(false)
         setAttackResult(null)
@@ -2499,16 +2601,16 @@ function App() {
                 const currentPopupConfirmed = currentData.data()?.popupConfirmed || {}
                 
                 if (!currentPopupConfirmed[myName]) {
-                    console.log('💥 [ATTACK MODAL] Markiere Popup als bestätigt für', myName)
+                    logger.log('💥 [ATTACK MODAL] Markiere Popup als bestätigt für', myName)
                     await updateDoc(ref, {
                         [`popupConfirmed.${myName}`]: true
                     })
-                    console.log('💥 [ATTACK MODAL] Popup erfolgreich als bestätigt markiert')
+                    logger.log('💥 [ATTACK MODAL] Popup erfolgreich als bestätigt markiert')
                 } else {
-                    console.log('💥 [ATTACK MODAL] Popup bereits als bestätigt markiert')
+                    logger.log('💥 [ATTACK MODAL] Popup bereits als bestätigt markiert')
                 }
             } catch (err) {
-                console.error('💥 [ATTACK MODAL] Fehler beim Markieren als bestätigt:', err)
+                logger.error('💥 [ATTACK MODAL] Fehler beim Markieren als bestätigt:', err)
             }
         }
         
@@ -2522,26 +2624,26 @@ function App() {
                 const currentPopupConfirmed = currentData.data()?.popupConfirmed || {}
                 
                 if (!currentPopupConfirmed[myName]) {
-                    console.log('💥 [ATTACK MODAL] Markiere Popup als bestätigt für', myName)
+                    logger.log('💥 [ATTACK MODAL] Markiere Popup als bestätigt für', myName)
                     await updateDoc(ref, {
                         [`popupConfirmed.${myName}`]: true
                     })
-                    console.log('💥 [ATTACK MODAL] Popup erfolgreich als bestätigt markiert')
+                    logger.log('💥 [ATTACK MODAL] Popup erfolgreich als bestätigt markiert')
                 } else {
-                    console.log('💥 [ATTACK MODAL] Popup bereits als bestätigt markiert')
+                    logger.log('💥 [ATTACK MODAL] Popup bereits als bestätigt markiert')
                 }
             } catch (error) {
-                console.error('💥 [ATTACK MODAL] Fehler beim Markieren des Popups als bestätigt:', error)
+                logger.error('💥 [ATTACK MODAL] Fehler beim Markieren des Popups als bestätigt:', error)
             }
         }
     }
     
     // Party Mode: Falsche Antwort (10° Strafhitze)
     const handlePartyModeWrongAnswer = async () => {
-        console.log('❌ [PARTY MODE] handlePartyModeWrongAnswer aufgerufen für', myName)
+        logger.log('❌ [PARTY MODE] handlePartyModeWrongAnswer aufgerufen für', myName)
         
         if (!db || !roomId) {
-            console.warn('❌ [PARTY MODE] Fehlende Parameter')
+            logger.warn('❌ [PARTY MODE] Fehlende Parameter')
             return
         }
         
@@ -2554,7 +2656,7 @@ function App() {
             [myName]: true
         }
         
-        console.log('❌ [PARTY MODE] Wende Strafhitze an:', {
+        logger.log('❌ [PARTY MODE] Wende Strafhitze an:', {
             dmg: dmg,
             myName: myName,
             attackDecisions: updatedAttackDecisions
@@ -2565,7 +2667,7 @@ function App() {
             log: arrayUnion(`❌ ${myName} hat falsch geraten und sich selbst aufgeheizt (+${dmg}°C)`),
             attackDecisions: updatedAttackDecisions
         }).then(() => {
-            console.log('❌ [PARTY MODE] Strafhitze erfolgreich angewendet')
+            logger.log('❌ [PARTY MODE] Strafhitze erfolgreich angewendet')
             // WICHTIG: Aktualisiere globalData sofort, damit die UI die Änderung sofort anzeigt
             if (globalData && globalData.players && globalData.players[myName]) {
                 const currentTemp = globalData.players[myName].temp || 0
@@ -2581,35 +2683,35 @@ function App() {
                 })
             }
         }).catch(err => {
-            console.error('❌ [PARTY MODE] Fehler:', err)
+            logger.error('❌ [PARTY MODE] Fehler:', err)
         })
     }
     
     // Angriff ausführen
     const doAttack = async (target) => {
         playSound('attack', 0.6) // Sound beim Angriff
-        console.log('🔥 [ATTACK] doAttack aufgerufen:', {
+        logger.log('🔥 [ATTACK] doAttack aufgerufen:', {
             attacker: myName,
             target: target,
             roomId: roomId
         })
         
         if (!db || !roomId) {
-            console.warn('🔥 [ATTACK] Fehlende Parameter')
+            logger.warn('🔥 [ATTACK] Fehlende Parameter')
             return
         }
         
         setLocalActionDone(true)
-        console.log('🔥 [ATTACK] localActionDone auf true gesetzt')
+        logger.log('🔥 [ATTACK] localActionDone auf true gesetzt')
         
         const gameMode = globalData?.config?.gameMode || 'party'
-        const isPartyMode = gameMode === 'party'
-        const baseDmg = isPartyMode ? 20 : (globalData?.config?.dmg || 10)
+        const isPartyMode = gameMode === GAME_MODE.PARTY
+        const baseDmg = isPartyMode ? GAME_CONSTANTS.ATTACK_DMG_PARTY : (globalData?.config?.dmg || GAME_CONSTANTS.ATTACK_DMG_STRATEGIC)
         const attackerState = globalData?.players?.[myName] || {}
         const hasOil = attackerState.inventory?.includes('card_oil')
         const dmg = baseDmg * (hasOil ? 2 : 1)
         
-        console.log('🔥 [ATTACK] Angriffsdetails:', {
+        logger.log('🔥 [ATTACK] Angriffsdetails:', {
             gameMode: gameMode,
             isPartyMode: isPartyMode,
             baseDmg: baseDmg,
@@ -2617,55 +2719,75 @@ function App() {
             finalDmg: dmg
         })
         
-        const ref = doc(db, "lobbies", roomId)
-        const currentData = await getDoc(ref)
-        const currentPendingAttacks = currentData.data()?.pendingAttacks || {}
-        const targetAttacks = currentPendingAttacks[target] || []
-        
-        targetAttacks.push({
-            attacker: myName,
-            dmg: dmg,
-            hasOil: hasOil
-        })
-        
-        const updatedPendingAttacks = {
-            ...currentPendingAttacks,
-            [target]: targetAttacks
+        // RACE-CONDITION-PREVENTION: Verwende runTransaction für atomares Update
+        // Dies verhindert, dass mehrere Clients gleichzeitig angreifen oder doppelte Angriffe entstehen
+        try {
+            await runTransaction(db, async (transaction) => {
+                const lobbyRef = doc(db, "lobbies", roomId)
+                const lobbyDoc = await transaction.get(lobbyRef)
+                
+                if (!lobbyDoc.exists()) {
+                    throw new Error("Lobby existiert nicht mehr!")
+                }
+                
+                const lobbyData = lobbyDoc.data()
+                const currentPendingAttacks = lobbyData?.pendingAttacks || {}
+                const currentAttackDecisions = lobbyData?.attackDecisions || {}
+                
+                // WICHTIG: Prüfe ob bereits eine Angriffsentscheidung getroffen wurde
+                if (currentAttackDecisions[myName] === true) {
+                    throw new Error("Du hast bereits eine Angriffsentscheidung getroffen!")
+                }
+                
+                // Erstelle neue Attack-Liste für das Ziel
+                const targetAttacks = currentPendingAttacks[target] || []
+                targetAttacks.push({
+                    attacker: myName,
+                    dmg: dmg,
+                    hasOil: hasOil
+                })
+                
+                // Atomar: Update pendingAttacks und attackDecisions
+                const updatedPendingAttacks = {
+                    ...currentPendingAttacks,
+                    [target]: targetAttacks
+                }
+                
+                const updatedAttackDecisions = {
+                    ...currentAttackDecisions,
+                    [myName]: true
+                }
+                
+                transaction.update(lobbyRef, {
+                    pendingAttacks: updatedPendingAttacks,
+                    attackDecisions: updatedAttackDecisions
+                })
+                
+                // Ölfass entfernen, falls verwendet
+                if (hasOil) {
+                    transaction.update(lobbyRef, {
+                        [`players.${myName}.inventory`]: arrayRemove('card_oil')
+                    })
+                    logger.log('🔥 [ATTACK] Ölfass wird verbraucht')
+                }
+            })
+            
+            logger.log('🔥 [ATTACK] Angriff erfolgreich gesendet (Transaction)')
+        } catch (err) {
+            logger.error('🔥 [ATTACK] Fehler:', err)
+            if (err.message === "Du hast bereits eine Angriffsentscheidung getroffen!") {
+                alert("Du hast bereits eine Angriffsentscheidung getroffen!")
+            } else {
+                alert("Fehler beim Senden des Angriffs!")
+            }
         }
-        
-        const currentAttackDecisions = currentData.data()?.attackDecisions || {}
-        const updatedAttackDecisions = {
-            ...currentAttackDecisions,
-            [myName]: true
-        }
-        
-        const updateData = {
-            pendingAttacks: updatedPendingAttacks,
-            attackDecisions: updatedAttackDecisions
-        }
-        
-        if (hasOil) {
-            updateData[`players.${myName}.inventory`] = arrayRemove('card_oil')
-            console.log('🔥 [ATTACK] Ölfass wird verbraucht')
-        }
-        
-        console.log('🔥 [ATTACK] Update Firebase mit:', {
-            pendingAttacks: updatedPendingAttacks,
-            attackDecisions: updatedAttackDecisions
-        })
-        
-        await updateDoc(ref, updateData).then(() => {
-            console.log('🔥 [ATTACK] Angriff erfolgreich gesendet')
-        }).catch(err => {
-            console.error('🔥 [ATTACK] Fehler:', err)
-        })
     }
     
     // Nächste Runde starten - NUR VOM HOST
     const nextRound = async () => {
         const opId = `nextRound_${Date.now()}`
         pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
-        console.log('🔄 [NEXT ROUND] Starte nextRound:', {
+        logger.log('🔄 [NEXT ROUND] Starte nextRound:', {
             isHost: isHost,
             hasDb: !!db,
             roomId: roomId,
@@ -2673,14 +2795,14 @@ function App() {
         })
         
         if (!db || !roomId || !isHost) {
-            console.warn('🔄 [NEXT ROUND] Nicht der Host oder fehlende Parameter')
+            logger.warn('🔄 [NEXT ROUND] Nicht der Host oder fehlende Parameter')
             return
         }
         
         // Prüfe nochmal explizit ob Host
         const currentDoc = await getDoc(doc(db, "lobbies", roomId))
         if (!currentDoc.exists() || currentDoc.data().host !== myName) {
-            console.warn('🔄 [NEXT ROUND] Host-Check fehlgeschlagen:', {
+            logger.warn('🔄 [NEXT ROUND] Host-Check fehlgeschlagen:', {
                 exists: currentDoc.exists(),
                 host: currentDoc.data()?.host,
                 myName: myName
@@ -2689,16 +2811,16 @@ function App() {
         }
         
         const currentData = currentDoc.data()
-        console.log('🔄 [NEXT ROUND] Aktuelle Daten:', {
+        logger.log('🔄 [NEXT ROUND] Aktuelle Daten:', {
             roundId: currentData.roundId,
             status: currentData.status,
             players: Object.keys(currentData.players || {})
         })
-        const players = Object.keys(currentData?.players || {})
-        const maxTemp = currentData?.config?.maxTemp || 100
-        const activePlayers = players.filter(p => (currentData?.players[p]?.temp || 0) < maxTemp)
+        const players = currentData?.players || {}
+        const maxTemp = currentData?.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
+        const activePlayers = getActivePlayers(players, maxTemp)
         
-        console.log('🔄 [NEXT ROUND] Aktive Spieler:', {
+        logger.log('🔄 [NEXT ROUND] Aktive Spieler:', {
             allPlayers: players,
             activePlayers: activePlayers,
             maxTemp: maxTemp,
@@ -2708,7 +2830,7 @@ function App() {
         // WICHTIG: Prüfe auf Spielende - wenn nur noch 1 oder 0 aktive Spieler, beende das Spiel
         if (activePlayers.length <= 1) {
             const winnerName = activePlayers.length === 1 ? activePlayers[0] : null
-            console.log('🏆 [NEXT ROUND] Spielende erkannt:', {
+            logger.log('🏆 [NEXT ROUND] Spielende erkannt:', {
                 activePlayers: activePlayers.length,
                 winner: winnerName,
                 allPlayers: players.map(p => ({ name: p, temp: currentData?.players[p]?.temp || 0 }))
@@ -2742,7 +2864,7 @@ function App() {
         // WICHTIG: Countdown nur beim ersten Start, nicht bei jeder Runde
         // Bei nextRound direkt zu 'game' wechseln, ohne Countdown
         
-        console.log('🔄 [NEXT ROUND] Runden-Details:', {
+        logger.log('🔄 [NEXT ROUND] Runden-Details:', {
             currentHotseat: currentHotseat,
             nextHotseat: nextHotseat,
             nextHotseatIndex: nextHotseatIndex,
@@ -2751,10 +2873,10 @@ function App() {
         })
         
         // WICHTIG: Eiswürfel-Automatik vor dem Rundenwechsel
-        console.log('🧊 [NEXT ROUND] Wende Eiswürfel-Automatik an')
+        logger.log('🧊 [NEXT ROUND] Wende Eiswürfel-Automatik an')
         await applyIceCooling(currentData.players)
         
-        console.log('🔄 [NEXT ROUND] Bereite nächste Runde vor:', {
+        logger.log('🔄 [NEXT ROUND] Bereite nächste Runde vor:', {
             nextRoundId: nextRoundId,
             hotseat: nextHotseat,
             question: randomQ.q,
@@ -2790,7 +2912,7 @@ function App() {
             updateData.usedQuestions = [...usedQuestions, qIndex]
         }
         
-        console.log('🔄 [NEXT ROUND] Update Firebase mit:', {
+        logger.log('🔄 [NEXT ROUND] Update Firebase mit:', {
             ...updateData,
             votes: '[deleteField]',
             countdownEnds: '[deleteField]',
@@ -2804,19 +2926,19 @@ function App() {
         
         if (success) {
             pendingOperationsRef.current.delete(opId)
-            console.log('🔄 [NEXT ROUND] Firebase aktualisiert, direkt zu Game-Status (kein Countdown)')
+            logger.log('🔄 [NEXT ROUND] Firebase aktualisiert, direkt zu Game-Status (kein Countdown)')
         } else {
-            console.error('❌ [NEXT ROUND] Firebase-Update fehlgeschlagen nach mehreren Versuchen')
+            logger.error('❌ [NEXT ROUND] Firebase-Update fehlgeschlagen nach mehreren Versuchen')
             // Versuche es erneut nach längerer Pause
             setTimeout(async () => {
-                console.log('🔄 [NEXT ROUND] Retry nach 3 Sekunden...')
+                logger.log('🔄 [NEXT ROUND] Retry nach 3 Sekunden...')
                 try {
                     await updateDoc(doc(db, "lobbies", roomId), updateData)
                     lastSuccessfulUpdateRef.current = Date.now()
                     pendingOperationsRef.current.delete(opId)
-                    console.log('✅ [NEXT ROUND] Retry erfolgreich')
+                    logger.log('✅ [NEXT ROUND] Retry erfolgreich')
                 } catch (err) {
-                    console.error('❌ [NEXT ROUND] Retry auch fehlgeschlagen:', err)
+                    logger.error('❌ [NEXT ROUND] Retry auch fehlgeschlagen:', err)
                     // Watchdog wird das Problem erkennen und Recovery starten
                 }
             }, 3000)
@@ -2827,7 +2949,7 @@ function App() {
     const executePendingAttacks = async (data) => {
         const opId = `executeAttacks_${data?.roundId || Date.now()}`
         pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
-        console.log('⚔️ [EXECUTE ATTACKS] Starte executePendingAttacks:', {
+        logger.log('⚔️ [EXECUTE ATTACKS] Starte executePendingAttacks:', {
             roundId: data?.roundId,
             isHost: isHost,
             hasDb: !!db,
@@ -2835,14 +2957,14 @@ function App() {
         })
         
         if (!db || !roomId || !isHost) {
-            console.warn('⚔️ [EXECUTE ATTACKS] Nicht der Host oder fehlende Parameter')
+            logger.warn('⚔️ [EXECUTE ATTACKS] Nicht der Host oder fehlende Parameter')
             return
         }
         
         // Prüfe nochmal explizit ob Host
         const currentDoc = await getDoc(doc(db, "lobbies", roomId))
         if (!currentDoc.exists() || currentDoc.data().host !== myName) {
-            console.warn('⚔️ [EXECUTE ATTACKS] Host-Check fehlgeschlagen')
+            logger.warn('⚔️ [EXECUTE ATTACKS] Host-Check fehlgeschlagen')
             return
         }
         
@@ -2901,7 +3023,7 @@ function App() {
         // Alle Spieler die nicht angreifen können, müssen bereits attackDecisions haben (durch handlePartyModeWrongAnswer)
         const allNonAttackersDecided = playersWhoCannotAttack.every(p => attackDecisions[p] === true)
         
-        console.log('⚔️ [EXECUTE ATTACKS] Verarbeite Angriffe:', {
+        logger.log('⚔️ [EXECUTE ATTACKS] Verarbeite Angriffe:', {
             roundId: currentData.roundId,
             pendingAttacks: pendingAttacks,
             players: Object.keys(players),
@@ -2916,7 +3038,7 @@ function App() {
         // Aber wenn alle Nicht-Angreifer entschieden haben und es keine Angreifer gibt, fahre fort
         if (!allAttackersDecided && playersWhoCanAttack.length > 0) {
             const missing = playersWhoCanAttack.filter(p => !attackDecisions[p])
-            console.warn('⚔️ [EXECUTE ATTACKS] ❌ Nicht alle Angreifer haben entschieden, warte noch...', {
+            logger.warn('⚔️ [EXECUTE ATTACKS] ❌ Nicht alle Angreifer haben entschieden, warte noch...', {
                 roundId: currentData.roundId,
                 playersWhoCanAttack: playersWhoCanAttack,
                 missing: missing,
@@ -2931,7 +3053,7 @@ function App() {
         // wenn alle Nicht-Angreifer entschieden haben (Strafhitze wurde bereits angewendet)
         if (playersWhoCanAttack.length === 0 && !allNonAttackersDecided && playersWhoCannotAttack.length > 0) {
             const missing = playersWhoCannotAttack.filter(p => !attackDecisions[p])
-            console.warn('⚔️ [EXECUTE ATTACKS] ❌ Nicht alle Nicht-Angreifer haben entschieden, warte noch...', {
+            logger.warn('⚔️ [EXECUTE ATTACKS] ❌ Nicht alle Nicht-Angreifer haben entschieden, warte noch...', {
                 roundId: currentData.roundId,
                 playersWhoCannotAttack: playersWhoCannotAttack,
                 missing: missing,
@@ -2944,7 +3066,7 @@ function App() {
         // WICHTIG: Wenn es keine Angreifer gibt (alle haben falsch geraten), aber alle haben entschieden,
         // fahre trotzdem fort (Strafhitze wurde bereits angewendet, es gibt keine normalen Angriffe)
         if (playersWhoCanAttack.length === 0 && allNonAttackersDecided) {
-            console.log('⚔️ [EXECUTE ATTACKS] ✅ Keine Angreifer, aber alle haben entschieden (nur Strafhitze), fahre fort...')
+            logger.log('⚔️ [EXECUTE ATTACKS] ✅ Keine Angreifer, aber alle haben entschieden (nur Strafhitze), fahre fort...')
             // Setze roundRecapShown auf true, damit das Spiel weitergeht
             // WICHTIG: Setze auch attackResults auf leeres Objekt, damit die UI weiß, dass es keine Angriffe gibt
             await updateDoc(doc(db, "lobbies", roomId), {
@@ -2957,7 +3079,7 @@ function App() {
         // WICHTIG: Fallback: Wenn es keine Angreifer gibt und auch keine Nicht-Angreifer (nur Hotseat),
         // fahre trotzdem fort
         if (playersWhoCanAttack.length === 0 && playersWhoCannotAttack.length === 0) {
-            console.log('⚔️ [EXECUTE ATTACKS] ✅ Keine Angreifer und keine Nicht-Angreifer (nur Hotseat), fahre fort...')
+            logger.log('⚔️ [EXECUTE ATTACKS] ✅ Keine Angreifer und keine Nicht-Angreifer (nur Hotseat), fahre fort...')
             await updateDoc(doc(db, "lobbies", roomId), {
                 roundRecapShown: true,
                 attackResults: {}
@@ -2965,7 +3087,7 @@ function App() {
             return
         }
         
-        console.log('⚔️ [EXECUTE ATTACKS] ✅ Alle Entscheidungen getroffen, verarbeite Angriffe...', {
+        logger.log('⚔️ [EXECUTE ATTACKS] ✅ Alle Entscheidungen getroffen, verarbeite Angriffe...', {
             roundId: currentData.roundId,
             playersWhoCanAttack: playersWhoCanAttack,
             playersWhoCannotAttack: playersWhoCannotAttack,
@@ -3053,7 +3175,7 @@ function App() {
             
             if (playerVote && playerChoice !== truthChoice) {
                 // Falsch geraten - Strafhitze
-                let penaltyDmg = 10
+                let penaltyDmg = GAME_CONSTANTS.PENALTY_DMG
                 if (isPartyMode) {
                     // Im Party Mode wurde bereits 10° in handlePartyModeWrongAnswer angewendet
                     // Aber wir müssen es trotzdem zu attackResults hinzufügen für die Anzeige
@@ -3130,17 +3252,17 @@ function App() {
         if (success) {
             pendingOperationsRef.current.delete(opId)
         } else {
-            console.error('❌ [EXECUTE ATTACKS] Firebase-Update fehlgeschlagen nach mehreren Versuchen')
+            logger.error('❌ [EXECUTE ATTACKS] Firebase-Update fehlgeschlagen nach mehreren Versuchen')
             // Versuche es erneut nach längerer Pause
             setTimeout(async () => {
-                console.log('⚔️ [EXECUTE ATTACKS] Retry nach 3 Sekunden...')
+                logger.log('⚔️ [EXECUTE ATTACKS] Retry nach 3 Sekunden...')
                 try {
                     await updateDoc(doc(db, "lobbies", roomId), updateData)
                     lastSuccessfulUpdateRef.current = Date.now()
                     pendingOperationsRef.current.delete(opId)
-                    console.log('✅ [EXECUTE ATTACKS] Retry erfolgreich')
+                    logger.log('✅ [EXECUTE ATTACKS] Retry erfolgreich')
                 } catch (err) {
-                    console.error('❌ [EXECUTE ATTACKS] Retry auch fehlgeschlagen:', err)
+                    logger.error('❌ [EXECUTE ATTACKS] Retry auch fehlgeschlagen:', err)
                     // Watchdog wird das Problem erkennen und Recovery starten
                 }
             }, 3000)
@@ -3170,7 +3292,7 @@ function App() {
                 return beforeTemp < maxTemp && afterTemp >= maxTemp
             })
             
-            console.log('🏆 [WINNER CHECK] Prüfe auf Gewinner nach Angriffen:', {
+            logger.log('🏆 [WINNER CHECK] Prüfe auf Gewinner nach Angriffen:', {
                 roundId: updatedData.roundId,
                 allPlayers: Object.keys(updatedPlayers),
                 activePlayers: activePlayers,
@@ -3188,7 +3310,7 @@ function App() {
             // Wenn jemand gerade eliminiert wurde, setze eliminationInfo und füge zu eliminatedPlayers hinzu
             if (justEliminated.length > 0) {
                 const eliminatedName = justEliminated[0]
-                console.log('🔥 [ELIMINATION] Spieler eliminiert:', eliminatedName)
+                logger.log('🔥 [ELIMINATION] Spieler eliminiert:', eliminatedName)
                 
                 // Lese aktuelle eliminatedPlayers Liste
                 const currentEliminated = updatedData.eliminatedPlayers || []
@@ -3211,13 +3333,13 @@ function App() {
             // Wenn nur noch ein Spieler übrig ist, setze Status auf 'winner'
             if (activePlayers.length === 1) {
                 const winnerName = activePlayers[0]
-                console.log('🏆 [WINNER] Nur noch ein Spieler übrig! Gewinner:', winnerName)
+                logger.log('🏆 [WINNER] Nur noch ein Spieler übrig! Gewinner:', winnerName)
                 await updateDoc(doc(db, "lobbies", roomId), {
                     status: 'winner'
                 })
             } else if (activePlayers.length === 0) {
                 // Alle sind raus - sollte nicht passieren, aber falls doch, setze auch auf winner
-                console.warn('🏆 [WINNER] Alle Spieler sind ausgeschieden!')
+                logger.warn('🏆 [WINNER] Alle Spieler sind ausgeschieden!')
                 await updateDoc(doc(db, "lobbies", roomId), {
                     status: 'winner'
                 })
@@ -3291,7 +3413,7 @@ function App() {
         if (!window.confirm("Lobby wirklich löschen? Alle Spieler werden ausgeworfen und die Lobby ist danach nicht mehr verfügbar!")) return
         const ref = doc(db, "lobbies", roomId)
         await deleteDoc(ref)
-        console.log('Lobby gelöscht:', roomId)
+        logger.log('Lobby gelöscht:', roomId)
         setMenuOpen(false)
     }
     
@@ -4577,7 +4699,7 @@ function App() {
                             const hasAttackDecision = attackDecisions[myName] === true
                             const shouldShowAttackSelection = !hasAttackDecision && isPartyMode
                             
-                            console.log('✅ [ATTACK SELECTION] Richtig geraten - Prüfe Angriffsauswahl:', {
+                            logger.log('✅ [ATTACK SELECTION] Richtig geraten - Prüfe Angriffsauswahl:', {
                                 roundId: globalData.roundId,
                                 myName: myName,
                                 isPartyMode: isPartyMode,
@@ -4594,7 +4716,7 @@ function App() {
                             })
                             
                             if (shouldShowAttackSelection) {
-                                console.log('✅ [ATTACK SELECTION] Zeige Angriffsauswahl (Party Mode)')
+                                logger.log('✅ [ATTACK SELECTION] Zeige Angriffsauswahl (Party Mode)')
                                 return (
                                     <div style={{margin: '20px 0'}}>
                                         <p style={{color: '#0f0', fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '10px'}}>✅ RICHTIG GERATEN!</p>
@@ -4693,7 +4815,7 @@ function App() {
                                 )
                             } else if (!hasAttackDecision && !isPartyMode) {
                                 // Strategic Mode: Belohnung wählen
-                                console.log('🎁 [REWARD] Zeige Belohnungsauswahl (Strategic Mode)')
+                                logger.log('🎁 [REWARD] Zeige Belohnungsauswahl (Strategic Mode)')
                                 return (
                                     <div style={{margin: '20px 0'}}>
                                         <p style={{color: '#0f0', fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '10px'}}>✅ RICHTIG GERATEN!</p>
@@ -4870,7 +4992,7 @@ function App() {
                             // Falsch geraten - WICHTIG: String-Vergleich, aber nur wenn truth existiert
                             // WICHTIG: attackDecisions aus globalData extrahieren
                             const attackDecisions = globalData?.attackDecisions || {}
-                            console.log('❌ [RESULT UI] Falsch geraten erkannt:', {
+                            logger.log('❌ [RESULT UI] Falsch geraten erkannt:', {
                                 myChoice: myVote.choice,
                                 truth: truth,
                                 isPartyMode: isPartyMode,
