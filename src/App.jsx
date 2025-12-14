@@ -3518,6 +3518,9 @@ function App() {
             {currentScreen !== 'landing' && (
                 <div className="menu-btn" onClick={() => setMenuOpen(!menuOpen)}>⚙️</div>
             )}
+            {currentScreen !== 'landing' && (
+                <div className="menu-btn help-btn" onClick={() => setShowRulesModal(true)} style={{left: 'max(15px, env(safe-area-inset-left))', right: 'auto'}}>?</div>
+            )}
             
             {menuOpen && (
                 <>
@@ -3999,10 +4002,6 @@ function App() {
             {/* START SCREEN */}
             {currentScreen === 'start' && (
                 <div className="screen active card">
-                    <h3 style={{marginBottom: '15px', color: '#ff8c00'}}>Wie heißt du?</h3>
-                    <label htmlFor="playerName" style={{display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '8px', fontWeight: '500'}}>
-                        Dein Name:
-                    </label>
                     <input 
                         id="playerName"
                         name="playerName"
@@ -4013,9 +4012,6 @@ function App() {
                         maxLength={20} 
                         autoComplete="name"
                     />
-                    <label htmlFor="playerEmoji" style={{display: 'block', fontSize: '0.85rem', color: '#aaa', marginTop: '15px', marginBottom: '8px', fontWeight: '500'}}>
-                        Wähle deinen Charakter:
-                    </label>
                     <div className="emoji-gallery-wrapper" style={{
                         position: 'relative', 
                         marginBottom: '15px', 
@@ -4099,21 +4095,6 @@ function App() {
                             🚪 Spiel beitreten
                         </button>
                     </div>
-                    
-                    {/* Anleitung Button außerhalb des Cards */}
-                    <button 
-                        className="btn-secondary" 
-                        onClick={() => setShowRulesModal(true)} 
-                        style={{
-                            marginTop: '20px',
-                            width: '100%',
-                            maxWidth: '480px',
-                            marginLeft: 'auto',
-                            marginRight: 'auto'
-                        }}
-                    >
-                        📖 Anleitung
-                    </button>
                 </div>
             )}
             
@@ -5692,7 +5673,8 @@ function App() {
                                     <strong style={{color: '#ff8c00', fontSize: '1.1rem'}}>Ziel:</strong>
                                 </div>
                                 <p style={{color: '#ccc', marginLeft: '35px'}}>
-                                    Errate die Antworten deiner Freunde und bringe sie zum kochen!
+                                    Errate die Antworten deiner Freunde und bringe sie zum Kochen! <br />
+                                    Rätst du richtig, darfst du Hitze verteilen, liegst du falsch, erhältst du Strafhitze.
                                 </p>
                             </div>
                             
@@ -5707,7 +5689,7 @@ function App() {
                                     <strong style={{color: '#ff8c00', fontSize: '1.1rem'}}>Verlierer:</strong>
                                 </div>
                                 <p style={{color: '#ccc', marginLeft: '35px'}}>
-                                    Wer als erstes 100° erreicht, fliegt raus.
+                                    Wer als erstes 100° erreicht ist ein Hitzkopf und fliegt raus.
                                 </p>
                             </div>
                             
