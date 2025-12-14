@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { initializeApp } from 'firebase/app'
-import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, arrayUnion, arrayRemove, increment, deleteField, deleteDoc } from 'firebase/firestore'
+import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, arrayUnion, arrayRemove, increment, deleteField, deleteDoc, runTransaction } from 'firebase/firestore'
 import { questionCategories, getAllQuestions } from './data/questionCategories'
 import './App.css'
 import hkBackground from './assets/hk_background_fullwidth.png'
@@ -1476,10 +1476,24 @@ function App() {
                     hotseatInDecisions: attackDecisions[data.hotseat]
                 })
                 
-                // NUR HOST führt executePendingAttacks aus
+                // HOST-FAILOVER: Prüfe ob Host inaktiv ist (>5 Sekunden keine Aktivität)
+                const lastHostActivity = data.lastHostActivity
+                const hostInactive = lastHostActivity && lastHostActivity.toMillis ? (Date.now() - lastHostActivity.toMillis()) > 5000 : true
+                const hostName = data.host
+                const isHostActive = !hostInactive && hostName === myName
+                
+                // Sortiere Spieler nach Name für konsistente Failover-Reihenfolge (verhindert Race Conditions)
+                const sortedActivePlayers = Object.keys(data.players || {}).filter(p => {
+                    const temp = data.players?.[p]?.temp || 0
+                    return temp < (data.config?.maxTemp || 100)
+                }).sort()
+                const myIndex = sortedActivePlayers.indexOf(myName)
+                const isFirstBackupHost = myIndex === 0 && sortedActivePlayers.length > 0 && sortedActivePlayers[0] !== hostName
+                
+                // NUR HOST führt executePendingAttacks aus, ODER Backup-Host wenn Host inaktiv
                 // WICHTIG: Nur ausführen wenn Hotseat geantwortet hat
                 // WICHTIG: Auch ausführen wenn alle geantwortet haben (für Strafhitze-Fall ohne normale Angriffe)
-                const canExecuteAttacks = (allDecided || allVoted) && recapNotShown && hasTruth && isHost && data.host === myName
+                const canExecuteAttacks = (allDecided || allVoted) && recapNotShown && hasTruth && (isHostActive || (hostInactive && isFirstBackupHost))
                 
                 console.log('⚔️ [EXECUTE ATTACKS] Detaillierte Prüfung:', {
                     roundId: data.roundId,
@@ -1533,10 +1547,23 @@ function App() {
             }
             
             // Host Auto-Advance: Wenn alle Spieler geantwortet haben, automatisch zu Result
-            // WICHTIG: Nur Host führt Auto-Advance aus
+            // HOST-FAILOVER: Backup-Host kann übernehmen wenn Host inaktiv ist
             // WICHTIG: Hotseat MUSS auch geantwortet haben!
             // WICHTIG: Nur aktive Spieler (nicht eliminiert) zählen!
-            if (data.status === 'game' && isHost && data.host === myName && data.votes) {
+            const lastHostActivityAdvance = data.lastHostActivity
+            const hostInactiveAdvance = lastHostActivityAdvance && lastHostActivityAdvance.toMillis ? (Date.now() - lastHostActivityAdvance.toMillis()) > 5000 : true
+            const hostNameAdvance = data.host
+            const maxTempAdvance = data.config?.maxTemp || 100
+            const sortedActivePlayersAdvance = Object.keys(data.players || {}).filter(p => {
+                const temp = data.players?.[p]?.temp || 0
+                return temp < maxTempAdvance
+            }).sort()
+            const myIndexAdvance = sortedActivePlayersAdvance.indexOf(myName)
+            const isFirstBackupHostAdvance = myIndexAdvance === 0 && sortedActivePlayersAdvance.length > 0 && sortedActivePlayersAdvance[0] !== hostNameAdvance
+            const isHostActiveAdvance = !hostInactiveAdvance && hostNameAdvance === myName
+            const canAutoAdvance = data.status === 'game' && data.votes && (isHostActiveAdvance || (hostInactiveAdvance && isFirstBackupHostAdvance))
+            
+            if (canAutoAdvance) {
                 const maxTemp = data.config?.maxTemp || 100
                 // WICHTIG: Zähle nur aktive Spieler (nicht eliminiert)
                 const activePlayers = Object.keys(data.players || {}).filter(p => {
@@ -1576,7 +1603,10 @@ function App() {
                             console.log('⏩ [AUTO-ADVANCE] Wechsle jetzt zu Result-Screen')
                             try {
                                 await retryFirebaseOperation(
-                                    () => updateDoc(doc(db, "lobbies", roomId), { status: 'result' }),
+                                    () => updateDoc(doc(db, "lobbies", roomId), { 
+                                        status: 'result',
+                                        lastHostActivity: serverTimestamp()
+                                    }),
                                     `autoAdvance_${data.roundId}`,
                                     5, // Mehr Retries bei schlechtem Internet
                                     2000 // Längere Delay bei Retries
@@ -1603,10 +1633,26 @@ function App() {
             }
             
             // Host Auto-Next: Wenn alle Spieler ihre Antwort abgegeben haben UND Popups bestätigt wurden, automatisch nächste Runde
-            // WICHTIG: Nur Host führt Auto-Next aus
+            // HOST-FAILOVER: Backup-Host kann übernehmen wenn Host inaktiv ist
             // WICHTIG: Prüfe auf votes statt ready - wenn alle abgestimmt haben, geht es weiter
             const roundRecapShownForNext = data.roundRecapShown ?? false
-            const canAutoNext = data.status === 'result' && isHost && data.host === myName && roundRecapShownForNext
+            
+            // Prüfe Host-Aktivität
+            const lastHostActivityNext = data.lastHostActivity
+            const hostInactiveNext = lastHostActivityNext && lastHostActivityNext.toMillis ? (Date.now() - lastHostActivityNext.toMillis()) > 5000 : true
+            const hostNameNext = data.host
+            
+            // Sortiere Spieler für konsistente Failover-Reihenfolge
+            const maxTempNext = data.config?.maxTemp || 100
+            const sortedActivePlayersNext = Object.keys(data.players || {}).filter(p => {
+                const temp = data.players?.[p]?.temp || 0
+                return temp < maxTempNext
+            }).sort()
+            const myIndexNext = sortedActivePlayersNext.indexOf(myName)
+            const isFirstBackupHostNext = myIndexNext === 0 && sortedActivePlayersNext.length > 0 && sortedActivePlayersNext[0] !== hostNameNext
+            const isHostActiveNext = !hostInactiveNext && hostNameNext === myName
+            
+            const canAutoNext = data.status === 'result' && roundRecapShownForNext && (isHostActiveNext || (hostInactiveNext && isFirstBackupHostNext))
             
             console.log('⏭️ [AUTO-NEXT] Basis-Prüfung:', {
                 roundId: data.roundId,
@@ -2263,25 +2309,45 @@ function App() {
             roundId: currentRoundId
         })
         
-        // ATOMARES UPDATE: Nur den spezifischen Vote-Pfad aktualisieren
-        // WICHTIG: Verwende updateDoc, nicht setDoc, um andere Votes nicht zu überschreiben
-        await updateDoc(doc(db, "lobbies", roomId), {
-            [`votes.${myName}`]: { choice: String(mySelection), strategy: myStrategy || 'none' }
-        }).then(() => {
-            console.log('📝 [SUBMIT VOTE] Vote erfolgreich gesendet')
-            // Prüfe nach dem Update, ob alle Votes noch vorhanden sind
-            getDoc(doc(db, "lobbies", roomId)).then(doc => {
-                const updatedData = doc.data()
-                console.log('📝 [SUBMIT VOTE] Nach Update - Alle Votes:', {
-                    allVotes: Object.keys(updatedData?.votes || {}),
-                    votes: updatedData?.votes,
-                    roundId: updatedData?.roundId
+        // RACE-CONDITION-PREVENTION: Verwende runTransaction für atomares Update
+        // Dies verhindert, dass mehrere Clients gleichzeitig voten oder doppelte Votes entstehen
+        try {
+            await runTransaction(db, async (transaction) => {
+                const lobbyRef = doc(db, "lobbies", roomId)
+                const lobbyDoc = await transaction.get(lobbyRef)
+                
+                if (!lobbyDoc.exists()) {
+                    throw new Error("Lobby existiert nicht mehr!")
+                }
+                
+                const lobbyData = lobbyDoc.data()
+                const currentRoundIdInTransaction = lobbyData?.roundId || 0
+                const existingVoteInTransaction = lobbyData?.votes?.[myName]
+                
+                // WICHTIG: Prüfe ob bereits in dieser Runde abgestimmt wurde
+                if (existingVoteInTransaction && currentRoundIdInTransaction === currentRoundId) {
+                    throw new Error("Du hast bereits abgestimmt!")
+                }
+                
+                // Atomar: Vote setzen
+                transaction.update(lobbyRef, {
+                    [`votes.${myName}`]: { 
+                        choice: String(voteChoice), 
+                        strategy: myStrategy || 'none',
+                        timestamp: serverTimestamp()
+                    }
                 })
             })
-        }).catch(err => {
+            
+            console.log('📝 [SUBMIT VOTE] Vote erfolgreich gesendet (Transaction)')
+        } catch (err) {
             console.error("📝 [SUBMIT VOTE] Fehler beim Absenden der Antwort:", err)
-            alert("Fehler beim Absenden der Antwort!")
-        })
+            if (err.message === "Du hast bereits abgestimmt!") {
+                alert("Du hast bereits abgestimmt!")
+            } else {
+                alert("Fehler beim Absenden der Antwort!")
+            }
+        }
     }
     
     // Bereit setzen (für Result-Screen)
@@ -2704,7 +2770,8 @@ function App() {
             roundId: nextRoundId,
             // WICHTIG: countdownEnds NICHT setzen - Countdown nur beim ersten Start
             lastQuestionCategory: randomQ.category,
-            roundRecapShown: false
+            roundRecapShown: false,
+            lastHostActivity: serverTimestamp() // Host-Aktivität für Failover-Tracking
         }
         
         // Lösche alte Felder atomar
@@ -3038,7 +3105,8 @@ function App() {
         const updateData = {
             pendingAttacks: {},
             attackResults: attackResults,
-            roundRecapShown: true
+            roundRecapShown: true,
+            lastHostActivity: serverTimestamp() // Host-Aktivität für Failover-Tracking
         }
         
         if (logEntries.length > 0) {
