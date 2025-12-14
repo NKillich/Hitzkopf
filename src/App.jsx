@@ -1977,9 +1977,23 @@ function App() {
     const selectEmoji = (emoji) => {
         const index = availableEmojis.indexOf(emoji)
         if (index >= 0) {
-            setMyEmoji(emoji)
+            // Verwende flushSync für sofortiges Update auf mobilen Geräten
             setEmojiScrollIndex(index)
+            setMyEmoji(emoji)
             sessionStorage.setItem("hk_emoji", emoji)
+            
+            // Force re-render der betroffenen Karten auf mobilen Geräten
+            if (emojiGalleryRef.current) {
+                const cards = emojiGalleryRef.current.querySelectorAll('.emoji-card')
+                cards.forEach((card, idx) => {
+                    const isSelected = idx === index
+                    if (isSelected) {
+                        card.classList.add('selected')
+                    } else {
+                        card.classList.remove('selected')
+                    }
+                })
+            }
         }
     }
     
@@ -4054,7 +4068,16 @@ function App() {
                                     <div
                                         key={`${emoji}-${index}`}
                                         className={`emoji-card ${isSelected ? 'selected' : ''}`}
-                                        onClick={() => selectEmoji(emoji)}
+                                        onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            selectEmoji(emoji)
+                                        }}
+                                        onTouchEnd={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            selectEmoji(emoji)
+                                        }}
                                         data-emoji={emoji}
                                         data-index={index}
                                     >
