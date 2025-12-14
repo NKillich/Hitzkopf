@@ -502,7 +502,10 @@ function App() {
     // State
     const [currentScreen, setCurrentScreen] = useState('landing')
     const [myName, setMyName] = useState(sessionStorage.getItem("hk_name") || "")
-    const [myEmoji, setMyEmoji] = useState(sessionStorage.getItem("hk_emoji") || availableEmojis[Math.floor(availableEmojis.length / 2)])
+    // WICHTIG: Beim Start-Screen immer mittlerer Charakter, sessionStorage wird ignoriert
+    const middleIndexInit = Math.floor(availableEmojis.length / 2)
+    const middleEmojiInit = availableEmojis[middleIndexInit]
+    const [myEmoji, setMyEmoji] = useState(middleEmojiInit)
     const [roomId, setRoomId] = useState(sessionStorage.getItem("hk_room") || "")
     const [isHost, setIsHost] = useState(false)
     const [globalData, setGlobalData] = useState(null)
@@ -1896,18 +1899,39 @@ function App() {
     const emojiGalleryRef = useRef(null)
     const [emojiScrollIndex, setEmojiScrollIndex] = useState(Math.floor(availableEmojis.length / 2))
     const isScrollingRef = useRef(false)
+    const isInitializingRef = useRef(false) // Verhindert, dass Endless-Scrolling während der Initialisierung greift
     
     // Initialisiere mit mittlerem Emoji - IMMER mittlerer Charakter als erstes
     useEffect(() => {
         const middleIndex = Math.floor(availableEmojis.length / 2)
         const middleEmoji = availableEmojis[middleIndex]
-        // WICHTIG: Immer mittlerer Charakter als Standard, auch wenn bereits einer ausgewählt wurde
-        if (!myEmoji || !availableEmojis.includes(myEmoji) || currentScreen === 'start') {
+        
+        // WICHTIG: Beim Start-Screen IMMER mittlerer Charakter auswählen
+        if (currentScreen === 'start') {
+            // Prüfe, ob bereits der mittlere Charakter ausgewählt ist, um unnötige Updates zu vermeiden
+            if (myEmoji !== middleEmoji || emojiScrollIndex !== middleIndex) {
+                setMyEmoji(middleEmoji)
+                setEmojiScrollIndex(middleIndex)
+                sessionStorage.setItem("hk_emoji", middleEmoji)
+            }
+            
+            // Initialisiere Scroll-Position zur mittleren Gruppe für Endless Scrolling
+            // Die Zentrierung wird vom separaten useEffect übernommen
+            if (emojiGalleryRef.current) {
+                isInitializingRef.current = true // Blockiere Endless-Scrolling während der Initialisierung
+                
+                // Warte, bis die Karten gerendert sind, dann wird die Zentrierung automatisch ausgelöst
+                setTimeout(() => {
+                    isInitializingRef.current = false
+                }, 300)
+            }
+        } else if (!myEmoji || !availableEmojis.includes(myEmoji)) {
+            // Nur wenn kein gültiges Emoji vorhanden ist, setze auf Mitte
             setMyEmoji(middleEmoji)
             setEmojiScrollIndex(middleIndex)
             sessionStorage.setItem("hk_emoji", middleEmoji)
         } else {
-            // Falls bereits ein Emoji gespeichert ist, verwende es, aber setze trotzdem auf Mitte beim ersten Laden
+            // Falls bereits ein Emoji gespeichert ist (außerhalb des Start-Screens), verwende es
             const index = availableEmojis.indexOf(myEmoji)
             if (index >= 0) {
                 setEmojiScrollIndex(index)
@@ -1915,18 +1939,6 @@ function App() {
                 setEmojiScrollIndex(middleIndex)
                 setMyEmoji(middleEmoji)
             }
-        }
-        
-        // Initialisiere Scroll-Position zur mittleren Gruppe für Endless Scrolling
-        if (emojiGalleryRef.current && currentScreen === 'start') {
-            setTimeout(() => {
-                const gallery = emojiGalleryRef.current
-                if (gallery) {
-                    const cardWidth = 80 + 10 // card width + gap
-                    const middleGroupStart = availableEmojis.length * cardWidth
-                    gallery.scrollLeft = middleGroupStart
-                }
-            }, 200)
         }
     }, [currentScreen])
     
@@ -1936,11 +1948,12 @@ function App() {
         if (!gallery || currentScreen !== 'start') return
         
         const handleScroll = () => {
-            if (isScrollingRef.current) return
+            if (isScrollingRef.current || isInitializingRef.current) {
+                return
+            }
             
             const scrollLeft = gallery.scrollLeft
             const scrollWidth = gallery.scrollWidth
-            const clientWidth = gallery.clientWidth
             const singleGroupWidth = scrollWidth / 3 // 3 Gruppen von Emojis
             
             // Wenn am Anfang der ersten Gruppe, springe zur Mitte der zweiten Gruppe
@@ -1969,24 +1982,42 @@ function App() {
             // Finde die erste Karte mit dem gewählten Index (in der mittleren Gruppe)
             const middleGroupStart = availableEmojis.length
             const targetAbsoluteIndex = middleGroupStart + emojiScrollIndex
+            
             const selectedCard = cards[targetAbsoluteIndex]
             
             if (selectedCard) {
-                // Warte auf Layout-Berechnung
+                // Blockiere Endless-Scrolling während der Zentrierung
+                isScrollingRef.current = true
+                isInitializingRef.current = true
+                
+                // Warte auf Layout-Berechnung und setze dann die Scroll-Position
                 setTimeout(() => {
                     requestAnimationFrame(() => {
                         requestAnimationFrame(() => {
                             const galleryWidth = gallery.clientWidth
-                            const cardWidth = selectedCard.offsetWidth
+                            const cardWidth = selectedCard.offsetWidth || 80
                             const cardLeft = selectedCard.offsetLeft
                             const scrollPosition = cardLeft - (galleryWidth / 2) + (cardWidth / 2)
-                            gallery.scrollTo({
-                                left: Math.max(0, scrollPosition),
-                                behavior: 'smooth'
-                            })
+                            
+                            // Setze die Scroll-Position direkt (ohne smooth, für sofortige Positionierung)
+                            const finalScrollPosition = Math.max(0, Math.min(scrollPosition, gallery.scrollWidth - gallery.clientWidth))
+                            gallery.scrollLeft = finalScrollPosition
+                            
+                            // Prüfe nach kurzer Verzögerung, ob die Position korrekt ist
+                            setTimeout(() => {
+                                if (Math.abs(gallery.scrollLeft - finalScrollPosition) > 10) {
+                                    gallery.scrollLeft = finalScrollPosition
+                                }
+                                
+                                // Reaktiviere Endless-Scrolling nach der Positionierung
+                                setTimeout(() => {
+                                    isScrollingRef.current = false
+                                    isInitializingRef.current = false
+                                }, 100)
+                            }, 50)
                         })
                     })
-                }, 100)
+                }, 150)
             }
         }
     }, [emojiScrollIndex, currentScreen])
@@ -4066,6 +4097,7 @@ function App() {
                             {[...availableEmojis, ...availableEmojis, ...availableEmojis].map((emoji, absoluteIndex) => {
                                 const index = absoluteIndex % availableEmojis.length
                                 const isSelected = index === emojiScrollIndex
+                                
                                 return (
                                     <div
                                         key={`${emoji}-${absoluteIndex}`}
@@ -4137,7 +4169,7 @@ function App() {
                         {Object.entries(questionCategories).map(([key, cat]) => (
                             <div key={key} className={`category-card ${selectedCategories.includes(key) ? 'selected' : ''}`} onClick={() => toggleCategory(key)}>
                                 <div className="category-emoji">{cat.emoji}</div>
-                                <div className="category-name">{cat.name}</div>
+                                <div className="category-name">{cat.name.split(' ')[0]}</div>
                             </div>
                         ))}
                     </div>
@@ -4252,148 +4284,249 @@ function App() {
             )}
             
             {/* LOBBY SCREEN */}
-            {currentScreen === 'lobby' && globalData && (
-                <div className="screen active card">
-                    <h3 style={{marginBottom: '15px', color: '#ff8c00'}}>👥 Lobby</h3>
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                        gap: '15px',
-                        margin: '20px 0'
-                    }}>
-                        {(() => {
-                            // Sortiere Spieler: Eigener Spieler zuerst, dann alle anderen
-                            const allPlayers = renderPlayers()
-                            const myPlayer = allPlayers.find(p => p.name === myName)
-                            const otherPlayers = allPlayers.filter(p => p.name !== myName)
-                            const sortedPlayers = myPlayer ? [myPlayer, ...otherPlayers] : allPlayers
-                            return sortedPlayers
-                        })().map((p, idx) => {
-                            const isReady = globalData.lobbyReady?.[p.name] === true
-                            const maxTemp = globalData.config?.maxTemp || 100
-                            const isEliminated = (p.temp || 0) >= maxTemp
-                            const isMe = p.name === myName
-                            
-                            return (
-                                <div 
-                                    key={p.name} 
-                                    onClick={isMe ? toggleLobbyReady : undefined}
-                                    style={{
-                                        padding: '16px',
-                                        background: 'rgba(22, 27, 34, 0.6)',
-                                        borderRadius: '12px',
-                                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                                        opacity: isEliminated ? 0.5 : (isReady ? 1 : 0.4),
-                                        transition: 'opacity 0.3s ease',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        gap: '12px',
-                                        cursor: isMe ? 'pointer' : 'default'
-                                    }}
-                                    onMouseEnter={isMe ? (e) => {
-                                        if (!isEliminated) {
-                                            e.currentTarget.style.opacity = isReady ? 1 : 0.5;
-                                        }
-                                    } : undefined}
-                                    onMouseLeave={isMe ? (e) => {
-                                        if (!isEliminated) {
-                                            e.currentTarget.style.opacity = isReady ? 1 : 0.4;
-                                        }
-                                    } : undefined}
-                                >
+            {currentScreen === 'lobby' && globalData && (() => {
+                const allPlayers = renderPlayers()
+                const myPlayer = allPlayers.find(p => p.name === myName)
+                const otherPlayers = allPlayers.filter(p => p.name !== myName)
+                const myIsReady = globalData.lobbyReady?.[myName] === true
+                const maxTemp = globalData.config?.maxTemp || 100
+                const myIsEliminated = (myPlayer?.temp || 0) >= maxTemp
+                
+                return (
+                    <div className="screen active card">
+                        <h3 style={{marginBottom: '15px', color: '#ff8c00'}}>
+                            👥 Spiel von {globalData.hostName || globalData.host || 'Unbekannt'}
+                        </h3>
+                        
+                        {/* Eigener Spieler oben */}
+                        {myPlayer && (
+                            <div 
+                                onClick={toggleLobbyReady}
+                                style={{
+                                    padding: '20px',
+                                    background: 'rgba(22, 27, 34, 0.6)',
+                                    borderRadius: '12px',
+                                    border: '2px solid rgba(255, 140, 0, 0.3)',
+                                    opacity: myIsEliminated ? 0.5 : (myIsReady ? 1 : 0.6),
+                                    transition: 'all 0.3s ease',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '20px',
+                                    cursor: 'pointer',
+                                    marginBottom: '20px'
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (!myIsEliminated) {
+                                        e.currentTarget.style.opacity = myIsReady ? 1 : 0.8;
+                                        e.currentTarget.style.borderColor = 'rgba(255, 140, 0, 0.5)';
+                                    }
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (!myIsEliminated) {
+                                        e.currentTarget.style.opacity = myIsReady ? 1 : 0.6;
+                                        e.currentTarget.style.borderColor = 'rgba(255, 140, 0, 0.3)';
+                                    }
+                                }}
+                            >
+                                <div style={{
+                                    fontSize: '4rem',
+                                    flexShrink: 0
+                                }}>
+                                    {myPlayer.emoji}
+                                </div>
+                                <div style={{
+                                    flex: 1,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
+                                }}>
                                     <div style={{
-                                        fontSize: '2.5rem',
-                                        marginBottom: '4px'
-                                    }}>
-                                        {p.emoji}
-                                    </div>
-                                    <div style={{
-                                        fontSize: '1rem',
+                                        fontSize: '1.2rem',
                                         fontWeight: 'bold',
                                         color: '#fff',
-                                        textAlign: 'center',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '6px'
+                                        gap: '8px'
                                     }}>
-                                        {p.name}
-                                        {globalData.host === p.name && <span style={{ fontSize: '1.2rem' }}>👑</span>}
+                                        {myPlayer.name}
+                                        {globalData.host === myPlayer.name && <span style={{ fontSize: '1.4rem' }}>👑</span>}
                                     </div>
-                                    
-                                    {/* Toggle Switch */}
-                                    <div
-                                        onClick={isMe ? (e) => {
-                                            e.stopPropagation(); // Verhindere doppeltes Toggling
-                                            toggleLobbyReady();
-                                        } : undefined}
-                                        style={{
-                                            position: 'relative',
-                                            width: '50px',
-                                            height: '28px',
-                                            borderRadius: '14px',
-                                            background: isReady ? '#22c55e' : '#d1d5db',
-                                            cursor: isMe ? 'pointer' : 'default',
-                                            transition: 'all 0.3s ease',
-                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            padding: '2px',
-                                            opacity: isMe ? 1 : 0.8,
-                                            marginTop: '4px'
-                                        }}
-                                        onMouseEnter={isMe ? (e) => {
-                                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                                        } : undefined}
-                                        onMouseLeave={isMe ? (e) => {
-                                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                                        } : undefined}
-                                    >
-                                        <div style={{
-                                            width: '24px',
-                                            height: '24px',
-                                            borderRadius: '12px',
-                                            background: '#fff',
-                                            transition: 'transform 0.3s ease',
-                                            transform: isReady ? 'translateX(22px)' : 'translateX(0)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px'
+                                    }}>
+                                        <span style={{
+                                            fontSize: '0.95rem',
+                                            color: '#aaa',
+                                            fontWeight: '500'
                                         }}>
-                                            {isReady ? (
-                                                <span style={{ color: '#22c55e', fontSize: '14px', fontWeight: 'bold' }}>✓</span>
-                                            ) : (
-                                                <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 'bold' }}>✕</span>
-                                            )}
+                                            Bereit
+                                        </span>
+                                        {/* Toggle Switch */}
+                                        <div
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleLobbyReady();
+                                            }}
+                                            style={{
+                                                position: 'relative',
+                                                width: '50px',
+                                                height: '28px',
+                                                borderRadius: '14px',
+                                                background: myIsReady ? '#22c55e' : '#d1d5db',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.3s ease',
+                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                padding: '2px'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: '24px',
+                                                height: '24px',
+                                                borderRadius: '12px',
+                                                background: '#fff',
+                                                transition: 'transform 0.3s ease',
+                                                transform: myIsReady ? 'translateX(22px)' : 'translateX(0)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                                            }}>
+                                                {myIsReady ? (
+                                                    <span style={{ color: '#22c55e', fontSize: '14px', fontWeight: 'bold' }}>✓</span>
+                                                ) : (
+                                                    <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 'bold' }}>✕</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            )
-                        })}
+                            </div>
+                        )}
+                        
+                        {/* Andere Spieler darunter */}
+                        {otherPlayers.length > 0 && (
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                                gap: '15px',
+                                marginTop: '20px'
+                            }}>
+                                {otherPlayers.map((p) => {
+                                    const isReady = globalData.lobbyReady?.[p.name] === true
+                                    const isEliminated = (p.temp || 0) >= maxTemp
+                                    
+                                    return (
+                                        <div 
+                                            key={p.name}
+                                            style={{
+                                                padding: '16px',
+                                                background: 'rgba(22, 27, 34, 0.6)',
+                                                borderRadius: '12px',
+                                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                opacity: isEliminated ? 0.5 : (isReady ? 1 : 0.4),
+                                                transition: 'opacity 0.3s ease',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                cursor: 'default'
+                                            }}
+                                        >
+                                            <div style={{
+                                                fontSize: '2.5rem',
+                                                marginBottom: '4px'
+                                            }}>
+                                                {p.emoji}
+                                            </div>
+                                            <div style={{
+                                                fontSize: '1rem',
+                                                fontWeight: 'bold',
+                                                color: '#fff',
+                                                textAlign: 'center',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px'
+                                            }}>
+                                                {p.name}
+                                                {globalData.host === p.name && <span style={{ fontSize: '1.2rem' }}>👑</span>}
+                                            </div>
+                                            
+                                            {/* Toggle Switch (nur Anzeige, nicht klickbar) */}
+                                            <div
+                                                style={{
+                                                    position: 'relative',
+                                                    width: '50px',
+                                                    height: '28px',
+                                                    borderRadius: '14px',
+                                                    background: isReady ? '#22c55e' : '#d1d5db',
+                                                    cursor: 'default',
+                                                    transition: 'all 0.3s ease',
+                                                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    padding: '2px',
+                                                    opacity: 0.8,
+                                                    marginTop: '4px'
+                                                }}
+                                            >
+                                                <div style={{
+                                                    width: '24px',
+                                                    height: '24px',
+                                                    borderRadius: '12px',
+                                                    background: '#fff',
+                                                    transition: 'transform 0.3s ease',
+                                                    transform: isReady ? 'translateX(22px)' : 'translateX(0)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                                                }}>
+                                                    {isReady ? (
+                                                        <span style={{ color: '#22c55e', fontSize: '14px', fontWeight: 'bold' }}>✓</span>
+                                                    ) : (
+                                                        <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 'bold' }}>✕</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                        
+                        {isHost && (
+                            <button 
+                                className="btn-primary" 
+                                onClick={startCountdown} 
+                                style={{marginTop: '20px'}}
+                                disabled={
+                                    (() => {
+                                        const maxTemp = globalData.config?.maxTemp || 100
+                                        const activePlayers = renderPlayers().filter(p => (p.temp || 0) < maxTemp)
+                                        const activeReady = activePlayers.filter(p => globalData.lobbyReady?.[p.name] === true)
+                                        return activeReady.length < activePlayers.length || activePlayers.length < 2
+                                    })()
+                                }
+                            >
+                                🔥 Spiel starten
+                            </button>
+                        )}
+                        {!isHost && (
+                            <p style={{color: '#666', fontSize: '0.9rem', marginTop: '20px'}}>⏳ Warte auf Host...</p>
+                        )}
                     </div>
-                    {isHost && (
-                        <button 
-                            className="btn-primary" 
-                            onClick={startCountdown} 
-                            style={{marginTop: '10px'}}
-                            disabled={
-                                (() => {
-                                    const maxTemp = globalData.config?.maxTemp || 100
-                                    const activePlayers = renderPlayers().filter(p => (p.temp || 0) < maxTemp)
-                                    const activeReady = activePlayers.filter(p => globalData.lobbyReady?.[p.name] === true)
-                                    return activeReady.length < activePlayers.length || activePlayers.length < 2
-                                })()
-                            }
-                        >
-                            🔥 Spiel starten
-                        </button>
-                    )}
-                    {!isHost && (
-                        <p style={{color: '#666', fontSize: '0.9rem', marginTop: '15px'}}>⏳ Warte auf Host...</p>
-                    )}
-                </div>
-            )}
+                )
+            })()}
             
             {/* GAME SCREEN */}
             {currentScreen === 'game' && globalData && (() => {

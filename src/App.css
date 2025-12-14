@@ -45,6 +45,18 @@ h1 {
 }
 .screen.active { display: block; }
 
+.App {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 .card { 
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(180%);
@@ -52,11 +64,39 @@ h1 {
     padding: 24px; 
     border-radius: 24px; 
     max-width: 480px; 
-    margin: 0 auto 20px auto; 
+    width: calc(100% - 30px);
+    max-height: 100%;
+    margin: 0;
     box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.05); 
     border: 1px solid var(--glass-border);
     position: relative;
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    flex-shrink: 1;
+    min-height: 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 107, 53, 0.3) transparent;
+}
+
+.card::-webkit-scrollbar {
+    width: 6px;
+}
+
+.card::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.card::-webkit-scrollbar-thumb {
+    background: rgba(255, 107, 53, 0.3);
+    border-radius: 3px;
+}
+
+.card::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 107, 53, 0.5);
 }
 
 .card::before {
