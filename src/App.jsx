@@ -432,6 +432,10 @@ function App() {
     const [isHost, setIsHost] = useState(false)
     const [globalData, setGlobalData] = useState(null)
     
+    // Verbindungsstatus für bessere Fehlerbehandlung
+    const [connectionStatus, setConnectionStatus] = useState('online') // 'online', 'offline', 'slow'
+    const lastHostActivityRef = useRef(Date.now()) // Zeitstempel der letzten Host-Aktivität
+    
     // Start Screen
     const [showHostSettings, setShowHostSettings] = useState(false)
     const [showJoinPanel, setShowJoinPanel] = useState(false)
@@ -905,19 +909,31 @@ function App() {
         // WICHTIG: Speichere alle Timeout-IDs für Cleanup
         const timeoutIds = []
         
-        const unsubscribe = onSnapshot(doc(db, "lobbies", roomId), (snapshot) => {
-            if (!snapshot.exists()) {
-                // Lobby existiert nicht mehr
-                console.log('🚨 [FIREBASE] Lobby existiert nicht mehr, zurück zum Start')
-                sessionStorage.removeItem("hk_room")
-                setRoomId("")
-                setGlobalData(null)
-                setCurrentScreen('start')
-                return
-            }
-            
-            // Update erfolgreich erhalten → aktualisiere Zeitstempel
-            lastSuccessfulUpdateRef.current = Date.now()
+        const unsubscribe = onSnapshot(
+            doc(db, "lobbies", roomId),
+            (snapshot) => {
+                // Update erfolgreich erhalten
+                setConnectionStatus('online')
+                lastSuccessfulUpdateRef.current = Date.now()
+                
+                // Aktualisiere Host-Aktivität, wenn Host etwas geändert hat
+                if (snapshot.metadata.hasPendingWrites === false) {
+                    // Update vom Server (nicht lokal)
+                    const data = snapshot.data()
+                    if (data?.host === myName) {
+                        lastHostActivityRef.current = Date.now()
+                    }
+                }
+                
+                if (!snapshot.exists()) {
+                    // Lobby existiert nicht mehr
+                    console.log('🚨 [FIREBASE] Lobby existiert nicht mehr, zurück zum Start')
+                    sessionStorage.removeItem("hk_room")
+                    setRoomId("")
+                    setGlobalData(null)
+                    setCurrentScreen('start')
+                    return
+                }
             
             const data = snapshot.data()
             
@@ -1556,11 +1572,21 @@ function App() {
                     if (!window[timeoutKey]) {
                         window[timeoutKey] = true
                         console.log('⏩ [AUTO-ADVANCE] Alle haben geantwortet (inkl. Hotseat), wechsle zu Result in 1000ms')
-                        const timeoutId = setTimeout(() => {
+                        const timeoutId = setTimeout(async () => {
                             console.log('⏩ [AUTO-ADVANCE] Wechsle jetzt zu Result-Screen')
-                            updateDoc(doc(db, "lobbies", roomId), { status: 'result' }).catch(err => {
-                                console.error('⏩ [AUTO-ADVANCE] Fehler:', err)
-                            })
+                            try {
+                                await retryFirebaseOperation(
+                                    () => updateDoc(doc(db, "lobbies", roomId), { status: 'result' }),
+                                    `autoAdvance_${data.roundId}`,
+                                    5, // Mehr Retries bei schlechtem Internet
+                                    2000 // Längere Delay bei Retries
+                                )
+                                console.log('⏩ [AUTO-ADVANCE] Erfolgreich zu Result gewechselt')
+                            } catch (err) {
+                                console.error('⏩ [AUTO-ADVANCE] Fehler nach allen Retries:', err)
+                                // Setze Status auf 'slow' um zu signalisieren, dass es Probleme gibt
+                                setConnectionStatus('slow')
+                            }
                             delete window[timeoutKey]
                         }, 1000)
                         timeoutIds.push(timeoutId)
@@ -1644,18 +1670,18 @@ function App() {
                         const timeoutId = setTimeout(async () => {
                             console.log('⏭️ [AUTO-NEXT] Starte nächste Runde')
                             try {
-                                await nextRound()
+                                // Verwende retryFirebaseOperation für robustere Fehlerbehandlung
+                                await retryFirebaseOperation(
+                                    () => nextRound(),
+                                    `autoNext_${data.roundId}`,
+                                    5, // Mehr Retries bei schlechtem Internet
+                                    2000 // Längere Delay bei Retries
+                                )
+                                console.log('⏭️ [AUTO-NEXT] Nächste Runde erfolgreich gestartet')
                             } catch (err) {
-                                console.error('⏭️ [AUTO-NEXT] Fehler:', err)
-                                // Versuche es erneut nach 2 Sekunden
-                                setTimeout(async () => {
-                                    console.log('⏭️ [AUTO-NEXT] Retry nach Fehler...')
-                                    try {
-                                        await nextRound()
-                                    } catch (retryErr) {
-                                        console.error('⏭️ [AUTO-NEXT] Retry auch fehlgeschlagen:', retryErr)
-                                    }
-                                }, 2000)
+                                console.error('⏭️ [AUTO-NEXT] Fehler nach allen Retries:', err)
+                                // Setze Status auf 'slow' um zu signalisieren, dass es Probleme gibt
+                                setConnectionStatus('slow')
                             }
                             delete window[timeoutKey]
                         }, 1000)
@@ -1691,11 +1717,30 @@ function App() {
                     roundRecapShownForNext: roundRecapShownForNext
                 })
             }
-        })
+            },
+            {
+                // Verbindungsstatus-Überwachung für bessere Fehlerbehandlung
+                includeMetadataChanges: true
+            }
+        )
+        
+        // Verbindungsstatus-Überwachung
+        const connectionCheckInterval = setInterval(() => {
+            const timeSinceLastUpdate = Date.now() - lastSuccessfulUpdateRef.current
+            if (timeSinceLastUpdate > 10000) {
+                setConnectionStatus('offline')
+                console.warn('⚠️ [CONNECTION] Keine Updates seit', Math.round(timeSinceLastUpdate / 1000), 'Sekunden')
+            } else if (timeSinceLastUpdate > 5000) {
+                setConnectionStatus('slow')
+            } else {
+                setConnectionStatus('online')
+            }
+        }, 2000)
         
         // Cleanup-Funktion: Räume alle Timeouts auf und beende den Listener
         return () => {
             unsubscribe()
+            clearInterval(connectionCheckInterval)
             // WICHTIG: Räume alle Timeouts auf, um Memory Leaks zu vermeiden
             timeoutIds.forEach(id => clearTimeout(id))
             // Räume auch window[timeoutKey] auf
