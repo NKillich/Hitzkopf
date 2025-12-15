@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { initializeApp } from 'firebase/app'
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, arrayUnion, arrayRemove, increment, deleteField, deleteDoc, runTransaction } from 'firebase/firestore'
 import { questionCategories, getAllQuestions } from './data/questionCategories'
 import './App.css'
@@ -738,9 +739,16 @@ function App() {
                         const usedQuestions = firebaseData.usedQuestions || []
                         const activeCategories = firebaseData.config?.categories || Object.keys(questionCategories)
                         const allQuestions = getAllQuestions(activeCategories)
-                        const unusedQuestions = allQuestions.filter((q, idx) => !usedQuestions.includes(idx))
+                        
+                        // Migration: Wenn usedQuestions noch Indizes enthält, konvertiere zu IDs
+                        let usedQuestionIds = usedQuestions
+                        if (usedQuestions.length > 0 && typeof usedQuestions[0] === 'number') {
+                            // Alte Daten: Indizes zu IDs konvertieren
+                            usedQuestionIds = usedQuestions.map(idx => allQuestions[idx]?.id).filter(Boolean)
+                        }
+                        
+                        const unusedQuestions = allQuestions.filter(q => q.id && !usedQuestionIds.includes(q.id))
                         const randomQ = unusedQuestions[Math.floor(Math.random() * unusedQuestions.length)] || allQuestions[0]
-                        const qIndex = allQuestions.findIndex(q => q.q === randomQ.q)
                         const nextRoundId = (firebaseData.roundId ?? 0) + 1
                         
                         // Hinweis: Eiswürfel-Automatik wird beim nächsten Listener-Update angewendet
@@ -763,8 +771,8 @@ function App() {
                             countdownEnds: deleteField()
                         }
                         
-                        if (qIndex !== -1) {
-                            updateData.usedQuestions = [...usedQuestions, qIndex]
+                        if (randomQ.id && !usedQuestionIds.includes(randomQ.id)) {
+                            updateData.usedQuestions = [...usedQuestionIds, randomQ.id]
                         }
                         
                         const success = await retryFirebaseOperation(async () => {
@@ -986,12 +994,31 @@ function App() {
         localStorage.setItem('hk_sound_volume', String(value))
     }, [])
     
-    // Firebase Initialisierung
+    // Firebase Initialisierung mit automatischer anonymer Authentifizierung
     useEffect(() => {
         const firebaseApp = initializeApp(firebaseConfig)
         const firestoreDb = getFirestore(firebaseApp)
+        const auth = getAuth(firebaseApp)
+        
         setApp(firebaseApp)
         setDb(firestoreDb)
+        
+        // Automatische anonyme Anmeldung beim App-Start
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User ist bereits angemeldet (anonym)
+                logger.log('✅ [AUTH] Anonyme Authentifizierung erfolgreich:', user.uid)
+            } else {
+                // User ist nicht angemeldet, melde anonym an
+                signInAnonymously(auth)
+                    .then((userCredential) => {
+                        logger.log('✅ [AUTH] Automatische anonyme Anmeldung erfolgreich:', userCredential.user.uid)
+                    })
+                    .catch((error) => {
+                        logger.error('❌ [AUTH] Fehler bei anonymer Anmeldung:', error)
+                    })
+            }
+        })
     }, [])
     
     // Firebase Listener - Aktualisiert alle States basierend auf Firebase-Änderungen
@@ -2358,16 +2385,23 @@ function App() {
         const usedQuestions = globalData?.usedQuestions || []
         const activeCategories = globalData?.config?.categories || Object.keys(questionCategories)
         const allQuestions = getAllQuestions(activeCategories)
-        const unusedQuestions = allQuestions.filter((q, idx) => !usedQuestions.includes(idx))
+        
+        // Migration: Wenn usedQuestions noch Indizes enthält, konvertiere zu IDs
+        let usedQuestionIds = usedQuestions
+        if (usedQuestions.length > 0 && typeof usedQuestions[0] === 'number') {
+            // Alte Daten: Indizes zu IDs konvertieren
+            usedQuestionIds = usedQuestions.map(idx => allQuestions[idx]?.id).filter(Boolean)
+        }
+        
+        const unusedQuestions = allQuestions.filter(q => q.id && !usedQuestionIds.includes(q.id))
         const randomQ = unusedQuestions[Math.floor(Math.random() * unusedQuestions.length)] || allQuestions[0]
-        const qIndex = allQuestions.findIndex(q => q.q === randomQ.q)
         const nextRoundId = (globalData?.roundId ?? 0) + 1
         
         logger.log('🎮 [START COUNTDOWN] Starte erste Runde:', {
             hotseat: activePlayers[0],
             question: randomQ.q,
             roundId: nextRoundId,
-            qIndex: qIndex
+            questionId: randomQ.id
         })
         
         // WICHTIG: Direkt zu 'game' wechseln, kein Countdown
@@ -2380,7 +2414,7 @@ function App() {
             ready: [],
             roundId: nextRoundId,
             lobbyReady: {},
-            usedQuestions: qIndex !== -1 ? [...usedQuestions, qIndex] : usedQuestions,
+            usedQuestions: randomQ.id && !usedQuestionIds.includes(randomQ.id) ? [...usedQuestionIds, randomQ.id] : usedQuestionIds,
             lastQuestionCategory: randomQ.category,
             pendingAttacks: {},
             attackDecisions: {},
@@ -2993,12 +3027,19 @@ function App() {
         
         // WICHTIG: Deterministische Frage-Auswahl basierend auf roundId, damit alle Spieler die gleiche Frage sehen
         const allQuestions = getAllQuestions(activeCategories)
-        const unusedQuestions = allQuestions.filter((q, idx) => !usedQuestions.includes(idx))
+        
+        // Migration: Wenn usedQuestions noch Indizes enthält, konvertiere zu IDs
+        let usedQuestionIds = usedQuestions
+        if (usedQuestions.length > 0 && typeof usedQuestions[0] === 'number') {
+            // Alte Daten: Indizes zu IDs konvertieren
+            usedQuestionIds = usedQuestions.map(idx => allQuestions[idx]?.id).filter(Boolean)
+        }
+        
+        const unusedQuestions = allQuestions.filter(q => q.id && !usedQuestionIds.includes(q.id))
         // Verwende roundId als Seed für deterministische Auswahl
         const nextRoundId = (currentData?.roundId ?? 0) + 1
         const questionIndex = unusedQuestions.length > 0 ? (nextRoundId % unusedQuestions.length) : 0
         const randomQ = unusedQuestions[questionIndex] || allQuestions[0]
-        const qIndex = allQuestions.findIndex(q => q.q === randomQ.q)
         
         // WICHTIG: Countdown nur beim ersten Start, nicht bei jeder Runde
         // Bei nextRound direkt zu 'game' wechseln, ohne Countdown
@@ -3047,8 +3088,10 @@ function App() {
         updateData.countdownEnds = deleteField()
         
         // Füge neue usedQuestion hinzu
-        if (qIndex !== -1) {
-            updateData.usedQuestions = [...usedQuestions, qIndex]
+        if (randomQ.id && !usedQuestionIds.includes(randomQ.id)) {
+            updateData.usedQuestions = [...usedQuestionIds, randomQ.id]
+        } else {
+            updateData.usedQuestions = usedQuestionIds
         }
         
         logger.log('🔄 [NEXT ROUND] Update Firebase mit:', {
