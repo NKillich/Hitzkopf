@@ -1084,6 +1084,50 @@ function App() {
                 const importantFields = ['status', 'roundId', 'hotseat', 'countdownEnds', 'roundRecapShown']
                 dataChanged = importantFields.some(field => globalData[field] !== data[field])
                 
+                // Prüfe lobbyReady IMMER separat, da es ein Objekt ist und direkter Vergleich nicht funktioniert
+                // WICHTIG: Diese Prüfung muss immer ausgeführt werden, nicht nur wenn dataChanged noch false ist
+                const oldLobbyReady = globalData.lobbyReady || {}
+                const newLobbyReady = data.lobbyReady || {}
+                const oldKeys = Object.keys(oldLobbyReady)
+                const newKeys = Object.keys(newLobbyReady)
+                
+                // Prüfe zuerst ob sich die Anzahl der Keys geändert hat
+                if (oldKeys.length !== newKeys.length) {
+                    logger.log('🔄 [LOBBY READY] Anzahl Keys geändert:', {
+                        oldCount: oldKeys.length,
+                        newCount: newKeys.length,
+                        oldKeys: oldKeys,
+                        newKeys: newKeys
+                    })
+                    dataChanged = true
+                } else {
+                    // Prüfe alle Keys auf Änderungen - WICHTIG: Prüfe ALLE Keys, nicht nur bis zur ersten Änderung
+                    const allKeys = new Set([...oldKeys, ...newKeys])
+                    let lobbyReadyChanged = false
+                    for (const key of allKeys) {
+                        const oldVal = oldLobbyReady[key]
+                        const newVal = newLobbyReady[key]
+                        // WICHTIG: Prüfe explizit auf undefined/null Unterschiede
+                        // Verwende === für strikten Vergleich, um auch false/undefined Unterschiede zu erkennen
+                        const oldBool = oldVal === true
+                        const newBool = newVal === true
+                        if (oldBool !== newBool) {
+                            logger.log('🔄 [LOBBY READY] Änderung erkannt:', {
+                                key: key,
+                                oldValue: oldVal,
+                                newValue: newVal,
+                                oldBool: oldBool,
+                                newBool: newBool
+                            })
+                            lobbyReadyChanged = true
+                            // BREAK NICHT - prüfe alle Keys, um alle Änderungen zu loggen
+                        }
+                    }
+                    if (lobbyReadyChanged) {
+                        dataChanged = true
+                    }
+                }
+                
                 // Effiziente Objekt-Vergleiche ohne JSON.stringify
                 if (!dataChanged) {
                     const oldVotes = globalData.votes || {}
@@ -1120,22 +1164,22 @@ function App() {
                     }
                 }
                 
-                // WICHTIG: Prüfe auch lobbyReady für Lobby-Bereit-Status
-                if (!dataChanged) {
-                    const oldLobbyReady = globalData.lobbyReady || {}
-                    const newLobbyReady = data.lobbyReady || {}
-                    const oldLobbyReadyKeys = Object.keys(oldLobbyReady)
-                    const newLobbyReadyKeys = Object.keys(newLobbyReady)
-                    if (oldLobbyReadyKeys.length !== newLobbyReadyKeys.length ||
-                        oldLobbyReadyKeys.some(key => oldLobbyReady[key] !== newLobbyReady[key]) ||
-                        newLobbyReadyKeys.some(key => oldLobbyReady[key] !== newLobbyReady[key])) {
-                        dataChanged = true
-                    }
-                }
             }
             
             if (dataChanged || !globalData) {
-                setGlobalData(data)
+                // WICHTIG: Erstelle immer ein neues Objekt, damit React die Änderung erkennt
+                // Auch wenn data bereits ein neues Objekt von Firebase ist, stellen wir sicher,
+                // dass lobbyReady immer eine neue Referenz hat, wenn es sich geändert hat
+                const updatedData = { ...data }
+                if (data.lobbyReady) {
+                    updatedData.lobbyReady = { ...data.lobbyReady }
+                }
+                setGlobalData(updatedData)
+                logger.log('✅ [GLOBAL DATA] globalData aktualisiert:', {
+                    dataChanged: dataChanged,
+                    hasLobbyReady: !!updatedData.lobbyReady,
+                    lobbyReadyKeys: updatedData.lobbyReady ? Object.keys(updatedData.lobbyReady) : []
+                })
             }
             
             // Screen-Wechsel basierend auf Status
@@ -1899,6 +1943,7 @@ function App() {
     const emojiGalleryRef = useRef(null)
     const [emojiScrollIndex, setEmojiScrollIndex] = useState(Math.floor(availableEmojis.length / 2))
     const isScrollingRef = useRef(false)
+    const touchStartRef = useRef({ x: 0, y: 0, time: 0 })
     
     // Initialisiere mit mittlerem Emoji - IMMER mittlerer Charakter als erstes
     useEffect(() => {
@@ -2087,7 +2132,6 @@ function App() {
             currentQ: firstQuestion,
             roundId: 0,
             lobbyReady: {},
-            password: roomPassword || "",
             lastQuestionCategory: firstCategory,
         })
         
@@ -2116,10 +2160,6 @@ function App() {
         }
         
         const roomData = snap.data()
-        if (roomData.password && roomData.password !== joinPassword) {
-            alert("Falsches Passwort!")
-            return
-        }
         
         // Prüfe ob Spieler bereits existiert
         if (roomData.players && roomData.players[myName]) {
@@ -2156,7 +2196,6 @@ function App() {
                     hostName: data.hostName,
                     hostEmoji: hostEmoji,
                     playerCount: Object.keys(data.players || {}).length,
-                    hasPassword: !!(data.password && data.password.trim().length > 0)
                 })
             }
         })
@@ -2175,15 +2214,9 @@ function App() {
     }
     
     // Raum auswählen
-    const selectRoom = async (targetRoomId, hasPassword) => {
+    const selectRoom = async (targetRoomId) => {
         setRoomCode(targetRoomId)
-        if (!hasPassword) {
-            // Kein Passwort, direkt beitreten
-            await joinGame(targetRoomId)
-        } else {
-            // Passwort erforderlich - warte auf Eingabe
-            // Der User kann dann den "Beitreten"-Button klicken
-        }
+        await joinGame(targetRoomId)
     }
     
     // Lobby Ready umschalten
@@ -3518,7 +3551,10 @@ function App() {
             {currentScreen !== 'landing' && (
                 <div className="menu-btn" onClick={() => setMenuOpen(!menuOpen)}>⚙️</div>
             )}
-            {currentScreen !== 'landing' && (
+            {currentScreen === 'create' && (
+                <div className="menu-btn help-btn" onClick={() => setCurrentScreen('start')} style={{left: 'max(15px, env(safe-area-inset-left))', right: 'auto'}}>←</div>
+            )}
+            {currentScreen !== 'landing' && currentScreen !== 'create' && (
                 <div className="menu-btn help-btn" onClick={() => setShowRulesModal(true)} style={{left: 'max(15px, env(safe-area-inset-left))', right: 'auto'}}>?</div>
             )}
             
@@ -4065,14 +4101,49 @@ function App() {
                                         key={`${emoji}-${index}`}
                                         className={`emoji-card ${isSelected ? 'selected' : ''}`}
                                         onClick={(e) => {
-                                            e.preventDefault()
-                                            e.stopPropagation()
-                                            selectEmoji(emoji)
+                                            // Nur auswählen, wenn nicht gescrollt wurde
+                                            if (!isScrollingRef.current) {
+                                                selectEmoji(emoji)
+                                            }
+                                        }}
+                                        onTouchStart={(e) => {
+                                            // Speichere Start-Position für Swipe-Erkennung
+                                            touchStartRef.current = {
+                                                x: e.touches[0].clientX,
+                                                y: e.touches[0].clientY,
+                                                time: Date.now()
+                                            }
+                                        }}
+                                        onTouchMove={(e) => {
+                                            // Wenn Bewegung erkannt wird, markiere als Scroll
+                                            if (touchStartRef.current.x !== 0) {
+                                                const deltaX = Math.abs(e.touches[0].clientX - touchStartRef.current.x)
+                                                const deltaY = Math.abs(e.touches[0].clientY - touchStartRef.current.y)
+                                                // Wenn Bewegung größer als 10px, ist es ein Swipe
+                                                if (deltaX > 10 || deltaY > 10) {
+                                                    isScrollingRef.current = true
+                                                }
+                                            }
                                         }}
                                         onTouchEnd={(e) => {
-                                            e.preventDefault()
-                                            e.stopPropagation()
-                                            selectEmoji(emoji)
+                                            // Prüfe ob es ein Swipe war
+                                            const deltaX = Math.abs(e.changedTouches[0].clientX - touchStartRef.current.x)
+                                            const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartRef.current.y)
+                                            const deltaTime = Date.now() - touchStartRef.current.time
+                                            const isSwipe = deltaX > 10 || deltaY > 10
+                                            
+                                            // Nur auswählen wenn es kein Swipe war und nicht zu lange gedrückt wurde
+                                            if (!isSwipe && deltaTime < 300 && !isScrollingRef.current) {
+                                                e.preventDefault()
+                                                e.stopPropagation()
+                                                selectEmoji(emoji)
+                                            }
+                                            
+                                            // Reset nach kurzer Verzögerung
+                                            setTimeout(() => {
+                                                isScrollingRef.current = false
+                                                touchStartRef.current = { x: 0, y: 0, time: 0 }
+                                            }, 100)
                                         }}
                                         data-emoji={emoji}
                                         data-index={index}
@@ -4101,7 +4172,6 @@ function App() {
             {/* CREATE GAME SCREEN */}
             {currentScreen === 'create' && (
                 <div className="screen active card">
-                    <h3 style={{marginBottom: '15px', color: '#ff8c00'}}>⚙️ Host-Einstellungen</h3>
                     {/* Spielmodus-Auswahl vorübergehend deaktiviert
                     <label style={{display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '5px', fontWeight: '500'}}>Spielmodus:</label>
                     <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginTop: '10px', marginBottom: '15px'}}>
@@ -4130,19 +4200,6 @@ function App() {
                             </div>
                         ))}
                     </div>
-                    <label htmlFor="roomPassword" style={{display: 'block', fontSize: '0.85rem', color: '#aaa', marginTop: '15px', marginBottom: '5px', fontWeight: '500'}}>
-                        🔒 Raum-Passwort (optional):
-                    </label>
-                    <input 
-                        id="roomPassword"
-                        name="roomPassword"
-                        type="password" 
-                        value={roomPassword}
-                        onChange={(e) => setRoomPassword(e.target.value)}
-                        placeholder="Leer lassen für öffentlichen Raum" 
-                        style={{marginBottom: '15px'}} 
-                        autoComplete="new-password"
-                    />
                     <button className="btn-primary" onClick={createGame} style={{marginTop: '15px'}} disabled={!myName.trim() || selectedCategories.length === 0}>
                         🎮 Spiel erstellen
                     </button>
@@ -4192,7 +4249,6 @@ function App() {
                                     </div>
                                     <div className="category-name" style={{fontSize: '0.9rem', lineHeight: '1.3', color: '#f0f6fc'}}>
                                         Spiel von {room.hostName}
-                                        {room.hasPassword && <div style={{fontSize: '0.75rem', marginTop: '5px', opacity: 0.7}}>🔒</div>}
                                     </div>
                                 </div>
                             ))}
@@ -4201,28 +4257,9 @@ function App() {
                         <p style={{color: '#666', fontSize: '0.9rem', marginBottom: '15px'}}>Keine Räume verfügbar</p>
                     )}
                     {roomCode && (
-                        <>
-                            {roomList.find(r => r.id === roomCode)?.hasPassword && (
-                                <>
-                                    <label htmlFor="joinPassword" style={{display: 'block', fontSize: '0.85rem', color: '#aaa', marginTop: '10px', marginBottom: '5px', fontWeight: '500'}}>
-                                        Passwort:
-                                    </label>
-                                    <input 
-                                        id="joinPassword"
-                                        name="joinPassword"
-                                        type="password" 
-                                        value={joinPassword}
-                                        onChange={(e) => setJoinPassword(e.target.value)}
-                                        placeholder="Passwort eingeben" 
-                                        style={{marginBottom: '10px'}} 
-                                        autoComplete="current-password"
-                                    />
-                                </>
-                            )}
-                            <button className="btn-secondary" onClick={() => joinGame(roomCode)} disabled={!myName.trim() || !roomCode}>
-                                🚪 Beitreten
-                            </button>
-                        </>
+                        <button className="btn-secondary" onClick={() => joinGame(roomCode)} disabled={!myName.trim() || !roomCode}>
+                            🚪 Beitreten
+                        </button>
                     )}
                     <button 
                         onClick={() => setCurrentScreen('start')}
@@ -4305,7 +4342,7 @@ function App() {
                                         alignItems: 'center',
                                         gap: '8px'
                                     }}>
-                                        {myPlayer.name}
+                                        {myPlayer.name} (Du)
                                         {globalData.host === myPlayer.name && <span style={{ fontSize: '1.4rem' }}>👑</span>}
                                     </div>
                                     <div style={{
@@ -4478,9 +4515,18 @@ function App() {
                                 🔥 Spiel starten
                             </button>
                         )}
-                        {!isHost && (
-                            <p style={{color: '#666', fontSize: '0.9rem', marginTop: '20px'}}>⏳ Warte auf Host...</p>
-                        )}
+                        {!isHost && (() => {
+                            const maxTemp = globalData.config?.maxTemp || 100
+                            const activePlayers = renderPlayers().filter(p => (p.temp || 0) < maxTemp)
+                            const activeReady = activePlayers.filter(p => globalData.lobbyReady?.[p.name] === true)
+                            const allReady = activeReady.length >= activePlayers.length && activePlayers.length >= 2
+                            
+                            return (
+                                <p style={{color: '#666', fontSize: '0.9rem', marginTop: '20px'}}>
+                                    {allReady ? '⏳ Warten bis der Host das Spiel startet' : '⏳ Warten bis alle bereit sind'}
+                                </p>
+                            )
+                        })()}
                     </div>
                 )
             })()}
@@ -5299,7 +5345,16 @@ function App() {
                         }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div style={{fontSize: '5rem', marginBottom: '20px'}}>🎯</div>
+                        <div style={{fontSize: '5rem', marginBottom: '20px'}}>
+                            {(() => {
+                                // WICHTIG: Stelle sicher, dass hotseat ein String ist
+                                const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
+                                const isMeHotseat = myName === hotseatName
+                                // Beim Hotseat-Spieler: Fragezeichen statt Dartscheibe
+                                // Bei anderen: Dartscheibe bleibt
+                                return isMeHotseat ? '❓' : '🎯'
+                            })()}
+                        </div>
                         {myName === globalData.hotseat ? (
                             <>
                                 <div style={{
@@ -5320,12 +5375,6 @@ function App() {
                         ) : (
                             <>
                                 <div style={{
-                                    fontSize: '2.5rem',
-                                    fontWeight: '800',
-                                    background: 'linear-gradient(90deg, #ff4500, #ff8c00)',
-                                    WebkitBackgroundClip: 'text',
-                                    WebkitTextFillColor: 'transparent',
-                                    textShadow: '0 0 18px rgba(255, 69, 0, 0.6)',
                                     marginBottom: '15px',
                                     display: 'flex',
                                     alignItems: 'center',
@@ -5335,11 +5384,20 @@ function App() {
                                     {(() => {
                                         // WICHTIG: Stelle sicher, dass hotseat ein String ist
                                         const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
+                                        const isMeHotseat = myName === hotseatName
+                                        // Beim nicht-Hotseat-Spieler: Zeige den Emoji des Hotseat-Spielers (nicht gestylt)
                                         const hotseatEmoji = globalData.players?.[hotseatName]?.emoji || '😊'
                                         return (
                                             <>
-                                                <span>{hotseatEmoji}</span>
-                                                <span>{hotseatName}</span>
+                                                <span style={{fontSize: '2.5rem'}}>{hotseatEmoji}</span>
+                                                <span style={{
+                                                    fontSize: '2.5rem',
+                                                    fontWeight: '800',
+                                                    background: 'linear-gradient(90deg, #ff4500, #ff8c00)',
+                                                    WebkitBackgroundClip: 'text',
+                                                    WebkitTextFillColor: 'transparent',
+                                                    textShadow: '0 0 18px rgba(255, 69, 0, 0.6)'
+                                                }}>{hotseatName}</span>
                                             </>
                                         )
                                     })()}
