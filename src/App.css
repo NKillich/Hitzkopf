@@ -233,6 +233,12 @@ button:disabled {
     gap: 16px; 
     margin-bottom: 24px;
 }
+/* Auf Mobile: 50/50 Layout für Spielerübersicht */
+@media (max-width: 768px) {
+    .thermo-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
 .thermo-item { 
     background: var(--glass-bg);
     backdrop-filter: blur(16px) saturate(180%);

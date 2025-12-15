@@ -1688,14 +1688,28 @@ function App() {
             // WICHTIG: Hotseat MUSS auch geantwortet haben!
             // WICHTIG: Nur aktive Spieler (nicht eliminiert) zählen!
             const lastHostActivityAdvance = data.lastHostActivity
-            const hostInactiveAdvance = lastHostActivityAdvance && lastHostActivityAdvance.toMillis ? (Date.now() - lastHostActivityAdvance.toMillis()) > GAME_CONSTANTS.HOST_INACTIVE_THRESHOLD : true
+            // WICHTIG: Wenn lastHostActivity nicht gesetzt ist, prüfe ob wir der Host sind
+            const hostInactiveAdvance = lastHostActivityAdvance && lastHostActivityAdvance.toMillis ? (Date.now() - lastHostActivityAdvance.toMillis()) > GAME_CONSTANTS.HOST_INACTIVE_THRESHOLD : false
             const hostNameAdvance = data.host
             const maxTempAdvance = data.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
             const sortedActivePlayersAdvance = getActivePlayers(data.players, maxTempAdvance)
             const myIndexAdvance = sortedActivePlayersAdvance.indexOf(myName)
             const isFirstBackupHostAdvance = myIndexAdvance === 0 && sortedActivePlayersAdvance.length > 0 && sortedActivePlayersAdvance[0] !== hostNameAdvance
             const isHostActiveAdvance = !hostInactiveAdvance && hostNameAdvance === myName
-            const canAutoAdvance = data.status === 'game' && data.votes && (isHostActiveAdvance || (hostInactiveAdvance && isFirstBackupHostAdvance))
+            // WICHTIG: Erlaube Auto-Advance auch wenn Host nicht aktiv ist, aber wir sind der Host oder Backup-Host
+            const canAutoAdvance = data.status === 'game' && data.votes && (isHostActiveAdvance || (hostInactiveAdvance && isFirstBackupHostAdvance) || (hostNameAdvance === myName && !lastHostActivityAdvance))
+            
+            logger.log('⏩ [AUTO-ADVANCE] Basis-Prüfung:', {
+                roundId: data.roundId,
+                status: data.status,
+                hasVotes: !!data.votes,
+                isHost: isHost,
+                isMeHost: data.host === myName,
+                isHostActiveAdvance: isHostActiveAdvance,
+                hostInactiveAdvance: hostInactiveAdvance,
+                isFirstBackupHostAdvance: isFirstBackupHostAdvance,
+                canAutoAdvance: canAutoAdvance
+            })
             
             if (canAutoAdvance) {
                 const maxTemp = data.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
@@ -1766,7 +1780,7 @@ function App() {
             // Host Auto-Next: Wenn alle Spieler ihre Antwort abgegeben haben UND Popups bestätigt wurden, automatisch nächste Runde
             // HOST-FAILOVER: Backup-Host kann übernehmen wenn Host inaktiv ist
             // WICHTIG: Prüfe auf votes statt ready - wenn alle abgestimmt haben, geht es weiter
-            const roundRecapShownForNext = data.roundRecapShown ?? false
+            let roundRecapShownForNext = data.roundRecapShown ?? false
             
             // Prüfe Host-Aktivität
             const lastHostActivityNext = data.lastHostActivity
@@ -1780,7 +1794,51 @@ function App() {
             const isFirstBackupHostNext = myIndexNext === 0 && sortedActivePlayersNext.length > 0 && sortedActivePlayersNext[0] !== hostNameNext
             const isHostActiveNext = !hostInactiveNext && hostNameNext === myName
             
-            const canAutoNext = data.status === 'result' && roundRecapShownForNext && (isHostActiveNext || (hostInactiveNext && isFirstBackupHostNext))
+            // WICHTIG: Prüfe ob roundRecapShown gesetzt werden muss, wenn alle bereit sind
+            // Wenn alle bereit sind, aber roundRecapShown noch false ist, setze es auf true
+            const maxTempCheck = data.config?.maxTemp || 100
+            const activePlayersCheck = Object.keys(data.players || {}).filter(p => {
+                const temp = data.players?.[p]?.temp || 0
+                return temp < maxTempCheck
+            })
+            const playerCountCheck = activePlayersCheck.length
+            const voteCountCheck = activePlayersCheck.filter(p => {
+                return data.votes?.[p]?.choice !== undefined
+            }).length
+            const readyListCheck = data.ready || []
+            const readyCountCheck = activePlayersCheck.filter(p => readyListCheck.includes(p)).length
+            const allReadyCheck = readyCountCheck >= playerCountCheck && playerCountCheck > 0
+            const allVotedCheck = voteCountCheck >= playerCountCheck && playerCountCheck > 0
+            
+            // Prüfe ob alle Popups bestätigt wurden (falls nötig)
+            const popupConfirmedCheck = data.popupConfirmed || {}
+            const hasAttackResultsCheck = data.attackResults && Object.keys(data.attackResults).length > 0
+            const allPopupConfirmedCheck = !hasAttackResultsCheck || activePlayersCheck.every(p => {
+                if (!data.attackResults?.[p]) return true
+                return popupConfirmedCheck[p] === true
+            })
+            
+            // Wenn alle bereit sind, alle abgestimmt haben und alle Popups bestätigt sind, aber roundRecapShown noch false ist,
+            // setze es auf true (nur Host oder Backup-Host)
+            if (data.status === 'result' && !roundRecapShownForNext && allReadyCheck && allVotedCheck && allPopupConfirmedCheck && 
+                (isHostActiveNext || (hostInactiveNext && isFirstBackupHostNext)) && db && roomId) {
+                logger.log('⏭️ [AUTO-NEXT] Setze roundRecapShown auf true, da alle bereit sind')
+                updateDoc(doc(db, "lobbies", roomId), {
+                    roundRecapShown: true
+                }).catch(err => {
+                    logger.error('⏭️ [AUTO-NEXT] Fehler beim Setzen von roundRecapShown:', err)
+                })
+                // Setze roundRecapShownForNext auf true für diese Prüfung
+                roundRecapShownForNext = true
+            }
+            
+            // WICHTIG: Erlaube Auto-Next auch wenn Host nicht aktiv ist, aber alle Bedingungen erfüllt sind
+            // Wenn alle bereit sind, kann JEDER Spieler die nächste Runde starten (Failover)
+            const canAutoNext = data.status === 'result' && roundRecapShownForNext && (
+                isHostActiveNext || 
+                (hostInactiveNext && isFirstBackupHostNext) ||
+                (allReadyCheck && allVotedCheck && allPopupConfirmedCheck && sortedActivePlayersNext.includes(myName))
+            )
             
             logger.log('⏭️ [AUTO-NEXT] Basis-Prüfung:', {
                 roundId: data.roundId,
@@ -1788,7 +1846,10 @@ function App() {
                 isHost: isHost,
                 isMeHost: data.host === myName,
                 roundRecapShownForNext: roundRecapShownForNext,
-                canAutoNext: canAutoNext
+                canAutoNext: canAutoNext,
+                allReadyCheck: allReadyCheck,
+                allVotedCheck: allVotedCheck,
+                allPopupConfirmedCheck: allPopupConfirmedCheck
             })
             
             if (canAutoNext) {
@@ -2216,7 +2277,7 @@ function App() {
     // Raum auswählen
     const selectRoom = async (targetRoomId) => {
         setRoomCode(targetRoomId)
-        await joinGame(targetRoomId)
+            await joinGame(targetRoomId)
     }
     
     // Lobby Ready umschalten
@@ -2824,37 +2885,83 @@ function App() {
             myName: myName
         })
         
-        if (!db || !roomId || !isHost) {
-            logger.warn('🔄 [NEXT ROUND] Nicht der Host oder fehlende Parameter')
+        if (!db || !roomId) {
+            logger.warn('🔄 [NEXT ROUND] Fehlende Parameter')
             return
         }
         
-        // Prüfe nochmal explizit ob Host
+        // Prüfe nochmal explizit ob Host oder ob Failover erlaubt ist
         const currentDoc = await getDoc(doc(db, "lobbies", roomId))
-        if (!currentDoc.exists() || currentDoc.data().host !== myName) {
+        if (!currentDoc.exists()) {
+            logger.warn('🔄 [NEXT ROUND] Lobby existiert nicht')
+            return
+        }
+        
+        const currentData = currentDoc.data()
+        const isCurrentHost = currentData.host === myName
+        
+        // WICHTIG: Erlaube auch Nicht-Hosts, wenn alle Bedingungen erfüllt sind (Failover)
+        if (!isCurrentHost && !isHost) {
+            // Prüfe ob Failover erlaubt ist (alle bereit, alle abgestimmt, etc.)
+            const maxTemp = currentData.config?.maxTemp || 100
+            const activePlayers = Object.keys(currentData.players || {}).filter(p => {
+                const temp = currentData.players?.[p]?.temp || 0
+                return temp < maxTemp
+            })
+            const playerCount = activePlayers.length
+            const voteCount = activePlayers.filter(p => {
+                return currentData.votes?.[p]?.choice !== undefined
+            }).length
+            const readyList = currentData.ready || []
+            const readyCount = activePlayers.filter(p => readyList.includes(p)).length
+            const allReady = readyCount >= playerCount && playerCount > 0
+            const allVoted = voteCount >= playerCount && playerCount > 0
+            
+            const popupConfirmed = currentData.popupConfirmed || {}
+            const hasAttackResults = currentData.attackResults && Object.keys(currentData.attackResults).length > 0
+            const allPopupConfirmed = !hasAttackResults || activePlayers.every(p => {
+                if (!currentData.attackResults?.[p]) return true
+                return popupConfirmed[p] === true
+            })
+            
+            const roundRecapShown = currentData.roundRecapShown ?? false
+            
+            // Nur erlauben wenn alle Bedingungen erfüllt sind
+            if (!(allReady && allVoted && allPopupConfirmed && roundRecapShown && currentData.status === 'result')) {
+                logger.warn('🔄 [NEXT ROUND] Nicht der Host und Failover-Bedingungen nicht erfüllt:', {
+                    allReady,
+                    allVoted,
+                    allPopupConfirmed,
+                    roundRecapShown,
+                    status: currentData.status
+                })
+                return
+            }
+            
+            logger.log('🔄 [NEXT ROUND] Failover erlaubt - alle Bedingungen erfüllt')
+        } else if (!isCurrentHost) {
             logger.warn('🔄 [NEXT ROUND] Host-Check fehlgeschlagen:', {
-                exists: currentDoc.exists(),
-                host: currentDoc.data()?.host,
+                host: currentData.host,
                 myName: myName
             })
             return
         }
         
-        const currentData = currentDoc.data()
         logger.log('🔄 [NEXT ROUND] Aktuelle Daten:', {
             roundId: currentData.roundId,
             status: currentData.status,
             players: Object.keys(currentData.players || {})
         })
         const players = currentData?.players || {}
+        const playerNames = Object.keys(players)
         const maxTemp = currentData?.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
         const activePlayers = getActivePlayers(players, maxTemp)
         
         logger.log('🔄 [NEXT ROUND] Aktive Spieler:', {
-            allPlayers: players,
+            allPlayers: playerNames,
             activePlayers: activePlayers,
             maxTemp: maxTemp,
-            playerTemps: players.map(p => ({ name: p, temp: currentData?.players[p]?.temp || 0 }))
+            playerTemps: playerNames.map(p => ({ name: p, temp: currentData?.players[p]?.temp || 0 }))
         })
         
         // WICHTIG: Prüfe auf Spielende - wenn nur noch 1 oder 0 aktive Spieler, beende das Spiel
@@ -2863,7 +2970,7 @@ function App() {
             logger.log('🏆 [NEXT ROUND] Spielende erkannt:', {
                 activePlayers: activePlayers.length,
                 winner: winnerName,
-                allPlayers: players.map(p => ({ name: p, temp: currentData?.players[p]?.temp || 0 }))
+                allPlayers: playerNames.map(p => ({ name: p, temp: currentData?.players[p]?.temp || 0 }))
             })
             
             await updateDoc(doc(db, "lobbies", roomId), {
@@ -2884,13 +2991,15 @@ function App() {
         const usedQuestions = currentData?.usedQuestions || []
         const activeCategories = currentData?.config?.categories || Object.keys(questionCategories)
         
-        // Zufällige Frage auswählen
+        // WICHTIG: Deterministische Frage-Auswahl basierend auf roundId, damit alle Spieler die gleiche Frage sehen
         const allQuestions = getAllQuestions(activeCategories)
         const unusedQuestions = allQuestions.filter((q, idx) => !usedQuestions.includes(idx))
-        const randomQ = unusedQuestions[Math.floor(Math.random() * unusedQuestions.length)] || allQuestions[0]
+        // Verwende roundId als Seed für deterministische Auswahl
+        const nextRoundId = (currentData?.roundId ?? 0) + 1
+        const questionIndex = unusedQuestions.length > 0 ? (nextRoundId % unusedQuestions.length) : 0
+        const randomQ = unusedQuestions[questionIndex] || allQuestions[0]
         const qIndex = allQuestions.findIndex(q => q.q === randomQ.q)
         
-        const nextRoundId = (currentData?.roundId ?? 0) + 1
         // WICHTIG: Countdown nur beim ersten Start, nicht bei jeder Runde
         // Bei nextRound direkt zu 'game' wechseln, ohne Countdown
         
@@ -4257,9 +4366,9 @@ function App() {
                         <p style={{color: '#666', fontSize: '0.9rem', marginBottom: '15px'}}>Keine Räume verfügbar</p>
                     )}
                     {roomCode && (
-                        <button className="btn-secondary" onClick={() => joinGame(roomCode)} disabled={!myName.trim() || !roomCode}>
-                            🚪 Beitreten
-                        </button>
+                            <button className="btn-secondary" onClick={() => joinGame(roomCode)} disabled={!myName.trim() || !roomCode}>
+                                🚪 Beitreten
+                            </button>
                     )}
                     <button 
                         onClick={() => setCurrentScreen('start')}
@@ -4287,7 +4396,7 @@ function App() {
                 const myIsEliminated = (myPlayer?.temp || 0) >= maxTemp
                 
                 return (
-                    <div className="screen active card">
+                <div className="screen active card">
                         <h3 style={{marginBottom: '15px', color: '#ff8c00'}}>
                             👥 Spiel von {globalData.hostName || globalData.host || 'Unbekannt'}
                         </h3>
@@ -4409,112 +4518,112 @@ function App() {
                         
                         {/* Andere Spieler darunter */}
                         {otherPlayers.length > 0 && (
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                                gap: '15px',
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                        gap: '15px',
                                 marginTop: '20px'
                             }}>
                                 {otherPlayers.map((p) => {
-                                    const isReady = globalData.lobbyReady?.[p.name] === true
-                                    const isEliminated = (p.temp || 0) >= maxTemp
-                                    
-                                    return (
-                                        <div 
-                                            key={p.name}
-                                            style={{
-                                                padding: '16px',
-                                                background: 'rgba(22, 27, 34, 0.6)',
-                                                borderRadius: '12px',
-                                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                                opacity: isEliminated ? 0.5 : (isReady ? 1 : 0.4),
-                                                transition: 'opacity 0.3s ease',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                alignItems: 'center',
-                                                gap: '12px',
+                            const isReady = globalData.lobbyReady?.[p.name] === true
+                            const isEliminated = (p.temp || 0) >= maxTemp
+                            
+                            return (
+                                <div 
+                                    key={p.name} 
+                                    style={{
+                                        padding: '16px',
+                                        background: 'rgba(22, 27, 34, 0.6)',
+                                        borderRadius: '12px',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                                        opacity: isEliminated ? 0.5 : (isReady ? 1 : 0.4),
+                                        transition: 'opacity 0.3s ease',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: '12px',
                                                 cursor: 'default'
                                             }}
-                                        >
-                                            <div style={{
-                                                fontSize: '2.5rem',
-                                                marginBottom: '4px'
-                                            }}>
-                                                {p.emoji}
-                                            </div>
-                                            <div style={{
-                                                fontSize: '1rem',
-                                                fontWeight: 'bold',
-                                                color: '#fff',
-                                                textAlign: 'center',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '6px'
-                                            }}>
-                                                {p.name}
-                                                {globalData.host === p.name && <span style={{ fontSize: '1.2rem' }}>👑</span>}
-                                            </div>
-                                            
+                                >
+                                    <div style={{
+                                        fontSize: '2.5rem',
+                                        marginBottom: '4px'
+                                    }}>
+                                        {p.emoji}
+                                    </div>
+                                    <div style={{
+                                        fontSize: '1rem',
+                                        fontWeight: 'bold',
+                                        color: '#fff',
+                                        textAlign: 'center',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}>
+                                        {p.name}
+                                        {globalData.host === p.name && <span style={{ fontSize: '1.2rem' }}>👑</span>}
+                                    </div>
+                                    
                                             {/* Toggle Switch (nur Anzeige, nicht klickbar) */}
-                                            <div
-                                                style={{
-                                                    position: 'relative',
-                                                    width: '50px',
-                                                    height: '28px',
-                                                    borderRadius: '14px',
-                                                    background: isReady ? '#22c55e' : '#d1d5db',
+                                    <div
+                                        style={{
+                                            position: 'relative',
+                                            width: '50px',
+                                            height: '28px',
+                                            borderRadius: '14px',
+                                            background: isReady ? '#22c55e' : '#d1d5db',
                                                     cursor: 'default',
-                                                    transition: 'all 0.3s ease',
-                                                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    padding: '2px',
+                                            transition: 'all 0.3s ease',
+                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            padding: '2px',
                                                     opacity: 0.8,
-                                                    marginTop: '4px'
-                                                }}
-                                            >
-                                                <div style={{
-                                                    width: '24px',
-                                                    height: '24px',
-                                                    borderRadius: '12px',
-                                                    background: '#fff',
-                                                    transition: 'transform 0.3s ease',
-                                                    transform: isReady ? 'translateX(22px)' : 'translateX(0)',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-                                                }}>
-                                                    {isReady ? (
-                                                        <span style={{ color: '#22c55e', fontSize: '14px', fontWeight: 'bold' }}>✓</span>
-                                                    ) : (
-                                                        <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 'bold' }}>✕</span>
-                                                    )}
-                                                </div>
-                                            </div>
+                                            marginTop: '4px'
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: '24px',
+                                            height: '24px',
+                                            borderRadius: '12px',
+                                            background: '#fff',
+                                            transition: 'transform 0.3s ease',
+                                            transform: isReady ? 'translateX(22px)' : 'translateX(0)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                                        }}>
+                                            {isReady ? (
+                                                <span style={{ color: '#22c55e', fontSize: '14px', fontWeight: 'bold' }}>✓</span>
+                                            ) : (
+                                                <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 'bold' }}>✕</span>
+                                            )}
                                         </div>
-                                    )
-                                })}
-                            </div>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
                         )}
                         
-                        {isHost && (
-                            <button 
-                                className="btn-primary" 
-                                onClick={startCountdown} 
+                    {isHost && (
+                        <button 
+                            className="btn-primary" 
+                            onClick={startCountdown} 
                                 style={{marginTop: '20px'}}
-                                disabled={
-                                    (() => {
-                                        const maxTemp = globalData.config?.maxTemp || 100
-                                        const activePlayers = renderPlayers().filter(p => (p.temp || 0) < maxTemp)
-                                        const activeReady = activePlayers.filter(p => globalData.lobbyReady?.[p.name] === true)
-                                        return activeReady.length < activePlayers.length || activePlayers.length < 2
-                                    })()
-                                }
-                            >
-                                🔥 Spiel starten
-                            </button>
-                        )}
+                            disabled={
+                                (() => {
+                                    const maxTemp = globalData.config?.maxTemp || 100
+                                    const activePlayers = renderPlayers().filter(p => (p.temp || 0) < maxTemp)
+                                    const activeReady = activePlayers.filter(p => globalData.lobbyReady?.[p.name] === true)
+                                    return activeReady.length < activePlayers.length || activePlayers.length < 2
+                                })()
+                            }
+                        >
+                            🔥 Spiel starten
+                        </button>
+                    )}
                         {!isHost && (() => {
                             const maxTemp = globalData.config?.maxTemp || 100
                             const activePlayers = renderPlayers().filter(p => (p.temp || 0) < maxTemp)
@@ -4527,7 +4636,7 @@ function App() {
                                 </p>
                             )
                         })()}
-                    </div>
+                </div>
                 )
             })()}
             
@@ -4566,7 +4675,7 @@ function App() {
                                             <div className="thermo-top" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
                                                 <span style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                                                     {isHotseat && <span>🔥</span>}
-                                                    <span>{player.emoji} {player.name}</span>
+                                                    <span>{player.emoji} {player.name}{player.name === myName ? ' (Du)' : ''}</span>
                                                 </span>
                                                 <span style={{fontWeight: 'bold', color: tempPercent >= 100 ? '#ff0000' : '#fff'}}>{player.temp}°C</span>
                                             </div>
@@ -4774,7 +4883,7 @@ function App() {
                                     background: 'rgba(22, 27, 34, 0.6)'
                                 }}>
                                     <div className="thermo-top" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
-                                        <span>{player.emoji} {player.name}</span>
+                                        <span>{player.emoji} {player.name}{player.name === myName ? ' (Du)' : ''}</span>
                                         <span style={{fontWeight: 'bold', color: tempPercent >= 100 ? '#ff0000' : '#fff'}}>{player.temp}°C</span>
                                     </div>
                                     <div className="thermo-bar" style={{
@@ -5624,7 +5733,18 @@ function App() {
                         }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div style={{fontSize: '4rem', marginBottom: '20px'}}>🔥</div>
+                        <div style={{marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
+                            <img 
+                                src={hkLogoHorizontal} 
+                                alt="Hitzkopf Logo" 
+                                style={{
+                                    maxWidth: '250px',
+                                    width: '80%',
+                                    height: 'auto',
+                                    objectFit: 'contain'
+                                }}
+                            />
+                        </div>
                         {eliminatedPlayer === myName ? (
                             <>
                                 <h2 style={{color: '#ff4500', marginBottom: '15px', fontSize: '1.8rem'}}>
