@@ -3,7 +3,9 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, arrayUnion, arrayRemove, increment, deleteField, deleteDoc, runTransaction } from 'firebase/firestore'
 import { questionCategories, getAllQuestions } from './data/questionCategories'
+import { playSound as playSoundCached, getBackgroundMusic } from './utils/audioManager'
 import './App.css'
+import styles from './App.module.css'
 import hkBackground from './assets/hk_background_fullwidth.png'
 import hkLogo from './assets/hk_logo_vertical.png'
 import hkLogoHorizontal from './assets/hk_logo_horizontal.png'
@@ -11,9 +13,7 @@ import hkLogoHorizontal from './assets/hk_logo_horizontal.png'
 // Constants
 const GAME_CONSTANTS = {
     MAX_TEMP_DEFAULT: 100,
-    MAX_TEMP_STRATEGIC: 120,
     ATTACK_DMG_PARTY: 20,
-    ATTACK_DMG_STRATEGIC: 10,
     PENALTY_DMG: 10,
     PRESENCE_HEARTBEAT_INTERVAL: 10000,
     CONNECTION_CHECK_INTERVAL: 2000,
@@ -26,15 +26,9 @@ const GAME_CONSTANTS = {
 
 const GAME_STATUS = {
     LOBBY: 'lobby',
-    COUNTDOWN: 'countdown',
     GAME: 'game',
     RESULT: 'result',
     WINNER: 'winner'
-}
-
-const GAME_MODE = {
-    PARTY: 'party',
-    STRATEGIC: 'strategisch'
 }
 
 // Debug Logger (nur in Development)
@@ -112,388 +106,7 @@ const availableEmojis = (() => {
 // für besseres Code-Splitting und reduzierte initiale Bundle-Größe
 // Siehe: src/data/questionCategories.js
 
-/* Alte Definition entfernt - jetzt importiert:
-const questionCategories = {
-    "astronomie_geographie": {
-        name: "Astronomie & Geographie",
-        emoji: "🌍",
-        questions: [
-            { q: "Lieber Tag oder Nacht?", a: "Tag ☀️", b: "Nacht 🌙" },
-            { q: "Lieber Regenwald oder Wüste?", a: "Regenwald 🌳💧", b: "Wüste 🏜️☀️" },
-            { q: "Lieber Ozean oder Gebirge?", a: "Ozean 🌊", b: "Gebirge ⛰️" },
-            { q: "Lieber Nordpol oder Südpol?", a: "Nordpol 🐻‍❄️", b: "Südpol 🐧" },
-            { q: "Lieber Städtereise oder Naturreise?", a: "Stadt 🏙️", b: "Natur 🏞️" },
-            { q: "Lieber Kontinental oder Insel?", a: "Kontinental 🗺️", b: "Insel 🏝️" },
-            { q: "Lieber heiße oder kalte Klimazone?", a: "Heiß 🌞", b: "Kalt ❄️" },
-            { q: "Lieber Regen oder Schnee?", a: "Regen 🌧️", b: "Schnee ❄️" },
-            { q: "Lieber Sonne oder Mond beobachten?", a: "Sonne ☀️", b: "Mond 🌙" },
-            { q: "Lieber Flachland oder Hochland?", a: "Flachland 🌾", b: "Hochland 🏔️" },
-            { q: "Lieber Fluss oder See?", a: "Fluss 🌊", b: "See 🏞️" },
-            { q: "Lieber tropisch oder gemäßigt?", a: "Tropisch 🌴", b: "Gemäßigt 🍃" },
-            { q: "Lieber Meeresküste oder Seenlandschaft?", a: "Meeresküste 🌊", b: "Seenlandschaft 🏞️" },
-            { q: "Lieber Vulkan oder Geysir?", a: "Vulkan 🌋", b: "Geysir 💨" },
-            { q: "Lieber Regenzeit oder Trockenzeit?", a: "Regenzeit 🌧️", b: "Trockenzeit ☀️" },
-            { q: "Lieber Polarlicht oder Sonnenuntergang?", a: "Polarlicht 🌌", b: "Sonnenuntergang 🌅" },
-            { q: "Lieber Kontinent oder Ozean?", a: "Kontinent 🗺️", b: "Ozean 🌊" },
-            { q: "Lieber Wettervorhersage oder überrascht werden?", a: "Vorhersage 📡", b: "Überraschung 🎲" },
-            { q: "Lieber Höhenluft oder Meereshöhe?", a: "Höhenluft ⛰️", b: "Meereshöhe 🏖️" },
-            { q: "Lieber Erdmagnetfeld oder Schwerkraft?", a: "Magnetfeld 🧲", b: "Schwerkraft ⬇️" }
-        ]
-    },
-    "essen_trinken": {
-        name: "Essen & Trinken",
-        emoji: "🍽️",
-        questions: [
-            { q: "Lieber Butter oder Margarine?", a: "Butter 🧈", b: "Margarine 🥄" },
-            { q: "Lieber Kaffee oder Tee?", a: "Kaffee ☕", b: "Tee 🍵" },
-            { q: "Lieber Pizza oder Pasta?", a: "Pizza 🍕", b: "Pasta 🍝" },
-            { q: "Lieber Schokolade oder Gummibärchen?", a: "Schokolade 🍫", b: "Gummibärchen 🐻" },
-            { q: "Lieber Burger oder Döner?", a: "Burger 🍔", b: "Döner 🥙" },
-            { q: "Lieber kochen oder bestellen?", a: "Kochen 🧑‍🍳", b: "Bestellen 🛵" },
-            { q: "Lieber Vanille oder Schokoeis?", a: "Vanille 🤍🍦", b: "Schoko 🤎🍦" },
-            { q: "Lieber Popcorn süß oder salzig?", a: "Süß 🍬🍿", b: "Salzig 🧂🍿" },
-            { q: "Lieber Wein oder Bier?", a: "Wein 🍷", b: "Bier 🍺" },
-            { q: "Lieber Käse oder Wurst?", a: "Käse 🧀", b: "Wurst 🥓" },
-            { q: "Lieber Spiegelei oder Rührei?", a: "Spiegelei 🍳👁️", b: "Rührei 🥚🥣" },
-            { q: "Lieber Limo oder Saft?", a: "Limo 🥤", b: "Saft 🧃" },
-            { q: "Lieber Torte oder Kuchen?", a: "Torte 🎂", b: "Kuchen 🍰" },
-            { q: "Lieber Ketchup oder Mayo?", a: "Ketchup 🍅", b: "Mayo 🥚" },
-            { q: "Lieber Salat oder Suppe?", a: "Salat 🥗", b: "Suppe 🥣" },
-            { q: "Lieber Marmelade oder Honig?", a: "Marmelade 🍓", b: "Honig 🍯" },
-            { q: "Lieber Kartoffeln oder Reis?", a: "Kartoffeln 🥔", b: "Reis 🍚" },
-            { q: "Lieber süß oder herzhaft frühstücken?", a: "Süß 🥞🍬", b: "Herzhaft 🥓🍳" },
-            { q: "Lieber Käseplatte oder Obstteller?", a: "Käse 🧀🍇", b: "Obst 🥝🍎" },
-            { q: "Lieber Apfelkuchen oder Käsekuchen?", a: "Apfelkuchen 🍎🍰", b: "Käsekuchen 🧀🍰" }
-        ]
-    },
-    "flora_fauna": {
-        name: "Flora & Fauna",
-        emoji: "🌿",
-        questions: [
-            { q: "Lieber Hund oder Katze?", a: "Hund 🐕", b: "Katze 🐈" },
-            { q: "Lieber Blumen oder Bäume?", a: "Blumen 🌸", b: "Bäume 🌳" },
-            { q: "Lieber Vögel oder Fische beobachten?", a: "Vögel 🐦", b: "Fische 🐠" },
-            { q: "Lieber Rosen oder Sonnenblumen?", a: "Rosen 🌹", b: "Sonnenblumen 🌻" },
-            { q: "Lieber Haus- oder Wildtier?", a: "Haustier 🐕", b: "Wildtier 🦁" },
-            { q: "Lieber Garten oder Wald?", a: "Garten 🌳", b: "Wald 🌲" },
-            { q: "Lieber Kraut oder Blüte?", a: "Kraut 🌿", b: "Blüte 🌺" },
-            { q: "Lieber Tagfalter oder Nachtfalter?", a: "Tagfalter 🦋", b: "Nachtfalter 🦋🌙" },
-            { q: "Lieber Nadel- oder Laubbaum?", a: "Nadelbaum 🌲", b: "Laubbaum 🍃" },
-            { q: "Lieber Säugetier oder Reptil?", a: "Säugetier 🐾", b: "Reptil 🦎" },
-            { q: "Lieber Obst- oder Gemüsegarten?", a: "Obstgarten 🍎", b: "Gemüsegarten 🥕" },
-            { q: "Lieber Land- oder Wassertier?", a: "Landtier 🦌", b: "Wassertier 🐙" },
-            { q: "Lieber Kaktus oder Palme?", a: "Kaktus 🌵", b: "Palme 🌴" },
-            { q: "Lieber kleine oder große Tiere?", a: "Klein 🐭", b: "Groß 🐘" },
-            { q: "Lieber duftende oder bunte Blumen?", a: "Duftend 🌸", b: "Bunt 🌺" },
-            { q: "Lieber Raub- oder Beutetier?", a: "Raubtier 🦁", b: "Beutetier 🐰" },
-            { q: "Lieber heimische oder exotische Pflanzen?", a: "Heimisch 🌾", b: "Exotisch 🌴" },
-            { q: "Lieber Insekten oder Spinnen?", a: "Insekten 🦗", b: "Spinnen 🕷️" },
-            { q: "Lieber einjährige oder mehrjährige Pflanzen?", a: "Einjährig 🌱", b: "Mehrjährig 🌳" },
-            { q: "Lieber Pflanzen pflegen oder Tiere versorgen?", a: "Pflanzen 🌿", b: "Tiere 🐕" }
-        ]
-    },
-    "forschung_wissenschaft": {
-        name: "Forschung & Wissenschaft",
-        emoji: "🔬",
-        questions: [
-            { q: "Lieber Biologie oder Physik?", a: "Biologie 🧬", b: "Physik ⚛️" },
-            { q: "Lieber Labor oder Feldversuch?", a: "Labor 🧪", b: "Feldversuch 🌍" },
-            { q: "Lieber Theorie oder Praxis?", a: "Theorie 📚", b: "Praxis 🔬" },
-            { q: "Lieber Mikroskop oder Teleskop?", a: "Mikroskop 🔬", b: "Teleskop 🔭" },
-            { q: "Lieber Chemie oder Mathematik?", a: "Chemie ⚗️", b: "Mathematik 📐" },
-            { q: "Lieber beobachten oder experimentieren?", a: "Beobachten 👁️", b: "Experimentieren ⚗️" },
-            { q: "Lieber Naturwissenschaft oder Geisteswissenschaft?", a: "Naturwissenschaft 🔬", b: "Geisteswissenschaft 📖" },
-            { q: "Lieber Einzelergebnis oder Durchbruch?", a: "Einzelergebnis 📊", b: "Durchbruch 💡" },
-            { q: "Lieber quantitative oder qualitative Forschung?", a: "Quantitativ 📈", b: "Qualitativ 📝" },
-            { q: "Lieber Astronomie oder Geologie?", a: "Astronomie 🪐", b: "Geologie 🗿" },
-            { q: "Lieber Genom oder Umwelt?", a: "Genom 🧬", b: "Umwelt 🌍" },
-            { q: "Lieber Hypothese oder Theorie?", a: "Hypothese 💭", b: "Theorie 📚" },
-            { q: "Lieber klinische oder Grundlagenforschung?", a: "Klinisch 🏥", b: "Grundlagen 🧪" },
-            { q: "Lieber Robotik oder KI?", a: "Robotik 🤖", b: "KI 🧠" },
-            { q: "Lieber Entdeckung oder Erfindung?", a: "Entdeckung 🔍", b: "Erfindung 💡" },
-            { q: "Lieber Mikro- oder Makroskala?", a: "Mikro 🔬", b: "Makro 🌌" },
-            { q: "Lieber Langzeitstudie oder Schnelltest?", a: "Langzeit 📅", b: "Schnelltest ⚡" },
-            { q: "Lieber Teamforschung oder Einzelforschung?", a: "Team 👥", b: "Einzel 🧑‍🔬" },
-            { q: "Lieber Datenanalyse oder Datensammlung?", a: "Analyse 📊", b: "Sammlung 📦" },
-            { q: "Lieber publizieren oder forschen?", a: "Publizieren 📄", b: "Forschen 🔬" }
-        ]
-    },
-    "geschichte_politik": {
-        name: "Geschichte & Politik",
-        emoji: "🏛️",
-        questions: [
-            { q: "Lieber Antike oder Moderne?", a: "Antike 🏛️", b: "Moderne 🏙️" },
-            { q: "Lieber Monarchie oder Republik?", a: "Monarchie 👑", b: "Republik 🗳️" },
-            { q: "Lieber lokale oder Weltgeschichte?", a: "Lokal 🏘️", b: "Welt 🌍" },
-            { q: "Lieber Krieg oder Frieden?", a: "Krieg ⚔️", b: "Frieden 🕊️" },
-            { q: "Lieber Revolution oder Evolution?", a: "Revolution 🔥", b: "Evolution 📈" },
-            { q: "Lieber Demokratie oder Diktatur?", a: "Demokratie 🗳️", b: "Diktatur 🚫" },
-            { q: "Lieber geschichtliche Dokumente oder mündliche Überlieferung?", a: "Dokumente 📜", b: "Mündlich 🗣️" },
-            { q: "Lieber Imperium oder Stadtstaat?", a: "Imperium 🌍", b: "Stadtstaat 🏛️" },
-            { q: "Lieber Vergangenheit oder Zukunft?", a: "Vergangenheit ⏮️", b: "Zukunft ⏭️" },
-            { q: "Lieber Wirtschafts- oder Kulturpolitik?", a: "Wirtschaft 💼", b: "Kultur 🎭" },
-            { q: "Lieber Nationalismus oder Globalismus?", a: "Nationalismus 🇩🇪", b: "Globalismus 🌐" },
-            { q: "Lieber Konservativ oder Progressiv?", a: "Konservativ 📜", b: "Progressiv 🚀" },
-            { q: "Lieber historische Persönlichkeit oder Ereignis?", a: "Persönlichkeit 👤", b: "Ereignis 📅" },
-            { q: "Lieber Innen- oder Außenpolitik?", a: "Innenpolitik 🏠", b: "Außenpolitik 🌍" },
-            { q: "Lieber Wahl oder Revolution?", a: "Wahl 🗳️", b: "Revolution 🔥" },
-            { q: "Lieber Tradition oder Innovation?", a: "Tradition 📜", b: "Innovation 💡" },
-            { q: "Lieber Friedensvertrag oder Handelsabkommen?", a: "Friedensvertrag ✍️", b: "Handelsabkommen 🤝" },
-            { q: "Lieber historischer Roman oder Dokumentation?", a: "Roman 📚", b: "Dokumentation 🎥" },
-            { q: "Lieber Regierung oder Opposition?", a: "Regierung 🏛️", b: "Opposition 🎤" },
-            { q: "Lieber Geschichtsbuch oder Museum?", a: "Buch 📖", b: "Museum 🏛️" }
-        ]
-    },
-    "glaube_religion": {
-        name: "Glaube & Religion",
-        emoji: "🙏",
-        questions: [
-            { q: "Lieber Glaube oder Wissen?", a: "Glaube 🙏", b: "Wissen 📚" },
-            { q: "Lieber Gebet oder Meditation?", a: "Gebet 🙏", b: "Meditation 🧘" },
-            { q: "Lieber Kirche oder Natur?", a: "Kirche ⛪", b: "Natur 🌳" },
-            { q: "Lieber religiöser Text oder spirituelle Erfahrung?", a: "Text 📖", b: "Erfahrung ✨" },
-            { q: "Lieber Gemeinschaft oder Einzelgänger?", a: "Gemeinschaft 👥", b: "Einzel 🙏" },
-            { q: "Lieber Ritual oder spontan?", a: "Ritual 🔔", b: "Spontan 💫" },
-            { q: "Lieber Tradition oder Modernität?", a: "Tradition 📜", b: "Modernität 🌟" },
-            { q: "Lieber Philosophie oder Theologie?", a: "Philosophie 💭", b: "Theologie 📖" },
-            { q: "Lieber feste Überzeugung oder offene Fragen?", a: "Überzeugung 💪", b: "Offen 🤔" },
-            { q: "Lieber Gott oder Universum?", a: "Gott 👼", b: "Universum 🌌" },
-            { q: "Lieber Predigt oder Stille?", a: "Predigt 🗣️", b: "Stille 🤫" },
-            { q: "Lieber heiliger Ort oder überall?", a: "Heiliger Ort ⛪", b: "Überall 🌍" },
-            { q: "Lieber Dogma oder Toleranz?", a: "Dogma 📜", b: "Toleranz 🤝" },
-            { q: "Lieber Religion oder Spiritualität?", a: "Religion ⛪", b: "Spiritualität ✨" },
-            { q: "Lieber Gemeindeleben oder Privatheit?", a: "Gemeinde 👥", b: "Privat 🙏" },
-            { q: "Lieber geschriebenes Gesetz oder Gewissen?", a: "Gesetz 📜", b: "Gewissen ❤️" },
-            { q: "Lieber Priester oder Laie?", a: "Priester 👨‍💼", b: "Laie 👤" },
-            { q: "Lieber heilige Schrift oder persönliche Offenbarung?", a: "Schrift 📖", b: "Offenbarung 💡" },
-            { q: "Lieber Festtag oder Alltag?", a: "Festtag 🎉", b: "Alltag 📅" },
-            { q: "Lieber Transzendenz oder Immanenz?", a: "Transzendenz 🌌", b: "Immanenz 🌍" }
-        ]
-    },
-    "kunst_kultur": {
-        name: "Kunst & Kultur",
-        emoji: "🎨",
-        questions: [
-            { q: "Lieber Malerei oder Skulptur?", a: "Malerei 🖼️", b: "Skulptur 🗿" },
-            { q: "Lieber abstrakt oder figurativ?", a: "Abstrakt 🎨", b: "Figurativ 👤" },
-            { q: "Lieber Museum oder Galerie?", a: "Museum 🏛️", b: "Galerie 🖼️" },
-            { q: "Lieber klassisch oder modern?", a: "Klassisch 🎭", b: "Modern 🎨" },
-            { q: "Lieber Farbe oder Form?", a: "Farbe 🌈", b: "Form ⬜" },
-            { q: "Lieber Original oder Reproduktion?", a: "Original ✨", b: "Reproduktion 📋" },
-            { q: "Lieber Künstler oder Betrachter?", a: "Künstler 🎨", b: "Betrachter 👁️" },
-            { q: "Lieber Öl- oder Aquarellmalerei?", a: "Öl 🖌️", b: "Aquarell 💧" },
-            { q: "Lieber Renaissance oder Barock?", a: "Renaissance 🎭", b: "Barock 🏛️" },
-            { q: "Lieber Street Art oder Museumskunst?", a: "Street Art 🎨", b: "Museumskunst 🖼️" },
-            { q: "Lieber Porträt oder Landschaft?", a: "Porträt 👤", b: "Landschaft 🌄" },
-            { q: "Lieber Fotografie oder Gemälde?", a: "Fotografie 📸", b: "Gemälde 🖼️" },
-            { q: "Lieber Installation oder Performance?", a: "Installation 🎭", b: "Performance 🎪" },
-            { q: "Lieber Realismus oder Surrealismus?", a: "Realismus 👁️", b: "Surrealismus 🌈" },
-            { q: "Lieber minimal oder opulent?", a: "Minimal ⬜", b: "Opulent ✨" },
-            { q: "Lieber analog oder digital?", a: "Analog 🖌️", b: "Digital 💻" },
-            { q: "Lieber Tradition oder Avantgarde?", a: "Tradition 📜", b: "Avantgarde 🚀" },
-            { q: "Lieber Einzelwerk oder Serie?", a: "Einzelwerk 🖼️", b: "Serie 📚" },
-            { q: "Lieber Gemälde oder Zeichnung?", a: "Gemälde 🎨", b: "Zeichnung ✏️" },
-            { q: "Lieber Künstlerkollektiv oder Einzelkünstler?", a: "Kollektiv 👥", b: "Einzelkünstler 🎨" }
-        ]
-    },
-    "literatur_sprache": {
-        name: "Literatur & Sprache",
-        emoji: "📚",
-        questions: [
-            { q: "Lieber Buch oder Hörbuch?", a: "Buch 📚", b: "Hörbuch 🎧" },
-            { q: "Lieber Roman oder Gedicht?", a: "Roman 📖", b: "Gedicht ✍️" },
-            { q: "Lieber Fiktion oder Non-Fiktion?", a: "Fiktion 🎭", b: "Non-Fiktion 📊" },
-            { q: "Lieber Schreiber oder Leser?", a: "Schreiber ✍️", b: "Leser 👁️" },
-            { q: "Lieber gedruckt oder digital?", a: "Gedruckt 📖", b: "Digital 📱" },
-            { q: "Lieber Fantasy oder Realismus?", a: "Fantasy 🐉", b: "Realismus 👁️" },
-            { q: "Lieber Kurzgeschichte oder Roman?", a: "Kurzgeschichte 📝", b: "Roman 📖" },
-            { q: "Lieber Übersetzen oder Original?", a: "Übersetzen 🌐", b: "Original 📚" },
-            { q: "Lieber Gedicht schreiben oder lesen?", a: "Schreiben ✍️", b: "Lesen 👁️" },
-            { q: "Lieber Drama oder Komödie?", a: "Drama 🎭", b: "Komödie 😂" },
-            { q: "Lieber Autor oder Kritiker?", a: "Autor ✍️", b: "Kritiker 📝" },
-            { q: "Lieber Bibliothek oder Buchhandlung?", a: "Bibliothek 📚", b: "Buchhandlung 🏪" },
-            { q: "Lieber Klassiker oder Bestseller?", a: "Klassiker 📜", b: "Bestseller 🔥" },
-            { q: "Lieber Poesie oder Prosa?", a: "Poesie ✍️", b: "Prosa 📖" },
-            { q: "Lieber Muttersprache oder Fremdsprache?", a: "Muttersprache 🇩🇪", b: "Fremdsprache 🌍" },
-            { q: "Lieber Erzähler oder Zuhörer?", a: "Erzähler 🗣️", b: "Zuhörer 👂" },
-            { q: "Lieber Brief oder E-Mail?", a: "Brief ✉️", b: "E-Mail 📧" },
-            { q: "Lieber Tagebuch oder Blog?", a: "Tagebuch 📔", b: "Blog 💻" },
-            { q: "Lieber Lyrik oder Epik?", a: "Lyrik ✍️", b: "Epik 📖" },
-            { q: "Lieber Wort oder Bild?", a: "Wort 📝", b: "Bild 🖼️" }
-        ]
-    },
-    "medien_unterhaltung": {
-        name: "Medien & Unterhaltung",
-        emoji: "📺",
-        questions: [
-            { q: "Lieber Film oder Serie?", a: "Film 🎬", b: "Serie 📺" },
-            { q: "Lieber Netflix oder YouTube?", a: "Netflix 🟥", b: "YouTube ▶️" },
-            { q: "Lieber Kino oder zu Hause?", a: "Kino 🎬", b: "Zuhause 📺" },
-            { q: "Lieber Action oder Drama?", a: "Action 💥", b: "Drama 🎭" },
-            { q: "Lieber Comedy oder Thriller?", a: "Comedy 😂", b: "Thriller 🕵️" },
-            { q: "Lieber Live-TV oder Streaming?", a: "Live-TV 📡", b: "Streaming 📱" },
-            { q: "Lieber Dokumentation oder Spielfilm?", a: "Dokumentation 📹", b: "Spielfilm 🎬" },
-            { q: "Lieber Originalsprache oder Synchronisation?", a: "Original 🗣️", b: "Synchronisation 🎤" },
-            { q: "Lieber Kurzfilm oder Langfilm?", a: "Kurzfilm ⏱️", b: "Langfilm ⏰" },
-            { q: "Lieber Schwarz-Weiß oder Farbe?", a: "Schwarz-Weiß ⚫⚪", b: "Farbe 🌈" },
-            { q: "Lieber Realität oder Fiktion?", a: "Realität 👁️", b: "Fiktion 🎭" },
-            { q: "Lieber Single-Player oder Multiplayer?", a: "Single 🎮", b: "Multiplayer 👥" },
-            { q: "Lieber Actionspiel oder Strategiespiel?", a: "Action 💥", b: "Strategie 🧠" },
-            { q: "Lieber Konsole oder PC?", a: "Konsole 🎮", b: "PC 💻" },
-            { q: "Lieber Videospiele spielen oder Brettspiele?", a: "Video 🎮", b: "Brett 🎲" },
-            { q: "Lieber Kabel oder Streaming?", a: "Kabel 📺", b: "Streaming 📱" },
-            { q: "Lieber Neuerscheinung oder Klassiker?", a: "Neu 🆕", b: "Klassiker ⭐" },
-            { q: "Lieber Fernseher oder Projektor?", a: "Fernseher 📺", b: "Projektor 🎬" },
-            { q: "Lieber Reality-TV oder Scripted?", a: "Reality 📺", b: "Scripted 📝" },
-            { q: "Lieber Binge-Watching oder wöchentlich?", a: "Binge 🍿", b: "Wöchentlich 📅" }
-        ]
-    },
-    "musik": {
-        name: "Musik",
-        emoji: "🎵",
-        questions: [
-            { q: "Lieber Rock oder Pop?", a: "Rock 🎸", b: "Pop 🎤" },
-            { q: "Lieber laut oder leise Musik hören?", a: "Laut 🔊🎶", b: "Leise 🤫🎧" },
-            { q: "Lieber Musik mit oder ohne Text?", a: "Mit Text 🗣️🎵", b: "Instrumental 🎼🎧" },
-            { q: "Lieber Live-Konzert oder Studioaufnahme?", a: "Live 🎤", b: "Studio 🎧" },
-            { q: "Lieber Sänger oder Instrumentalist?", a: "Sänger 🎤", b: "Instrumentalist 🎸" },
-            { q: "Lieber Klassik oder Moderne?", a: "Klassik 🎻", b: "Moderne 🎸" },
-            { q: "Lieber Gitarre oder Klavier?", a: "Gitarre 🎸", b: "Klavier 🎹" },
-            { q: "Lieber allein oder in der Band?", a: "Allein 🎤", b: "Band 👥" },
-            { q: "Lieber Kopfhörer oder Lautsprecher?", a: "Kopfhörer 🎧", b: "Lautsprecher 🔊" },
-            { q: "Lieber Vinyl oder Digital?", a: "Vinyl 💿", b: "Digital 📱" },
-            { q: "Lieber Songwriter oder Interprete?", a: "Songwriter ✍️", b: "Interprete 🎤" },
-            { q: "Lieber Jazz oder Electronic?", a: "Jazz 🎷", b: "Electronic 🎹" },
-            { q: "Lieber Festival oder Intimkonzert?", a: "Festival 🎪", b: "Intim 🎵" },
-            { q: "Lieber Refrain oder Bridge?", a: "Refrain 🎵", b: "Bridge 🌉" },
-            { q: "Lieber Musik machen oder hören?", a: "Machen 🎸", b: "Hören 🎧" },
-            { q: "Lieber Akustik oder Elektrik?", a: "Akustik 🎸", b: "Elektrik ⚡" },
-            { q: "Lieber Cover oder Original?", a: "Cover 🎵", b: "Original ✨" },
-            { q: "Lieber Album oder Single?", a: "Album 💿", b: "Single 🎵" },
-            { q: "Lieber Rhythmus oder Melodie?", a: "Rhythmus 🥁", b: "Melodie 🎵" },
-            { q: "Lieber Bar oder Club?", a: "Bar 🍸", b: "Club 🎶" }
-        ]
-    },
-    "sport": {
-        name: "Sport",
-        emoji: "⚽",
-        questions: [
-            { q: "Lieber Sport im Team oder allein?", a: "Team ⚽", b: "Allein 🏃‍♀️" },
-            { q: "Lieber Sport gucken oder selber machen?", a: "Gucken 🏟️👀", b: "Machen 🤸‍♂️💪" },
-            { q: "Lieber morgens oder abends trainieren?", a: "Morgens 🌅🏃", b: "Abends 🌙💪" },
-            { q: "Lieber Laufen oder Schwimmen?", a: "Laufen 🏃", b: "Schwimmen 🏊" },
-            { q: "Lieber Fußball oder Basketball?", a: "Fußball ⚽", b: "Basketball 🏀" },
-            { q: "Lieber Indoor oder Outdoor?", a: "Indoor 🏠", b: "Outdoor 🌳" },
-            { q: "Lieber Ausdauer oder Kraft?", a: "Ausdauer 🏃", b: "Kraft 💪" },
-            { q: "Lieber Wettkampf oder Training?", a: "Wettkampf 🏆", b: "Training 💪" },
-            { q: "Lieber Mannschaft oder Einzelsport?", a: "Mannschaft 👥", b: "Einzel 🏃" },
-            { q: "Lieber Tennis oder Badminton?", a: "Tennis 🎾", b: "Badminton 🏸" },
-            { q: "Lieber Radfahren oder Wandern?", a: "Radfahren 🚲🌳", b: "Wandern 🚶‍♀️🏔️" },
-            { q: "Lieber Gym oder Natur?", a: "Gym 🏋️", b: "Natur 🌲" },
-            { q: "Lieber Profi oder Amateur?", a: "Profi 🏆", b: "Amateur 🎯" },
-            { q: "Lieber Sieg oder Spaß?", a: "Sieg 🏆", b: "Spaß 😊" },
-            { q: "Lieber Sommer- oder Wintersport?", a: "Sommer ☀️", b: "Winter ❄️" },
-            { q: "Lieber Kontaktsport oder Nicht-Kontakt?", a: "Kontakt 🤼", b: "Nicht-Kontakt 🏃" },
-            { q: "Lieber Sprint oder Marathon?", a: "Sprint ⚡", b: "Marathon 🏃" },
-            { q: "Lieber Ball- oder Rückschlagsport?", a: "Ball ⚽", b: "Rückschlag 🎾" },
-            { q: "Lieber Sportartikel oder natürliche Bewegung?", a: "Artikel 🎾", b: "Natürlich 🏃" },
-            { q: "Lieber Tageszeitung oder Sport-App?", a: "Zeitung 📰", b: "App 📱" }
-        ]
-    },
-    "technik_wirtschaft": {
-        name: "Technik & Wirtschaft",
-        emoji: "💻",
-        questions: [
-            { q: "Lieber Apple oder Android?", a: "Apple 🍎", b: "Android 🤖" },
-            { q: "Lieber Smartphone oder Laptop?", a: "Smartphone 📱", b: "Laptop 💻" },
-            { q: "Lieber Bargeld oder Karte?", a: "Bargeld 💵", b: "Karte 💳" },
-            { q: "Lieber Auto oder Bahn?", a: "Auto 🚗", b: "Bahn 🚂" },
-            { q: "Lieber Schreibtisch oder Homeoffice?", a: "Büro 🏢", b: "Homeoffice 🏡" },
-            { q: "Lieber WhatsApp oder Anruf?", a: "WhatsApp 💬", b: "Anruf 📞" },
-            { q: "Lieber online shoppen oder im Laden?", a: "Online 🛒💻", b: "Im Laden 🛍️🚶" },
-            { q: "Lieber Aktien oder Immobilien?", a: "Aktien 📈", b: "Immobilien 🏠" },
-            { q: "Lieber Start-up oder Konzern?", a: "Start-up 🚀", b: "Konzern 🏢" },
-            { q: "Lieber Innovation oder Stabilität?", a: "Innovation 💡", b: "Stabilität 📊" },
-            { q: "Lieber Cloud oder lokal?", a: "Cloud ☁️", b: "Lokal 💾" },
-            { q: "Lieber Kryptowährung oder Fiat?", a: "Krypto ₿", b: "Fiat 💵" },
-            { q: "Lieber Automatisierung oder Handarbeit?", a: "Automatisierung 🤖", b: "Handarbeit ✋" },
-            { q: "Lieber Ökonomie oder Ökologie?", a: "Ökonomie 💼", b: "Ökologie 🌿" },
-            { q: "Lieber B2B oder B2C?", a: "B2B 💼", b: "B2C 🛒" },
-            { q: "Lieber Offline oder Online?", a: "Offline 📴", b: "Online 🌐" },
-            { q: "Lieber Freelancer oder Angestellter?", a: "Freelancer 🆓", b: "Angestellter 💼" },
-            { q: "Lieber Kredit oder Sparen?", a: "Kredit 💳", b: "Sparen 💰" },
-            { q: "Lieber Risiko oder Sicherheit?", a: "Risiko 🎲", b: "Sicherheit 🔒" },
-            { q: "Lieber einmal viel Geld oder jeden Tag ein bisschen?", a: "Einmal viel 💰💥", b: "Jeden Tag etwas 💸🗓️" }
-        ]
-    },
-    "diverses": {
-        name: "Diverses",
-        emoji: "🎲",
-        questions: [
-            { q: "Lieber Sommer oder Winter?", a: "Sommer ☀️", b: "Winter ❄️" },
-            { q: "Lieber Urlaub am Strand oder in den Bergen?", a: "Strand 🏖️", b: "Berge ⛰️" },
-            { q: "Lieber Frühaufsteher oder Langschläfer?", a: "Früh ⏰☀️", b: "Spät 🌙💤" },
-            { q: "Lieber Sneaker oder Stiefel?", a: "Sneaker 👟", b: "Stiefel 👢" },
-            { q: "Lieber Holz- oder Metallmöbel?", a: "Holz 🪵", b: "Metall 🔩" },
-            { q: "Lieber Jeans oder Stoffhose?", a: "Jeans 👖", b: "Stoffhose 🩳" },
-            { q: "Lieber drinnen oder draußen feiern?", a: "Drinnen 🏠🎉", b: "Draußen 🌳🥳" },
-            { q: "Lieber Socken an oder barfuß?", a: "Socken an 🧦", b: "Barfuß 🦶" },
-            { q: "Lieber Couch oder Sessel?", a: "Couch 🛋️", b: "Sessel 🪑" },
-            { q: "Lieber Stadt oder Land?", a: "Stadt 🏙️", b: "Land 🏞️" },
-            { q: "Lieber Meer oder See?", a: "Meer 🌊", b: "See 🏞️💧" },
-            { q: "Lieber Frühling oder Herbst?", a: "Frühling 🌷", b: "Herbst 🍂" },
-            { q: "Lieber aufstehen oder liegen bleiben?", a: "Aufstehen 🚶‍♀️", b: "Liegen 🛌" },
-            { q: "Lieber Bleistift oder Kugelschreiber?", a: "Bleistift ✏️", b: "Kugelschreiber 🖊️" },
-            { q: "Lieber Feste planen oder spontan sein?", a: "Planen 🗓️", b: "Spontan 🎉" },
-            { q: "Lieber Duschgel oder Seife?", a: "Duschgel 🧴", b: "Seife 🧼" },
-            { q: "Lieber drinnen lesen oder draußen spazieren?", a: "Drinnen lesen 📖🏠", b: "Draußen spazieren 🚶‍♂️🌲" },
-            { q: "Lieber Zelt oder Hotel?", a: "Zelt ⛺", b: "Hotel 🏨" },
-            { q: "Lieber Nachrichten lesen oder hören?", a: "Lesen 📰👀", b: "Hören 📻👂" },
-            { q: "Lieber Kerzenlicht oder helles Licht?", a: "Kerzenlicht 🔥🕯️", b: "Helles Licht 💡✨" },
-            { q: "Lieber kurze oder lange Haare?", a: "Kurz 💇‍♀️✂️", b: "Lang 👱‍♀️🦒" },
-            { q: "Lieber Ananas auf Pizza: Ja oder Nein?", a: "Ananas: Ja 🍍🍕👍", b: "Ananas: Nein 🍍🍕👎" },
-            { q: "Lieber Stille oder Hintergrundgeräusche beim Arbeiten?", a: "Stille 🤫🔇", b: "Hintergrund 🎧🎵" },
-            { q: "Lieber Bleistift oder Marker?", a: "Bleistift ✏️", b: "Marker 🖍️" },
-            { q: "Lieber Eis im Becher oder in der Waffel?", a: "Becher 🍨", b: "Waffel 🍦" },
-            { q: "Lieber am Fenster sitzen oder am Gang (Flugzeug/Bahn)?", a: "Fenster 🖼️", b: "Gang 🚪" },
-            { q: "Lieber eine saubere, leere Wohnung oder eine unordentliche, gemütliche?", a: "Sauber & Leer ✨📦", b: "Unordentlich & Gemütlich 🛋️😌" },
-            { q: "Lieber Kissen weich oder hart?", a: "Weich ☁️", b: "Hart 🧱" },
-            { q: "Lieber ein Leben lang nur noch Toast oder nur noch Brötchen essen?", a: "Toast 🍞", b: "Brötchen 🥐" },
-            { q: "Lieber in der ersten oder letzten Reihe sitzen (Kino/Theater)?", a: "Erste Reihe 🥇", b: "Letzte Reihe 🔚" },
-            { q: "Lieber Marmelade oder Nutella?", a: "Marmelade 🍓", b: "Nutella 🍫" },
-            { q: "Lieber warm oder kalt trinken?", a: "Warm ♨️☕", b: "Kalt 🧊🥤" },
-            { q: "Lieber Fleisch oder Fisch?", a: "Fleisch 🥩", b: "Fisch 🐟" },
-            { q: "Lieber Süßkartoffel oder normale Kartoffel?", a: "Süß 🍠", b: "Normal 🥔" },
-            { q: "Lieber Hemd oder T-Shirt?", a: "Hemd 👔", b: "T-Shirt 👕" },
-            { q: "Lieber im Hotel frühstücken oder im Café?", a: "Hotel 🏨🍳", b: "Café ☕🥐" },
-            { q: "Lieber Scharf oder Mild essen?", a: "Scharf 🌶️🔥", b: "Mild 🥛😌" },
-            { q: "Lieber E-Book oder gedrucktes Buch?", a: "E-Book 📱📚", b: "Gedruckt 📖🌳" },
-            { q: "Lieber mit öffentlichen Verkehrsmitteln oder mit dem Rad zur Arbeit?", a: "Öffentlich 🚌🚆", b: "Fahrrad 🚲" },
-            { q: "Lieber Rotwein oder Weißwein?", a: "Rotwein 🍷🔴", b: "Weißwein 🥂⚪" },
-            { q: "Lieber in der Küche oder im Wohnzimmer essen?", a: "Küche 🧑‍🍳🍽️", b: "Wohnzimmer 🛋️📺" },
-            { q: "Lieber Salzgebäck oder Chips?", a: "Salzgebäck 🥨", b: "Chips 🥔💸" },
-            { q: "Lieber schreiben oder lesen?", a: "Schreiben ✍️", b: "Lesen 📖" },
-            { q: "Lieber Krawatte oder Fliege?", a: "Krawatte 👔", b: "Fliege 🎀" },
-            { q: "Lieber glatt oder lockig?", a: "Glatt 💇‍♀️📏", b: "Lockig 💆‍♀️🌀" },
-            { q: "Lieber Taschenlampe oder Kerze?", a: "Taschenlampe 🔦", b: "Kerze 🕯️" },
-            { q: "Lieber nur noch Gemüse oder nur noch Obst essen?", a: "Gemüse 🥦🥬", b: "Obst 🍎🍊" },
-            { q: "Lieber nur noch Mützen oder nur noch Schals tragen?", a: "Mützen 🧢👒", b: "Schals 🧣🧣" },
-            { q: "Lieber immer pünktlich oder immer gute Laune?", a: "Pünktlich ⏰✅", b: "Gute Laune 😄🥳" },
-            { q: "Lieber Suppe mit Einlage oder pur?", a: "Mit Einlage 🍜🍲", b: "Pur 🥣💧" },
-            { q: "Lieber Süßigkeiten im Kühlschrank oder ungekühlt?", a: "Kalt 🧊🍬", b: "Zimmerwarm 🌡️🍭" },
-            { q: "Lieber auf dem Bauch oder auf der Seite schlafen?", a: "Bauch ⬇️🛌", b: "Seite ↪️😴" },
-            { q: "Lieber Jeans mit Löchern oder ohne?", a: "Mit Löchern 👖🕳️", b: "Ohne Löcher 👖✨" },
-            { q: "Lieber weiße oder bunte Wäsche?", a: "Weiße ⚪🧺", b: "Bunte 🌈👕" },
-            { q: "Lieber Nudeln al dente oder weich?", a: "Al Dente 👌🍝", b: "Weich 😴🍜" },
-            { q: "Lieber Füller oder Kugelschreiber?", a: "Füller 🖋️✨", b: "Kugelschreiber 🖊️💪" },
-            { q: "Lieber Städtetrip oder Wellness?", a: "Städtetrip 🏙️", b: "Wellness 🧘‍♀️" },
-            { q: "Lieber duschen oder baden?", a: "Duschen 🚿", b: "Baden 🛁" }
-        ]
-    }
-}; */
-
-// PERFORMANCE-OPTIMIERUNG: getAllQuestions wurde in separate Datei ausgelagert
-// Siehe: src/data/questionCategories.js
+// Fragen sind jetzt in src/data/questionCategories.js ausgelagert
 
 function App() {
     // Firebase
@@ -511,6 +124,25 @@ function App() {
     const [isHost, setIsHost] = useState(false)
     const [globalData, setGlobalData] = useState(null)
     
+    // PERFORMANCE: useMemo für häufig verwendete Berechnungen
+    // Aktive Spieler (nicht eliminiert) - nur neu berechnen wenn players oder config sich ändert
+    const activePlayers = useMemo(() => {
+        if (!globalData?.players) return []
+        const maxTemp = globalData.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
+        return getActivePlayers(globalData.players, maxTemp)
+    }, [globalData?.players, globalData?.config?.maxTemp])
+    
+    // Sortierte Spieler für UI - nur neu berechnen wenn players sich ändert
+    const sortedPlayers = useMemo(() => {
+        if (!globalData?.players) return []
+        return Object.keys(globalData.players).sort()
+    }, [globalData?.players])
+    
+    // Player Count - nur neu berechnen wenn players sich ändert
+    const playerCount = useMemo(() => {
+        return Object.keys(globalData?.players || {}).length
+    }, [globalData?.players])
+    
     // Verbindungsstatus für bessere Fehlerbehandlung
     const [connectionStatus, setConnectionStatus] = useState('online') // 'online', 'offline', 'slow'
     const lastHostActivityRef = useRef(Date.now()) // Zeitstempel der letzten Host-Aktivität
@@ -518,11 +150,11 @@ function App() {
     // Refs für Timeout-Tracking (statt window-Objekte)
     const timeoutKeysRef = useRef(new Set())
     const timeoutIdsRef = useRef([])
+    const lastProcessedRoundIdRef = useRef(null) // Verhindert veraltete Updates
     
     // Start Screen
     const [showHostSettings, setShowHostSettings] = useState(false)
     const [showJoinPanel, setShowJoinPanel] = useState(false)
-    const [gameMode, setGameMode] = useState('party')
     const [selectedCategories, setSelectedCategories] = useState([])
     const [roomPassword, setRoomPassword] = useState("")
     const [roomCode, setRoomCode] = useState("")
@@ -538,7 +170,7 @@ function App() {
     const [isOpeningAttackModal, setIsOpeningAttackModal] = useState(false)
     const [lastEliminationShown, setLastEliminationShown] = useState(null) // Ref für Eliminierungs-Modal
     
-    // Reward/Attack Selection States (Strategic Mode)
+    // Reward/Attack Selection States
     const [showRewardChoice, setShowRewardChoice] = useState(false)
     const [showAttackSelection, setShowAttackSelection] = useState(false)
     const [showJokerShop, setShowJokerShop] = useState(false)
@@ -550,8 +182,6 @@ function App() {
     const [showEliminationModal, setShowEliminationModal] = useState(false)
     const [eliminatedPlayer, setEliminatedPlayer] = useState(null)
     const [attackResult, setAttackResult] = useState(null)
-    const [countdownText, setCountdownText] = useState(null)
-    const [showCountdown, setShowCountdown] = useState(false)
     
     // Menu
     const [menuOpen, setMenuOpen] = useState(false)
@@ -577,86 +207,129 @@ function App() {
     const lastSuccessfulUpdateRef = useRef(Date.now()) // Zeitstempel des letzten erfolgreichen Updates
     const gameStateWatchdogRef = useRef(null) // Watchdog-Intervall
     
-    // Countdown-Interval für Countdown-Animation
-    useEffect(() => {
-        if (!showCountdown || !globalData?.countdownEnds) return
-        
-        const countdownEnds = globalData.countdownEnds
-        // Null-Check für countdownEnds
-        if (!countdownEnds) {
-            logger.warn('⚠️ [COUNTDOWN] countdownEnds ist undefined/null')
-            return
-        }
-        const updateCountdown = () => {
-            // WICHTIG: Unterstütze sowohl Firestore Timestamps als auch Zahlen
-            // Wenn countdownEnds ein Firestore Timestamp ist, verwende toMillis()
-            const endTime = countdownEnds?.toMillis ? countdownEnds.toMillis() : countdownEnds
-            const remainingMs = endTime - Date.now()
-            const seconds = Math.max(0, Math.ceil(remainingMs / 1000))
-            if (seconds > 0) {
-                setCountdownText(seconds.toString())
-            } else {
-                setCountdownText('HITZ\nKOPF!')
-                setTimeout(() => {
-                    setShowCountdown(false)
-                    setCountdownText(null)
-                }, 1000)
-            }
-        }
-        
-        updateCountdown()
-        const interval = setInterval(() => {
-            // WICHTIG: Unterstütze sowohl Firestore Timestamps als auch Zahlen
-            const endTime = countdownEnds?.toMillis ? countdownEnds.toMillis() : countdownEnds
-            const remainingMs = endTime - Date.now()
-            if (remainingMs <= 0) {
-                clearInterval(interval)
-                setShowCountdown(false)
-                setCountdownText(null)
-            } else {
-                updateCountdown()
-            }
-        }, 100)
-        
-        return () => clearInterval(interval)
-    }, [showCountdown, globalData?.countdownEnds])
-    
     // Retry-Helper für Firebase-Operationen mit Tracking
     // Versucht eine Operation mehrmals, falls sie durch Adblocker o.ä. blockiert wird
     const retryFirebaseOperation = useCallback(async (operation, operationId = null, maxRetries = 3, delay = 1000) => {
         const opId = operationId || generateOperationId()
-        pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
+        const startTime = Date.now()
+        pendingOperationsRef.current.set(opId, { startTime: startTime, attempts: 0 })
+        
+        // Nur bei ersten Versuch oder Fehlern loggen
+        let hasLoggedStart = false
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             pendingOperationsRef.current.get(opId).attempts = attempt
+            
+            if (attempt === 1 && !hasLoggedStart) {
+                logger.log(`🔄 [RETRY] Starte Operation mit Retry-Mechanismus:`, {
+                    operationId: opId,
+                    maxRetries: maxRetries
+                })
+                hasLoggedStart = true
+            }
+            
             try {
                 await operation()
                 // Erfolgreich!
+                const totalDuration = Date.now() - startTime
                 lastSuccessfulUpdateRef.current = Date.now()
                 pendingOperationsRef.current.delete(opId)
+                logger.log(`✅ [RETRY] Operation erfolgreich (${opId}):`, {
+                    totalAttempts: attempt,
+                    totalDuration: totalDuration + 'ms',
+                    operationId: opId
+                })
                 return true // Erfolgreich
             } catch (error) {
-                logger.warn(`⚠️ [RETRY] Versuch ${attempt}/${maxRetries} fehlgeschlagen (${opId}):`, error)
+                logger.warn(`⚠️ [RETRY] Versuch ${attempt}/${maxRetries} fehlgeschlagen (${opId}):`, {
+                    error: error,
+                    code: error?.code,
+                    message: error?.message,
+                    stack: error?.stack,
+                    serverResponse: error?.serverResponse,
+                    operationId: opId,
+                    attempt: attempt,
+                    maxRetries: maxRetries,
+                    roomId: roomId,
+                    hasDb: !!db
+                })
+                
+                // WICHTIG: Bei permission-denied prüfe ob Lobby noch existiert
+                if (error?.code === 'permission-denied' && roomId) {
+                    logger.log('🔍 [RETRY] Permission-denied - prüfe Lobby-Status:', {
+                        roomId: roomId,
+                        operationId: opId
+                    })
+                    try {
+                        const lobbyDoc = await getDoc(doc(db, "lobbies", roomId))
+                        if (!lobbyDoc.exists()) {
+                            logger.warn(`⚠️ [RETRY] Lobby existiert nicht mehr (${opId})`)
+                            pendingOperationsRef.current.delete(opId)
+                            return false
+                        }
+                        const lobbyData = lobbyDoc.data()
+                        if (lobbyData?.status === 'deleted') {
+                            logger.warn(`⚠️ [RETRY] Lobby wurde gelöscht (${opId})`)
+                            pendingOperationsRef.current.delete(opId)
+                            return false
+                        }
+                        logger.log('🔍 [RETRY] Lobby existiert noch:', {
+                            status: lobbyData?.status,
+                            roundId: lobbyData?.roundId,
+                            host: lobbyData?.host
+                        })
+                    } catch (checkError) {
+                        logger.error('❌ [RETRY] Fehler beim Prüfen der Lobby:', checkError)
+                    }
+                }
                 
                 // Prüfe ob es ein Netzwerkfehler oder Blockierungsfehler ist
                 const isBlockedError = error?.code === 'permission-denied' || 
                                       error?.code === 'unavailable' ||
                                       error?.code === 'deadline-exceeded' ||
+                                      error?.code === 'failed-precondition' || // Transaction-Konflikte
                                       error?.message?.includes('network') ||
                                       error?.message?.includes('blocked') ||
                                       error?.message?.includes('CORS') ||
-                                      error?.message?.includes('Failed to fetch')
+                                      error?.message?.includes('Failed to fetch') ||
+                                      error?.message?.includes('failed-precondition')
                 
                 if (isBlockedError && attempt < maxRetries) {
                     // Warte vor dem nächsten Versuch
-                    await new Promise(resolve => setTimeout(resolve, delay * attempt))
+                    const waitTime = delay * attempt
+                    logger.log(`⏳ [RETRY] Warte ${waitTime}ms vor nächstem Versuch (${opId}):`, {
+                        attempt: attempt,
+                        maxRetries: maxRetries,
+                        waitTime: waitTime,
+                        errorCode: error?.code,
+                        errorMessage: error?.message
+                    })
+                    await new Promise(resolve => setTimeout(resolve, waitTime))
+                    logger.log(`▶️ [RETRY] Weiter mit Versuch ${attempt + 1}/${maxRetries} (${opId})`)
                 } else if (attempt === maxRetries) {
                     // Letzter Versuch fehlgeschlagen
-                    logger.error(`❌ [RETRY] Alle Versuche fehlgeschlagen (${opId}):`, error)
+                    logger.error(`❌ [RETRY] Alle Versuche fehlgeschlagen (${opId}):`, {
+                        error: error,
+                        code: error?.code,
+                        message: error?.message,
+                        stack: error?.stack,
+                        serverResponse: error?.serverResponse,
+                        operationId: opId,
+                        totalAttempts: attempt,
+                        roomId: roomId,
+                        timestamp: new Date().toISOString()
+                    })
                     pendingOperationsRef.current.delete(opId)
                     return false // Fehlgeschlagen
                 } else {
                     // Anderer Fehler - nicht retryen
+                    logger.error(`❌ [RETRY] Nicht-retrybarer Fehler (${opId}):`, {
+                        error: error,
+                        code: error?.code,
+                        message: error?.message,
+                        operationId: opId,
+                        attempt: attempt
+                    })
                     pendingOperationsRef.current.delete(opId)
                     throw error
                 }
@@ -892,42 +565,20 @@ function App() {
         }
     }, [db, roomId, globalData, isHost, recoverGameState])
     
-    // Sound-Helper-Funktion
-    // Spielt einen Sound ab (falls die Datei existiert)
+    // Sound-Helper-Funktion - verwendet gecachte Audio-Objekte für bessere Performance
     const playSound = useCallback((soundName, volume = 0.5) => {
-        try {
-            // Versuche Sound abzuspielen
-            // In Vite: Assets aus public Ordner sind direkt über / zugänglich
-            const baseUrl = import.meta.env.BASE_URL || '/'
-            const audio = new Audio(`${baseUrl}sounds/${soundName}.mp3`)
-            audio.volume = (volume * soundVolume) / 10
-            audio.play().catch(err => {
-                // Ignoriere Fehler, wenn Sound nicht gefunden wird
-                logger.log(`🔇 Sound nicht gefunden: ${soundName}`)
-            })
-        } catch (err) {
-            // Ignoriere Fehler beim Erstellen des Audio-Objekts
-            logger.log(`🔇 Fehler beim Abspielen von Sound: ${soundName}`)
-        }
+        // Verwende Audio-Manager mit angepasster Lautstärke
+        playSoundCached(soundName, (volume * soundVolume) / 10)
     }, [soundVolume])
     
     // Hintergrundmusik steuern
     useEffect(() => {
-        // Initialisiere Audio nur einmal
+        // Initialisiere Audio nur einmal - verwende Audio-Manager
         if (!backgroundMusicRef.current) {
-            try {
-                // In Vite: Assets aus public Ordner sind direkt über / zugänglich
-                const baseUrl = import.meta.env.BASE_URL || '/'
-                backgroundMusicRef.current = new Audio(`${baseUrl}sounds/background_music.mp3`)
-                backgroundMusicRef.current.loop = true
-                backgroundMusicRef.current.volume = musicVolume / 10
-                
-                // Fehlerbehandlung für fehlende Datei
-                backgroundMusicRef.current.addEventListener('error', (e) => {
-                    logger.log('🔇 Hintergrundmusik-Datei nicht gefunden: background_music.mp3', e)
-                })
-            } catch (err) {
-                logger.log('🔇 Fehler beim Erstellen des Audio-Objekts:', err)
+            const music = getBackgroundMusic()
+            if (music) {
+                music.loop = true
+                backgroundMusicRef.current = music
             }
         }
         
@@ -1032,18 +683,14 @@ function App() {
         const unsubscribe = onSnapshot(
             doc(db, "lobbies", roomId),
             (snapshot) => {
+                // WICHTIG: Prüfe sofort ob roomId noch gesetzt ist (verhindert Updates nach Löschung)
+                if (!roomId) {
+                    return
+                }
+                
                 // Update erfolgreich erhalten
                 setConnectionStatus('online')
                 lastSuccessfulUpdateRef.current = Date.now()
-                
-                // Aktualisiere Host-Aktivität, wenn Host etwas geändert hat
-                if (snapshot.metadata.hasPendingWrites === false) {
-                    // Update vom Server (nicht lokal)
-                    const data = snapshot.data()
-                    if (data?.host === myName) {
-                        lastHostActivityRef.current = Date.now()
-                    }
-                }
                 
                 if (!snapshot.exists()) {
                     // Lobby existiert nicht mehr
@@ -1052,10 +699,58 @@ function App() {
                     setRoomId("")
                     setGlobalData(null)
                     setCurrentScreen('start')
+                    lastProcessedRoundIdRef.current = null // Reset Ref
                     return
                 }
             
             const data = snapshot.data()
+            
+            // Prüfe ob Lobby gelöscht wurde
+            if (data.status === 'deleted') {
+                logger.log('🚨 [FIREBASE] Lobby wurde gelöscht, zurück zum Start')
+                sessionStorage.removeItem("hk_room")
+                setRoomId("")
+                setGlobalData(null)
+                setCurrentScreen('start')
+                lastProcessedRoundIdRef.current = null
+                alert("Die Lobby wurde vom Host gelöscht.")
+                return
+            }
+            
+            // WICHTIG: Prüfe nochmal ob roomId noch gesetzt ist (Race Condition Schutz)
+            if (!roomId) {
+                return
+            }
+            
+            // WICHTIG: Ignoriere Updates mit niedrigerer roundId (verhindert Loops durch veraltete Updates)
+            const currentRoundId = data.roundId ?? 0
+            const lastRoundId = lastProcessedRoundIdRef.current
+            
+            if (lastRoundId !== null && lastRoundId !== undefined && currentRoundId < lastRoundId) {
+                // Nur bei wichtigen Änderungen loggen
+                if (data.status !== globalData?.status || currentRoundId !== globalData?.roundId) {
+                    logger.warn('🚨 [FIREBASE] Update mit niedrigerer roundId ignoriert:', {
+                        lastRoundId,
+                        currentRoundId,
+                        status: data.status,
+                        oldStatus: globalData?.status
+                    })
+                }
+                return // Ignoriere veraltete Updates
+            }
+            
+            // Aktualisiere Ref mit neuer roundId
+            if (currentRoundId > (lastRoundId || 0)) {
+                lastProcessedRoundIdRef.current = currentRoundId
+            }
+            
+            // Aktualisiere Host-Aktivität, wenn Host etwas geändert hat
+            if (snapshot.metadata.hasPendingWrites === false) {
+                // Update vom Server (nicht lokal)
+                if (data?.host === myName) {
+                    lastHostActivityRef.current = Date.now()
+                }
+            }
             
             // WICHTIG: Prüfe ob sich wirklich wichtige Daten geändert haben, bevor wir States aktualisieren
             // Das verhindert unnötige Re-Renders und "Neuladen"-Effekte
@@ -1065,6 +760,25 @@ function App() {
             const newRoundId = data.roundId
             const oldHotseat = globalData?.hotseat
             const newHotseat = data.hotseat
+            
+            // Nur bei wichtigen Änderungen loggen
+            const statusChanged = oldStatus !== newStatus
+            const roundIdChanged = oldRoundId !== newRoundId
+            const hotseatChanged = oldHotseat !== newHotseat
+            
+            if (statusChanged || roundIdChanged || hotseatChanged) {
+                logger.log('🔍 [FIREBASE LISTENER] Wichtige Änderung erkannt:', {
+                    statusChanged: statusChanged,
+                    oldStatus: oldStatus,
+                    newStatus: newStatus,
+                    roundIdChanged: roundIdChanged,
+                    oldRoundId: oldRoundId,
+                    newRoundId: newRoundId,
+                    hotseatChanged: hotseatChanged,
+                    oldHotseat: oldHotseat,
+                    newHotseat: newHotseat
+                })
+            }
             
             // PERFORMANCE-OPTIMIERUNG: Effiziente Shallow-Comparison statt JSON.stringify
             // JSON.stringify ist sehr teuer bei jedem Snapshot-Update
@@ -1097,7 +811,28 @@ function App() {
                 logger.log('🎯 [HOTSEAT] Hotseat geändert:', oldHotseat, '→', newHotseat, '| RoundId:', newRoundId)
             }
             if (oldRoundId !== newRoundId) {
+                // WICHTIG: Warnung wenn roundId zurückgeht (sollte nie passieren)
+                if (oldRoundId !== null && oldRoundId !== undefined && newRoundId < oldRoundId) {
+                    logger.error('🚨 [ROUND] KRITISCH: roundId geht zurück!', {
+                        oldRoundId,
+                        newRoundId,
+                        status: data.status,
+                        roomId: roomId
+                    })
+                    // Ignoriere dieses Update, um Loop zu verhindern
+                    return
+                }
                 logger.log('🔄 [ROUND] Neue Runde:', oldRoundId, '→', newRoundId)
+                // WICHTIG: Setze mySelection zurück bei Rundenwechsel, damit keine alte Auswahl übernommen wird
+                if (mySelection) {
+                    logger.log('🔄 [ROUND] Setze mySelection zurück bei Rundenwechsel:', {
+                        oldSelection: mySelection,
+                        oldRoundId: oldRoundId,
+                        newRoundId: newRoundId,
+                        reason: 'Neue Runde gestartet'
+                    })
+                    setMySelection(null)
+                }
             }
             
             // WICHTIG: Setze globalData nur wenn sich wirklich etwas geändert hat
@@ -1108,7 +843,7 @@ function App() {
                 dataChanged = true
             } else {
                 // Prüfe nur wichtige Felder statt des gesamten Objekts
-                const importantFields = ['status', 'roundId', 'hotseat', 'countdownEnds', 'roundRecapShown']
+                const importantFields = ['status', 'roundId', 'hotseat', 'roundRecapShown']
                 dataChanged = importantFields.some(field => globalData[field] !== data[field])
                 
                 // Prüfe lobbyReady IMMER separat, da es ein Objekt ist und direkter Vergleich nicht funktioniert
@@ -1202,38 +937,48 @@ function App() {
                     updatedData.lobbyReady = { ...data.lobbyReady }
                 }
                 setGlobalData(updatedData)
-                logger.log('✅ [GLOBAL DATA] globalData aktualisiert:', {
-                    dataChanged: dataChanged,
-                    hasLobbyReady: !!updatedData.lobbyReady,
-                    lobbyReadyKeys: updatedData.lobbyReady ? Object.keys(updatedData.lobbyReady) : []
-                })
+                
+                // Nur bei wichtigen Änderungen loggen
+                if (statusChanged || roundIdChanged || hotseatChanged) {
+                    logger.log('✅ [GLOBAL DATA] globalData aktualisiert:', {
+                        statusChanged: statusChanged,
+                        roundIdChanged: roundIdChanged,
+                        hotseatChanged: hotseatChanged,
+                        status: updatedData.status,
+                        roundId: updatedData.roundId,
+                        hotseat: updatedData.hotseat,
+                        playerCount: Object.keys(updatedData.players || {}).length,
+                        voteCount: Object.keys(updatedData.votes || {}).length,
+                        readyCount: Array.isArray(updatedData.ready) ? updatedData.ready.length : 0
+                    })
+                }
             }
             
             // Screen-Wechsel basierend auf Status
+            // WICHTIG: Nur setzen wenn sich der Status wirklich geändert hat (verhindert Loops)
             if (data.status === 'lobby') {
                 if (currentScreen !== 'lobby') {
                     logger.log('🏠 [SCREEN] Wechsel zu Lobby')
-                }
-                setCurrentScreen('lobby')
-            } else if (data.status === 'countdown') {
-                if (currentScreen !== 'lobby') {
-                    logger.log('⏳ [SCREEN] Wechsel zu Countdown (Lobby)')
-                }
-                setCurrentScreen('lobby') // Countdown wird in Lobby angezeigt
-                
-                // Countdown-Animation starten
-                if (data.countdownEnds && !showCountdown) {
-                    setShowCountdown(true)
-                } else if (!data.countdownEnds && showCountdown) {
-                    // Countdown beendet
-                    setShowCountdown(false)
-                    setCountdownText(null)
+                    setCurrentScreen('lobby')
                 }
             } else if (data.status === 'game') {
                 if (currentScreen !== 'game') {
-                    logger.log('🎮 [SCREEN] Wechsel zu Game | RoundId:', data.roundId, '| Hotseat:', data.hotseat)
+                    logger.log('🎮 [SCREEN] Wechsel zu Game:', {
+                        from: currentScreen,
+                        to: 'game',
+                        roundId: data.roundId,
+                        hotseat: data.hotseat,
+                        timestamp: new Date().toISOString(),
+                        hasPendingWrites: snapshot.metadata.hasPendingWrites,
+                        fromCache: snapshot.metadata.fromCache
+                    })
+                    setCurrentScreen('game')
+                } else {
+                    logger.log('⏭️ [SCREEN] Bereits auf Game-Screen, überspringe Wechsel:', {
+                        roundId: data.roundId,
+                        hotseat: data.hotseat
+                    })
                 }
-                setCurrentScreen('game')
                 
                 // WICHTIG: Prüfe ob sich nur votes geändert haben (nicht roundId, status, etc.)
                 // Wenn nur andere Votes geändert wurden, überspringe die Selection-Logik komplett
@@ -1244,23 +989,79 @@ function App() {
                     votesEqual({...globalData, votes: {}}, {...data, votes: {}}) &&
                     globalData.votes?.[myName]?.choice === data.votes?.[myName]?.choice
                 
+                // WICHTIG: Initialisiere lastRoundId, wenn es noch nicht gesetzt ist
+                if (lastRoundId === null && data.roundId !== undefined) {
+                    logger.log('🎮 [GAME SCREEN] Initialisiere lastRoundId beim ersten Mal:', data.roundId)
+                    setLastRoundId(data.roundId)
+                }
+                
+                // WICHTIG: Prüfe zuerst, ob es eine neue Runde ist
+                // Verwende lastRoundId als primäre Quelle, da es zuverlässiger ist
+                const oldRoundId = lastRoundId ?? globalData?.roundId
+                const isNewRound = oldRoundId !== null && oldRoundId !== undefined && data.roundId !== oldRoundId
+                
+                // WICHTIG: Bei neuer Runde IMMER Selection zurücksetzen, BEVOR andere Logik ausgeführt wird
+                if (isNewRound) {
+                    logger.log('🔄 [GAME SCREEN] Neue Runde erkannt - RESET Selection:', {
+                        oldRoundId: oldRoundId,
+                        newRoundId: data.roundId,
+                        oldSelection: mySelection,
+                        lastRoundId: lastRoundId,
+                        globalDataRoundId: globalData?.roundId
+                    })
+                    setMySelection(null)
+                    setLastRoundId(data.roundId)
+                    setLocalActionDone(false)
+                    setShowRewardChoice(false)
+                    setShowAttackSelection(false)
+                    setShowJokerShop(false)
+                    // WICHTIG: Return früh, um zu verhindern, dass die Selection aus alten Votes wiederhergestellt wird
+                    return
+                }
+                
                 // WICHTIG: Prüfe auch, ob globalData noch nicht gesetzt ist, aber roundId gleich lastRoundId ist
                 // Das verhindert, dass mySelection zurückgesetzt wird, wenn globalData beim ersten Mal undefined ist
-                const isInitialLoad = !globalData && lastRoundId === data.roundId
+                // ABER: Nur wenn es KEINE neue Runde ist!
+                const isInitialLoad = !globalData && lastRoundId === data.roundId && !isNewRound
+                
+                // WICHTIG: Wenn ein Vote existiert, aber mySelection null ist, muss die Selection wiederhergestellt werden
+                // ABER NUR wenn der Vote aus der aktuellen Runde stammt UND es KEINE neue Runde ist!
+                const hasVote = data.votes?.[myName]?.choice !== undefined
+                const voteRoundId = data.votes?.[myName]?.roundId
+                const isVoteFromCurrentRound = voteRoundId !== undefined && voteRoundId === data.roundId
+                const needsSelectionRestore = hasVote && isVoteFromCurrentRound && !mySelection && !isNewRound
                 
                 if (onlyVotesChanged || isInitialLoad) {
                     // Nur andere Votes haben sich geändert ODER es ist der erste Load mit gleicher Runde
-                    logger.log('🎮 [GAME SCREEN] Nur andere Votes geändert oder Initial-Load, überspringe Selection-Logik:', {
-                        mySelection: mySelection,
-                        myVote: data.votes?.[myName]?.choice,
-                        otherVotes: Object.keys(data.votes || {}).filter(v => v !== myName),
-                        onlyVotesChanged: onlyVotesChanged,
-                        isInitialLoad: isInitialLoad,
-                        lastRoundId: lastRoundId,
-                        currentRoundId: data.roundId
-                    })
-                    // WICHTIG: Behalte mySelection unverändert!
-                    // Überspringe den Rest der Game-Screen-Logik
+                    // WICHTIG: Wenn ein Vote existiert, aber Selection fehlt, wiederherstellen
+                    // ABER NUR wenn der Vote aus der aktuellen Runde stammt UND es KEINE neue Runde ist!
+                    if (needsSelectionRestore) {
+                        logger.log('🔄 [GAME SCREEN] Restore Selection aus Vote:', {
+                            oldSelection: mySelection,
+                            newSelection: data.votes[myName].choice,
+                            voteRoundId: voteRoundId,
+                            currentRoundId: data.roundId,
+                            isNewRound: isNewRound
+                        })
+                        setMySelection(data.votes[myName].choice)
+                    } else if (hasVote && !isVoteFromCurrentRound && mySelection) {
+                        // WICHTIG: Wenn ein Vote existiert, aber aus alter Runde stammt, RESET Selection
+                        logger.warn('⚠️ [GAME SCREEN] Vote aus alter Runde - RESET Selection:', {
+                            oldSelection: mySelection,
+                            voteRoundId: voteRoundId,
+                            currentRoundId: data.roundId
+                        })
+                        setMySelection(null)
+                    } else if (isNewRound && mySelection) {
+                        // WICHTIG: Bei neuer Runde sollte Selection bereits zurückgesetzt sein, aber falls nicht, hier nochmal
+                        logger.warn('⚠️ [GAME SCREEN] Neue Runde erkannt, aber Selection noch gesetzt - RESET:', {
+                            oldSelection: mySelection,
+                            currentRoundId: data.roundId,
+                            oldRoundId: oldRoundId
+                        })
+                        setMySelection(null)
+                    }
+                    // WICHTIG: Kein return hier! Auto-Advance muss trotzdem laufen
                 } else {
                 
                 logger.log('🎮 [GAME SCREEN] Game-Screen Update:', {
@@ -1273,33 +1074,9 @@ function App() {
                     localActionDone: localActionDone
                 })
                 
-                // Reset selection nur bei neuer Runde UND wenn noch nicht abgestimmt wurde
-                // WICHTIG: Nur zurücksetzen wenn es wirklich eine neue Runde ist
-                // WICHTIG: Prüfe auch lastRoundId, um sicherzustellen, dass es wirklich eine neue Runde ist
-                const oldRoundId = globalData?.roundId ?? lastRoundId
-                const isNewRound = globalData && data.roundId !== oldRoundId && oldRoundId !== null && oldRoundId !== undefined
-                
-                if (isNewRound) {
-                    logger.log('🎮 [GAME SCREEN] Neue Runde erkannt:', {
-                        oldRoundId: oldRoundId,
-                        newRoundId: data.roundId,
-                        hasMyVote: !!data.votes?.[myName],
-                        lastRoundId: lastRoundId,
-                        currentMySelection: mySelection
-                    })
-                    setLastRoundId(data.roundId)
-                    // WICHTIG: Bei neuer Runde IMMER mySelection zurücksetzen
-                    // Die Auswahl der letzten Runde darf nicht in die neue Runde übernommen werden
-                    // WICHTIG: Setze mySelection IMMER auf null, auch wenn ein Vote existiert
-                    // Die Auswahl soll in jeder Runde neutral sein
-                    logger.log('🎮 [GAME SCREEN] Reset mySelection (neue Runde erkannt)')
-                    setMySelection(null)
-                    setLocalActionDone(false)
-                    // WICHTIG: Reset alle Reward/Attack States bei neuer Runde, damit Spieler wieder auswählen kann
-                    setShowRewardChoice(false)
-                    setShowAttackSelection(false)
-                    setShowJokerShop(false)
-                } else {
+                // WICHTIG: Diese Logik wird nur ausgeführt, wenn es KEINE neue Runde ist
+                // (neue Runde wird bereits oben behandelt)
+                if (!isNewRound) {
                     // WICHTIG: Wenn globalData noch nicht gesetzt ist, initialisiere lastRoundId
                     if (!globalData && data.roundId !== lastRoundId) {
                         logger.log('🎮 [GAME SCREEN] Initialisiere lastRoundId:', data.roundId)
@@ -1310,40 +1087,49 @@ function App() {
                     // WICHTIG: Prüfe ob es wirklich die gleiche Runde ist (lastRoundId === data.roundId)
                     if (lastRoundId === data.roundId) {
                         if (data.votes?.[myName]) {
-                            // Spieler hat bereits abgestimmt - synchronisiere nur wenn Selection fehlt oder falsch ist
-                            if (!mySelection) {
-                                logger.log('🎮 [GAME SCREEN] Restore Selection aus Vote (gleiche Runde):', data.votes[myName].choice)
-                                setMySelection(data.votes[myName].choice)
-                            } else if (mySelection !== data.votes[myName].choice) {
-                                // Vote existiert, aber Selection stimmt nicht überein - synchronisiere
-                                logger.log('🎮 [GAME SCREEN] Synchronisiere Selection mit Vote (gleiche Runde):', {
-                                    mySelection: mySelection,
-                                    voteChoice: data.votes[myName].choice
-                                })
-                                setMySelection(data.votes[myName].choice)
+                            // WICHTIG: Prüfe ob Vote aus aktueller Runde stammt
+                            // Da Votes bei nextRound gelöscht werden, sollte ein existierender Vote immer aus der aktuellen Runde sein
+                            // Aber zur Sicherheit prüfen wir trotzdem
+                            const voteRoundId = data.votes[myName]?.roundId
+                            // WICHTIG: Nur Votes mit roundId === data.roundId sind aus aktueller Runde
+                            // Votes ohne roundId sind aus alter Version und sollten ignoriert werden
+                            const isVoteFromCurrentRound = voteRoundId !== undefined && voteRoundId === data.roundId
+                            
+                            if (isVoteFromCurrentRound) {
+                                // Spieler hat bereits abgestimmt - synchronisiere nur wenn Selection fehlt oder falsch ist
+                                if (!mySelection) {
+                                    logger.log('🔄 [GAME SCREEN] Restore Selection aus Vote (gleiche Runde):', {
+                                        oldSelection: mySelection,
+                                        newSelection: data.votes[myName].choice,
+                                        voteRoundId: voteRoundId,
+                                        currentRoundId: data.roundId,
+                                        reason: 'Selection fehlt, Vote existiert'
+                                    })
+                                    setMySelection(data.votes[myName].choice)
+                                } else if (mySelection !== data.votes[myName].choice) {
+                                    // Vote existiert, aber Selection stimmt nicht überein - synchronisiere
+                                    logger.log('🔄 [GAME SCREEN] Synchronisiere Selection mit Vote (gleiche Runde):', {
+                                        oldSelection: mySelection,
+                                        newSelection: data.votes[myName].choice,
+                                        voteRoundId: voteRoundId,
+                                        currentRoundId: data.roundId,
+                                        reason: 'Selection stimmt nicht mit Vote überein'
+                                    })
+                                    setMySelection(data.votes[myName].choice)
+                                } else {
+                                    // Selection stimmt bereits überein - keine Änderung
+                                }
                             } else {
-                                // Selection stimmt bereits überein - keine Änderung
-                                logger.log('🎮 [GAME SCREEN] Selection bereits korrekt (gleiche Runde):', mySelection)
+                                // Vote aus alter Runde - ignoriere und RESET Selection
+                                if (mySelection) {
+                                    logger.warn('⚠️ [GAME SCREEN] Vote aus alter Runde - RESET Selection:', {
+                                        mySelection: mySelection,
+                                        voteRoundId: voteRoundId,
+                                        currentRoundId: data.roundId
+                                    })
+                                    setMySelection(null)
+                                }
                             }
-                        } else {
-                            // Spieler hat noch nicht abgestimmt - BEHALTE Selection auf jeden Fall!
-                            // WICHTIG: Setze Selection NIEMALS auf null, wenn andere Spieler abstimmen!
-                            // WICHTIG: Prüfe ob mySelection bereits gesetzt ist - wenn ja, NIE zurücksetzen!
-                            if (mySelection) {
-                                logger.log('🎮 [GAME SCREEN] Behalte Selection (noch nicht abgestimmt, gleiche Runde):', mySelection, '| Andere Votes:', Object.keys(data.votes || {}))
-                                // WICHTIG: Stelle sicher, dass mySelection NICHT zurückgesetzt wird
-                                // Die Selection bleibt bestehen, auch wenn andere Spieler abstimmen
-                            } else {
-                                logger.log('🎮 [GAME SCREEN] Keine Selection (noch nicht abgestimmt, gleiche Runde)')
-                            }
-                            // WICHTIG: KEINE setMySelection(null) hier - das würde die Selection bei anderen Spielern löschen!
-                        }
-                    } else {
-                        // WICHTIG: Neue Runde erkannt, aber Code ist in else-Block - mySelection sollte bereits auf null gesetzt sein
-                        // Falls nicht, setze es hier nochmal auf null, um sicherzustellen, dass keine alte Selection angezeigt wird
-                        if (mySelection !== null) {
-                            logger.log('🎮 [GAME SCREEN] Reset mySelection (neue Runde im else-Block erkannt)')
-                            setMySelection(null)
                         }
                     }
                 }
@@ -1387,20 +1173,42 @@ function App() {
                 }
             } else if (data.status === 'result') {
                 if (currentScreen !== 'result') {
-                    logger.log('📊 [SCREEN] Wechsel zu Result | RoundId:', data.roundId)
+                    logger.log('📊 [SCREEN] Wechsel zu Result:', {
+                        from: currentScreen,
+                        to: 'result',
+                        roundId: data.roundId
+                    })
+                    setCurrentScreen('result')
                 }
-                setCurrentScreen('result')
                 
-                // Strategic Mode: Zeige Belohnungsauswahl wenn richtig geraten
-                const gameMode = data.config?.gameMode || 'party'
-                const isPartyMode = gameMode === 'party'
+                // Party Mode: Zeige Angriffsauswahl wenn richtig geraten
+                const isPartyMode = true
                 const isHotseat = myName === data.hotseat
                 const myVoteData = data.votes?.[myName]
                 // WICHTIG: Stelle sicher, dass hotseat ein String ist
                 const hotseatName = typeof data.hotseat === 'string' ? data.hotseat : (data.hotseat?.name || String(data.hotseat || ''))
                 const hotseatVote = data.votes?.[hotseatName]
-                const truth = hotseatVote?.choice
+                const hotseatVoteRoundId = hotseatVote?.roundId
+                const currentRoundId = data.roundId
+                // WICHTIG: Prüfe ob Hotseat-Vote aus aktueller Runde stammt
+                const isHotseatVoteFromCurrentRound = hotseatVoteRoundId !== undefined && hotseatVoteRoundId === currentRoundId
+                const truth = isHotseatVoteFromCurrentRound ? hotseatVote?.choice : undefined
                 const hasTruth = truth !== undefined && truth !== null
+                
+                logger.log('🔍 [RESULT] Hotseat-Vote-Prüfung:', {
+                    roundId: currentRoundId,
+                    hotseat: hotseatName,
+                    hotseatVote: hotseatVote,
+                    hotseatVoteRoundId: hotseatVoteRoundId,
+                    isHotseatVoteFromCurrentRound: isHotseatVoteFromCurrentRound,
+                    truth: truth,
+                    hasTruth: hasTruth,
+                    reason: !hasTruth ? (
+                        !hotseatVote ? 'Kein Hotseat-Vote vorhanden' :
+                        !isHotseatVoteFromCurrentRound ? `Vote aus alter Runde (${hotseatVoteRoundId} !== ${currentRoundId})` :
+                        'Truth ist undefined/null'
+                    ) : 'Hotseat hat geantwortet'
+                })
                 const guessedCorrectly = hasTruth && myVoteData && String(myVoteData.choice) === String(truth)
                 const guessedWrong = hasTruth && myVoteData && String(myVoteData.choice) !== String(truth)
                 const attackDecisions = data.attackDecisions || {}
@@ -1447,9 +1255,9 @@ function App() {
                         [`attackDecisions.${myName}`]: true
                     }).catch(logger.error)
                 } else if (!isHotseat && guessedWrong && !attackDecisions[myName] && !isPartyMode && db && roomId) {
-                    // Falsch geraten (Strategic Mode): Automatisch als entschieden markieren
+                    // Falsch geraten: Automatisch als entschieden markieren
                     // Im Party Mode wird es bereits in handlePartyModeWrongAnswer gesetzt
-                    logger.log('❌ [AUTO] Falsch geraten (Strategic Mode) - automatisch als entschieden markiert')
+                    logger.log('❌ [AUTO] Falsch geraten - automatisch als entschieden markiert')
                     updateDoc(doc(db, "lobbies", roomId), {
                         [`attackDecisions.${myName}`]: true
                     }).catch(logger.error)
@@ -1478,15 +1286,17 @@ function App() {
                     penaltyAppliedRef.current = null
                 }
                 
-                // Strategic Mode: Zeige Belohnungsauswahl wenn richtig geraten UND noch keine Entscheidung getroffen
+                // Zeige Angriffsauswahl wenn richtig geraten UND noch keine Entscheidung getroffen
                 // WICHTIG: Prüfe auch ob es eine neue Runde ist, damit die Auswahl bei jeder Runde möglich ist
-                if (!isHotseat && guessedCorrectly && !isPartyMode && !attackDecisions[myName] && !showRewardChoice && !showAttackSelection && !showJokerShop) {
-                    // Strategic Mode: Zeige Belohnungsauswahl
-                    logger.log('🎁 [REWARD] Zeige Belohnungsauswahl (Strategic Mode)', {
+                // HINWEIS: Gilt für BEIDE Modi (Party und normal), solange richtig geraten wurde
+                if (!isHotseat && guessedCorrectly && !attackDecisions[myName] && !showRewardChoice && !showAttackSelection && !showJokerShop) {
+                    // Zeige Angriffsauswahl
+                    logger.log('🎁 [ATTACK] Zeige Angriffsauswahl', {
                         roundId: data.roundId,
                         lastRoundId: lastRoundId,
                         isNewRound: isNewRoundForReward,
-                        attackDecisions: attackDecisions[myName]
+                        attackDecisions: attackDecisions[myName],
+                        isPartyMode: isPartyMode
                     })
                     setShowRewardChoice(true)
                 }
@@ -1499,7 +1309,12 @@ function App() {
                 
                 // WICHTIG: Prüfe ob alle Spieler ihre Angriffsentscheidungen getroffen haben, bevor Popups angezeigt werden
                 // (Diese Variablen werden auch später für executePendingAttacks verwendet)
-                const playerCount = Object.keys(data.players || {}).length
+                const maxTemp = data.config?.maxTemp || 100
+                const activePlayers = Object.keys(data.players || {}).filter(p => {
+                    const temp = data.players?.[p]?.temp || 0
+                    return temp < maxTemp
+                })
+                const playerCount = activePlayers.length
                 const playersWithDecision = Object.keys(attackDecisions).filter(p => attackDecisions[p] === true)
                 const hotseatShouldBeDecided = isHotseat && hasTruth
                 const effectiveDecidedCount = playersWithDecision.length + (hotseatShouldBeDecided && !attackDecisions[data.hotseat] ? 1 : 0)
@@ -1613,8 +1428,15 @@ function App() {
                 const recapNotShown = !roundRecapShown
                 
                 // WICHTIG: Prüfe auch ob alle Spieler geantwortet haben (für Strafhitze-Fall ohne normale Angriffe)
+                // WICHTIG: Zähle nur Votes mit richtiger roundId
                 const votes = data.votes || {}
-                const allVoted = Object.keys(votes).length >= playerCount && playerCount > 0
+                const voteCountForAllVoted = activePlayers.filter(p => {
+                    const vote = votes[p]
+                    if (!vote || vote.choice === undefined) return false
+                    const voteRoundId = vote.roundId
+                    return voteRoundId !== undefined && voteRoundId === data.roundId
+                }).length
+                const allVoted = voteCountForAllVoted >= playerCount && playerCount > 0
                 
                 // WICHTIG: Prüfe ob Hotseat überhaupt geantwortet hat, bevor executePendingAttacks ausgeführt wird
                 if (!hasTruth && allDecided) {
@@ -1628,7 +1450,8 @@ function App() {
                     effectiveDecidedCount: effectiveDecidedCount,
                     allDecided: allDecided,
                     allVoted: allVoted,
-                    voteCount: Object.keys(votes).length,
+                    voteCount: voteCountForAllVoted,
+                    totalVotesInFirebase: Object.keys(votes).length,
                     recapNotShown: recapNotShown,
                     hasTruth: hasTruth,
                     hotseat: data.hotseat,
@@ -1657,122 +1480,140 @@ function App() {
                 // NUR HOST führt executePendingAttacks aus, ODER Backup-Host wenn Host inaktiv
                 // WICHTIG: Nur ausführen wenn Hotseat geantwortet hat
                 // WICHTIG: Auch ausführen wenn alle geantwortet haben (für Strafhitze-Fall ohne normale Angriffe)
-                const canExecuteAttacks = (allDecided || allVoted) && recapNotShown && hasTruth && (isHostActive || (hostInactive && isFirstBackupHost))
-                
-                logger.log('⚔️ [EXECUTE ATTACKS] Detaillierte Prüfung:', {
-                    roundId: data.roundId,
-                    allDecided: allDecided,
-                    allVoted: allVoted,
-                    recapNotShown: recapNotShown,
-                    hasTruth: hasTruth,
-                    isHost: isHost,
-                    isMeHost: data.host === myName,
-                    canExecuteAttacks: canExecuteAttacks,
-                    effectiveDecidedCount: effectiveDecidedCount,
-                    playerCount: playerCount,
-                    playersWithDecision: playersWithDecision,
-                    votes: Object.keys(votes || {}),
-                    roundRecapShown: roundRecapShown
-                })
+                const condition1 = (allDecided || allVoted)
+                const condition2 = recapNotShown
+                const condition3 = hasTruth
+                const condition4 = (isHostActive || (hostInactive && isFirstBackupHost))
+                const canExecuteAttacks = condition1 && condition2 && condition3 && condition4
                 
                 if (canExecuteAttacks) {
                     // Verhindere mehrfache Ausführung
                     const timeoutKey = `executeAttacks_${data.roundId}`
                     if (!timeoutKeysRef.current.has(timeoutKey)) {
                         timeoutKeysRef.current.add(timeoutKey)
-                        logger.log('⚔️ [EXECUTE ATTACKS] Starte executePendingAttacks in 500ms (Hotseat hat geantwortet)')
+                        logger.log('⚔️ [EXECUTE ATTACKS] Starte executePendingAttacks in 500ms')
                         const timeoutId = setTimeout(() => {
-                            logger.log('⚔️ [EXECUTE ATTACKS] Führe executePendingAttacks aus')
                             executePendingAttacks(data).catch(err => {
                                 logger.error('⚔️ [EXECUTE ATTACKS] Fehler:', err)
                             })
                             timeoutKeysRef.current.delete(timeoutKey)
                         }, 500)
                         timeoutIdsRef.current.push(timeoutId)
-                    } else {
-                        logger.log('⚔️ [EXECUTE ATTACKS] Bereits geplant, überspringe')
                     }
                 } else if (allDecided && recapNotShown && !hasTruth && isHost && data.host === myName) {
                     logger.warn('⚠️ [EXECUTE ATTACKS] Alle haben entschieden, aber Hotseat hat noch keine Antwort - warte auf Hotseat')
-                } else {
-                    logger.log('⚔️ [EXECUTE ATTACKS] Wird NICHT ausgeführt:', {
-                        roundId: data.roundId,
-                        reason: !canExecuteAttacks ? 'Bedingungen nicht erfüllt' : 'Unbekannt',
-                        allDecided: allDecided,
-                        allVoted: allVoted,
-                        recapNotShown: recapNotShown,
-                        hasTruth: hasTruth,
-                        isHost: isHost,
-                        isMeHost: data.host === myName
-                    })
                 }
             } else if (data.status === 'winner') {
-                setCurrentScreen('winner')
+                if (currentScreen !== 'winner') {
+                    logger.log('🏆 [SCREEN] Wechsel zu Winner')
+                    setCurrentScreen('winner')
+                }
             }
             
             // Host Auto-Advance: Wenn alle Spieler geantwortet haben, automatisch zu Result
+            // WICHTIG: Diese Logik wird IMMER ausgeführt, wenn status === 'game'
             // HOST-FAILOVER: Backup-Host kann übernehmen wenn Host inaktiv ist
             // WICHTIG: Hotseat MUSS auch geantwortet haben!
             // WICHTIG: Nur aktive Spieler (nicht eliminiert) zählen!
-            const lastHostActivityAdvance = data.lastHostActivity
-            // WICHTIG: Wenn lastHostActivity nicht gesetzt ist, prüfe ob wir der Host sind
-            const hostInactiveAdvance = lastHostActivityAdvance && lastHostActivityAdvance.toMillis ? (Date.now() - lastHostActivityAdvance.toMillis()) > GAME_CONSTANTS.HOST_INACTIVE_THRESHOLD : false
-            const hostNameAdvance = data.host
-            const maxTempAdvance = data.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
-            const sortedActivePlayersAdvance = getActivePlayers(data.players, maxTempAdvance)
-            const myIndexAdvance = sortedActivePlayersAdvance.indexOf(myName)
-            const isFirstBackupHostAdvance = myIndexAdvance === 0 && sortedActivePlayersAdvance.length > 0 && sortedActivePlayersAdvance[0] !== hostNameAdvance
-            const isHostActiveAdvance = !hostInactiveAdvance && hostNameAdvance === myName
-            // WICHTIG: Erlaube Auto-Advance auch wenn Host nicht aktiv ist, aber wir sind der Host oder Backup-Host
-            const canAutoAdvance = data.status === 'game' && data.votes && (isHostActiveAdvance || (hostInactiveAdvance && isFirstBackupHostAdvance) || (hostNameAdvance === myName && !lastHostActivityAdvance))
             
-            logger.log('⏩ [AUTO-ADVANCE] Basis-Prüfung:', {
-                roundId: data.roundId,
-                status: data.status,
-                hasVotes: !!data.votes,
-                isHost: isHost,
-                isMeHost: data.host === myName,
-                isHostActiveAdvance: isHostActiveAdvance,
-                hostInactiveAdvance: hostInactiveAdvance,
-                isFirstBackupHostAdvance: isFirstBackupHostAdvance,
-                canAutoAdvance: canAutoAdvance
-            })
+            // WICHTIG: Prüfe IMMER, wenn status === 'game' ist
+            if (data.status === 'game') {
+                const lastHostActivityAdvance = data.lastHostActivity
+                // WICHTIG: Wenn lastHostActivity nicht gesetzt ist, prüfe ob wir der Host sind
+                const hostInactiveAdvance = lastHostActivityAdvance && lastHostActivityAdvance.toMillis ? (Date.now() - lastHostActivityAdvance.toMillis()) > GAME_CONSTANTS.HOST_INACTIVE_THRESHOLD : false
+                const hostNameAdvance = data.host
+                const maxTempAdvance = data.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
+                const sortedActivePlayersAdvance = getActivePlayers(data.players, maxTempAdvance)
+                const myIndexAdvance = sortedActivePlayersAdvance.indexOf(myName)
+                const isFirstBackupHostAdvance = myIndexAdvance === 0 && sortedActivePlayersAdvance.length > 0 && sortedActivePlayersAdvance[0] !== hostNameAdvance
+                const isHostActiveAdvance = !hostInactiveAdvance && hostNameAdvance === myName
+                
+                // WICHTIG: Prüfe zuerst, ob alle Spieler abgestimmt haben (inkl. Hotseat)
+                // Wenn ja, erlaube Auto-Advance für jeden Spieler (nicht nur Host)
+                const activePlayersAdvance = getActivePlayers(data.players, maxTempAdvance)
+                const playerCountAdvance = activePlayersAdvance.length
+                const voteCountAdvance = activePlayersAdvance.filter(p => {
+                    const vote = data.votes?.[p]
+                    if (!vote || vote.choice === undefined) return false
+                    const voteRoundId = vote?.roundId
+                    return voteRoundId !== undefined && voteRoundId === data.roundId
+                }).length
+                const hotseatAdvance = getHotseatName(data.hotseat)
+                const hotseatVoteAdvance = hotseatAdvance ? data.votes?.[hotseatAdvance] : null
+                const hotseatVoteRoundIdAdvance = hotseatVoteAdvance?.roundId
+                const hotseatHasVotedAdvance = hotseatAdvance && activePlayersAdvance.includes(hotseatAdvance) && 
+                    hotseatVoteAdvance?.choice !== undefined &&
+                    hotseatVoteRoundIdAdvance !== undefined && 
+                    hotseatVoteRoundIdAdvance === data.roundId
+                
+                // DEBUG: Detaillierte Prüfung für Hotseat-Vote
+                if (!hotseatHasVotedAdvance && hotseatAdvance) {
+                    logger.warn('⚠️ [AUTO-ADVANCE] Hotseat hat noch nicht (gültig) abgestimmt:', {
+                        hotseat: hotseatAdvance,
+                        hasVote: !!hotseatVoteAdvance,
+                        choice: hotseatVoteAdvance?.choice,
+                        voteRoundId: hotseatVoteRoundIdAdvance,
+                        currentRoundId: data.roundId,
+                        isActive: activePlayersAdvance.includes(hotseatAdvance)
+                    })
+                }
+
+                // WICHTIG: Wenn alle aktiven Spieler abgestimmt haben, dann MUSS auch der Hotseat dabei sein
+                // (da der Hotseat immer ein aktiver Spieler ist).
+                // Wir entfernen die strikte hotseatHasVotedAdvance Prüfung für den Trigger,
+                // da sie bei Namens-Unstimmigkeiten blockieren könnte.
+                const allVotedAdvance = voteCountAdvance >= playerCountAdvance && playerCountAdvance > 0
+                
+                // DEBUG: Warnung wenn rechnerisch alle abgestimmt haben, aber Hotseat-Check fehlschlägt
+                if (allVotedAdvance && !hotseatHasVotedAdvance && hotseatAdvance) {
+                     logger.warn('⚠️ [AUTO-ADVANCE] Alle haben abgestimmt, aber Hotseat-Check schlug fehl (Ignoriere)', {
+                        hotseat: hotseatAdvance,
+                        activePlayers: activePlayersAdvance
+                     })
+                }
+                
+                // WICHTIG: Erlaube Auto-Advance wenn:
+                // 1. Alle Spieler abgestimmt haben (inkl. Hotseat) - dann kann jeder Spieler den Wechsel auslösen
+                // 2. ODER wenn wir der Host/Backup-Host sind
+                const canAutoAdvance = data.votes && (
+                    allVotedAdvance || // Alle haben abgestimmt - jeder kann wechseln
+                    isHostActiveAdvance || // Aktiver Host
+                    (hostInactiveAdvance && isFirstBackupHostAdvance) || // Backup-Host bei inaktivem Host
+                    (hostNameAdvance === myName && !lastHostActivityAdvance) // Host ohne lastHostActivity
+                )
             
             if (canAutoAdvance) {
+                // WICHTIG: Verwende die bereits berechneten Werte aus der Basis-Prüfung
+                // Das verhindert Inkonsistenzen zwischen den Prüfungen
                 const maxTemp = data.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
-                // WICHTIG: Zähle nur aktive Spieler (nicht eliminiert)
                 const activePlayers = getActivePlayers(data.players, maxTemp)
                 const playerCount = activePlayers.length
-                // WICHTIG: Zähle nur Votes von aktiven Spielern
-                const voteCount = activePlayers.filter(p => {
-                    return data.votes?.[p]?.choice !== undefined
-                }).length
-                // WICHTIG: Stelle sicher, dass hotseat ein String ist
-                const hotseat = getHotseatName(data.hotseat)
-                const hotseatHasVoted = hotseat && activePlayers.includes(hotseat) && data.votes?.[hotseat]?.choice !== undefined
                 
-                logger.log('⏩ [AUTO-ADVANCE] Prüfung:', {
-                    roundId: data.roundId,
-                    status: data.status,
-                    activePlayers: activePlayers,
-                    playerCount: playerCount,
-                    voteCount: voteCount,
-                    hotseat: hotseat,
-                    hotseatHasVoted: hotseatHasVoted,
-                    votes: Object.keys(data.votes || {}),
-                    allPlayers: Object.keys(data.players || {}),
-                    hotseatVote: data.votes?.[hotseat]
-                })
+                // WICHTIG: Verwende die bereits berechneten Werte
+                const voteCount = voteCountAdvance
+                const hotseat = hotseatAdvance
+                const hotseatVote = hotseatVoteAdvance
+                const hotseatVoteRoundId = hotseatVoteRoundIdAdvance
+                const hotseatHasVoted = hotseatHasVotedAdvance
                 
-                // WICHTIG: Alle aktiven Spieler (inklusive Hotseat) müssen geantwortet haben
-                if (voteCount >= playerCount && playerCount > 0 && hotseatHasVoted) {
-                    // Verhindere mehrfache Ausführung
+                const allVotedCondition = voteCount >= playerCount && playerCount > 0
+                const hotseatCondition = hotseatHasVoted
+                const canAdvance = allVotedAdvance // Verwende die bereits berechnete Bedingung
+
+                if (canAdvance) {
+                    // Verhindere mehrfache Ausführung, ABER erlaube Retries nach einer gewissen Zeit
+                    // Verwende Timestamp im Key um bei jedem Update eine neue Chance zu haben, falls es lange her ist?
+                    // Nein, besser: Prüfe ob wir bereits versuchen
                     const timeoutKey = `autoAdvance_${data.roundId}`
+                    
+                    // Wenn der Key existiert, aber es ist schon > 5 Sekunden her, versuche es nochmal
+                    // Dazu müssten wir den Timestamp speichern. Vereinfachung:
+                    // Wir vertrauen auf retryFirebaseOperation. Wenn das durchläuft, ist gut.
+                    // Wenn nicht, wird timeoutKey nicht gelöscht? Doch, im finally/catch/timeout callback.
+                    
                     if (!timeoutKeysRef.current.has(timeoutKey)) {
                         timeoutKeysRef.current.add(timeoutKey)
-                        logger.log('⏩ [AUTO-ADVANCE] Alle haben geantwortet (inkl. Hotseat), wechsle zu Result in 1000ms')
                         const timeoutId = setTimeout(async () => {
-                            logger.log('⏩ [AUTO-ADVANCE] Wechsle jetzt zu Result-Screen')
                             try {
                                 await retryFirebaseOperation(
                                     () => updateDoc(doc(db, "lobbies", roomId), { 
@@ -1781,29 +1622,33 @@ function App() {
                                     }),
                                     `autoAdvance_${data.roundId}`,
                                     5, // Mehr Retries bei schlechtem Internet
-                                    2000 // Längere Delay bei Retries
+                                    1000 // Kürzere Delay bei Retries
                                 )
-                                logger.log('⏩ [AUTO-ADVANCE] Erfolgreich zu Result gewechselt')
                             } catch (err) {
-                                logger.error('⏩ [AUTO-ADVANCE] Fehler nach allen Retries:', err)
+                                logger.error('⏩ [AUTO-ADVANCE] Fehler:', err)
                                 // Setze Status auf 'slow' um zu signalisieren, dass es Probleme gibt
                                 setConnectionStatus('slow')
+                                // WICHTIG: Lösche Key bei Fehler, damit wir es beim nächsten Snapshot nochmal versuchen können!
+                                timeoutKeysRef.current.delete(timeoutKey)
                             }
-                            timeoutKeysRef.current.delete(timeoutKey)
-                        }, 1000)
+                            // Normalerweise Key löschen, aber bei Erfolg wollen wir nicht sofort nochmal feuern (Status ändert sich eh)
+                            // Aber falls Status-Update langsam ist, könnte Snapshot nochmal feuern.
+                            // Lassen wir den Key drin, bis Status sich ändert (dann wird Snapshot eh neu ausgeführt mit neuem Status)
+                            // ABER: Wenn wir im 'game' Status bleiben (weil Update failed), müssen wir retryen.
+                            // Da wir oben catch haben, löschen wir dort den Key.
+                            // Hier (im success case) lassen wir ihn drin, oder löschen ihn verzögert?
+                            // Löschen wir ihn, damit bei nächsten Snapshot (falls Status noch game) nochmal geprüft wird?
+                            // Nein, das würde zu Loop führen. 
+                            // Wir verlassen uns darauf, dass Status zu 'result' wechselt.
+                        }, 500)
                         timeoutIdsRef.current.push(timeoutId)
-                    } else {
-                        logger.log('⏩ [AUTO-ADVANCE] Bereits geplant, überspringe')
-                    }
-                } else {
-                    if (!hotseatHasVoted) {
-                        logger.log('⏩ [AUTO-ADVANCE] Hotseat hat noch nicht geantwortet:', hotseat, '| Warte...')
-                    } else {
-                        logger.log('⏩ [AUTO-ADVANCE] Noch nicht alle geantwortet:', voteCount, '/', playerCount)
                     }
                 }
             }
+            } // Ende von if (data.status === 'game')
             
+            // Auto-Next läuft wenn Status 'result' ist
+            if (data.status === 'result') {
             // Host Auto-Next: Wenn alle Spieler ihre Antwort abgegeben haben UND Popups bestätigt wurden, automatisch nächste Runde
             // HOST-FAILOVER: Backup-Host kann übernehmen wenn Host inaktiv ist
             // WICHTIG: Prüfe auf votes statt ready - wenn alle abgestimmt haben, geht es weiter
@@ -1829,8 +1674,12 @@ function App() {
                 return temp < maxTempCheck
             })
             const playerCountCheck = activePlayersCheck.length
+            // WICHTIG: Zähle nur Votes aus der aktuellen Runde
             const voteCountCheck = activePlayersCheck.filter(p => {
-                return data.votes?.[p]?.choice !== undefined
+                const vote = data.votes?.[p]
+                if (!vote || vote.choice === undefined) return false
+                const voteRoundId = vote.roundId
+                return voteRoundId !== undefined && voteRoundId === data.roundId
             }).length
             const readyListCheck = data.ready || []
             const readyCountCheck = activePlayersCheck.filter(p => readyListCheck.includes(p)).length
@@ -1849,7 +1698,6 @@ function App() {
             // setze es auf true (nur Host oder Backup-Host)
             if (data.status === 'result' && !roundRecapShownForNext && allReadyCheck && allVotedCheck && allPopupConfirmedCheck && 
                 (isHostActiveNext || (hostInactiveNext && isFirstBackupHostNext)) && db && roomId) {
-                logger.log('⏭️ [AUTO-NEXT] Setze roundRecapShown auf true, da alle bereit sind')
                 updateDoc(doc(db, "lobbies", roomId), {
                     roundRecapShown: true
                 }).catch(err => {
@@ -1867,18 +1715,6 @@ function App() {
                 (allReadyCheck && allVotedCheck && allPopupConfirmedCheck && sortedActivePlayersNext.includes(myName))
             )
             
-            logger.log('⏭️ [AUTO-NEXT] Basis-Prüfung:', {
-                roundId: data.roundId,
-                status: data.status,
-                isHost: isHost,
-                isMeHost: data.host === myName,
-                roundRecapShownForNext: roundRecapShownForNext,
-                canAutoNext: canAutoNext,
-                allReadyCheck: allReadyCheck,
-                allVotedCheck: allVotedCheck,
-                allPopupConfirmedCheck: allPopupConfirmedCheck
-            })
-            
             if (canAutoNext) {
                 const maxTemp = data.config?.maxTemp || 100
                 // WICHTIG: Zähle nur aktive Spieler (nicht eliminiert)
@@ -1888,8 +1724,13 @@ function App() {
                 })
                 const playerCount = activePlayers.length
                 // WICHTIG: Prüfe auf votes statt ready - alle müssen abgestimmt haben
+                // WICHTIG: Zähle nur Votes mit richtiger roundId
                 const voteCount = activePlayers.filter(p => {
-                    return data.votes?.[p]?.choice !== undefined
+                    const vote = data.votes?.[p]
+                    if (!vote || vote.choice === undefined) return false
+                    // WICHTIG: Prüfe ob Vote aus aktueller Runde stammt
+                    const voteRoundId = vote.roundId
+                    return voteRoundId !== undefined && voteRoundId === data.roundId
                 }).length
                 const popupConfirmed = data.popupConfirmed || {}
                 // WICHTIG: Prüfe ob alle Popups bestätigt wurden ODER ob keine Attack-Results existieren (keine Popups nötig)
@@ -1905,32 +1746,13 @@ function App() {
                 const readyCount = activePlayers.filter(p => readyList.includes(p)).length
                 const allReady = readyCount >= playerCount && playerCount > 0
                 
-                logger.log('⏭️ [AUTO-NEXT] Prüfung:', {
-                    roundId: data.roundId,
-                    status: data.status,
-                    roundRecapShown: data.roundRecapShown,
-                    activePlayers: activePlayers,
-                    playerCount: playerCount,
-                    voteCount: voteCount,
-                    votes: Object.keys(data.votes || {}),
-                    hasAttackResults: hasAttackResults,
-                    allPopupConfirmed: allPopupConfirmed,
-                    popupConfirmed: popupConfirmed,
-                    attackResults: Object.keys(data.attackResults || {}),
-                    readyList: readyList,
-                    readyCount: readyCount,
-                    allReady: allReady
-                })
+                const shouldNext = voteCount >= playerCount && playerCount > 0 && allReady
                 
-                // Alle aktiven Spieler müssen abgestimmt haben UND alle Popups bestätigt haben (falls nötig) UND alle bereit sein
-                if (voteCount >= playerCount && playerCount > 0 && allPopupConfirmed && allReady) {
-                    // Verhindere mehrfache Ausführung
+                if (shouldNext) {
                     const timeoutKey = `autoNext_${data.roundId}`
                     if (!timeoutKeysRef.current.has(timeoutKey)) {
                         timeoutKeysRef.current.add(timeoutKey)
-                        logger.log('⏭️ [AUTO-NEXT] Alle haben abgestimmt und Popups bestätigt, starte nächste Runde in 1000ms')
                         const timeoutId = setTimeout(async () => {
-                            logger.log('⏭️ [AUTO-NEXT] Starte nächste Runde')
                             try {
                                 // Verwende retryFirebaseOperation für robustere Fehlerbehandlung
                                 await retryFirebaseOperation(
@@ -1939,7 +1761,6 @@ function App() {
                                     5, // Mehr Retries bei schlechtem Internet
                                     2000 // Längere Delay bei Retries
                                 )
-                                logger.log('⏭️ [AUTO-NEXT] Nächste Runde erfolgreich gestartet')
                             } catch (err) {
                                 logger.error('⏭️ [AUTO-NEXT] Fehler nach allen Retries:', err)
                                 // Setze Status auf 'slow' um zu signalisieren, dass es Probleme gibt
@@ -1948,43 +1769,16 @@ function App() {
                             timeoutKeysRef.current.delete(timeoutKey)
                         }, 1000)
                         timeoutIdsRef.current.push(timeoutId)
-                    } else {
-                        logger.log('⏭️ [AUTO-NEXT] Bereits geplant, überspringe')
                     }
-                } else {
-                    logger.log('⏭️ [AUTO-NEXT] Bedingungen nicht erfüllt:', {
-                        voteCheck: voteCount >= playerCount,
-                        popupCheck: allPopupConfirmed,
-                        readyCheck: allReady,
-                        voteCount: voteCount,
-                        playerCount: playerCount,
-                        readyCount: readyCount,
-                        readyList: readyList,
-                        hasAttackResults: hasAttackResults,
-                        votes: Object.keys(data.votes || {}),
-                        popupConfirmed: popupConfirmed,
-                        missingPopups: Object.keys(data.players || {}).filter(p => {
-                            if (!data.attackResults?.[p]) return false
-                            return popupConfirmed[p] !== true
-                        }),
-                        missingReady: activePlayers.filter(p => !readyList.includes(p))
-                    })
                 }
-            } else {
-                logger.log('⏭️ [AUTO-NEXT] Basis-Bedingungen nicht erfüllt:', {
-                    roundId: data.roundId,
-                    status: data.status,
-                    isHost: isHost,
-                    isMeHost: data.host === myName,
-                    roundRecapShownForNext: roundRecapShownForNext
-                })
             }
-            },
-            {
-                // Verbindungsstatus-Überwachung für bessere Fehlerbehandlung
-                includeMetadataChanges: true
-            }
-        )
+            } // Ende von if (data.status === 'result')
+        }, // Ende von onSnapshot callback
+        {
+            // Verbindungsstatus-Überwachung für bessere Fehlerbehandlung
+            includeMetadataChanges: true
+        }
+    )
         
         // Verbindungsstatus-Überwachung
         const connectionCheckInterval = setInterval(() => {
@@ -1999,33 +1793,88 @@ function App() {
             }
         }, GAME_CONSTANTS.CONNECTION_CHECK_INTERVAL)
         
-        // PRESENCE-SYSTEM: Heartbeat - Aktualisiere lastSeen regelmäßig
+        // PRESENCE-SYSTEM: Heartbeat - Aktualisiere lastSeen regelmäßig (alle 5 Sekunden)
         // Dies ermöglicht es anderen Spielern zu sehen, wer online ist
         const presenceHeartbeatInterval = setInterval(async () => {
-            if (db && roomId && myName) {
-                try {
-                    await updateDoc(doc(db, "lobbies", roomId), {
-                        [`players.${myName}.lastSeen`]: serverTimestamp()
-                    })
-                } catch (err) {
-                    // Fehler beim Heartbeat sind nicht kritisch - nur loggen
-                    logger.debug('💓 [PRESENCE] Heartbeat-Fehler (nicht kritisch):', err)
-                }
+            if (!db || !roomId || !myName) {
+                return // Stoppe Heartbeat wenn roomId leer ist
             }
-        }, GAME_CONSTANTS.PRESENCE_HEARTBEAT_INTERVAL)
+            
+            try {
+                // Prüfe ob Lobby noch existiert, bevor wir updaten
+                const lobbyDoc = await getDoc(doc(db, "lobbies", roomId))
+                if (!lobbyDoc.exists()) {
+                    logger.debug('💓 [PRESENCE] Lobby existiert nicht mehr, stoppe Heartbeat')
+                    return
+                }
+                
+                const lobbyData = lobbyDoc.data()
+                if (lobbyData?.status === 'deleted') {
+                    logger.debug('💓 [PRESENCE] Lobby wurde gelöscht, stoppe Heartbeat')
+                    return
+                }
+                
+                await updateDoc(doc(db, "lobbies", roomId), {
+                    [`players.${myName}.lastSeen`]: serverTimestamp()
+                })
+            } catch (err) {
+                // Fehler beim Heartbeat sind nicht kritisch - nur loggen
+                // Aber stoppe Heartbeat bei permission-denied (Lobby wurde gelöscht)
+                if (err?.code === 'permission-denied' || err?.code === 'not-found') {
+                    logger.debug('💓 [PRESENCE] Heartbeat gestoppt (Lobby existiert nicht mehr)')
+                    return
+                }
+                logger.debug('💓 [PRESENCE] Heartbeat-Fehler (nicht kritisch):', err)
+            }
+        }, 5000) // Alle 5 Sekunden (statt 10)
+        
+        // HOST: Prüfe auf inaktive Spieler (alle 10 Sekunden)
+        // Markiere Spieler als inaktiv, wenn lastSeen > 15 Sekunden alt ist
+        const inactivePlayerCheckInterval = setInterval(async () => {
+            if (!isHost || !db || !roomId || !globalData?.players) {
+                return // Nur Host prüft auf inaktive Spieler
+            }
+            
+            try {
+                const now = Date.now()
+                const INACTIVE_THRESHOLD = 15000 // 15 Sekunden
+                const inactivePlayers = []
+                
+                // Prüfe alle Spieler auf Inaktivität
+                for (const [playerName, playerData] of Object.entries(globalData.players)) {
+                    const lastSeen = playerData?.lastSeen
+                    if (lastSeen && lastSeen.toMillis) {
+                        const timeSinceLastSeen = now - lastSeen.toMillis()
+                        if (timeSinceLastSeen > INACTIVE_THRESHOLD) {
+                            inactivePlayers.push(playerName)
+                            logger.warn(`💓 [PRESENCE] Spieler ${playerName} ist inaktiv (${Math.round(timeSinceLastSeen / 1000)}s)`)
+                        }
+                    }
+                }
+                
+                // TODO: Optional - Markiere inaktive Spieler oder entferne sie aus activePlayers Berechnung
+                // Für jetzt nur loggen
+                if (inactivePlayers.length > 0) {
+                    logger.warn('💓 [PRESENCE] Inaktive Spieler erkannt:', inactivePlayers)
+                }
+            } catch (err) {
+                logger.debug('💓 [PRESENCE] Fehler beim Prüfen auf inaktive Spieler:', err)
+            }
+        }, 10000) // Alle 10 Sekunden
         
         // Cleanup-Funktion: Räume alle Timeouts auf und beende den Listener
         return () => {
             unsubscribe()
             clearInterval(connectionCheckInterval)
             clearInterval(presenceHeartbeatInterval)
+            clearInterval(inactivePlayerCheckInterval)
             // WICHTIG: Räume alle Timeouts auf, um Memory Leaks zu vermeiden
             timeoutIdsRef.current.forEach(id => clearTimeout(id))
             timeoutIdsRef.current = []
             // Räume auch timeoutKeys auf
             timeoutKeysRef.current.clear()
         }
-    }, [db, roomId, myName, isHost, globalData?.status, globalData?.roundId, globalData?.hotseat, currentScreen, showCountdown])
+        }, [db, roomId, myName, isHost])
     
     // Emoji auswählen - mit zentriertem Scrollen
     const emojiGalleryRef = useRef(null)
@@ -2185,45 +2034,89 @@ function App() {
             alert("Bitte wähle mindestens eine Kategorie aus!")
             return
         }
+        if (!db) {
+            alert("Fehler: Firebase ist noch nicht initialisiert. Bitte warte einen Moment und versuche es erneut.")
+            logger.error('❌ [CREATE GAME] Firebase DB nicht verfügbar')
+            return
+        }
         
-        const dmg = gameMode === GAME_MODE.STRATEGIC ? GAME_CONSTANTS.ATTACK_DMG_STRATEGIC : GAME_CONSTANTS.ATTACK_DMG_PARTY
-        const speed = gameMode === GAME_MODE.STRATEGIC ? 1.0 : 1.5
-        const maxTemp = gameMode === GAME_MODE.STRATEGIC ? GAME_CONSTANTS.MAX_TEMP_STRATEGIC : GAME_CONSTANTS.MAX_TEMP_DEFAULT
+        const dmg = GAME_CONSTANTS.ATTACK_DMG_PARTY
+        const speed = 1.5
+        const maxTemp = GAME_CONSTANTS.MAX_TEMP_DEFAULT
         
         const code = Math.random().toString(36).substring(2, 6).toUpperCase()
-        setRoomId(code)
-        sessionStorage.setItem("hk_room", code)
-        setIsHost(true)
         
-        const allQuestions = getAllQuestions(selectedCategories)
-        const firstQuestion = allQuestions[0] || { q: "Willkommen zu Hitzkopf!", a: "A", b: "B" }
-        const firstCategory = firstQuestion.category || null
-        
-        await setDoc(doc(db, "lobbies", code), {
-            host: myName,
-            hostName: myName,
-            status: "lobby",
-            createdAt: serverTimestamp(),
-            players: { 
-                [myName]: { 
-                    temp: 0, 
-                    inventory: [], 
-                    emoji: myEmoji,
-                    lastSeen: serverTimestamp() // Presence-Tracking
-                } 
-            },
-            config: { dmg, speed, startTemp: 0, maxTemp, gameMode, categories: selectedCategories },
-            votes: {},
-            ready: [],
-            log: [],
-            hotseat: "",
-            currentQ: firstQuestion,
-            roundId: 0,
-            lobbyReady: {},
-            lastQuestionCategory: firstCategory,
-        })
-        
-        setCurrentScreen('lobby')
+        try {
+            const allQuestions = getAllQuestions(selectedCategories)
+            const firstQuestion = allQuestions[0] || { q: "Willkommen zu Hitzkopf!", a: "A", b: "B" }
+            const firstCategory = firstQuestion.category || null
+            
+            logger.log('🎮 [CREATE GAME] Versuche Lobby zu erstellen:', {
+                code,
+                host: myName,
+                categories: selectedCategories.length,
+            })
+            
+            const lobbyData = {
+                host: myName,
+                hostName: myName,
+                status: "lobby",
+                createdAt: serverTimestamp(),
+                players: { 
+                    [myName]: { 
+                        temp: 0, 
+                        inventory: [], 
+                        emoji: myEmoji,
+                        lastSeen: serverTimestamp() // Presence-Tracking
+                    } 
+                },
+                config: { dmg, speed, startTemp: 0, maxTemp, categories: selectedCategories },
+                votes: {},
+                ready: [],
+                log: [],
+                hotseat: "",
+                currentQ: firstQuestion,
+                roundId: 0,
+                lobbyReady: {},
+            }
+            
+            // Füge lastQuestionCategory nur hinzu, wenn es nicht null ist
+            if (firstCategory) {
+                lobbyData.lastQuestionCategory = firstCategory
+            }
+            
+            await setDoc(doc(db, "lobbies", code), lobbyData)
+            
+            // Nur bei erfolgreicher Erstellung: States setzen und zur Lobby navigieren
+            setRoomId(code)
+            sessionStorage.setItem("hk_room", code)
+            setIsHost(true)
+            setCurrentScreen('lobby')
+            lastProcessedRoundIdRef.current = null // Reset für neue Lobby
+            
+            logger.log('✅ [CREATE GAME] Lobby erfolgreich erstellt:', code)
+        } catch (error) {
+            logger.error('❌ [CREATE GAME] Fehler beim Erstellen der Lobby:', {
+                error,
+                code: error.code,
+                message: error.message,
+                stack: error.stack
+            })
+            
+            // States zurücksetzen bei Fehler
+            setRoomId("")
+            sessionStorage.removeItem("hk_room")
+            setIsHost(false)
+            
+            // Benutzerfreundliche Fehlermeldung anzeigen
+            if (error.code === 'permission-denied') {
+                alert("Fehler: Keine Berechtigung zum Erstellen einer Lobby. Bitte überprüfe deine Firebase-Berechtigungen.")
+            } else if (error.code === 'unavailable') {
+                alert("Fehler: Firebase ist nicht verfügbar. Bitte überprüfe deine Internetverbindung.")
+            } else {
+                alert(`Fehler beim Erstellen des Spiels: ${error.message || 'Unbekannter Fehler'}`)
+            }
+        }
     }
     
     // Spiel beitreten (mit Raum-ID)
@@ -2257,6 +2150,7 @@ function App() {
         setRoomId(code)
         sessionStorage.setItem("hk_room", code)
         setIsHost(false)
+        lastProcessedRoundIdRef.current = null // Reset für neue Lobby
         
         await updateDoc(ref, {
             [`players.${myName}`]: { temp: 0, inventory: [], emoji: myEmoji },
@@ -2343,14 +2237,14 @@ function App() {
     
     // Spiel starten (nur Host)
     const startCountdown = async () => {
-        logger.log('🎮 [START COUNTDOWN] Starte Spiel:', {
+        logger.log('🎮 [START GAME] Starte Spiel:', {
             isHost: isHost,
             hasDb: !!db,
             roomId: roomId
         })
         
         if (!db || !roomId || !isHost) {
-            logger.warn('🎮 [START COUNTDOWN] Nicht der Host oder fehlende Parameter')
+            logger.warn('🎮 [START GAME] Nicht der Host oder fehlende Parameter')
             return
         }
         
@@ -2364,7 +2258,7 @@ function App() {
         const lobbyReady = globalData?.lobbyReady || {}
         const readyCount = activePlayers.filter(p => lobbyReady[p]).length
         
-        logger.log('🎮 [START COUNTDOWN] Prüfung:', {
+        logger.log('🎮 [START GAME] Prüfung:', {
             allPlayers: allPlayers,
             activePlayers: activePlayers,
             readyCount: readyCount,
@@ -2373,7 +2267,7 @@ function App() {
         })
         
         if (readyCount < activePlayers.length || activePlayers.length < 2) {
-            logger.warn('🎮 [START COUNTDOWN] Nicht alle aktiven Spieler bereit:', readyCount, '/', activePlayers.length)
+            logger.warn('🎮 [START GAME] Nicht alle aktiven Spieler bereit:', readyCount, '/', activePlayers.length)
             alert(`Alle aktiven Spieler müssen bereit sein! (${readyCount}/${activePlayers.length})`)
             return
         }
@@ -2397,14 +2291,14 @@ function App() {
         const randomQ = unusedQuestions[Math.floor(Math.random() * unusedQuestions.length)] || allQuestions[0]
         const nextRoundId = (globalData?.roundId ?? 0) + 1
         
-        logger.log('🎮 [START COUNTDOWN] Starte erste Runde:', {
+        logger.log('🎮 [START GAME] Starte erste Runde:', {
             hotseat: activePlayers[0],
             question: randomQ.q,
             roundId: nextRoundId,
             questionId: randomQ.id
         })
         
-        // WICHTIG: Direkt zu 'game' wechseln, kein Countdown
+        // Direkt zu 'game' wechseln
         playSound('game_start', 0.7) // Sound beim Spielstart
         await updateDoc(doc(db, "lobbies", roomId), {
             status: 'game',
@@ -2421,10 +2315,9 @@ function App() {
             attackResults: {},
             roundRecapShown: false,
             popupConfirmed: {},
-            countdownEnds: deleteField() // Stelle sicher, dass countdownEnds gelöscht wird
         })
         
-        logger.log('🎮 [START COUNTDOWN] Spiel gestartet, direkt zu Game-Status')
+        logger.log('🎮 [START GAME] Spiel gestartet, direkt zu Game-Status')
     }
     
     // Antwort wählen
@@ -2449,13 +2342,14 @@ function App() {
     }, [playSound, globalData, myName])
     
     // Antwort absenden - ATOMARES UPDATE (nur spezifischer Pfad)
-    const submitVote = async () => {
+    const submitVote = useCallback(async () => {
         logger.log('📝 [SUBMIT VOTE] Starte submitVote:', {
             mySelection: mySelection,
-            myName: myName,
-            roomId: roomId,
-            hasDb: !!db
+            isHost: isHost,
+            localActionDone: localActionDone
         })
+        
+        if (localActionDone) return // Bereits lokal als fertig markiert
         
         if (!db || !roomId) {
             logger.warn('📝 [SUBMIT VOTE] Fehlende Parameter (db oder roomId)')
@@ -2497,10 +2391,36 @@ function App() {
         })
         
         // WICHTIG: Prüfe ob bereits in dieser Runde abgestimmt wurde
-        if (existingVote && currentRoundId === (globalData?.roundId || 0)) {
-            logger.warn('📝 [SUBMIT VOTE] Bereits in dieser Runde abgestimmt:', existingVote)
+        // WICHTIG: existingVote könnte aus einer vorherigen Runde stammen!
+        // Prüfe daher, ob der Vote wirklich aus der aktuellen Runde stammt
+        const voteRoundId = existingVote?.roundId
+        // WICHTIG: Wenn Vote kein roundId-Feld hat, ist es aus einer alten Version
+        // In diesem Fall prüfe, ob die Runde sich geändert hat (Vote ist alt, wenn roundId fehlt)
+        const isVoteFromCurrentRound = existingVote && (
+            voteRoundId !== undefined && voteRoundId === currentRoundId // Vote hat roundId und stimmt überein
+        )
+        
+        // WICHTIG: Wenn Vote existiert aber keine roundId hat, ist es aus alter Version
+        // Erlaube in diesem Fall das Voten, da wir nicht sicher sein können, ob es aus aktueller Runde ist
+        // Die Transaction wird die finale Prüfung durchführen
+        
+        if (isVoteFromCurrentRound) {
+            logger.warn('📝 [SUBMIT VOTE] Bereits in dieser Runde abgestimmt:', {
+                existingVote: existingVote,
+                currentRoundId: currentRoundId,
+                voteRoundId: voteRoundId
+            })
             alert("Du hast bereits abgestimmt!")
             return
+        }
+        
+        // WICHTIG: Wenn Vote aus alter Runde stammt oder keine roundId hat, ignoriere es
+        if (existingVote && !isVoteFromCurrentRound) {
+            logger.log('📝 [SUBMIT VOTE] Vote aus alter Runde erkannt oder ohne roundId, ignoriere:', {
+                existingVote: existingVote,
+                currentRoundId: currentRoundId,
+                voteRoundId: voteRoundId
+            })
         }
         
         // WICHTIG: Prüfe ob mySelection noch gesetzt ist (könnte durch Re-Render zurückgesetzt worden sein)
@@ -2538,44 +2458,145 @@ function App() {
         
         // RACE-CONDITION-PREVENTION: Verwende runTransaction für atomares Update
         // Dies verhindert, dass mehrere Clients gleichzeitig voten oder doppelte Votes entstehen
+        // WICHTIG: Verwende retryFirebaseOperation für robustere Fehlerbehandlung
+        const operationId = `submitVote_${myName}_${currentRoundId}_${Date.now()}`
+        
+        // Versuche zuerst mit Transaction, falls das fehlschlägt, verwende updateDoc als Fallback
+        let success = false
+        let transactionFailed = false
+        
         try {
-            await runTransaction(db, async (transaction) => {
-                const lobbyRef = doc(db, "lobbies", roomId)
-                const lobbyDoc = await transaction.get(lobbyRef)
-                
-                if (!lobbyDoc.exists()) {
-                    throw new Error("Lobby existiert nicht mehr!")
-                }
-                
-                const lobbyData = lobbyDoc.data()
-                const currentRoundIdInTransaction = lobbyData?.roundId || 0
-                const existingVoteInTransaction = lobbyData?.votes?.[myName]
-                
-                // WICHTIG: Prüfe ob bereits in dieser Runde abgestimmt wurde
-                if (existingVoteInTransaction && currentRoundIdInTransaction === currentRoundId) {
-                    throw new Error("Du hast bereits abgestimmt!")
-                }
-                
-                // Atomar: Vote setzen
-                transaction.update(lobbyRef, {
-                    [`votes.${myName}`]: { 
-                        choice: String(voteChoice), 
-                        strategy: myStrategy || 'none',
-                        timestamp: serverTimestamp()
+            success = await retryFirebaseOperation(async () => {
+                await runTransaction(db, async (transaction) => {
+                    const lobbyRef = doc(db, "lobbies", roomId)
+                    const lobbyDoc = await transaction.get(lobbyRef)
+                    
+                    if (!lobbyDoc.exists()) {
+                        throw new Error("Lobby existiert nicht mehr!")
                     }
+                    
+                    const lobbyData = lobbyDoc.data()
+                    const currentRoundIdInTransaction = lobbyData?.roundId || 0
+                    
+                    // WICHTIG: Prüfe ob roundId sich geändert hat (neue Runde gestartet)
+                    if (currentRoundIdInTransaction !== currentRoundId) {
+                        logger.warn('📝 [SUBMIT VOTE] RoundId hat sich geändert während Transaction:', {
+                            expectedRoundId: currentRoundId,
+                            actualRoundId: currentRoundIdInTransaction
+                        })
+                        throw new Error("Runde hat sich geändert!")
+                    }
+                    
+                    const existingVoteInTransaction = lobbyData?.votes?.[myName]
+                    
+                    // WICHTIG: Prüfe ob bereits in dieser Runde abgestimmt wurde
+                    // Verwende roundId aus dem Vote, falls vorhanden, sonst prüfe gegen aktuelle roundId
+                    const existingVoteRoundId = existingVoteInTransaction?.roundId
+                    const hasVotedInCurrentRound = existingVoteInTransaction && (
+                        (existingVoteRoundId !== undefined && existingVoteRoundId === currentRoundIdInTransaction) ||
+                        (existingVoteRoundId === undefined && currentRoundIdInTransaction === currentRoundId)
+                    )
+                    
+                    if (hasVotedInCurrentRound) {
+                        logger.warn('📝 [SUBMIT VOTE] Bereits in dieser Runde abgestimmt (Transaction):', {
+                            existingVote: existingVoteInTransaction,
+                            currentRoundIdInTransaction: currentRoundIdInTransaction,
+                            existingVoteRoundId: existingVoteRoundId,
+                            currentRoundId: currentRoundId
+                        })
+                        throw new Error("Du hast bereits abgestimmt!")
+                    }
+                    
+                    // Atomar: Vote setzen mit roundId, damit man später prüfen kann, ob Vote aus aktueller Runde stammt
+                    transaction.update(lobbyRef, {
+                        [`votes.${myName}`]: { 
+                            choice: String(voteChoice), 
+                            strategy: myStrategy || 'none',
+                            roundId: currentRoundIdInTransaction, // WICHTIG: Speichere roundId im Vote
+                            timestamp: serverTimestamp()
+                        }
+                    })
                 })
-            })
-            
-            logger.log('📝 [SUBMIT VOTE] Vote erfolgreich gesendet (Transaction)')
+            }, operationId, 3, 500) // Weniger Retries für Transaction, da sie automatisch wiederholt wird
         } catch (err) {
-            logger.error("📝 [SUBMIT VOTE] Fehler beim Absenden der Antwort:", err)
-            if (err.message === "Du hast bereits abgestimmt!") {
-                alert("Du hast bereits abgestimmt!")
+            // Transaction fehlgeschlagen - verwende updateDoc als Fallback
+            if (err?.code === 'failed-precondition' || err?.message?.includes('failed-precondition')) {
+                transactionFailed = true
+                logger.warn('📝 [SUBMIT VOTE] Transaction fehlgeschlagen, verwende updateDoc als Fallback:', err)
+                
+                // Fallback: Verwende updateDoc direkt (ohne Transaction)
+                // Prüfe zuerst, ob bereits abgestimmt wurde
+                try {
+                    const lobbyDoc = await getDoc(doc(db, "lobbies", roomId))
+                    if (!lobbyDoc.exists()) {
+                        throw new Error("Lobby existiert nicht mehr!")
+                    }
+                    
+                    const lobbyData = lobbyDoc.data()
+                    const currentRoundIdInFallback = lobbyData?.roundId || 0
+                    
+                    // Prüfe ob roundId sich geändert hat
+                    if (currentRoundIdInFallback !== currentRoundId) {
+                        logger.warn('📝 [SUBMIT VOTE] RoundId hat sich geändert:', {
+                            expectedRoundId: currentRoundId,
+                            actualRoundId: currentRoundIdInFallback
+                        })
+                        throw new Error("Runde hat sich geändert!")
+                    }
+                    
+                    const existingVoteInFallback = lobbyData?.votes?.[myName]
+                    const existingVoteRoundId = existingVoteInFallback?.roundId
+                    const hasVotedInCurrentRound = existingVoteInFallback && (
+                        (existingVoteRoundId !== undefined && existingVoteRoundId === currentRoundIdInFallback) ||
+                        (existingVoteRoundId === undefined && currentRoundIdInFallback === currentRoundId)
+                    )
+                    
+                    if (hasVotedInCurrentRound) {
+                        logger.warn('📝 [SUBMIT VOTE] Bereits in dieser Runde abgestimmt (Fallback):', {
+                            existingVote: existingVoteInFallback,
+                            currentRoundIdInFallback: currentRoundIdInFallback
+                        })
+                        throw new Error("Du hast bereits abgestimmt!")
+                    }
+                    
+                    // Verwende updateDoc als Fallback
+                    success = await retryFirebaseOperation(async () => {
+                        await updateDoc(doc(db, "lobbies", roomId), {
+                            [`votes.${myName}`]: { 
+                                choice: String(voteChoice), 
+                                strategy: myStrategy || 'none',
+                                roundId: currentRoundIdInFallback,
+                                timestamp: serverTimestamp()
+                            }
+                        })
+                    }, `${operationId}_fallback`, 3, 500)
+                } catch (fallbackErr) {
+                    logger.error('📝 [SUBMIT VOTE] Fallback fehlgeschlagen:', fallbackErr)
+                    success = false
+                }
             } else {
-                alert("Fehler beim Absenden der Antwort!")
+                // Anderer Fehler - nicht retryen
+                logger.error('📝 [SUBMIT VOTE] Transaction-Fehler (nicht failed-precondition):', err)
+                success = false
             }
         }
-    }
+        
+        if (success) {
+            logger.log('📝 [SUBMIT VOTE] Vote erfolgreich gesendet (Transaction)')
+            setLocalActionDone(true) // Erst JETZT UI updaten (falls nicht schon durch Listener passiert)
+            playSound('click', 0.3) // Sound beim Auswählen einer Antwort
+        } else {
+            logger.error("📝 [SUBMIT VOTE] Fehler beim Absenden der Antwort nach mehreren Versuchen")
+            // Prüfe ob es ein "Du hast bereits abgestimmt!" Fehler war
+            const existingVote = globalData?.votes?.[myName]
+            if (existingVote?.roundId === currentRoundId) {
+                logger.warn('📝 [SUBMIT VOTE] Bereits abgestimmt in dieser Runde')
+                alert("Du hast bereits abgestimmt!")
+            } else {
+                alert("Fehler beim Absenden der Antwort! Bitte versuche es erneut.")
+            }
+        }
+    }, [playSound, globalData, myName, mySelection, myStrategy, db, roomId])
     
     // Bereit setzen (für Result-Screen)
     const setReady = async () => {
@@ -2586,18 +2607,12 @@ function App() {
             return
         }
         
-        // WICHTIG: Lese aktuelle ready-Liste direkt aus Firebase, nicht aus globalData
-        // Das verhindert Race-Conditions und unnötige Re-Renders
+        // WICHTIG: Verwende atomare Operationen (arrayUnion/arrayRemove) statt Array-Ersetzung
+        // Das verhindert Race-Conditions, wenn mehrere Spieler gleichzeitig ihren Status ändern
         const ref = doc(db, "lobbies", roomId)
-        const currentDoc = await getDoc(ref)
         
-        if (!currentDoc.exists()) {
-            logger.error('👍 [SET READY] Lobby existiert nicht mehr')
-            return
-        }
-        
-        const currentData = currentDoc.data()
-        const currentReady = currentData?.ready || []
+        // Prüfe aktuellen Status aus globalData (schneller als getDoc)
+        const currentReady = globalData?.ready || []
         const isReady = currentReady.includes(myName)
         
         logger.log('👍 [SET READY] Aktueller Status:', {
@@ -2606,35 +2621,49 @@ function App() {
             willToggle: !isReady
         })
         
-        // WICHTIG: Prüfe ob bereits in der Liste (verhindert doppelte Einträge)
-        if (isReady) {
-            // Entferne aus ready-Liste
-            const updatedReady = currentReady.filter(n => n !== myName)
-            await retryFirebaseOperation(async () => {
+        try {
+            if (isReady) {
+                // Entferne aus ready-Liste (atomar)
                 await updateDoc(ref, {
-                    ready: updatedReady
+                    ready: arrayRemove(myName)
                 })
-            }, 3, 500).then(success => {
-                if (success) {
-                    logger.log('👍 [SET READY] Nicht mehr bereit gesetzt')
-                } else {
-                    logger.error('👍 [SET READY] Fehler: Update nach mehreren Versuchen fehlgeschlagen')
-                }
-            })
-        } else {
-            // Füge zu ready-Liste hinzu
-            const updatedReady = [...currentReady, myName]
-            await retryFirebaseOperation(async () => {
+                logger.log('👍 [SET READY] Nicht mehr bereit gesetzt')
+            } else {
+                // Füge zu ready-Liste hinzu (atomar)
                 await updateDoc(ref, {
-                    ready: updatedReady
+                    ready: arrayUnion(myName)
                 })
-            }, 3, 500).then(success => {
-                if (success) {
-                    logger.log('👍 [SET READY] Bereit gesetzt')
-                } else {
-                    logger.error('👍 [SET READY] Fehler: Update nach mehreren Versuchen fehlgeschlagen')
+                logger.log('👍 [SET READY] Bereit gesetzt')
+            }
+        } catch (error) {
+            logger.error('👍 [SET READY] Fehler:', error)
+            // Bei Fehler: Versuche es nochmal mit getDoc für genauere Prüfung
+            try {
+                const currentDoc = await getDoc(ref)
+                if (!currentDoc.exists()) {
+                    logger.error('👍 [SET READY] Lobby existiert nicht mehr')
+                    return
                 }
-            })
+                const currentData = currentDoc.data()
+                const currentReadyCheck = currentData?.ready || []
+                const isReadyCheck = currentReadyCheck.includes(myName)
+                
+                if (isReadyCheck !== isReady) {
+                    // Status hat sich geändert, versuche es nochmal
+                    if (isReadyCheck) {
+                        await updateDoc(ref, {
+                            ready: arrayRemove(myName)
+                        })
+                    } else {
+                        await updateDoc(ref, {
+                            ready: arrayUnion(myName)
+                        })
+                    }
+                    logger.log('👍 [SET READY] Retry erfolgreich')
+                }
+            } catch (retryError) {
+                logger.error('👍 [SET READY] Retry fehlgeschlagen:', retryError)
+            }
         }
     }
     
@@ -2645,6 +2674,7 @@ function App() {
         setGlobalData(null)
         setCurrentScreen('start')
         sessionStorage.removeItem("hk_room")
+        lastProcessedRoundIdRef.current = null // Reset Ref
     }, [])
     
     // Spieler-Liste rendern
@@ -2721,44 +2751,23 @@ function App() {
         // WICHTIG: Markiere Popup als bestätigt, damit es nicht erneut angezeigt wird
         if (roomId && myName && db) {
             try {
-                const ref = doc(db, "lobbies", roomId)
-                const currentData = await getDoc(ref)
-                const currentPopupConfirmed = currentData.data()?.popupConfirmed || {}
-                
-                if (!currentPopupConfirmed[myName]) {
-                    logger.log('💥 [ATTACK MODAL] Markiere Popup als bestätigt für', myName)
-                    await updateDoc(ref, {
-                        [`popupConfirmed.${myName}`]: true
-                    })
-                    logger.log('💥 [ATTACK MODAL] Popup erfolgreich als bestätigt markiert')
-                } else {
-                    logger.log('💥 [ATTACK MODAL] Popup bereits als bestätigt markiert')
-                }
+                // Verwende retryFirebaseOperation
+                await retryFirebaseOperation(async () => {
+                    const ref = doc(db, "lobbies", roomId)
+                    const currentData = await getDoc(ref)
+                    const currentPopupConfirmed = currentData.data()?.popupConfirmed || {}
+                    
+                    if (!currentPopupConfirmed[myName]) {
+                        logger.log('💥 [ATTACK MODAL] Markiere Popup als bestätigt für', myName)
+                        await updateDoc(ref, {
+                            [`popupConfirmed.${myName}`]: true
+                        })
+                        logger.log('💥 [ATTACK MODAL] Popup erfolgreich als bestätigt markiert')
+                    }
+                }, `confirmPopup_${myName}`, 3, 500)
             } catch (err) {
                 logger.error('💥 [ATTACK MODAL] Fehler beim Markieren als bestätigt:', err)
-            }
-        }
-        
-        // WICHTIG: Setze Ref NICHT zurück, damit Modal nicht erneut angezeigt wird
-        
-        // Markiere Popup als bestätigt
-        if (roomId && myName && db) {
-            try {
-                const ref = doc(db, "lobbies", roomId)
-                const currentData = await getDoc(ref)
-                const currentPopupConfirmed = currentData.data()?.popupConfirmed || {}
-                
-                if (!currentPopupConfirmed[myName]) {
-                    logger.log('💥 [ATTACK MODAL] Markiere Popup als bestätigt für', myName)
-                    await updateDoc(ref, {
-                        [`popupConfirmed.${myName}`]: true
-                    })
-                    logger.log('💥 [ATTACK MODAL] Popup erfolgreich als bestätigt markiert')
-                } else {
-                    logger.log('💥 [ATTACK MODAL] Popup bereits als bestätigt markiert')
-                }
-            } catch (error) {
-                logger.error('💥 [ATTACK MODAL] Fehler beim Markieren des Popups als bestätigt:', error)
+                // Fehler ignorieren, da wir jetzt in autoNext darauf vertrauen, dass "Ready" reicht
             }
         }
     }
@@ -2815,34 +2824,23 @@ function App() {
     // Angriff ausführen
     const doAttack = async (target) => {
         playSound('attack', 0.6) // Sound beim Angriff
-        logger.log('🔥 [ATTACK] doAttack aufgerufen:', {
-            attacker: myName,
-            target: target,
-            roomId: roomId
-        })
+        logger.log('🔥 [ATTACK] Starte Angriff auf:', target)
         
         if (!db || !roomId) {
             logger.warn('🔥 [ATTACK] Fehlende Parameter')
             return
         }
         
-        setLocalActionDone(true)
-        logger.log('🔥 [ATTACK] localActionDone auf true gesetzt')
+        // UI-Feedback sofort: Aber localActionDone erst bei Erfolg final setzen
+        // Wir könnten hier einen Loading-State setzen, aber localActionDone verhindert weitere Klicks
+        // Das ist riskant wenn es fehlschlägt.
+        // Besser: Loading State.
         
-        const gameMode = globalData?.config?.gameMode || 'party'
-        const isPartyMode = gameMode === GAME_MODE.PARTY
-        const baseDmg = isPartyMode ? GAME_CONSTANTS.ATTACK_DMG_PARTY : (globalData?.config?.dmg || GAME_CONSTANTS.ATTACK_DMG_STRATEGIC)
+        const isPartyMode = true
+        const baseDmg = GAME_CONSTANTS.ATTACK_DMG_PARTY
         const attackerState = globalData?.players?.[myName] || {}
         const hasOil = attackerState.inventory?.includes('card_oil')
         const dmg = baseDmg * (hasOil ? 2 : 1)
-        
-        logger.log('🔥 [ATTACK] Angriffsdetails:', {
-            gameMode: gameMode,
-            isPartyMode: isPartyMode,
-            baseDmg: baseDmg,
-            hasOil: hasOil,
-            finalDmg: dmg
-        })
         
         // RACE-CONDITION-PREVENTION: Verwende runTransaction für atomares Update
         // Dies verhindert, dass mehrere Clients gleichzeitig angreifen oder doppelte Angriffe entstehen
@@ -2898,18 +2896,29 @@ function App() {
             })
             
             logger.log('🔥 [ATTACK] Angriff erfolgreich gesendet (Transaction)')
+            // WICHTIG: Erst JETZT UI sperren
+            setLocalActionDone(true)
+            
         } catch (err) {
             logger.error('🔥 [ATTACK] Fehler:', err)
             if (err.message === "Du hast bereits eine Angriffsentscheidung getroffen!") {
+                setLocalActionDone(true) // Korrigiere UI falls State inkonsistent
                 alert("Du hast bereits eine Angriffsentscheidung getroffen!")
             } else {
-                alert("Fehler beim Senden des Angriffs!")
+                alert("Fehler beim Senden des Angriffs: " + err.message)
+                // localActionDone NICHT setzen, damit User es nochmal versuchen kann
             }
         }
     }
     
     // Nächste Runde starten - NUR VOM HOST
     const nextRound = async () => {
+        // HOST AUTHORITY: Nur Host darf nextRound ausführen
+        if (!isHost) {
+            logger.warn('🔄 [NEXT ROUND] Nicht der Host - Zugriff verweigert')
+            return
+        }
+        
         const opId = `nextRound_${Date.now()}`
         pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
         logger.log('🔄 [NEXT ROUND] Starte nextRound:', {
@@ -2932,6 +2941,19 @@ function App() {
         }
         
         const currentData = currentDoc.data()
+        
+        // WICHTIG: Prüfe ob Lobby gelöscht wurde
+        if (currentData.status === 'deleted') {
+            logger.warn('🔄 [NEXT ROUND] Lobby wurde gelöscht')
+            return
+        }
+        
+        // WICHTIG: Prüfe ob roomId noch gesetzt ist (Race Condition Schutz)
+        if (!roomId) {
+            logger.warn('🔄 [NEXT ROUND] roomId wurde gelöscht')
+            return
+        }
+        
         const isCurrentHost = currentData.host === myName
         
         // WICHTIG: Erlaube auch Nicht-Hosts, wenn alle Bedingungen erfüllt sind (Failover)
@@ -2943,8 +2965,13 @@ function App() {
                 return temp < maxTemp
             })
             const playerCount = activePlayers.length
+            // WICHTIG: Zähle nur Votes mit richtiger roundId
             const voteCount = activePlayers.filter(p => {
-                return currentData.votes?.[p]?.choice !== undefined
+                const vote = currentData.votes?.[p]
+                if (!vote || vote.choice === undefined) return false
+                // WICHTIG: Prüfe ob Vote aus aktueller Runde stammt
+                const voteRoundId = vote.roundId
+                return voteRoundId !== undefined && voteRoundId === currentData.roundId
             }).length
             const readyList = currentData.ready || []
             const readyCount = activePlayers.filter(p => readyList.includes(p)).length
@@ -2962,12 +2989,29 @@ function App() {
             
             // Nur erlauben wenn alle Bedingungen erfüllt sind
             if (!(allReady && allVoted && allPopupConfirmed && roundRecapShown && currentData.status === 'result')) {
+                const voteDetails = activePlayers.map(p => {
+                    const vote = currentData.votes?.[p]
+                    return {
+                        player: p,
+                        hasVote: !!vote,
+                        choice: vote?.choice,
+                        roundId: vote?.roundId,
+                        currentRoundId: currentData.roundId,
+                        isValid: vote?.roundId === currentData.roundId
+                    }
+                })
                 logger.warn('🔄 [NEXT ROUND] Nicht der Host und Failover-Bedingungen nicht erfüllt:', {
+                    roundId: currentData.roundId,
                     allReady,
                     allVoted,
                     allPopupConfirmed,
                     roundRecapShown,
-                    status: currentData.status
+                    status: currentData.status,
+                    voteCount: voteCount,
+                    playerCount: playerCount,
+                    readyCount: readyCount,
+                    voteDetails: voteDetails,
+                    readyList: readyList
                 })
                 return
             }
@@ -3041,8 +3085,7 @@ function App() {
         const questionIndex = unusedQuestions.length > 0 ? (nextRoundId % unusedQuestions.length) : 0
         const randomQ = unusedQuestions[questionIndex] || allQuestions[0]
         
-        // WICHTIG: Countdown nur beim ersten Start, nicht bei jeder Runde
-        // Bei nextRound direkt zu 'game' wechseln, ohne Countdown
+        // Bei nextRound direkt zu 'game' wechseln
         
         logger.log('🔄 [NEXT ROUND] Runden-Details:', {
             currentHotseat: currentHotseat,
@@ -3065,16 +3108,33 @@ function App() {
         
         // ATOMARES UPDATE: Nur spezifische Felder setzen, nicht ganze Objekte überschreiben
         // Verwende deleteField für Felder, die zurückgesetzt werden sollen
+        logger.log('🔍 [NEXT ROUND] Erstelle updateData Objekt:', {
+            currentRoundId: currentData?.roundId,
+            nextRoundId: nextRoundId,
+            currentStatus: currentData?.status,
+            nextHotseat: nextHotseat,
+            hasRandomQ: !!randomQ,
+            randomQId: randomQ?.id,
+            randomQCategory: randomQ?.category
+        })
+        
         const updateData = {
-            status: 'game', // WICHTIG: Direkt zu 'game', kein 'countdown' bei nextRound
+            status: 'game',
             hotseat: nextHotseat,
             currentQ: randomQ,
             roundId: nextRoundId,
-            // WICHTIG: countdownEnds NICHT setzen - Countdown nur beim ersten Start
             lastQuestionCategory: randomQ.category,
             roundRecapShown: false,
             lastHostActivity: serverTimestamp() // Host-Aktivität für Failover-Tracking
         }
+        
+        logger.log('🔍 [NEXT ROUND] Basis-updateData erstellt:', {
+            keys: Object.keys(updateData),
+            status: updateData.status,
+            roundId: updateData.roundId,
+            hotseat: updateData.hotseat,
+            hasCurrentQ: !!updateData.currentQ
+        })
         
         // Lösche alte Felder atomar
         updateData.votes = deleteField()
@@ -3084,8 +3144,22 @@ function App() {
         updateData.attackDecisions = {}
         updateData.attackResults = {}
         updateData.popupConfirmed = {}
-        // WICHTIG: Lösche countdownEnds, falls es noch existiert
-        updateData.countdownEnds = deleteField()
+        
+        logger.log('🔍 [NEXT ROUND] updateData vollständig erstellt:', {
+            totalKeys: Object.keys(updateData).length,
+            hasDeleteFields: updateData.votes === deleteField(),
+            arrayFields: {
+                ready: Array.isArray(updateData.ready),
+                usedQuestions: Array.isArray(updateData.usedQuestions)
+            },
+            objectFields: {
+                lobbyReady: typeof updateData.lobbyReady === 'object',
+                pendingAttacks: typeof updateData.pendingAttacks === 'object',
+                attackDecisions: typeof updateData.attackDecisions === 'object',
+                attackResults: typeof updateData.attackResults === 'object',
+                popupConfirmed: typeof updateData.popupConfirmed === 'object'
+            }
+        })
         
         // Füge neue usedQuestion hinzu
         if (randomQ.id && !usedQuestionIds.includes(randomQ.id)) {
@@ -3095,32 +3169,119 @@ function App() {
         }
         
         logger.log('🔄 [NEXT ROUND] Update Firebase mit:', {
-            ...updateData,
+            roomId: roomId,
+            roundId: updateData.roundId,
+            status: updateData.status,
+            hotseat: updateData.hotseat,
+            currentQ: updateData.currentQ ? { q: updateData.currentQ.q?.substring(0, 50), category: updateData.currentQ.category } : null,
+            lastQuestionCategory: updateData.lastQuestionCategory,
+            roundRecapShown: updateData.roundRecapShown,
+            hasLastHostActivity: !!updateData.lastHostActivity,
             votes: '[deleteField]',
-            countdownEnds: '[deleteField]',
-            usedQuestions: updateData.usedQuestions?.length || 0
+            ready: Array.isArray(updateData.ready) ? updateData.ready : 'not array',
+            lobbyReady: updateData.lobbyReady ? Object.keys(updateData.lobbyReady).length : 0,
+            pendingAttacks: updateData.pendingAttacks ? Object.keys(updateData.pendingAttacks).length : 0,
+            attackDecisions: updateData.attackDecisions ? Object.keys(updateData.attackDecisions).length : 0,
+            attackResults: updateData.attackResults ? Object.keys(updateData.attackResults).length : 0,
+            popupConfirmed: updateData.popupConfirmed ? Object.keys(updateData.popupConfirmed).length : 0,
+            usedQuestions: Array.isArray(updateData.usedQuestions) ? updateData.usedQuestions.length : 'not array'
         })
         
+        // WICHTIG: Prüfe nochmal ob roomId noch gesetzt ist (Race Condition Schutz)
+        if (!roomId) {
+            logger.warn('🔄 [NEXT ROUND] roomId wurde gelöscht, breche ab')
+            pendingOperationsRef.current.delete(opId)
+            return
+        }
+        
         // WICHTIG: Retry-Mechanismus für blockierte Anfragen
+        logger.log('🔄 [NEXT ROUND] Starte Firebase-Update:', {
+            roomId: roomId,
+            updateDataKeys: Object.keys(updateData),
+            roundId: updateData.roundId,
+            status: updateData.status,
+            hasDeleteFields: updateData.votes === deleteField(),
+            updateDataSize: JSON.stringify(updateData).length
+        })
+        
         const success = await retryFirebaseOperation(async () => {
+            // Prüfe nochmal ob Lobby noch existiert
+            if (!roomId) {
+                throw new Error("roomId wurde gelöscht")
+            }
+            
+            // Detailliertes Log vor dem Update
+            logger.log('🔄 [NEXT ROUND] Versuche updateDoc:', {
+                roomId: roomId,
+                timestamp: Date.now(),
+                updateData: {
+                    status: updateData.status,
+                    roundId: updateData.roundId,
+                    hotseat: updateData.hotseat,
+                    hasVotes: updateData.votes !== undefined,
+                    readyLength: Array.isArray(updateData.ready) ? updateData.ready.length : 'not array',
+                    lobbyReadyKeys: updateData.lobbyReady ? Object.keys(updateData.lobbyReady).length : 0,
+                    pendingAttacksKeys: updateData.pendingAttacks ? Object.keys(updateData.pendingAttacks).length : 0,
+                    attackDecisionsKeys: updateData.attackDecisions ? Object.keys(updateData.attackDecisions).length : 0,
+                    attackResultsKeys: updateData.attackResults ? Object.keys(updateData.attackResults).length : 0,
+                    popupConfirmedKeys: updateData.popupConfirmed ? Object.keys(updateData.popupConfirmed).length : 0,
+                    usedQuestionsLength: Array.isArray(updateData.usedQuestions) ? updateData.usedQuestions.length : 'not array',
+                    hasCurrentQ: !!updateData.currentQ,
+                    lastQuestionCategory: updateData.lastQuestionCategory,
+                    roundRecapShown: updateData.roundRecapShown,
+                    hasLastHostActivity: !!updateData.lastHostActivity
+                }
+            })
+            
+            const updateStartTime = Date.now()
             await updateDoc(doc(db, "lobbies", roomId), updateData)
+            const updateDuration = Date.now() - updateStartTime
+            
+            logger.log('✅ [NEXT ROUND] updateDoc erfolgreich:', {
+                duration: updateDuration + 'ms',
+                roomId: roomId,
+                roundId: updateData.roundId,
+                timestamp: new Date().toISOString()
+            })
         }, opId, 3, 1000)
         
         if (success) {
             pendingOperationsRef.current.delete(opId)
-            logger.log('🔄 [NEXT ROUND] Firebase aktualisiert, direkt zu Game-Status (kein Countdown)')
+            logger.log('🔄 [NEXT ROUND] Firebase aktualisiert, direkt zu Game-Status')
         } else {
             logger.error('❌ [NEXT ROUND] Firebase-Update fehlgeschlagen nach mehreren Versuchen')
+            // Prüfe ob Lobby noch existiert, bevor wir retryen
+            if (!roomId) {
+                logger.warn('🔄 [NEXT ROUND] roomId wurde gelöscht, kein Retry')
+                pendingOperationsRef.current.delete(opId)
+                return
+            }
+            
             // Versuche es erneut nach längerer Pause
             setTimeout(async () => {
-                logger.log('🔄 [NEXT ROUND] Retry nach 3 Sekunden...')
+                // Prüfe nochmal ob roomId noch gesetzt ist
+                if (!roomId || !db) {
+                    logger.warn('🔄 [NEXT ROUND] roomId oder db fehlt, kein Retry')
+                    pendingOperationsRef.current.delete(opId)
+                    return
+                }
+                
                 try {
+                    // Prüfe ob Lobby noch existiert
+                    const checkDoc = await getDoc(doc(db, "lobbies", roomId))
+                    if (!checkDoc.exists() || checkDoc.data()?.status === 'deleted') {
+                        logger.warn('🔄 [NEXT ROUND] Lobby existiert nicht mehr, kein Retry')
+                        pendingOperationsRef.current.delete(opId)
+                        return
+                    }
+                    
                     await updateDoc(doc(db, "lobbies", roomId), updateData)
                     lastSuccessfulUpdateRef.current = Date.now()
                     pendingOperationsRef.current.delete(opId)
                     logger.log('✅ [NEXT ROUND] Retry erfolgreich')
                 } catch (err) {
                     logger.error('❌ [NEXT ROUND] Retry auch fehlgeschlagen:', err)
+                    pendingOperationsRef.current.delete(opId)
                     // Watchdog wird das Problem erkennen und Recovery starten
                 }
             }, 3000)
@@ -3129,6 +3290,12 @@ function App() {
     
     // executePendingAttacks - Hitze verteilen - NUR VOM HOST
     const executePendingAttacks = async (data) => {
+        // HOST AUTHORITY: Nur Host darf executePendingAttacks ausführen
+        if (!isHost) {
+            logger.warn('⚔️ [EXECUTE ATTACKS] Nicht der Host - Zugriff verweigert')
+            return
+        }
+        
         const opId = `executeAttacks_${data?.roundId || Date.now()}`
         pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
         logger.log('⚔️ [EXECUTE ATTACKS] Starte executePendingAttacks:', {
@@ -3138,15 +3305,32 @@ function App() {
             roomId: roomId
         })
         
-        if (!db || !roomId || !isHost) {
+        if (!db || !roomId) {
             logger.warn('⚔️ [EXECUTE ATTACKS] Nicht der Host oder fehlende Parameter')
             return
         }
         
         // Prüfe nochmal explizit ob Host
         const currentDoc = await getDoc(doc(db, "lobbies", roomId))
-        if (!currentDoc.exists() || currentDoc.data().host !== myName) {
+        if (!currentDoc.exists()) {
+            logger.warn('⚔️ [EXECUTE ATTACKS] Lobby existiert nicht mehr')
+            return
+        }
+        
+        const currentDocData = currentDoc.data()
+        if (currentDocData.status === 'deleted') {
+            logger.warn('⚔️ [EXECUTE ATTACKS] Lobby wurde gelöscht')
+            return
+        }
+        
+        if (currentDocData.host !== myName) {
             logger.warn('⚔️ [EXECUTE ATTACKS] Host-Check fehlgeschlagen')
+            return
+        }
+        
+        // WICHTIG: Prüfe nochmal ob roomId noch gesetzt ist (Race Condition Schutz)
+        if (!roomId) {
+            logger.warn('⚔️ [EXECUTE ATTACKS] roomId wurde gelöscht')
             return
         }
         
@@ -3342,8 +3526,7 @@ function App() {
         // WICHTIG: Stelle sicher, dass hotseat ein String ist
         const hotseat = typeof currentData.hotseat === 'string' ? currentData.hotseat : (currentData.hotseat?.name || String(currentData.hotseat || ''))
         const truth = votes?.[hotseat]?.choice
-        const gameMode = currentData.config?.gameMode || 'party'
-        const isPartyMode = gameMode === 'party'
+        const isPartyMode = true
         const allPlayers = Object.keys(players)
         
         // WICHTIG: Vergleiche Strings mit Strings (Firebase speichert als String)
@@ -3382,7 +3565,7 @@ function App() {
                 }
                 
                 // Im Party Mode: 10° Strafhitze wurde bereits angewendet, aber wir zeigen sie trotzdem
-                // Im Strategic Mode: 10° Strafhitze wird hier angewendet und angezeigt
+                // 10° Strafhitze wird hier angewendet und angezeigt
                 const displayedPenaltyDmg = 10 // Immer 10° anzeigen
                 attackResults[playerName].totalDmg += displayedPenaltyDmg
                 attackResults[playerName].attackDetails.push({
@@ -3414,7 +3597,12 @@ function App() {
         }
         
         if (logEntries.length > 0) {
-            updateData.log = arrayUnion(...logEntries)
+            // PERFORMANCE: Begrenze Log-Array auf letzte 50 Einträge
+            // Lese aktuelles Log-Array, füge neue Einträge hinzu und kürze auf 50
+            const currentLog = currentData.log || []
+            const newLog = [...currentLog, ...logEntries]
+            const limitedLog = newLog.slice(-50) // Nur letzte 50 Einträge behalten
+            updateData.log = limitedLog
         }
         
         // Konvertiere tempUpdates zu Firebase-Format (increment für atomare Updates)
@@ -3534,6 +3722,12 @@ function App() {
     
     // Eiswürfel-Automatik: Kühle Spieler mit Eiswürfel ab
     const applyIceCooling = async (players) => {
+        // HOST AUTHORITY: Nur Host darf applyIceCooling ausführen
+        if (!isHost) {
+            logger.warn('🧊 [ICE COOLING] Nicht der Host - Zugriff verweigert')
+            return
+        }
+        
         if (!players || !db || !roomId) return
         const coolValue = globalData?.config?.dmg || 10
         const ref = doc(db, "lobbies", roomId)
@@ -3579,7 +3773,6 @@ function App() {
             hotseat: "",
             roundId: 0,
             lobbyReady: {},
-            countdownEnds: null,
             usedQuestions: [],
             pendingAttacks: deleteField(),
             attackResults: deleteField(),
@@ -3593,10 +3786,79 @@ function App() {
     const killLobby = async () => {
         if (!isHost || !db || !roomId) return
         if (!window.confirm("Lobby wirklich löschen? Alle Spieler werden ausgeworfen und die Lobby ist danach nicht mehr verfügbar!")) return
-        const ref = doc(db, "lobbies", roomId)
-        await deleteDoc(ref)
-        logger.log('Lobby gelöscht:', roomId)
-        setMenuOpen(false)
+        
+        try {
+            // Setze Status auf "deleted" bevor wir löschen, damit andere Spieler benachrichtigt werden
+            const ref = doc(db, "lobbies", roomId)
+            await updateDoc(ref, {
+                status: 'deleted',
+                deletedAt: serverTimestamp()
+            }).catch(err => {
+                logger.warn('⚠️ [KILL LOBBY] Konnte Status nicht setzen, lösche direkt:', err)
+            })
+            
+            // Kurz warten, damit andere Spieler die Änderung sehen können
+            await new Promise(resolve => setTimeout(resolve, 500))
+            
+            // Jetzt löschen
+            await deleteDoc(ref)
+            logger.log('✅ [KILL LOBBY] Lobby gelöscht:', roomId)
+            setMenuOpen(false)
+            leaveLobby()
+        } catch (error) {
+            logger.error('❌ [KILL LOBBY] Fehler beim Löschen:', error)
+            alert(`Fehler beim Löschen der Lobby: ${error.message}`)
+        }
+    }
+    
+    // Admin-Funktion: Alle alten/kaputten Lobbies löschen
+    const deleteAllLobbies = async () => {
+        if (!db) {
+            alert("Fehler: Firebase ist nicht verfügbar.")
+            return
+        }
+        
+        if (!window.confirm("⚠️ WARNUNG: Alle offenen Lobbies werden gelöscht! Dies kann nicht rückgängig gemacht werden. Fortfahren?")) {
+            return
+        }
+        
+        if (!window.confirm("Bist du wirklich sicher? Alle Spieler werden ausgeworfen!")) {
+            return
+        }
+        
+        try {
+            logger.log('🗑️ [ADMIN] Starte Löschung aller Lobbies...')
+            const roomsRef = collection(db, "lobbies")
+            const q = query(roomsRef, where("status", "in", ["lobby", "game", "result"]))
+            const querySnapshot = await getDocs(q)
+            
+            let deletedCount = 0
+            let errorCount = 0
+            
+            for (const docSnapshot of querySnapshot.docs) {
+                try {
+                    const lobbyData = docSnapshot.data()
+                    // Setze Status auf "deleted" bevor wir löschen
+                    await updateDoc(docSnapshot.ref, {
+                        status: 'deleted',
+                        deletedAt: serverTimestamp()
+                    }).catch(() => {}) // Ignoriere Fehler beim Status-Setzen
+                    
+                    await deleteDoc(docSnapshot.ref)
+                    deletedCount++
+                    logger.log(`🗑️ [ADMIN] Lobby gelöscht: ${docSnapshot.id} (Host: ${lobbyData.hostName || lobbyData.host})`)
+                } catch (error) {
+                    errorCount++
+                    logger.error(`❌ [ADMIN] Fehler beim Löschen von ${docSnapshot.id}:`, error)
+                }
+            }
+            
+            alert(`✅ ${deletedCount} Lobby(s) gelöscht.${errorCount > 0 ? `\n⚠️ ${errorCount} Fehler aufgetreten.` : ''}`)
+            logger.log(`✅ [ADMIN] Löschung abgeschlossen: ${deletedCount} gelöscht, ${errorCount} Fehler`)
+        } catch (error) {
+            logger.error('❌ [ADMIN] Fehler beim Löschen aller Lobbies:', error)
+            alert(`Fehler beim Löschen: ${error.message}`)
+        }
     }
     
     // Revanche starten
@@ -3626,7 +3888,6 @@ function App() {
             hotseat: "",
             roundId: (globalData.roundId ?? 0) + 1,
             lobbyReady: {},
-            countdownEnds: null,
             usedQuestions: [],
             pendingAttacks: deleteField(),
             attackResults: deleteField(),
@@ -3636,7 +3897,7 @@ function App() {
         alert("Revanche gestartet! Alle zurück in die Lobby.")
     }
     
-    // Belohnung wählen (Strategic Mode)
+    // Angriff ausführen
     const chooseReward = (rewardType) => {
         if (rewardType === 'attack') {
             setShowRewardChoice(false)
@@ -3680,22 +3941,31 @@ function App() {
     const skipAttack = async () => {
         if (!db || !roomId) return
         
-        setLocalActionDone(true)
+        // Optimistic UI updates
         setShowRewardChoice(false)
         setShowAttackSelection(false)
         
-        const ref = doc(db, "lobbies", roomId)
-        const currentData = await getDoc(ref)
-        const currentAttackDecisions = currentData.data()?.attackDecisions || {}
-        const updatedAttackDecisions = {
-            ...currentAttackDecisions,
-            [myName]: true
+        try {
+            const ref = doc(db, "lobbies", roomId)
+            const currentData = await getDoc(ref)
+            const currentAttackDecisions = currentData.data()?.attackDecisions || {}
+            const updatedAttackDecisions = {
+                ...currentAttackDecisions,
+                [myName]: true
+            }
+            
+            await updateDoc(ref, {
+                log: arrayUnion(`🕊️ ${myName} verzichtet auf einen Angriff.`),
+                attackDecisions: updatedAttackDecisions
+            })
+            
+            setLocalActionDone(true) // Erst bei Erfolg setzen
+        } catch (error) {
+            logger.error("Fehler beim Überspringen:", error)
+            alert("Fehler beim Überspringen des Angriffs: " + error.message)
+            // UI wiederherstellen falls Fehler
+            setShowAttackSelection(true) // Nehmen wir an wir waren da
         }
-        
-        await updateDoc(ref, {
-            log: arrayUnion(`🕊️ ${myName} verzichtet auf einen Angriff.`),
-            attackDecisions: updatedAttackDecisions
-        })
     }
 
     return (
@@ -3704,10 +3974,10 @@ function App() {
                 <div className="menu-btn" onClick={() => setMenuOpen(!menuOpen)}>⚙️</div>
             )}
             {currentScreen === 'create' && (
-                <div className="menu-btn help-btn" onClick={() => setCurrentScreen('start')} style={{left: 'max(15px, env(safe-area-inset-left))', right: 'auto'}}>←</div>
+                <div className={`menu-btn help-btn ${styles.helpButtonLeft}`} onClick={() => setCurrentScreen('start')}>←</div>
             )}
             {currentScreen !== 'landing' && currentScreen !== 'create' && (
-                <div className="menu-btn help-btn" onClick={() => setShowRulesModal(true)} style={{left: 'max(15px, env(safe-area-inset-left))', right: 'auto'}}>?</div>
+                <div className={`menu-btn help-btn ${styles.helpButtonLeft}`} onClick={() => setShowRulesModal(true)}>?</div>
             )}
             
             {menuOpen && (
@@ -3716,153 +3986,46 @@ function App() {
                         setMenuOpen(false)
                         setMenuPage('main')
                     }}></div>
-                    <div style={{
-                        position: 'fixed',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: 'min(90vw, 400px)',
-                        maxHeight: '85vh',
-                        background: 'var(--glass-bg)',
-                        backdropFilter: 'blur(30px) saturate(180%)',
-                        WebkitBackdropFilter: 'blur(30px) saturate(180%)',
-                        border: '1.5px solid var(--glass-border)',
-                        borderRadius: '24px',
-                        padding: '24px',
-                        zIndex: 2002,
-                        boxShadow: 'var(--shadow-xl)',
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '16px'
-                    }}>
+                    <div className={styles.menuModal}>
                         {menuPage === 'main' && (
                             <>
-                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
-                                    <h3 style={{color: '#fff', margin: 0}}>⚙️ Menü</h3>
+                                <div className={styles.menuHeader}>
+                                    <h3 className={styles.menuTitle}>⚙️ Menü</h3>
                                     <button 
                                         onClick={() => {
                                             setMenuOpen(false)
                                             setMenuPage('main')
                                         }}
-                                        style={{
-                                            background: 'transparent',
-                                            border: 'none',
-                                            color: '#aaa',
-                                            fontSize: '1.5rem',
-                                            cursor: 'pointer',
-                                            padding: '0',
-                                            width: '32px',
-                                            height: '32px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}
+                                        className={styles.menuCloseButton}
                                     >✕</button>
                                 </div>
                                 
                                 <button 
                                     onClick={() => setMenuPage('settings')}
-                                    style={{
-                                        padding: '16px',
-                                        fontSize: '1rem',
-                                        background: 'rgba(22, 27, 34, 0.6)',
-                                        borderRadius: '12px',
-                                        width: '100%',
-                                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                                        color: '#fff',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.3s ease',
-                                        textAlign: 'left'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.8)'
-                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.6)'
-                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
-                                    }}
+                                    className={styles.menuButton}
                                 >
                                     ⚙️ Einstellungen
                                 </button>
                                 
                                 <button 
                                     onClick={() => setMenuPage('volume')}
-                                    style={{
-                                        padding: '16px',
-                                        fontSize: '1rem',
-                                        background: 'rgba(22, 27, 34, 0.6)',
-                                        borderRadius: '12px',
-                                        width: '100%',
-                                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                                        color: '#fff',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.3s ease',
-                                        textAlign: 'left'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.8)'
-                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.6)'
-                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
-                                    }}
+                                    className={styles.menuButton}
                                 >
                                     🔊 Lautstärke
                                 </button>
                                 
                                 <button 
                                     onClick={() => setMenuPage('log')}
-                                    style={{
-                                        padding: '16px',
-                                        fontSize: '1rem',
-                                        background: 'rgba(22, 27, 34, 0.6)',
-                                        borderRadius: '12px',
-                                        width: '100%',
-                                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                                        color: '#fff',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.3s ease',
-                                        textAlign: 'left'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.8)'
-                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.background = 'rgba(22, 27, 34, 0.6)'
-                                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
-                                    }}
+                                    className={styles.menuButton}
                                 >
                                     📜 Spielverlauf
                                 </button>
                                 
-                                <div style={{marginTop: '8px'}}></div>
+                                <div className={styles.spacer}></div>
                                 
                                 <button 
                                     onClick={leaveLobby}
-                                    style={{
-                                        padding: '16px',
-                                        fontSize: '1rem',
-                                        background: 'rgba(136, 0, 0, 0.6)',
-                                        borderRadius: '12px',
-                                        width: '100%',
-                                        border: '1px solid rgba(255, 0, 0, 0.3)',
-                                        color: '#fff',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.3s ease',
-                                        textAlign: 'left'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.background = 'rgba(136, 0, 0, 0.8)'
-                                        e.currentTarget.style.borderColor = 'rgba(255, 0, 0, 0.5)'
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.background = 'rgba(136, 0, 0, 0.6)'
-                                        e.currentTarget.style.borderColor = 'rgba(255, 0, 0, 0.3)'
-                                    }}
+                                    className={styles.leaveButton}
                                 >
                                     👋 Spiel verlassen
                                 </button>
@@ -3871,23 +4034,11 @@ function App() {
                         
                         {menuPage === 'settings' && (
                             <>
-                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
-                                    <h3 style={{color: '#fff', margin: 0}}>⚙️ Einstellungen</h3>
+                                <div className={styles.menuHeader}>
+                                    <h3 className={styles.menuTitle}>⚙️ Einstellungen</h3>
                                     <button 
                                         onClick={() => setMenuPage('main')}
-                                        style={{
-                                            background: 'transparent',
-                                            border: 'none',
-                                            color: '#aaa',
-                                            fontSize: '1.2rem',
-                                            cursor: 'pointer',
-                                            padding: '0',
-                                            width: '32px',
-                                            height: '32px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}
+                                        className={styles.menuBackButton}
                                     >←</button>
                                 </div>
                                 
@@ -3895,72 +4046,39 @@ function App() {
                                     <>
                                         <button 
                                             onClick={forceNextRound}
-                                            style={{
-                                                padding: '12px',
-                                                fontSize: '0.9rem',
-                                                margin: '8px 0',
-                                                background: '#333',
-                                                borderRadius: '8px',
-                                                width: '100%',
-                                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                                color: '#fff',
-                                                cursor: 'pointer'
-                                            }}
+                                            className={`${styles.settingsButton} ${styles.settingsButtonGray}`}
                                         >
                                             ⏩ Runde erzwingen
                                         </button>
                                         <button 
                                             onClick={resetGame}
-                                            style={{
-                                                padding: '12px',
-                                                fontSize: '0.9rem',
-                                                margin: '8px 0',
-                                                background: '#550000',
-                                                borderRadius: '8px',
-                                                width: '100%',
-                                                border: '1px solid rgba(255, 0, 0, 0.3)',
-                                                color: '#fff',
-                                                cursor: 'pointer'
-                                            }}
+                                            className={`${styles.settingsButton} ${styles.settingsButtonRed}`}
                                         >
                                             🔄 Spiel neustarten
                                         </button>
                                         <button 
                                             onClick={killLobby}
-                                            style={{
-                                                padding: '12px',
-                                                fontSize: '0.9rem',
-                                                margin: '8px 0',
-                                                background: '#880000',
-                                                borderRadius: '8px',
-                                                width: '100%',
-                                                border: '1px solid rgba(255, 0, 0, 0.3)',
-                                                color: '#fff',
-                                                cursor: 'pointer'
-                                            }}
+                                            className={`${styles.settingsButton} ${styles.settingsButtonDarkRed}`}
                                         >
                                             🧨 Lobby löschen
                                         </button>
                                     </>
                                 )}
                                 
+                                {/* Admin-Funktion: Alle Lobbies löschen (für Testzwecke) */}
+                                <div className={styles.menuSection}>
+                                    <h4 className={styles.menuSectionTitle}>🔧 Admin-Funktionen</h4>
+                                    <button 
+                                        onClick={deleteAllLobbies}
+                                        className={`${styles.settingsButton} ${styles.settingsButtonDanger}`}
+                                    >
+                                        🗑️ Alle Lobbies löschen (Test)
+                                    </button>
+                                </div>
+                                
                                 <button 
                                     onClick={toggleMusic}
-                                    style={{
-                                        padding: '12px',
-                                        fontSize: '0.9rem',
-                                        margin: '8px 0',
-                                        background: musicEnabled ? '#334400' : '#444',
-                                        borderRadius: '8px',
-                                        width: '100%',
-                                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                                        color: '#fff',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '8px'
-                                    }}
+                                    className={`${styles.settingsButton} ${styles.settingsButtonMusic} ${musicEnabled ? styles.settingsButtonMusicEnabled : styles.settingsButtonMusicDisabled}`}
                                 >
                                     {musicEnabled ? '🔊' : '🔇'} Hintergrundmusik {musicEnabled ? 'an' : 'aus'}
                                 </button>
@@ -3969,71 +4087,43 @@ function App() {
                         
                         {menuPage === 'volume' && (
                             <>
-                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
-                                    <h3 style={{color: '#fff', margin: 0}}>🔊 Lautstärke</h3>
+                                <div className={styles.menuHeader}>
+                                    <h3 className={styles.menuTitle}>🔊 Lautstärke</h3>
                                     <button 
                                         onClick={() => setMenuPage('main')}
-                                        style={{
-                                            background: 'transparent',
-                                            border: 'none',
-                                            color: '#aaa',
-                                            fontSize: '1.2rem',
-                                            cursor: 'pointer',
-                                            padding: '0',
-                                            width: '32px',
-                                            height: '32px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}
+                                        className={styles.menuBackButton}
                                     >←</button>
                                 </div>
                                 
-                                <div style={{marginBottom: '24px'}}>
-                                    <h4 style={{color: '#fff', marginBottom: '12px', fontSize: '1rem'}}>Hintergrundmusik</h4>
-                                    <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                                        <span style={{fontSize: '1.2rem'}}>🔇</span>
+                                <div className={styles.volumeSliderContainer}>
+                                    <h4 className={styles.volumeTitle}>Hintergrundmusik</h4>
+                                    <div className={styles.volumeSliderWrapper}>
+                                        <span className={styles.volumeIcon}>🔇</span>
                                         <input
                                             type="range"
                                             min="0"
                                             max="10"
                                             value={musicVolume}
                                             onChange={(e) => handleMusicVolumeChange(parseInt(e.target.value))}
-                                            style={{
-                                                flex: 1,
-                                                height: '6px',
-                                                background: '#333',
-                                                borderRadius: '3px',
-                                                outline: 'none',
-                                                WebkitAppearance: 'none',
-                                                cursor: 'pointer'
-                                            }}
+                                            className={styles.volumeSliderInput}
                                         />
-                                        <span style={{fontSize: '1.2rem'}}>🔊</span>
+                                        <span className={styles.volumeIcon}>🔊</span>
                                     </div>
                                 </div>
                                 
-                                <div>
-                                    <h4 style={{color: '#fff', marginBottom: '12px', fontSize: '1rem'}}>Soundeffekte</h4>
-                                    <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                                        <span style={{fontSize: '1.2rem'}}>🔇</span>
+                                <div className={styles.volumeSliderContainer}>
+                                    <h4 className={styles.volumeTitle}>Soundeffekte</h4>
+                                    <div className={styles.volumeSliderWrapper}>
+                                        <span className={styles.volumeIcon}>🔇</span>
                                         <input
                                             type="range"
                                             min="0"
                                             max="10"
                                             value={soundVolume}
                                             onChange={(e) => handleSoundVolumeChange(parseInt(e.target.value))}
-                                            style={{
-                                                flex: 1,
-                                                height: '6px',
-                                                background: '#333',
-                                                borderRadius: '3px',
-                                                outline: 'none',
-                                                WebkitAppearance: 'none',
-                                                cursor: 'pointer'
-                                            }}
+                                            className={styles.volumeSliderInput}
                                         />
-                                        <span style={{fontSize: '1.2rem'}}>🔊</span>
+                                        <span className={styles.volumeIcon}>🔊</span>
                                     </div>
                                 </div>
                             </>
@@ -4041,41 +4131,21 @@ function App() {
                         
                         {menuPage === 'log' && (
                             <>
-                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
-                                    <h3 style={{color: '#fff', margin: 0}}>📜 Spielverlauf</h3>
+                                <div className={styles.menuHeader}>
+                                    <h3 className={styles.menuTitle}>📜 Spielverlauf</h3>
                                     <button 
                                         onClick={() => setMenuPage('main')}
-                                        style={{
-                                            background: 'transparent',
-                                            border: 'none',
-                                            color: '#aaa',
-                                            fontSize: '1.2rem',
-                                            cursor: 'pointer',
-                                            padding: '0',
-                                            width: '32px',
-                                            height: '32px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}
+                                        className={styles.menuBackButton}
                                     >←</button>
                                 </div>
                                 
-                                <div style={{
-                                    maxHeight: '400px',
-                                    fontSize: '0.85rem',
-                                    overflowY: 'auto',
-                                    background: 'rgba(0,0,0,0.3)',
-                                    padding: '12px',
-                                    borderRadius: '8px',
-                                    border: '1px solid rgba(255, 255, 255, 0.1)'
-                                }}>
+                                <div className={styles.menuLogContainer}>
                                     {globalData?.log && globalData.log.length > 0 ? (
                                         globalData.log.slice(-20).map((entry, idx) => (
-                                            <div key={idx} style={{marginBottom: '8px', color: '#aaa', lineHeight: '1.4'}}>{entry}</div>
+                                            <div key={idx} className={styles.menuLogEntry}>{entry}</div>
                                         ))
                                     ) : (
-                                        <div style={{color: '#666'}}>Keine Einträge</div>
+                                        <div className={styles.menuLogEmpty}>Keine Einträge</div>
                                     )}
                                 </div>
                             </>
@@ -4085,102 +4155,32 @@ function App() {
             )}
             
             {currentScreen !== 'landing' && (
-                <div style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    marginBottom: '20px',
-                    marginTop: '10px'
-                }}>
+                <div className={styles.logoContainer}>
                     <img 
                         src={hkLogoHorizontal} 
                         alt="Hitzkopf Logo" 
-                        style={{
-                            maxWidth: '300px',
-                            width: 'auto',
-                            height: 'auto',
-                            maxHeight: '80px',
-                            objectFit: 'contain'
-                        }}
+                        className={styles.logoHorizontal}
                     />
                 </div>
             )}
             
             {/* LANDING PAGE */}
             {currentScreen === 'landing' && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1000
-                }}>
+                <div className={styles.landingContainer}>
                     
                     {/* Logo in der Mitte */}
-                    <div style={{
-                        position: 'relative',
-                        zIndex: 2,
-                        marginBottom: '60px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center'
-                    }}>
+                    <div className={styles.landingLogoContainer}>
                         <img 
                             src={hkLogo} 
                             alt="Hitzkopf Logo" 
-                            style={{
-                                maxWidth: '300px',
-                                width: '80%',
-                                height: 'auto',
-                                objectFit: 'contain'
-                            }}
+                            className={styles.landingLogo}
                         />
                     </div>
                     
                     {/* Spielen Button */}
                     <button
                         onClick={() => setCurrentScreen('start')}
-                        style={{
-                            position: 'relative',
-                            zIndex: 2,
-                            padding: '16px 40px',
-                            fontSize: '1.3rem',
-                            fontWeight: 'bold',
-                            color: '#fff',
-                            background: '#ff6b35',
-                            border: 'none',
-                            borderRadius: '25px',
-                            cursor: 'pointer',
-                            boxShadow: '0 6px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
-                            transition: 'all 0.2s ease',
-                            textTransform: 'uppercase',
-                            letterSpacing: '1px',
-                            width: 'auto',
-                            minWidth: '200px'
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-2px)'
-                            e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
-                            e.currentTarget.style.background = '#ff7a4a'
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'translateY(0)'
-                            e.currentTarget.style.boxShadow = '0 6px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
-                            e.currentTarget.style.background = '#ff6b35'
-                        }}
-                        onMouseDown={(e) => {
-                            e.currentTarget.style.transform = 'translateY(1px)'
-                            e.currentTarget.style.boxShadow = '0 3px 10px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
-                        }}
-                        onMouseUp={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-2px)'
-                            e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
-                        }}
+                        className={styles.landingButton}
                     >
                         SPIELEN
                     </button>
@@ -4200,50 +4200,14 @@ function App() {
                         maxLength={20} 
                         autoComplete="name"
                     />
-                    <div className="emoji-gallery-wrapper" style={{
-                        position: 'relative', 
-                        marginBottom: '15px', 
-                        padding: '0', 
-                        margin: '0 0 15px 0',
-                        width: 'calc(100% + 48px)',
-                        marginLeft: '-24px',
-                        marginRight: '-24px',
-                        paddingLeft: '24px',
-                        paddingRight: '24px',
-                        overflow: 'visible'
-                    }}>
+                    <div className={`emoji-gallery-wrapper ${styles.emojiGalleryWrapper}`}>
                         <div 
                             ref={emojiGalleryRef}
                             id="emojiGallery" 
-                            style={{
-                                display: 'flex', 
-                                gap: '10px', 
-                                overflowX: 'auto', 
-                                overflowY: 'hidden', 
-                                padding: '10px 0', 
-                                scrollBehavior: 'smooth', 
-                                width: '100%', 
-                                maxWidth: '100%',
-                                scrollbarWidth: 'none',
-                                msOverflowStyle: 'none',
-                                WebkitOverflowScrolling: 'touch',
-                                margin: '0',
-                                paddingLeft: '0',
-                                paddingRight: '0',
-                                cursor: 'grab'
-                            }}
-                            onMouseDown={(e) => {
-                                e.currentTarget.style.cursor = 'grabbing'
-                            }}
-                            onMouseUp={(e) => {
-                                e.currentTarget.style.cursor = 'grab'
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.cursor = 'grab'
-                            }}
+                            className={styles.emojiGallery}
                         >
                             {/* Spacer am Anfang, damit der erste Charakter zentriert werden kann */}
-                            <div className="emoji-spacer" style={{minWidth: 'calc(50% - 40px)', flexShrink: 0}}></div>
+                            <div className={`emoji-spacer ${styles.emojiSpacer}`}></div>
                             
                             {availableEmojis.map((emoji, index) => {
                                 const isSelected = index === emojiScrollIndex
@@ -4306,7 +4270,7 @@ function App() {
                             })}
                             
                             {/* Spacer am Ende, damit der letzte Charakter zentriert werden kann */}
-                            <div className="emoji-spacer" style={{minWidth: 'calc(50% - 40px)', flexShrink: 0}}></div>
+                            <div className={`emoji-spacer ${styles.emojiSpacer}`}></div>
                         </div>
                     </div>
                     
@@ -4324,23 +4288,10 @@ function App() {
             {/* CREATE GAME SCREEN */}
             {currentScreen === 'create' && (
                 <div className="screen active card">
-                    {/* Spielmodus-Auswahl vorübergehend deaktiviert
-                    <label style={{display: 'block', fontSize: '0.85rem', color: '#aaa', marginBottom: '5px', fontWeight: '500'}}>Spielmodus:</label>
-                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginTop: '10px', marginBottom: '15px'}}>
-                        <div className={`game-mode-card ${gameMode === 'party' ? 'selected' : ''}`} onClick={() => setGameMode('party')}>
-                            <div className="mode-emoji">⚡</div>
-                            <div className="mode-name">Party-Modus</div>
-                        </div>
-                        <div className={`game-mode-card ${gameMode === 'strategisch' ? 'selected' : ''}`} onClick={() => setGameMode('strategisch')}>
-                            <div className="mode-emoji">🕐</div>
-                            <div className="mode-name">Strategie-Modus</div>
-                        </div>
-                    </div>
-                    */}
-                    <label style={{display: 'block', fontSize: '0.85rem', color: '#aaa', marginTop: '12px', marginBottom: '5px', fontWeight: '500'}}>
+                    <label className={styles.labelWithMargin}>
                         Wähle Fragenkategorien:
                     </label>
-                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '10px', marginBottom: '15px'}}>
+                    <div className={styles.grid3Cols}>
                         <div className={`category-card ${selectedCategories.length === Object.keys(questionCategories).length ? 'selected' : ''}`} onClick={() => toggleCategory('all')}>
                             <div className="category-emoji">🌟</div>
                             <div className="category-name">Alle</div>
@@ -4352,19 +4303,12 @@ function App() {
                             </div>
                         ))}
                     </div>
-                    <button className="btn-primary" onClick={createGame} style={{marginTop: '15px'}} disabled={!myName.trim() || selectedCategories.length === 0}>
+                    <button className={`btn-primary ${styles.buttonMarginTop}`} onClick={createGame} disabled={!myName.trim() || selectedCategories.length === 0}>
                         🎮 Spiel erstellen
                     </button>
                     <button 
                         onClick={() => setCurrentScreen('start')}
-                        className="btn-secondary"
-                        style={{
-                            marginTop: '20px',
-                            width: 'calc(50% - 10px)',
-                            maxWidth: '240px',
-                            marginLeft: 'auto',
-                            marginRight: 'auto'
-                        }}
+                        className={`btn-secondary ${styles.backButton}`}
                     >
                         ← Zurück
                     </button>
@@ -4374,39 +4318,29 @@ function App() {
             {/* JOIN GAME SCREEN */}
             {currentScreen === 'join' && (
                 <div className="screen active card">
-                    <h3 style={{marginBottom: '15px', color: '#ff8c00'}}>🤝 Spiel beitreten</h3>
-                    <button className="btn-secondary" onClick={loadRoomList} style={{marginBottom: '15px', fontSize: '0.9rem', padding: '10px'}}>
+                    <h3 className={styles.joinScreenTitle}>🤝 Spiel beitreten</h3>
+                    <button className={`btn-secondary ${styles.refreshButton}`} onClick={loadRoomList}>
                         🔄 Räume aktualisieren
                     </button>
                     {roomList.length > 0 ? (
-                        <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginTop: '10px', marginBottom: '15px'}}>
+                        <div className={styles.grid2Cols}>
                             {roomList.map((room) => (
                                 <div 
                                     key={room.id} 
-                                    className={`category-card ${roomCode === room.id ? 'selected' : ''}`}
-                                    style={{
-                                        cursor: 'pointer',
-                                        aspectRatio: '1',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        padding: '15px',
-                                        textAlign: 'center'
-                                    }}
+                                    className={`category-card ${roomCode === room.id ? 'selected' : ''} ${styles.roomCard}`}
                                     onClick={() => selectRoom(room.id, room.hasPassword)}
                                 >
-                                    <div className="category-emoji" style={{fontSize: '2.5rem', marginBottom: '10px'}}>
+                                    <div className={`category-emoji ${styles.categoryEmojiLarge}`}>
                                         {room.hostEmoji || '😊'}
                                     </div>
-                                    <div className="category-name" style={{fontSize: '0.9rem', lineHeight: '1.3', color: '#f0f6fc'}}>
+                                    <div className={`category-name ${styles.categoryNameLarge}`}>
                                         Spiel von {room.hostName}
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <p style={{color: '#666', fontSize: '0.9rem', marginBottom: '15px'}}>Keine Räume verfügbar</p>
+                        <p className={styles.noRoomsText}>Keine Räume verfügbar</p>
                     )}
                     {roomCode && (
                             <button className="btn-secondary" onClick={() => joinGame(roomCode)} disabled={!myName.trim() || !roomCode}>
@@ -4415,14 +4349,7 @@ function App() {
                     )}
                     <button 
                         onClick={() => setCurrentScreen('start')}
-                        className="btn-secondary"
-                        style={{
-                            marginTop: '20px',
-                            width: 'calc(50% - 10px)',
-                            maxWidth: '240px',
-                            marginLeft: 'auto',
-                            marginRight: 'auto'
-                        }}
+                        className={`btn-secondary ${styles.backButton}`}
                     >
                         ← Zurück
                     </button>
@@ -4440,7 +4367,7 @@ function App() {
                 
                 return (
                 <div className="screen active card">
-                        <h3 style={{marginBottom: '15px', color: '#ff8c00'}}>
+                        <h3 className={styles.lobbyTitle}>
                             👥 Spiel von {globalData.hostName || globalData.host || 'Unbekannt'}
                         </h3>
                         
@@ -4448,65 +4375,18 @@ function App() {
                         {myPlayer && (
                             <div 
                                 onClick={toggleLobbyReady}
-                                style={{
-                                    padding: '20px',
-                                    background: 'rgba(22, 27, 34, 0.6)',
-                                    borderRadius: '12px',
-                                    border: '2px solid rgba(255, 140, 0, 0.3)',
-                                    opacity: myIsEliminated ? 0.5 : (myIsReady ? 1 : 0.6),
-                                    transition: 'all 0.3s ease',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '20px',
-                                    cursor: 'pointer',
-                                    marginBottom: '20px'
-                                }}
-                                onMouseEnter={(e) => {
-                                    if (!myIsEliminated) {
-                                        e.currentTarget.style.opacity = myIsReady ? 1 : 0.8;
-                                        e.currentTarget.style.borderColor = 'rgba(255, 140, 0, 0.5)';
-                                    }
-                                }}
-                                onMouseLeave={(e) => {
-                                    if (!myIsEliminated) {
-                                        e.currentTarget.style.opacity = myIsReady ? 1 : 0.6;
-                                        e.currentTarget.style.borderColor = 'rgba(255, 140, 0, 0.3)';
-                                    }
-                                }}
+                                className={`${styles.myPlayerCard} ${myIsEliminated ? styles.eliminated : (myIsReady ? styles.ready : styles.notReady)}`}
                             >
-                                <div style={{
-                                    fontSize: '4rem',
-                                    flexShrink: 0
-                                }}>
+                                <div className={styles.myPlayerEmoji}>
                                     {myPlayer.emoji}
                                 </div>
-                                <div style={{
-                                    flex: 1,
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px'
-                                }}>
-                                    <div style={{
-                                        fontSize: '1.2rem',
-                                        fontWeight: 'bold',
-                                        color: '#fff',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px'
-                                    }}>
+                                <div className={styles.myPlayerInfo}>
+                                    <div className={styles.myPlayerName}>
                                         {myPlayer.name} (Du)
-                                        {globalData.host === myPlayer.name && <span style={{ fontSize: '1.4rem' }}>👑</span>}
+                                        {globalData.host === myPlayer.name && <span className={styles.crownIcon}>👑</span>}
                                     </div>
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '12px'
-                                    }}>
-                                        <span style={{
-                                            fontSize: '0.95rem',
-                                            color: '#aaa',
-                                            fontWeight: '500'
-                                        }}>
+                                    <div className={styles.readyToggle}>
+                                        <span className={styles.readyLabel}>
                                             Bereit
                                         </span>
                                         {/* Toggle Switch */}
@@ -4515,42 +4395,13 @@ function App() {
                                                 e.stopPropagation();
                                                 toggleLobbyReady();
                                             }}
-                                            style={{
-                                                position: 'relative',
-                                                width: '50px',
-                                                height: '28px',
-                                                borderRadius: '14px',
-                                                background: myIsReady ? '#22c55e' : '#d1d5db',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.3s ease',
-                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                padding: '2px'
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
-                                            }}
+                                            className={`${styles.toggleSwitch} ${myIsReady ? styles.ready : styles.notReady}`}
                                         >
-                                            <div style={{
-                                                width: '24px',
-                                                height: '24px',
-                                                borderRadius: '12px',
-                                                background: '#fff',
-                                                transition: 'transform 0.3s ease',
-                                                transform: myIsReady ? 'translateX(22px)' : 'translateX(0)',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-                                            }}>
+                                            <div className={`${styles.toggleThumb} ${myIsReady ? styles.ready : styles.notReady}`}>
                                                 {myIsReady ? (
-                                                    <span style={{ color: '#22c55e', fontSize: '14px', fontWeight: 'bold' }}>✓</span>
+                                                    <span className={styles.toggleCheck}>✓</span>
                                                 ) : (
-                                                    <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: 'bold' }}>✕</span>
+                                                    <span className={styles.toggleCross}>✕</span>
                                                 )}
                                             </div>
                                         </div>
@@ -4652,9 +4503,8 @@ function App() {
                         
                     {isHost && (
                         <button 
-                            className="btn-primary" 
+                            className={`btn-primary ${styles.buttonMarginTop}`}
                             onClick={startCountdown} 
-                                style={{marginTop: '20px'}}
                             disabled={
                                 (() => {
                                     const maxTemp = globalData.config?.maxTemp || 100
@@ -4674,7 +4524,7 @@ function App() {
                             const allReady = activeReady.length >= activePlayers.length && activePlayers.length >= 2
                             
                             return (
-                                <p style={{color: '#666', fontSize: '0.9rem', marginTop: '20px'}}>
+                                <p className={styles.waitText}>
                                     {allReady ? '⏳ Warten bis der Host das Spiel startet' : '⏳ Warten bis alle bereit sind'}
                                 </p>
                             )
@@ -4695,10 +4545,10 @@ function App() {
                 if (isEliminated) {
                     return (
                         <div className="screen active card">
-                            <h3 style={{marginBottom: '15px', color: '#ff0000'}}>🔥 Du bist ausgeschieden!</h3>
-                            <div style={{padding: '20px', background: 'rgba(139, 0, 0, 0.3)', borderRadius: '10px', marginBottom: '20px'}}>
-                                <p style={{color: '#fff', fontSize: '1.1rem', marginBottom: '10px'}}>Du hast {myTemp}°C erreicht und bist ausgeschieden.</p>
-                                <p style={{color: '#aaa', fontSize: '0.9rem'}}>Du kannst dem Spiel als Zuschauer folgen.</p>
+                            <h3 className={styles.eliminatedTitle}>🔥 Du bist ausgeschieden!</h3>
+                            <div className={styles.eliminatedInfoBox}>
+                                <p className={styles.eliminatedText}>Du hast {myTemp}°C erreicht und bist ausgeschieden.</p>
+                                <p className={styles.eliminatedSubtext}>Du kannst dem Spiel als Zuschauer folgen.</p>
                             </div>
                             <div className="thermo-grid">
                                 {renderPlayers().map((player) => {
@@ -4707,29 +4557,16 @@ function App() {
                                     const hasAnswered = !!globalData.votes?.[player.name]
                                     
                                     return (
-                                        <div key={player.name} className={`thermo-item ${isHotseat ? 'is-hotseat' : ''}`} style={{
-                                            border: hasAnswered ? '2px solid #22c55e' : '1px solid #333',
-                                            borderRadius: '10px',
-                                            padding: '12px',
-                                            background: hasAnswered ? 'rgba(34, 197, 94, 0.2)' : 'rgba(22, 27, 34, 0.6)',
-                                            opacity: hasAnswered ? 1 : 0.5,
-                                            transition: 'opacity 0.3s ease'
-                                        }}>
-                                            <div className="thermo-top" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
-                                                <span style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                        <div key={player.name} className={`thermo-item ${isHotseat ? 'is-hotseat' : ''} ${hasAnswered ? styles.thermoItemAnswered : styles.thermoItemNotAnswered}`}>
+                                            <div className={styles.thermoTop}>
+                                                <span className={styles.thermoTopLeft}>
                                                     {isHotseat && <span>🔥</span>}
                                                     <span>{player.emoji} {player.name}{player.name === myName ? ' (Du)' : ''}</span>
                                                 </span>
-                                                <span style={{fontWeight: 'bold', color: tempPercent >= 100 ? '#ff0000' : '#fff'}}>{player.temp}°C</span>
+                                                <span className={`${styles.thermoTemp} ${tempPercent >= 100 ? styles.thermoTempMax : ''}`}>{player.temp}°C</span>
                                             </div>
-                                            <div className="thermo-bar" style={{
-                                                width: '100%',
-                                                height: '20px',
-                                                background: '#333',
-                                                borderRadius: '10px',
-                                                overflow: 'hidden'
-                                            }}>
-                                                <div className="thermo-fill" style={{
+                                            <div className={styles.thermoBar}>
+                                                <div className={styles.thermoFill} style={{
                                                     width: `${tempPercent}%`,
                                                     height: '100%',
                                                     background: (() => {
@@ -4752,9 +4589,9 @@ function App() {
                                     )
                                 })}
                             </div>
-                            <div style={{marginTop: '20px', padding: '15px', background: 'rgba(22, 27, 34, 0.6)', borderRadius: '10px'}}>
-                                <h4 style={{color: '#ff8c00', marginBottom: '10px'}}>Aktuelle Frage:</h4>
-                                <p style={{color: '#fff', fontSize: '1.1rem'}}>{globalData.currentQ?.q || 'Lade Frage...'}</p>
+                            <div className={styles.currentQuestionBox}>
+                                <h4 className={styles.currentQuestionTitle}>Aktuelle Frage:</h4>
+                                <p className={styles.currentQuestionText}>{globalData.currentQ?.q || 'Lade Frage...'}</p>
                             </div>
                         </div>
                     )
@@ -4820,7 +4657,7 @@ function App() {
                             )
                         })}
                     </div>
-                    <hr style={{borderColor: '#333', margin: '15px 0'}} />
+                    <hr className={styles.horizontalRule} />
                     {/* Hotseat-Hinweis über der Frage */}
                     {(() => {
                         // WICHTIG: Stelle sicher, dass currentHotseat ein String ist
@@ -4853,26 +4690,19 @@ function App() {
                             </div>
                         )
                     })()}
-                    <h3 style={{margin: '20px 0', minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center'}}>
+                    <h3 className={styles.gameQuestion}>
                         {globalData.currentQ?.q || 'Lade Frage...'}
                     </h3>
                     {/* Kategorie anzeigen */}
                     {globalData.currentQ?.category && (
-                        <div style={{
-                            marginTop: '10px',
-                            marginBottom: '20px',
-                            color: '#888',
-                            fontSize: '0.9rem',
-                            textAlign: 'center',
-                            fontStyle: 'italic'
-                        }}>
+                        <div className={styles.gameCategory}>
                             {questionCategories[globalData.currentQ.category]?.emoji} {questionCategories[globalData.currentQ.category]?.name}
                         </div>
                     )}
                     {globalData.votes?.[myName] ? (
-                        <div style={{padding: '20px', background: 'rgba(255, 140, 0, 0.2)', borderRadius: '10px', marginTop: '20px'}}>
-                            <p style={{color: '#ff8c00', fontWeight: 'bold'}}>✅ Antwort abgesendet!</p>
-                            <p style={{color: '#aaa', fontSize: '0.9rem', marginTop: '10px'}}>Warte auf andere Spieler...</p>
+                        <div className={styles.voteSubmitted}>
+                            <p className={styles.voteSubmittedTitle}>✅ Antwort abgesendet!</p>
+                            <p className={styles.voteSubmittedText}>Warte auf andere Spieler...</p>
                         </div>
                     ) : (
                         <>
@@ -4893,14 +4723,34 @@ function App() {
                                 </button>
                             </div>
                             <button 
-                                className="btn-primary" 
+                                className={`btn-primary ${styles.submitButtonMargin}`}
                                 onClick={submitVote} 
-                                style={{marginTop: '20px'}}
                                 disabled={!mySelection || isEliminated}
                             >
                                 🔒 Antwort absenden
                             </button>
                         </>
+                    )}
+
+                    {/* NOTFALL-BUTTON FÜR HOST - IMMER SICHTBAR (Auch wenn abgestimmt) */}
+                    {isHost && (
+                        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                            <button 
+                                className="btn-text"
+                                style={{ fontSize: '0.8em', color: '#ff4d4d', opacity: 0.8 }}
+                                onClick={async () => {
+                                    if (confirm("Wirklich zur Auswertung springen? Dies sollte nur genutzt werden, wenn das Spiel hängt.")) {
+                                        logger.log('🚨 [FORCE ADVANCE] Host erzwingt Result-Screen')
+                                        await updateDoc(doc(db, "lobbies", roomId), {
+                                            status: 'result',
+                                            lastHostActivity: serverTimestamp()
+                                        })
+                                    }
+                                }}
+                            >
+                                ⚠️ Hängt? Weiter zur Auswertung
+                            </button>
+                        </div>
                     )}
                 </div>
                 )
@@ -4912,31 +4762,20 @@ function App() {
                 const isHotseat = myName === globalData.hotseat
                 return (
                 <div className="screen active card">
-                    <h3 style={{marginBottom: '15px', color: '#ff8c00'}}>📊 Ergebnis</h3>
+                    <h3 className={styles.resultTitle}>📊 Ergebnis</h3>
                     <div className="thermo-grid">
                         {renderPlayers().map((player) => {
                             const maxTemp = globalData.config?.maxTemp || 100
                             const tempPercent = Math.min((player.temp / maxTemp) * 100, 100)
                             
                             return (
-                                <div key={player.name} className="thermo-item" style={{
-                                    border: '1px solid #333',
-                                    borderRadius: '10px',
-                                    padding: '12px',
-                                    background: 'rgba(22, 27, 34, 0.6)'
-                                }}>
-                                    <div className="thermo-top" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                <div key={player.name} className={`thermo-item ${styles.resultThermoItem}`}>
+                                    <div className={styles.thermoTop}>
                                         <span>{player.emoji} {player.name}{player.name === myName ? ' (Du)' : ''}</span>
-                                        <span style={{fontWeight: 'bold', color: tempPercent >= 100 ? '#ff0000' : '#fff'}}>{player.temp}°C</span>
+                                        <span className={`${styles.thermoTemp} ${tempPercent >= 100 ? styles.thermoTempMax : ''}`}>{player.temp}°C</span>
                                     </div>
-                                    <div className="thermo-bar" style={{
-                                        width: '100%',
-                                        height: '20px',
-                                        background: '#333',
-                                        borderRadius: '10px',
-                                        overflow: 'hidden'
-                                    }}>
-                                        <div className="thermo-fill" style={{
+                                    <div className={styles.thermoBar}>
+                                        <div className={styles.thermoFill} style={{
                                             width: `${tempPercent}%`,
                                             height: '100%',
                                             background: (() => {
@@ -4967,18 +4806,17 @@ function App() {
                         const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
                         const truth = globalData.votes?.[hotseatName]?.choice
                         const myVote = globalData.votes?.[myName]
-                        const gameMode = globalData.config?.gameMode || 'party'
-                        const isPartyMode = gameMode === 'party'
+                        const isPartyMode = true
                         const isHotseat = myName === hotseatName
                         
                         if (isHotseat) {
                             return (
-                                <div style={{margin: '20px 0', padding: '15px', background: 'rgba(22, 27, 34, 0.6)', borderRadius: '10px'}}>
-                                    <p style={{color: '#aaa'}}>Du hast die Frage beantwortet. Warte auf die anderen Spieler...</p>
+                                <div className={styles.resultStatusBox}>
+                                    <p className={styles.resultStatusText}>Du hast die Frage beantwortet. Warte auf die anderen Spieler...</p>
                                 </div>
                             )
                         } else if (myVote && truth !== undefined && truth !== null && String(myVote.choice) === String(truth)) {
-                            // Richtig geraten - Belohnung wählen (Strategic Mode) oder Angriff (Party Mode)
+                            // Richtig geraten - Angriff ausführen
                             const attackDecisions = globalData.attackDecisions || {}
                             
                             // WICHTIG: Prüfe ob bereits eine Entscheidung getroffen wurde (attackDecisions), nicht nur localActionDone
@@ -5006,30 +4844,24 @@ function App() {
                             if (shouldShowAttackSelection) {
                                 logger.log('✅ [ATTACK SELECTION] Zeige Angriffsauswahl (Party Mode)')
                                 return (
-                                    <div style={{margin: '20px 0'}}>
-                                        <p style={{color: '#0f0', fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '10px'}}>✅ RICHTIG GERATEN!</p>
-                                        <p style={{color: '#aaa', fontSize: '0.9rem', marginBottom: '15px'}}>Wähle einen Spieler zum Aufheizen!</p>
+                                    <div className={styles.correctGuessContainer}>
+                                        <p className={styles.correctGuessTitle}>✅ RICHTIG GERATEN!</p>
+                                        <p className={styles.correctGuessSubtitle}>Wähle einen Spieler zum Aufheizen!</p>
                                         
                                         {/* Kategorie anzeigen */}
                                         {globalData.currentQ?.category && (
-                                            <div style={{marginBottom: '15px', color: '#888', fontSize: '0.85rem'}}>
+                                            <div className={styles.categoryInfo}>
                                                 {questionCategories[globalData.currentQ.category]?.emoji} {questionCategories[globalData.currentQ.category]?.name}
                                             </div>
                                         )}
                                         
                                         {/* Angriffsauswahl Container */}
-                                        <div style={{
-                                            background: 'rgba(139, 0, 0, 0.3)',
-                                            borderRadius: '15px',
-                                            padding: '20px',
-                                            marginTop: '15px',
-                                            border: '2px solid rgba(255, 69, 0, 0.5)'
-                                        }}>
-                                            <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#ff8c00', fontWeight: 'bold'}}>
-                                                <span style={{fontSize: '1.2rem'}}>🔥</span>
+                                        <div className={styles.attackSelectionWrapper}>
+                                            <div className={styles.attackSelectionHeader}>
+                                                <span className={styles.attackSelectionHeaderIcon}>🔥</span>
                                                 <span>Wen aufheizen?</span>
                                             </div>
-                                            <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px'}}>
+                                            <div className={styles.attackSelectionGrid}>
                                                 {(() => {
                                                     const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
                                                     const maxTemp = globalData?.config?.maxTemp || 100
@@ -5053,7 +4885,7 @@ function App() {
                                                     
                                                     if (attackablePlayers.length === 0) {
                                                         return (
-                                                            <div key="no-players" style={{gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#aaa'}}>
+                                                            <div key="no-players" className={styles.attackNoPlayersLarge}>
                                                                 Keine Spieler zum Angreifen verfügbar
                                                             </div>
                                                         )
@@ -5068,31 +4900,11 @@ function App() {
                                                         <div
                                                             key={player.name}
                                                             onClick={() => doAttack(player.name)}
-                                                            style={{
-                                                                padding: '20px',
-                                                                background: 'rgba(22, 27, 34, 0.8)',
-                                                                borderRadius: '12px',
-                                                                cursor: 'pointer',
-                                                                textAlign: 'center',
-                                                                border: '2px solid #444',
-                                                                transition: 'all 0.2s',
-                                                                display: 'flex',
-                                                                flexDirection: 'column',
-                                                                alignItems: 'center',
-                                                                gap: '8px'
-                                                            }}
-                                                            onMouseEnter={(e) => {
-                                                                e.currentTarget.style.border = '2px solid #ff8c00'
-                                                                e.currentTarget.style.background = 'rgba(255, 140, 0, 0.1)'
-                                                            }}
-                                                            onMouseLeave={(e) => {
-                                                                e.currentTarget.style.border = '2px solid #444'
-                                                                e.currentTarget.style.background = 'rgba(22, 27, 34, 0.8)'
-                                                            }}
+                                                            className={styles.attackPlayerCardLarge}
                                                         >
-                                                            <div style={{fontSize: '3rem', marginBottom: '5px'}}>{player.emoji}</div>
-                                                            <div style={{fontSize: '1rem', fontWeight: 'bold', color: '#fff', marginBottom: '5px'}}>{player.name}</div>
-                                                            <div style={{fontSize: '0.9rem', color: '#ff8c00', fontWeight: 'bold'}}>+{dmg}°</div>
+                                                            <div className={styles.attackPlayerEmojiLarge}>{player.emoji}</div>
+                                                            <div className={styles.attackPlayerNameLarge}>{player.name}</div>
+                                                            <div className={styles.attackPlayerDmgLarge}>+{dmg}°</div>
                                                         </div>
                                                     )
                                                 })
@@ -5102,43 +4914,25 @@ function App() {
                                     </div>
                                 )
                             } else if (!hasAttackDecision && !isPartyMode) {
-                                // Strategic Mode: Belohnung wählen
-                                logger.log('🎁 [REWARD] Zeige Belohnungsauswahl (Strategic Mode)')
+                                // Angriff ausführen
+                                logger.log('🎁 [ATTACK] Zeige Angriffsauswahl')
                                 return (
-                                    <div style={{margin: '20px 0'}}>
-                                        <p style={{color: '#0f0', fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '10px'}}>✅ RICHTIG GERATEN!</p>
+                                    <div className={styles.rewardContainer}>
+                                        <p className={styles.rewardTitle}>✅ RICHTIG GERATEN!</p>
                                         
                                         {showRewardChoice && (
-                                            <div style={{background: '#2a3a1a', padding: '15px', borderRadius: '10px', marginBottom: '15px', border: '2px solid #4a6a2a'}}>
-                                                <h4 style={{margin: '0 0 12px 0', color: '#8fef8f'}}>🎁 Belohnung wählen:</h4>
-                                                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                                            <div className={styles.rewardChoiceBox}>
+                                                <h4 className={styles.rewardChoiceTitle}>🎁 Belohnung wählen:</h4>
+                                                <div className={styles.rewardGrid}>
                                                     <button 
                                                         onClick={() => chooseReward('attack')}
-                                                        style={{
-                                                            background: 'linear-gradient(135deg, #dc3545, #c82333)',
-                                                            color: 'white',
-                                                            padding: '20px',
-                                                            borderRadius: '10px',
-                                                            border: 'none',
-                                                            fontSize: '1.1rem',
-                                                            fontWeight: 'bold',
-                                                            cursor: 'pointer'
-                                                        }}
+                                                        className={styles.rewardButtonAttack}
                                                     >
                                                         🔴 Gegner aufheizen
                                                     </button>
                                                     <button 
                                                         onClick={() => chooseReward('invest')}
-                                                        style={{
-                                                            background: 'linear-gradient(135deg, #1a2a3a, #2a3a4a)',
-                                                            color: 'white',
-                                                            padding: '20px',
-                                                            borderRadius: '10px',
-                                                            border: 'none',
-                                                            fontSize: '1.1rem',
-                                                            fontWeight: 'bold',
-                                                            cursor: 'pointer'
-                                                        }}
+                                                        className={styles.rewardButtonInvest}
                                                     >
                                                         🃏 Joker ziehen
                                                     </button>
@@ -5147,15 +4941,15 @@ function App() {
                                         )}
                                         
                                         {showAttackSelection && (
-                                            <div style={{background: '#3a1a1a', padding: '10px', borderRadius: '10px', marginBottom: '15px'}}>
-                                                <h4 style={{margin: '0 0 10px 0'}}>🔥 Wen aufheizen?</h4>
-                                                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '10px'}}>
+                                            <div className={styles.attackSelectionContainer}>
+                                                <h4 className={styles.attackSelectionTitle}>🔥 Wen aufheizen?</h4>
+                                                <div className={styles.attackSelectionGrid}>
                                                     {(() => {
                                                         const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
                                                         const attackablePlayers = renderPlayers().filter(p => p.name !== myName && p.name !== hotseatName)
                                                         if (attackablePlayers.length === 0) {
                                                             return (
-                                                                <div key="no-players" style={{gridColumn: '1 / -1', textAlign: 'center', padding: '20px', color: '#aaa'}}>
+                                                                <div key="no-players" className={styles.attackNoPlayers}>
                                                                     Keine Spieler zum Angreifen verfügbar
                                                                 </div>
                                                             )
@@ -5170,33 +4964,26 @@ function App() {
                                                             <div
                                                                 key={player.name}
                                                                 onClick={() => doAttack(player.name)}
-                                                                style={{
-                                                                    padding: '15px',
-                                                                    background: 'rgba(22, 27, 34, 0.8)',
-                                                                    borderRadius: '10px',
-                                                                    cursor: 'pointer',
-                                                                    textAlign: 'center',
-                                                                    border: '2px solid #444'
-                                                                }}
+                                                                className={styles.attackPlayerCard}
                                                             >
-                                                                <div style={{fontSize: '2rem', marginBottom: '5px'}}>{player.emoji}</div>
-                                                                <div style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#fff'}}>{player.name}</div>
-                                                                <div style={{fontSize: '0.8rem', color: '#ff8c00'}}>+{dmg}°</div>
+                                                                <div className={styles.attackPlayerEmoji}>{player.emoji}</div>
+                                                                <div className={styles.attackPlayerName}>{player.name}</div>
+                                                                <div className={styles.attackPlayerDmg}>+{dmg}°</div>
                                                             </div>
                                                         )
                                                     })
                                                     })()}
                                                 </div>
-                                                <div style={{display: 'flex', gap: '5px', marginTop: '10px'}}>
+                                                <div className={styles.attackButtons}>
                                                     <button 
                                                         onClick={() => { setShowAttackSelection(false); setShowRewardChoice(true); }}
-                                                        style={{flex: 1, background: 'transparent', border: '1px solid #666', color: '#aaa', fontSize: '0.85rem', padding: '8px'}}
+                                                        className={styles.attackButton}
                                                     >
                                                         ← Zurück
                                                     </button>
                                                     <button 
                                                         onClick={skipAttack}
-                                                        style={{flex: 1, background: 'transparent', border: '1px solid #666', color: '#aaa', fontSize: '0.85rem', padding: '8px'}}
+                                                        className={styles.attackButton}
                                                     >
                                                         Angriff überspringen
                                                     </button>
@@ -5205,55 +4992,35 @@ function App() {
                                         )}
                                         
                                         {showJokerShop && (
-                                            <div style={{background: '#1a2a3a', padding: '10px', borderRadius: '10px', marginBottom: '15px'}}>
-                                                <h4 style={{margin: '0 0 10px 0'}}>🃏 Joker-Karte wählen:</h4>
-                                                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px'}}>
+                                            <div className={styles.jokerShopContainer}>
+                                                <h4 className={styles.jokerShopTitle}>🃏 Joker-Karte wählen:</h4>
+                                                <div className={styles.jokerShopGrid}>
                                                     <button 
                                                         onClick={() => takeCard('card_oil')}
-                                                        style={{
-                                                            padding: '15px',
-                                                            background: 'rgba(22, 27, 34, 0.8)',
-                                                            borderRadius: '10px',
-                                                            border: '2px solid #444',
-                                                            cursor: 'pointer',
-                                                            textAlign: 'center'
-                                                        }}
+                                                        className={styles.jokerCard}
                                                     >
-                                                        <strong style={{display: 'block', marginBottom: '5px'}}>🛢️ Ölfass</strong>
-                                                        <span style={{fontSize: '0.8rem', color: '#aaa'}}>Verdoppelt deinen nächsten Angriff.</span>
+                                                        <strong className={styles.jokerCardTitle}>🛢️ Ölfass</strong>
+                                                        <span className={styles.jokerCardDescription}>Verdoppelt deinen nächsten Angriff.</span>
                                                     </button>
                                                     <button 
                                                         onClick={() => takeCard('card_mirror')}
-                                                        style={{
-                                                            padding: '15px',
-                                                            background: 'rgba(22, 27, 34, 0.8)',
-                                                            borderRadius: '10px',
-                                                            border: '2px solid #444',
-                                                            cursor: 'pointer',
-                                                            textAlign: 'center'
-                                                        }}
+                                                        className={styles.jokerCard}
                                                     >
-                                                        <strong style={{display: 'block', marginBottom: '5px'}}>🪞 Spiegel</strong>
-                                                        <span style={{fontSize: '0.8rem', color: '#aaa'}}>Der nächste Angriff prallt zurück.</span>
+                                                        <strong className={styles.jokerCardTitle}>🪞 Spiegel</strong>
+                                                        <span className={styles.jokerCardDescription}>Der nächste Angriff prallt zurück.</span>
                                                     </button>
                                                     <button 
                                                         onClick={() => takeCard('card_ice')}
-                                                        style={{
-                                                            padding: '15px',
-                                                            background: 'rgba(22, 27, 34, 0.8)',
-                                                            borderRadius: '10px',
-                                                            border: '2px solid #444',
-                                                            cursor: 'pointer',
-                                                            textAlign: 'center'
-                                                        }}
+                                                        className={styles.jokerCard}
                                                     >
-                                                        <strong style={{display: 'block', marginBottom: '5px'}}>🧊 Eiswürfel</strong>
-                                                        <span style={{fontSize: '0.8rem', color: '#aaa'}}>Kühlt dich in der nächsten Runde automatisch ab.</span>
+                                                        <strong className={styles.jokerCardTitle}>🧊 Eiswürfel</strong>
+                                                        <span className={styles.jokerCardDescription}>Kühlt dich in der nächsten Runde automatisch ab.</span>
                                                     </button>
                                                 </div>
                                                 <button 
                                                     onClick={() => { setShowJokerShop(false); setShowRewardChoice(true); }}
-                                                    style={{width: '100%', background: 'transparent', border: '1px solid #666', color: '#aaa', fontSize: '0.85rem', marginTop: '10px', padding: '8px'}}
+                                                    className={styles.attackButton}
+                                                    style={{width: '100%', marginTop: '10px'}}
                                                 >
                                                     ← Zurück
                                                 </button>
@@ -5261,18 +5028,18 @@ function App() {
                                         )}
                                         
                                         {!showRewardChoice && !showAttackSelection && !showJokerShop && (
-                                            <div style={{margin: '20px 0', padding: '15px', background: 'rgba(0, 255, 0, 0.1)', borderRadius: '10px'}}>
-                                                <p style={{color: '#0f0', fontWeight: 'bold'}}>✅ RICHTIG GERATEN!</p>
-                                                <p style={{color: '#aaa', fontSize: '0.9rem'}}>Entscheidung getroffen. Warte auf andere Spieler...</p>
+                                            <div className={styles.rewardDecisionMade}>
+                                                <p className={styles.rewardDecisionTitle}>✅ RICHTIG GERATEN!</p>
+                                                <p className={styles.rewardDecisionText}>Entscheidung getroffen. Warte auf andere Spieler...</p>
                                             </div>
                                         )}
                                     </div>
                                 )
                             } else {
                                 return (
-                                    <div style={{margin: '20px 0', padding: '15px', background: 'rgba(0, 255, 0, 0.1)', borderRadius: '10px'}}>
-                                        <p style={{color: '#0f0', fontWeight: 'bold'}}>✅ RICHTIG GERATEN!</p>
-                                        <p style={{color: '#aaa', fontSize: '0.9rem'}}>Entscheidung getroffen. Warte auf andere Spieler...</p>
+                                    <div className={styles.rewardDecisionMade}>
+                                        <p className={styles.rewardDecisionTitle}>✅ RICHTIG GERATEN!</p>
+                                        <p className={styles.rewardDecisionText}>Entscheidung getroffen. Warte auf andere Spieler...</p>
                                     </div>
                                 )
                             }
@@ -5295,37 +5062,30 @@ function App() {
                                 setLocalActionDone(true)
                             }
                             return (
-                                <div style={{
-                                    margin: '20px 0',
-                                    padding: '20px',
-                                    background: 'rgba(139, 0, 0, 0.3)',
-                                    borderRadius: '15px',
-                                    border: '2px solid rgba(255, 0, 0, 0.5)',
-                                    textAlign: 'center'
-                                }}>
-                                    <div style={{fontSize: '3rem', marginBottom: '10px'}}>❌</div>
-                                    <p style={{color: '#ff0000', fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '10px'}}>FALSCH GERATEN</p>
-                                    {isPartyMode && <p style={{color: '#fff', fontSize: '0.9rem'}}>Du erhältst 10°C Strafhitze.</p>}
+                                <div className={styles.wrongAnswerContainer}>
+                                    <div className={styles.wrongAnswerIcon}>❌</div>
+                                    <p className={styles.wrongAnswerTitleRed}>FALSCH GERATEN</p>
+                                    {isPartyMode && <p className={styles.wrongAnswerTextWhite}>Du erhältst 10°C Strafhitze.</p>}
                                 </div>
                             )
                         } else if (myVote && (truth === undefined || truth === null)) {
                             // Hotseat hat noch nicht geantwortet, aber Spieler hat abgestimmt
                             return (
-                                <div style={{margin: '20px 0', padding: '15px', background: 'rgba(22, 27, 34, 0.6)', borderRadius: '10px'}}>
-                                    <p style={{color: '#aaa'}}>Du hast die Frage beantwortet. Warte auf die anderen Spieler...</p>
+                                <div className={styles.resultStatusBox}>
+                                    <p className={styles.resultStatusText}>Du hast die Frage beantwortet. Warte auf die anderen Spieler...</p>
                                 </div>
                             )
                         } else {
                             return (
-                                <div style={{margin: '20px 0', padding: '15px', background: 'rgba(22, 27, 34, 0.6)', borderRadius: '10px'}}>
-                                    <p style={{color: '#ccc'}}>⌛ Keine Antwort abgegeben.</p>
+                                <div className={styles.resultStatusBox}>
+                                    <p className={styles.resultStatusTextAlt}>⌛ Keine Antwort abgegeben.</p>
                                 </div>
                             )
                         }
                     })()}
                     
-                    <div style={{margin: '20px 0'}}>
-                        <div style={{marginBottom: '10px', color: '#aaa', fontSize: '0.9rem'}}>
+                    <div className={styles.resultSection}>
+                        <div className={styles.resultSectionTitle}>
                             {(() => {
                                 const maxTemp = globalData.config?.maxTemp || 100
                                 const activePlayers = renderPlayers().filter(p => (globalData.players?.[p.name]?.temp || 0) < maxTemp)
@@ -5362,7 +5122,7 @@ function App() {
             
             {/* WINNER SCREEN */}
             {currentScreen === 'winner' && globalData && (
-                <div className="screen active card" style={{position: 'relative', overflow: 'hidden'}}>
+                <div className={`screen active card ${styles.winnerScreen}`}>
                     {/* Konfetti Animation */}
                     {[...Array(50)].map((_, i) => (
                         <div
@@ -5381,22 +5141,22 @@ function App() {
                             }}
                         />
                     ))}
-                    <h2 style={{position: 'relative', zIndex: 2}}>🎉 Gewinner!</h2>
+                    <h2 className={styles.winnerTitle}>🎉 Gewinner!</h2>
                     {(() => {
                         const maxTemp = globalData.config?.maxTemp || 100
                         const winner = Object.entries(globalData.players || {}).find(([name, data]) => (data.temp || 0) < maxTemp)
                         if (winner) {
                             const [winnerName, winnerData] = winner
                             return (
-                                <div style={{margin: '20px 0', padding: '20px', background: 'rgba(22, 27, 34, 0.6)', borderRadius: '15px', textAlign: 'center', position: 'relative', zIndex: 2}}>
-                                    <div style={{fontSize: '4rem', marginBottom: '15px'}}>{winnerData.emoji || '😎'}</div>
-                                    <p style={{fontSize: '1.5rem', fontWeight: 'bold', color: '#ff8c00', marginBottom: '10px'}}>
+                                <div className={styles.winnerCard}>
+                                    <div className={styles.winnerEmoji}>{winnerData.emoji || '😎'}</div>
+                                    <p className={styles.winnerName}>
                                         {winnerName}
                                     </p>
-                                    <p style={{color: '#aaa', fontSize: '1rem'}}>
+                                    <p className={styles.winnerText}>
                                         ist cool geblieben und gewinnt diese Runde Hitzkopf! 🧊
                                     </p>
-                                    <p style={{color: '#888', fontSize: '0.9rem', marginTop: '10px'}}>
+                                    <p className={styles.winnerTemp}>
                                         {winnerData.temp || 0}°C
                                     </p>
                                 </div>
@@ -5404,100 +5164,30 @@ function App() {
                         }
                         return null
                     })()}
-                    <div style={{display: 'flex', gap: '10px', marginTop: '20px', position: 'relative', zIndex: 2}}>
+                    <div className={styles.winnerActions}>
                         {isHost && (
-                            <button onClick={rematchGame} className="btn-primary" style={{flex: 1}}>
+                            <button onClick={rematchGame} className={`btn-primary ${styles.winnerButton}`}>
                                 ♻️ Revanche starten
                             </button>
                         )}
-                        <button onClick={leaveLobby} className="btn-secondary" style={{flex: 1}}>
+                        <button onClick={leaveLobby} className={`btn-secondary ${styles.winnerButton}`}>
                             🚪 Lobby verlassen
                         </button>
                     </div>
                 </div>
             )}
             
-            {/* COUNTDOWN OVERLAY */}
-            {showCountdown && countdownText && (
-                <div 
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'rgba(0, 0, 0, 0.9)',
-                        backdropFilter: 'blur(20px) saturate(180%)',
-                        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexDirection: 'column',
-                        zIndex: 5000,
-                        animation: 'fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }}
-                >
-                    <div style={{
-                        fontSize: 'clamp(4rem, 20vw, 8rem)',
-                        fontWeight: 900,
-                        color: '#ff6b35',
-                        textShadow: '0 0 40px rgba(255, 107, 53, 0.8), 0 0 80px rgba(255, 107, 53, 0.4)',
-                        animation: 'pulse 1s cubic-bezier(0.4, 0, 0.2, 1) infinite',
-                        letterSpacing: '-0.02em',
-                        lineHeight: '1.2',
-                        whiteSpace: 'pre-line',
-                        textAlign: 'center'
-                    }}>
-                        {countdownText}
-                    </div>
-                    {countdownText !== 'HITZ\nKOPF!' && (
-                        <div style={{
-                            marginTop: '16px',
-                            fontSize: 'clamp(1rem, 4vw, 1.5rem)',
-                            color: '#fff',
-                            letterSpacing: '0.3em',
-                            fontWeight: 600,
-                            opacity: 0.9
-                        }}>
-                            Bereit machen...
-                        </div>
-                    )}
-                </div>
-            )}
-            
             {/* HOTSEAT MODAL */}
             {showHotseatModal && globalData && globalData.hotseat && (
                 <div 
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'rgba(0, 0, 0, 0.8)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10000
-                    }}
+                    className={styles.hotseatModalOverlay}
                     onClick={closeHotseatModal}
                 >
                     <div 
-                        style={{
-                            background: 'linear-gradient(145deg, #1e1e1e, #252525)',
-                            padding: '40px',
-                            borderRadius: '20px',
-                            maxWidth: '500px',
-                            margin: '20px',
-                            border: '2px solid #ff4500',
-                            boxShadow: '0 8px 32px rgba(255, 69, 0, 0.6)',
-                            textAlign: 'center',
-                            position: 'relative',
-                            zIndex: 10001
-                        }}
+                        className={styles.hotseatModalContent}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div style={{fontSize: '5rem', marginBottom: '20px'}}>
+                        <div className={styles.hotseatModalIcon}>
                             {(() => {
                                 // WICHTIG: Stelle sicher, dass hotseat ein String ist
                                 const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
@@ -5509,30 +5199,16 @@ function App() {
                         </div>
                         {myName === globalData.hotseat ? (
                             <>
-                                <div style={{
-                                    fontSize: '2.5rem',
-                                    fontWeight: '800',
-                                    background: 'linear-gradient(90deg, #ff4500, #ff8c00)',
-                                    WebkitBackgroundClip: 'text',
-                                    WebkitTextFillColor: 'transparent',
-                                    textShadow: '0 0 18px rgba(255, 69, 0, 0.6)',
-                                    marginBottom: '15px'
-                                }}>
+                                <div className={styles.hotseatModalTitle}>
                                     Du bist gefragt!
                                 </div>
-                                <div style={{fontSize: '1.2rem', color: '#fff', marginBottom: '25px'}}>
+                                <div className={styles.hotseatModalText}>
                                     Alle anderen müssen deine Antwort erraten.
                                 </div>
                             </>
                         ) : (
                             <>
-                                <div style={{
-                                    marginBottom: '15px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '10px'
-                                }}>
+                                <div className={styles.hotseatModalHeader}>
                                     {(() => {
                                         // WICHTIG: Stelle sicher, dass hotseat ein String ist
                                         const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
@@ -5541,20 +5217,13 @@ function App() {
                                         const hotseatEmoji = globalData.players?.[hotseatName]?.emoji || '😊'
                                         return (
                                             <>
-                                                <span style={{fontSize: '2.5rem'}}>{hotseatEmoji}</span>
-                                                <span style={{
-                                                    fontSize: '2.5rem',
-                                                    fontWeight: '800',
-                                                    background: 'linear-gradient(90deg, #ff4500, #ff8c00)',
-                                                    WebkitBackgroundClip: 'text',
-                                                    WebkitTextFillColor: 'transparent',
-                                                    textShadow: '0 0 18px rgba(255, 69, 0, 0.6)'
-                                                }}>{hotseatName}</span>
+                                                <span className={styles.hotseatModalEmoji}>{hotseatEmoji}</span>
+                                                <span className={styles.hotseatModalTitle}>{hotseatName}</span>
                                             </>
                                         )
                                     })()}
                                 </div>
-                                <div style={{fontSize: '1.2rem', color: '#fff', marginBottom: '25px'}}>
+                                <div className={styles.hotseatModalText}>
                                     {(() => {
                                         // WICHTIG: Stelle sicher, dass hotseat ein String ist
                                         const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
@@ -5564,28 +5233,8 @@ function App() {
                             </>
                         )}
                         <button 
-                            className="btn-primary" 
+                            className={`btn-primary ${styles.hotseatModalButton}`}
                             onClick={closeHotseatModal}
-                            style={{
-                                padding: '15px 30px',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                background: 'linear-gradient(135deg, #ff4500, #ff8c00)',
-                                border: 'none',
-                                borderRadius: '12px',
-                                color: '#fff',
-                                cursor: 'pointer',
-                                boxShadow: '0 4px 15px rgba(255, 69, 0, 0.4)',
-                                transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.05)'
-                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 69, 0, 0.6)'
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)'
-                                e.currentTarget.style.boxShadow = '0 4px 15px rgba(255, 69, 0, 0.4)'
-                            }}
                         >
                             Los geht's
                         </button>
@@ -5596,89 +5245,43 @@ function App() {
             {/* ATTACK MODAL */}
             {showAttackModal && attackResult && globalData && (
                 <div 
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'rgba(0, 0, 0, 0.8)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10000
-                    }}
+                    className={styles.attackModalOverlay}
                     onClick={closeAttackModal}
                 >
                     <div 
-                        style={{
-                            background: 'linear-gradient(145deg, #1e1e1e, #252525)',
-                            padding: '40px',
-                            borderRadius: '20px',
-                            maxWidth: '500px',
-                            margin: '20px',
-                            border: attackResult.totalDmg > 0 ? '2px solid #ff4500' : '2px solid #4a9eff',
-                            boxShadow: attackResult.totalDmg > 0 ? '0 8px 32px rgba(255, 69, 0, 0.8)' : '0 8px 32px rgba(74, 158, 255, 0.8)',
-                            textAlign: 'center',
-                            position: 'relative',
-                            zIndex: 10001
-                        }}
+                        className={`${styles.attackModalContent} ${attackResult.totalDmg > 0 ? styles.attackModalContentDamage : styles.attackModalContentNoDamage}`}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div style={{fontSize: '5rem', marginBottom: '20px'}}>
+                        <div className={styles.attackModalIcon}>
                             {attackResult.totalDmg > 0 ? '🔥' : '🧊'}
                         </div>
-                        <div style={{
-                            fontSize: '2.5rem',
-                            fontWeight: '800',
-                            color: attackResult.totalDmg > 0 ? '#ff4500' : '#4a9eff',
-                            marginBottom: '15px',
-                            textShadow: attackResult.totalDmg > 0 ? '0 0 18px rgba(255, 69, 0, 0.6)' : '0 0 18px rgba(74, 158, 255, 0.6)'
-                        }}>
+                        <div className={`${styles.attackModalName} ${attackResult.totalDmg > 0 ? styles.attackModalNameDamage : styles.attackModalNameNoDamage}`}>
                             {myName}
                         </div>
-                        <div style={{fontSize: '1.2rem', color: '#fff', marginBottom: '15px'}}>
+                        <div className={styles.attackModalMessage}>
                             {attackResult.totalDmg > 0 
                                 ? `Du wurdest aufgeheizt! Insgesamt ${attackResult.totalDmg}°C`
                                 : 'Cool geblieben - Keiner hat dich aufgeheizt'
                             }
                         </div>
                         {attackResult.totalDmg === 0 && (
-                            <div style={{fontSize: '0.9rem', color: '#aaa', marginBottom: '25px'}}>
+                            <div className={styles.attackModalNoDamage}>
                                 Du hast diese Runde keine Hitze erhalten
                             </div>
                         )}
                         {attackResult.attackDetails && attackResult.attackDetails.length > 0 && attackResult.totalDmg > 0 && (
-                            <div style={{
-                                fontSize: '0.9rem',
-                                color: '#aaa',
-                                marginBottom: '25px',
-                                textAlign: 'left',
-                                maxWidth: '80%',
-                                marginLeft: 'auto',
-                                marginRight: 'auto',
-                                paddingTop: '15px',
-                                borderTop: '1px solid #333'
-                            }}>
-                                <strong style={{color: '#fff'}}>Angriffe:</strong><br />
+                            <div className={styles.attackModalDetails}>
+                                <strong className={styles.attackModalDetailsTitle}>Angriffe:</strong><br />
                                 {attackResult.attackDetails
                                     .filter(d => !d.mirrored) // Zeige alle Angriffe außer gespiegelte, inklusive Strafhitze
                                     .map((detail, idx) => (
-                                        <div key={idx} style={{marginTop: '8px', color: '#ccc'}}>
+                                        <div key={idx} className={styles.attackModalDetailItem}>
                                             • {detail.attacker}: +{detail.dmg}°C
                                         </div>
                                     ))}
                             </div>
                         )}
-                        <div style={{
-                            width: '100%',
-                            height: '20px',
-                            background: '#333',
-                            borderRadius: '10px',
-                            marginBottom: '10px',
-                            overflow: 'hidden',
-                            position: 'relative'
-                        }}>
+                        <div className={styles.attackModalBar}>
                             {(() => {
                                 const maxTemp = globalData.config?.maxTemp || 100
                                 const currentTemp = globalData.players?.[myName]?.temp || 0
@@ -5686,15 +5289,7 @@ function App() {
                                 
                                 return (
                                     <div 
-                                        style={{
-                                            height: '100%',
-                                            width: '0%',
-                                            background: attackResult.totalDmg > 0 
-                                                ? 'linear-gradient(90deg, #ffae00, #ff0000)' 
-                                                : 'linear-gradient(90deg, #4a9eff, #0066cc)',
-                                            transition: 'width 1.2s ease-out',
-                                            boxShadow: attackResult.totalDmg > 0 ? '0 0 20px rgba(255, 0, 0, 0.7)' : 'none'
-                                        }}
+                                        className={`${styles.attackModalBarFill} ${attackResult.totalDmg > 0 ? styles.attackModalBarFillDamage : styles.attackModalBarFillNoDamage}`}
                                         ref={(el) => {
                                             if (el) {
                                                 setTimeout(() => {
@@ -5706,29 +5301,12 @@ function App() {
                                 )
                             })()}
                         </div>
-                        <div style={{
-                            fontSize: '1.5rem',
-                            fontWeight: 'bold',
-                            color: attackResult.totalDmg > 0 ? '#ff4500' : '#4a9eff',
-                            marginTop: '10px'
-                        }}>
+                        <div className={`${styles.attackModalTemp} ${attackResult.totalDmg > 0 ? styles.attackModalTempDamage : styles.attackModalTempNoDamage}`}>
                             {globalData.players?.[myName]?.temp || 0}°C
                         </div>
                         <button 
-                            className="btn-primary" 
+                            className={`btn-primary ${styles.attackModalButton}`}
                             onClick={closeAttackModal}
-                            style={{
-                                marginTop: '25px',
-                                padding: '15px 30px',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                background: 'linear-gradient(135deg, #ff4500, #ff8c00)',
-                                border: 'none',
-                                borderRadius: '12px',
-                                color: '#fff',
-                                cursor: 'pointer',
-                                width: '100%'
-                            }}
                         >
                             Verstanden
                         </button>
@@ -5739,18 +5317,7 @@ function App() {
             {/* ELIMINATION MODAL */}
             {showEliminationModal && eliminatedPlayer && globalData && (
                 <div 
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'rgba(0, 0, 0, 0.9)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10000
-                    }}
+                    className={styles.eliminationModalOverlay}
                     onClick={() => {
                         setShowEliminationModal(false)
                         setEliminatedPlayer(null)
@@ -5763,52 +5330,37 @@ function App() {
                     }}
                 >
                     <div 
-                        style={{
-                            background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
-                            padding: '30px',
-                            borderRadius: '20px',
-                            maxWidth: '500px',
-                            width: '90%',
-                            textAlign: 'center',
-                            border: '2px solid #ff4500',
-                            boxShadow: '0 0 30px rgba(255, 69, 0, 0.5)',
-                            zIndex: 10001
-                        }}
+                        className={styles.eliminationModalContent}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div style={{marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
+                        <div className={styles.eliminationModalLogoContainer}>
                             <img 
                                 src={hkLogoHorizontal} 
                                 alt="Hitzkopf Logo" 
-                                style={{
-                                    maxWidth: '250px',
-                                    width: '80%',
-                                    height: 'auto',
-                                    objectFit: 'contain'
-                                }}
+                                className={styles.eliminationModalLogo}
                             />
                         </div>
                         {eliminatedPlayer === myName ? (
                             <>
-                                <h2 style={{color: '#ff4500', marginBottom: '15px', fontSize: '1.8rem'}}>
+                                <h2 className={styles.eliminationModalTitle}>
                                     Oh nein!
                                 </h2>
-                                <p style={{color: '#fff', fontSize: '1.2rem', marginBottom: '10px'}}>
+                                <p className={styles.eliminationModalText}>
                                     Du bist ein Hitzkopf und somit ab sofort raus!
                                 </p>
                             </>
                         ) : (
                             <>
-                                <h2 style={{color: '#ff4500', marginBottom: '15px', fontSize: '1.8rem'}}>
+                                <h2 className={styles.eliminationModalTitle}>
                                     {eliminatedPlayer}
                                 </h2>
-                                <p style={{color: '#fff', fontSize: '1.2rem', marginBottom: '10px'}}>
+                                <p className={styles.eliminationModalText}>
                                     ist ein Hitzkopf und somit raus!
                                 </p>
                             </>
                         )}
                         <button 
-                            className="btn-primary" 
+                            className={`btn-primary ${styles.eliminationModalButton}`}
                             onClick={() => {
                                 setShowEliminationModal(false)
                                 setEliminatedPlayer(null)
@@ -5818,18 +5370,6 @@ function App() {
                                         eliminationInfo: deleteField()
                                     }).catch(console.error)
                                 }
-                            }}
-                            style={{
-                                marginTop: '25px',
-                                padding: '15px 30px',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                background: 'linear-gradient(135deg, #ff4500, #ff8c00)',
-                                border: 'none',
-                                borderRadius: '12px',
-                                color: '#fff',
-                                cursor: 'pointer',
-                                width: '100%'
                             }}
                         >
                             Verstanden
@@ -5841,113 +5381,52 @@ function App() {
             {/* RULES MODAL */}
             {showRulesModal && (
                 <div 
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'rgba(0, 0, 0, 0.8)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10000
-                    }}
+                    className={styles.rulesModalOverlay}
                     onClick={() => setShowRulesModal(false)}
                 >
                     <div 
-                        style={{
-                            background: 'linear-gradient(145deg, #1e1e1e, #252525)',
-                            padding: '40px',
-                            borderRadius: '20px',
-                            maxWidth: '600px',
-                            margin: '20px',
-                            border: '2px solid #ff4500',
-                            boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
-                            maxHeight: '80vh',
-                            overflowY: 'auto',
-                            position: 'relative',
-                            zIndex: 10001
-                        }}
+                        className={styles.rulesModalContent}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <h2 style={{
-                            color: '#ff4500',
-                            marginBottom: '30px',
-                            fontSize: '1.8rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px'
-                        }}>
-                            <span style={{fontSize: '1.5rem'}}>📖</span>
+                        <h2 className={styles.rulesModalHeader}>
+                            <span className={styles.rulesModalHeaderIcon}>📖</span>
                             <span>Anleitung</span>
                         </h2>
-                        <div style={{color: '#fff', lineHeight: '1.8', textAlign: 'left'}}>
-                            <div style={{
-                                marginBottom: '25px',
-                                padding: '15px',
-                                background: 'rgba(22, 27, 34, 0.6)',
-                                borderRadius: '10px'
-                            }}>
-                                <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
-                                    <span style={{fontSize: '1.5rem'}}>🎯</span>
-                                    <strong style={{color: '#ff8c00', fontSize: '1.1rem'}}>Ziel:</strong>
+                        <div className={styles.rulesModalBody}>
+                            <div className={styles.rulesModalSectionBox}>
+                                <div className={styles.rulesModalSectionHeader}>
+                                    <span className={styles.rulesModalSectionIcon}>🎯</span>
+                                    <strong className={styles.rulesModalSectionTitle}>Ziel:</strong>
                                 </div>
-                                <p style={{color: '#ccc', marginLeft: '35px'}}>
+                                <p className={styles.rulesModalSectionText}>
                                     Errate die Antworten deiner Freunde und bringe sie zum Kochen! <br />
                                     Rätst du richtig, darfst du Hitze verteilen, liegst du falsch, erhältst du Strafhitze.
                                 </p>
                             </div>
                             
-                            <div style={{
-                                marginBottom: '25px',
-                                padding: '15px',
-                                background: 'rgba(22, 27, 34, 0.6)',
-                                borderRadius: '10px'
-                            }}>
-                                <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
-                                    <span style={{fontSize: '1.5rem'}}>🔥</span>
-                                    <strong style={{color: '#ff8c00', fontSize: '1.1rem'}}>Verlierer:</strong>
+                            <div className={styles.rulesModalSectionBox}>
+                                <div className={styles.rulesModalSectionHeader}>
+                                    <span className={styles.rulesModalSectionIcon}>🔥</span>
+                                    <strong className={styles.rulesModalSectionTitle}>Verlierer:</strong>
                                 </div>
-                                <p style={{color: '#ccc', marginLeft: '35px'}}>
+                                <p className={styles.rulesModalSectionText}>
                                     Wer als erstes 100° erreicht ist ein Hitzkopf und fliegt raus.
                                 </p>
                             </div>
                             
-                            <div style={{
-                                marginBottom: '25px',
-                                padding: '15px',
-                                background: 'rgba(22, 27, 34, 0.6)',
-                                borderRadius: '10px'
-                            }}>
-                                <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px'}}>
-                                    <span style={{fontSize: '1.5rem'}}>🧊</span>
-                                    <strong style={{color: '#ff8c00', fontSize: '1.1rem'}}>Gewinner:</strong>
+                            <div className={styles.rulesModalSectionBox}>
+                                <div className={styles.rulesModalSectionHeader}>
+                                    <span className={styles.rulesModalSectionIcon}>🧊</span>
+                                    <strong className={styles.rulesModalSectionTitle}>Gewinner:</strong>
                                 </div>
-                                <p style={{color: '#ccc', marginLeft: '35px'}}>
+                                <p className={styles.rulesModalSectionText}>
                                     Bewahrst du einen kühlen Kopf, entscheidest du das Spiel für dich.
                                 </p>
                             </div>
                         </div>
                         <button 
-                            className="btn-primary" 
+                            className={`btn-primary ${styles.rulesModalButton}`}
                             onClick={() => setShowRulesModal(false)}
-                            style={{
-                                marginTop: '25px',
-                                padding: '15px 30px',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                background: 'linear-gradient(135deg, #ff4500, #ff8c00)',
-                                border: 'none',
-                                borderRadius: '12px',
-                                color: '#fff',
-                                cursor: 'pointer',
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px'
-                            }}
                         >
                             <span>Verstanden</span>
                             <span>✓</span>
