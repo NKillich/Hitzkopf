@@ -1628,3 +1628,79 @@
     color: #4a9eff;
 }
 
+/* Hotseat Wait Container - Angriffsphase */
+.hotseatWaitContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.hotseatWaitBox {
+    background: rgba(22, 27, 34, 0.8);
+    border: 2px solid #ff8c00;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+
+.hotseatWaitTitle {
+    margin: 0 0 10px 0;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #ff8c00;
+}
+
+.hotseatWaitSubtitle {
+    margin: 0;
+    font-size: 1rem;
+    color: #aaa;
+}
+
+/* Guess Overview - Wer hat richtig/falsch geraten */
+.guessOverviewContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.guessOverviewSection {
+    background: rgba(22, 27, 34, 0.6);
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 15px;
+}
+
+.guessOverviewTitle {
+    margin: 0 0 12px 0;
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+.guessOverviewList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.guessOverviewItem {
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Player Ready List - Zeigt Spielernamen mit Bereit-Status */
+.playerReadyList {
+    margin-top: 12px;
+}
+
+.playerReadyText {
+    font-size: 0.8rem;
+    color: #aaa;
+    text-align: center;
+    line-height: 1.4;
+}
+

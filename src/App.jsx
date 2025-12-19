@@ -4550,7 +4550,8 @@ function App() {
                                 <p className={styles.eliminatedText}>Du hast {myTemp}°C erreicht und bist ausgeschieden.</p>
                                 <p className={styles.eliminatedSubtext}>Du kannst dem Spiel als Zuschauer folgen.</p>
                             </div>
-                            <div className="thermo-grid">
+                            {/* THERMOMETER RANGLISTE - AUSGEBLENDET - Code bleibt für spätere Platzierung erhalten */}
+                            <div className="thermo-grid" style={{ display: 'none' }}>
                                 {renderPlayers().map((player) => {
                                     const tempPercent = Math.min((player.temp / maxTemp) * 100, 100)
                                     const isHotseat = player.name === currentHotseat
@@ -4600,7 +4601,8 @@ function App() {
                 return (
                 <div className="screen active card">
                     
-                    <div className="thermo-grid">
+                    {/* THERMOMETER RANGLISTE - AUSGEBLENDET - Code bleibt für spätere Platzierung erhalten */}
+                    <div className="thermo-grid" style={{ display: 'none' }}>
                         {renderPlayers().map((player) => {
                             const tempPercent = Math.min((player.temp / maxTemp) * 100, 100)
                             // WICHTIG: isHotseat nur basierend auf currentHotseat berechnen, nicht auf globalData.hotseat
@@ -4657,7 +4659,7 @@ function App() {
                             )
                         })}
                     </div>
-                    <hr className={styles.horizontalRule} />
+                    {/* <hr className={styles.horizontalRule} /> */}
                     {/* Hotseat-Hinweis über der Frage */}
                     {(() => {
                         // WICHTIG: Stelle sicher, dass currentHotseat ein String ist
@@ -4756,14 +4758,15 @@ function App() {
                 )
             })()}
             
-            {/* RESULT SCREEN */}
+            {/* RESULT SCREEN / ANGRIFFSPHASE */}
             {currentScreen === 'result' && globalData && (() => {
                 // WICHTIG: Definiere isHotseat hier im Scope, damit es im JSX verwendet werden kann
                 const isHotseat = myName === globalData.hotseat
                 return (
                 <div className="screen active card">
-                    <h3 className={styles.resultTitle}>📊 Ergebnis</h3>
-                    <div className="thermo-grid">
+                    <h3 className={styles.resultTitle}>⚔️ Angriffsphase</h3>
+                    {/* THERMOMETER RANGLISTE - AUSGEBLENDET - Wird später auf einer separaten Seite angezeigt */}
+                    <div className="thermo-grid" style={{ display: 'none' }}>
                         {renderPlayers().map((player) => {
                             const maxTemp = globalData.config?.maxTemp || 100
                             const tempPercent = Math.min((player.temp / maxTemp) * 100, 100)
@@ -4810,9 +4813,52 @@ function App() {
                         const isHotseat = myName === hotseatName
                         
                         if (isHotseat) {
+                            // Hotseat-Person: Zeige wer richtig und falsch geraten hat
+                            const allPlayers = renderPlayers().filter(p => p.name !== hotseatName)
+                            const correctGuessers = allPlayers.filter(p => {
+                                const playerVote = globalData.votes?.[p.name]
+                                return playerVote && String(playerVote.choice) === String(truth)
+                            }).sort((a, b) => a.name.localeCompare(b.name))
+                            const wrongGuessers = allPlayers.filter(p => {
+                                const playerVote = globalData.votes?.[p.name]
+                                return !playerVote || String(playerVote.choice) !== String(truth)
+                            }).sort((a, b) => a.name.localeCompare(b.name))
+                            
                             return (
-                                <div className={styles.resultStatusBox}>
-                                    <p className={styles.resultStatusText}>Du hast die Frage beantwortet. Warte auf die anderen Spieler...</p>
+                                <div className={styles.hotseatWaitContainer}>
+                                    <div className={styles.hotseatWaitBox}>
+                                        <p className={styles.hotseatWaitTitle}>⏳ Warte bis alle Spieler ihre Hitze verteilt haben</p>
+                                        <p className={styles.hotseatWaitSubtitle}>Die anderen Spieler greifen gerade an...</p>
+                                    </div>
+                                    
+                                    {/* Übersicht: Wer hat richtig/falsch geraten */}
+                                    <div className={styles.guessOverviewContainer}>
+                                        {correctGuessers.length > 0 && (
+                                            <div className={styles.guessOverviewSection}>
+                                                <h4 className={styles.guessOverviewTitle} style={{ color: '#22c55e' }}>✅ Richtig geraten:</h4>
+                                                <div className={styles.guessOverviewList}>
+                                                    {correctGuessers.map(player => (
+                                                        <div key={player.name} className={styles.guessOverviewItem} style={{ background: 'rgba(34, 197, 94, 0.2)', border: '1px solid #22c55e' }}>
+                                                            <span>{player.emoji} {player.name}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        
+                                        {wrongGuessers.length > 0 && (
+                                            <div className={styles.guessOverviewSection}>
+                                                <h4 className={styles.guessOverviewTitle} style={{ color: '#ef4444' }}>❌ Falsch geraten:</h4>
+                                                <div className={styles.guessOverviewList}>
+                                                    {wrongGuessers.map(player => (
+                                                        <div key={player.name} className={styles.guessOverviewItem} style={{ background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444' }}>
+                                                            <span>{player.emoji} {player.name}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )
                         } else if (myVote && truth !== undefined && truth !== null && String(myVote.choice) === String(truth)) {
@@ -5084,16 +5130,6 @@ function App() {
                         }
                     })()}
                     
-                    <div className={styles.resultSection}>
-                        <div className={styles.resultSectionTitle}>
-                            {(() => {
-                                const maxTemp = globalData.config?.maxTemp || 100
-                                const activePlayers = renderPlayers().filter(p => (globalData.players?.[p.name]?.temp || 0) < maxTemp)
-                                const activeReady = (globalData.ready || []).filter(p => (globalData.players?.[p]?.temp || 0) < maxTemp)
-                                return `Bereit: ${activeReady.length}/${activePlayers.length}`
-                            })()}
-                        </div>
-                    </div>
                     {/* WICHTIG: Button immer anzeigen, außer Spieler ist ausgeschieden */}
                     {(() => {
                         const playerData = globalData.players?.[myName]
@@ -5116,6 +5152,31 @@ function App() {
                             </button>
                         )
                     })()}
+                    
+                    {/* Spieler-Bereit-Status unter dem Button */}
+                    <div className={styles.playerReadyList}>
+                        {(() => {
+                            const maxTemp = globalData.config?.maxTemp || 100
+                            const activePlayers = renderPlayers().filter(p => (globalData.players?.[p.name]?.temp || 0) < maxTemp)
+                            const readyList = globalData.ready || []
+                            
+                            // Sortiere alphabetisch
+                            const sortedPlayers = [...activePlayers].sort((a, b) => a.name.localeCompare(b.name))
+                            
+                            // Erstelle Komma-getrennte Liste
+                            const playerText = sortedPlayers.map(player => {
+                                const isReady = readyList.includes(player.name)
+                                const icon = isReady ? '✅' : '⏳'
+                                return `${icon} ${player.emoji} ${player.name}`
+                            }).join(', ')
+                            
+                            return (
+                                <div className={styles.playerReadyText}>
+                                    {playerText}
+                                </div>
+                            )
+                        })()}
+                    </div>
                 </div>
                 )
             })()}
