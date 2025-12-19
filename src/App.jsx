@@ -1486,6 +1486,26 @@ function App() {
                 const condition4 = (isHostActive || (hostInactive && isFirstBackupHost))
                 const canExecuteAttacks = condition1 && condition2 && condition3 && condition4
                 
+                // DETAILLIERTES LOGGING: Zeige welche Bedingungen erfüllt/nicht erfüllt sind
+                if (!canExecuteAttacks && (allDecided || allVoted)) {
+                    logger.log('⚔️ [EXECUTE ATTACKS] Prüfung fehlgeschlagen - Details:', {
+                        roundId: data.roundId,
+                        condition1_allDecidedOrVoted: condition1,
+                        allDecided: allDecided,
+                        allVoted: allVoted,
+                        condition2_recapNotShown: condition2,
+                        roundRecapShown: data.roundRecapShown,
+                        condition3_hasTruth: condition3,
+                        hotseatVote: data.votes?.[data.hotseat],
+                        condition4_hostActive: condition4,
+                        isHostActive: isHostActive,
+                        hostInactive: hostInactive,
+                        isFirstBackupHost: isFirstBackupHost,
+                        myName: myName,
+                        host: data.host
+                    })
+                }
+                
                 if (canExecuteAttacks) {
                     // Verhindere mehrfache Ausführung
                     const timeoutKey = `executeAttacks_${data.roundId}`
@@ -1502,6 +1522,33 @@ function App() {
                     }
                 } else if (allDecided && recapNotShown && !hasTruth && isHost && data.host === myName) {
                     logger.warn('⚠️ [EXECUTE ATTACKS] Alle haben entschieden, aber Hotseat hat noch keine Antwort - warte auf Hotseat')
+                } else if (allDecided && recapNotShown && hasTruth && !canExecuteAttacks) {
+                    // FALLBACK: Wenn alle Bedingungen erfüllt sind, aber canExecuteAttacks false ist
+                    // (z.B. weil Host-Check fehlschlägt), trotzdem versuchen auszuführen
+                    logger.warn('⚠️ [EXECUTE ATTACKS] FALLBACK: Alle Bedingungen erfüllt, aber canExecuteAttacks ist false. Versuche trotzdem...', {
+                        condition1: condition1,
+                        condition2: condition2,
+                        condition3: condition3,
+                        condition4: condition4,
+                        isHost: isHost,
+                        myName: myName,
+                        host: data.host
+                    })
+                    // Versuche als Backup-Host oder wenn ich der erste aktive Spieler bin
+                    if (isFirstBackupHost || sortedActivePlayers[0] === myName) {
+                        const timeoutKey = `executeAttacks_fallback_${data.roundId}`
+                        if (!timeoutKeysRef.current.has(timeoutKey)) {
+                            timeoutKeysRef.current.add(timeoutKey)
+                            logger.log('⚔️ [EXECUTE ATTACKS] FALLBACK: Starte executePendingAttacks als Backup')
+                            const timeoutId = setTimeout(() => {
+                                executePendingAttacks(data).catch(err => {
+                                    logger.error('⚔️ [EXECUTE ATTACKS] FALLBACK Fehler:', err)
+                                })
+                                timeoutKeysRef.current.delete(timeoutKey)
+                            }, 1000)
+                            timeoutIdsRef.current.push(timeoutId)
+                        }
+                    }
                 }
             } else if (data.status === 'winner') {
                 if (currentScreen !== 'winner') {
@@ -1694,10 +1741,29 @@ function App() {
                 return popupConfirmedCheck[p] === true
             })
             
-            // Wenn alle bereit sind, alle abgestimmt haben und alle Popups bestätigt sind, aber roundRecapShown noch false ist,
-            // setze es auf true (nur Host oder Backup-Host)
-            if (data.status === 'result' && !roundRecapShownForNext && allReadyCheck && allVotedCheck && allPopupConfirmedCheck && 
+            // FALLBACK: Wenn alle bereit sind, alle abgestimmt haben, aber roundRecapShown noch false ist,
+            // setze es auf true - auch wenn executePendingAttacks nicht ausgeführt wurde
+            // WICHTIG: Auch ausführen wenn alle Spieler entschieden haben (attackDecisions)
+            const attackDecisionsCheck = data.attackDecisions || {}
+            const playersWithDecisionCheck = Object.keys(attackDecisionsCheck).filter(p => attackDecisionsCheck[p] === true)
+            const hotseatShouldBeDecidedCheck = data.hotseat && data.votes?.[data.hotseat]?.choice !== undefined
+            const effectiveDecidedCountCheck = playersWithDecisionCheck.length + (hotseatShouldBeDecidedCheck && !attackDecisionsCheck[data.hotseat] ? 1 : 0)
+            const allDecidedCheck = effectiveDecidedCountCheck >= playerCountCheck && playerCountCheck > 0
+            
+            // Wenn alle bereit sind UND (alle abgestimmt ODER alle entschieden), setze roundRecapShown auf true
+            if (data.status === 'result' && !roundRecapShownForNext && allReadyCheck && 
+                (allVotedCheck || allDecidedCheck) && allPopupConfirmedCheck && 
                 (isHostActiveNext || (hostInactiveNext && isFirstBackupHostNext)) && db && roomId) {
+                logger.log('⏭️ [AUTO-NEXT] FALLBACK: Setze roundRecapShown auf true, weil alle bereit sind:', {
+                    roundId: data.roundId,
+                    allReady: allReadyCheck,
+                    allVoted: allVotedCheck,
+                    allDecided: allDecidedCheck,
+                    allPopupConfirmed: allPopupConfirmedCheck,
+                    readyCount: readyCountCheck,
+                    playerCount: playerCountCheck,
+                    effectiveDecidedCount: effectiveDecidedCountCheck
+                })
                 updateDoc(doc(db, "lobbies", roomId), {
                     roundRecapShown: true
                 }).catch(err => {
@@ -1714,6 +1780,24 @@ function App() {
                 (hostInactiveNext && isFirstBackupHostNext) ||
                 (allReadyCheck && allVotedCheck && allPopupConfirmedCheck && sortedActivePlayersNext.includes(myName))
             )
+            
+            // DETAILLIERTES LOGGING: Zeige warum canAutoNext false ist
+            if (!canAutoNext && data.status === 'result') {
+                logger.log('⏭️ [AUTO-NEXT] canAutoNext ist false - Details:', {
+                    roundId: data.roundId,
+                    status: data.status,
+                    roundRecapShown: data.roundRecapShown,
+                    roundRecapShownForNext: roundRecapShownForNext,
+                    allReadyCheck: allReadyCheck,
+                    allVotedCheck: allVotedCheck,
+                    allPopupConfirmedCheck: allPopupConfirmedCheck,
+                    isHostActiveNext: isHostActiveNext,
+                    hostInactiveNext: hostInactiveNext,
+                    isFirstBackupHostNext: isFirstBackupHostNext,
+                    myName: myName,
+                    host: data.host
+                })
+            }
             
             if (canAutoNext) {
                 const maxTemp = data.config?.maxTemp || 100
@@ -1748,10 +1832,26 @@ function App() {
                 
                 const shouldNext = voteCount >= playerCount && playerCount > 0 && allReady
                 
+                // DETAILLIERTES LOGGING: Zeige warum nextRound nicht ausgeführt wird
+                if (!shouldNext && canAutoNext) {
+                    logger.log('⏭️ [AUTO-NEXT] shouldNext ist false - Details:', {
+                        roundId: data.roundId,
+                        voteCount: voteCount,
+                        playerCount: playerCount,
+                        readyCount: readyCount,
+                        allReady: allReady,
+                        hasEnoughVotes: voteCount >= playerCount,
+                        hasEnoughPlayers: playerCount > 0,
+                        readyList: readyList,
+                        activePlayers: activePlayers
+                    })
+                }
+                
                 if (shouldNext) {
                     const timeoutKey = `autoNext_${data.roundId}`
                     if (!timeoutKeysRef.current.has(timeoutKey)) {
                         timeoutKeysRef.current.add(timeoutKey)
+                        logger.log('⏭️ [AUTO-NEXT] Starte nextRound in 1 Sekunde')
                         const timeoutId = setTimeout(async () => {
                             try {
                                 // Verwende retryFirebaseOperation für robustere Fehlerbehandlung
@@ -3290,23 +3390,45 @@ function App() {
     
     // executePendingAttacks - Hitze verteilen - NUR VOM HOST
     const executePendingAttacks = async (data) => {
-        // HOST AUTHORITY: Nur Host darf executePendingAttacks ausführen
-        if (!isHost) {
-            logger.warn('⚔️ [EXECUTE ATTACKS] Nicht der Host - Zugriff verweigert')
-            return
-        }
-        
         const opId = `executeAttacks_${data?.roundId || Date.now()}`
         pendingOperationsRef.current.set(opId, { startTime: Date.now(), attempts: 0 })
+        
+        // HOST AUTHORITY: Prüfe ob ich der Host bin ODER ob ich als Backup-Host agieren kann
+        // WICHTIG: Prüfe basierend auf aktuellen Firebase-Daten, nicht auf React State
+        const maxTemp = data?.config?.maxTemp || 100
+        const activePlayers = Object.keys(data?.players || {}).filter(p => {
+            const temp = data.players?.[p]?.temp || 0
+            return temp < maxTemp
+        }).sort()
+        const hostName = data?.host
+        const isCurrentHost = hostName === myName
+        const myIndex = activePlayers.indexOf(myName)
+        const isFirstBackupHost = myIndex === 0 && activePlayers.length > 0
+        
+        // Erlaube Ausführung wenn: Ich bin Host ODER Ich bin erster Backup-Host
+        const canExecute = isCurrentHost || isFirstBackupHost || isHost
+        
         logger.log('⚔️ [EXECUTE ATTACKS] Starte executePendingAttacks:', {
             roundId: data?.roundId,
+            myName: myName,
+            hostName: hostName,
+            isCurrentHost: isCurrentHost,
+            isFirstBackupHost: isFirstBackupHost,
             isHost: isHost,
+            canExecute: canExecute,
             hasDb: !!db,
             roomId: roomId
         })
         
+        if (!canExecute) {
+            logger.warn('⚔️ [EXECUTE ATTACKS] Kein Host oder Backup-Host - Zugriff verweigert')
+            pendingOperationsRef.current.delete(opId)
+            return
+        }
+        
         if (!db || !roomId) {
-            logger.warn('⚔️ [EXECUTE ATTACKS] Nicht der Host oder fehlende Parameter')
+            logger.warn('⚔️ [EXECUTE ATTACKS] Fehlende Parameter')
+            pendingOperationsRef.current.delete(opId)
             return
         }
         
@@ -3345,12 +3467,12 @@ function App() {
         
         // WICHTIG: Prüfe ob alle Spieler, die einen Angriff wählen können, auch wirklich einen Angriff in pendingAttacks haben
         // Oder ob sie sich entschieden haben, keinen Angriff zu machen (attackDecisions[player] = true, aber kein Eintrag in pendingAttacks)
-        const maxTemp = currentData?.config?.maxTemp || 100
+        const maxTempConfig = currentData?.config?.maxTemp || 100
         const eliminatedPlayers = currentData?.eliminatedPlayers || []
         // WICHTIG: Filtere eliminierten Spieler heraus - sie können nicht mehr angreifen und müssen nicht mehr entscheiden
         const playerNames = Object.keys(players).filter(p => {
             const temp = players[p]?.temp || 0
-            return temp < maxTemp && !eliminatedPlayers.includes(p)
+            return temp < maxTempConfig && !eliminatedPlayers.includes(p)
         })
         const playersWhoCanAttack = playerNames.filter(p => {
             // Hotseat kann nicht angreifen
