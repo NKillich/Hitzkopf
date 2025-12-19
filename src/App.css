@@ -63,7 +63,7 @@ h1 {
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     padding: 24px; 
     border-radius: 24px; 
-    max-width: 480px; 
+    max-width: min(480px, 95vw); 
     width: calc(100% - 30px);
     max-height: 100%;
     margin: 0;
@@ -229,15 +229,10 @@ button:disabled {
 
 .thermo-grid { 
     display: grid; 
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-    gap: 16px; 
+    grid-template-columns: 1fr; 
+    gap: 12px; 
     margin-bottom: 24px;
-}
-/* Auf Mobile: 50/50 Layout für Spielerübersicht */
-@media (max-width: 768px) {
-    .thermo-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
+    width: 100%;
 }
 .thermo-item { 
     background: var(--glass-bg);

@@ -4,7 +4,7 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: min(90vw, 400px);
+    width: min(95vw, 400px);
     max-height: 85vh;
     background: var(--glass-bg);
     backdrop-filter: blur(30px) saturate(180%);
@@ -726,7 +726,7 @@
     background: linear-gradient(145deg, #1e1e1e, #252525);
     padding: 40px;
     border-radius: 20px;
-    max-width: 500px;
+    max-width: min(500px, 95vw);
     margin: 20px;
     border: 2px solid #ff4500;
     box-shadow: 0 8px 32px rgba(255, 69, 0, 0.6);
@@ -1295,7 +1295,7 @@
     background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
     padding: 30px;
     border-radius: 20px;
-    max-width: 500px;
+    max-width: min(500px, 95vw);
     width: 90%;
     text-align: center;
     border: 2px solid #ff4500;

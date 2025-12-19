@@ -372,9 +372,10 @@ function App() {
             if (currentStatus === 'result' && isHost && firebaseData.host === myName) {
                 // Prüfe ob alle bereit sind, aber nichts passiert
                 const maxTemp = firebaseData.config?.maxTemp || 100
+                const eliminatedPlayers = firebaseData.eliminatedPlayers || []
                 const activePlayers = Object.keys(firebaseData.players || {}).filter(p => {
                     const temp = firebaseData.players?.[p]?.temp || 0
-                    return temp < maxTemp
+                    return temp < maxTemp && !eliminatedPlayers.includes(p)
                 })
                 const readyCount = (firebaseData.ready || []).filter(p => {
                     const temp = firebaseData.players?.[p]?.temp || 0
@@ -536,9 +537,10 @@ function App() {
             // Prüfe ob das Spiel in einem problematischen Zustand ist
             if (globalData.status === 'result' && isHost) {
                 const maxTemp = globalData.config?.maxTemp || 100
+                const eliminatedPlayers = globalData.eliminatedPlayers || []
                 const activePlayers = Object.keys(globalData.players || {}).filter(p => {
                     const temp = globalData.players?.[p]?.temp || 0
-                    return temp < maxTemp
+                    return temp < maxTemp && !eliminatedPlayers.includes(p)
                 })
                 const readyCount = (globalData.ready || []).filter(p => {
                     const temp = globalData.players?.[p]?.temp || 0
@@ -1310,13 +1312,15 @@ function App() {
                 // WICHTIG: Prüfe ob alle Spieler ihre Angriffsentscheidungen getroffen haben, bevor Popups angezeigt werden
                 // (Diese Variablen werden auch später für executePendingAttacks verwendet)
                 const maxTemp = data.config?.maxTemp || 100
+                const eliminatedPlayers = data.eliminatedPlayers || []
                 const activePlayers = Object.keys(data.players || {}).filter(p => {
                     const temp = data.players?.[p]?.temp || 0
-                    return temp < maxTemp
+                    return temp < maxTemp && !eliminatedPlayers.includes(p)
                 })
                 const playerCount = activePlayers.length
                 const playersWithDecision = Object.keys(attackDecisions).filter(p => attackDecisions[p] === true)
-                const hotseatShouldBeDecided = isHotseat && hasTruth
+                // WICHTIG: Hotseat sollte als "decided" gezählt werden, wenn er abgestimmt hat (egal ob ich der Hotseat bin oder nicht)
+                const hotseatShouldBeDecided = data.hotseat && data.votes?.[data.hotseat]?.choice !== undefined
                 const effectiveDecidedCount = playersWithDecision.length + (hotseatShouldBeDecided && !attackDecisions[data.hotseat] ? 1 : 0)
                 const allDecidedForPopups = effectiveDecidedCount >= playerCount
                 
@@ -1470,9 +1474,10 @@ function App() {
                 const isHostActive = !hostInactive && hostName === myName
                 
                 // Sortiere Spieler nach Name für konsistente Failover-Reihenfolge (verhindert Race Conditions)
+                const eliminatedPlayersForSort = data.eliminatedPlayers || []
                 const sortedActivePlayers = Object.keys(data.players || {}).filter(p => {
                     const temp = data.players?.[p]?.temp || 0
-                    return temp < (data.config?.maxTemp || 100)
+                    return temp < (data.config?.maxTemp || 100) && !eliminatedPlayersForSort.includes(p)
                 }).sort()
                 const myIndex = sortedActivePlayers.indexOf(myName)
                 const isFirstBackupHost = myIndex === 0 && sortedActivePlayers.length > 0 && sortedActivePlayers[0] !== hostName
@@ -1570,14 +1575,15 @@ function App() {
                 const hostInactiveAdvance = lastHostActivityAdvance && lastHostActivityAdvance.toMillis ? (Date.now() - lastHostActivityAdvance.toMillis()) > GAME_CONSTANTS.HOST_INACTIVE_THRESHOLD : false
                 const hostNameAdvance = data.host
                 const maxTempAdvance = data.config?.maxTemp || GAME_CONSTANTS.MAX_TEMP_DEFAULT
-                const sortedActivePlayersAdvance = getActivePlayers(data.players, maxTempAdvance)
+                const eliminatedPlayersAdvance = data.eliminatedPlayers || []
+                const sortedActivePlayersAdvance = getActivePlayers(data.players, maxTempAdvance, eliminatedPlayersAdvance)
                 const myIndexAdvance = sortedActivePlayersAdvance.indexOf(myName)
                 const isFirstBackupHostAdvance = myIndexAdvance === 0 && sortedActivePlayersAdvance.length > 0 && sortedActivePlayersAdvance[0] !== hostNameAdvance
                 const isHostActiveAdvance = !hostInactiveAdvance && hostNameAdvance === myName
                 
                 // WICHTIG: Prüfe zuerst, ob alle Spieler abgestimmt haben (inkl. Hotseat)
                 // Wenn ja, erlaube Auto-Advance für jeden Spieler (nicht nur Host)
-                const activePlayersAdvance = getActivePlayers(data.players, maxTempAdvance)
+                const activePlayersAdvance = getActivePlayers(data.players, maxTempAdvance, eliminatedPlayersAdvance)
                 const playerCountAdvance = activePlayersAdvance.length
                 const voteCountAdvance = activePlayersAdvance.filter(p => {
                     const vote = data.votes?.[p]
@@ -1716,9 +1722,10 @@ function App() {
             // WICHTIG: Prüfe ob roundRecapShown gesetzt werden muss, wenn alle bereit sind
             // Wenn alle bereit sind, aber roundRecapShown noch false ist, setze es auf true
             const maxTempCheck = data.config?.maxTemp || 100
+            const eliminatedPlayersCheck = data.eliminatedPlayers || []
             const activePlayersCheck = Object.keys(data.players || {}).filter(p => {
                 const temp = data.players?.[p]?.temp || 0
-                return temp < maxTempCheck
+                return temp < maxTempCheck && !eliminatedPlayersCheck.includes(p)
             })
             const playerCountCheck = activePlayersCheck.length
             // WICHTIG: Zähle nur Votes aus der aktuellen Runde
@@ -1801,10 +1808,11 @@ function App() {
             
             if (canAutoNext) {
                 const maxTemp = data.config?.maxTemp || 100
+                const eliminatedPlayersAutoNext = data.eliminatedPlayers || []
                 // WICHTIG: Zähle nur aktive Spieler (nicht eliminiert)
                 const activePlayers = Object.keys(data.players || {}).filter(p => {
                     const temp = data.players?.[p]?.temp || 0
-                    return temp < maxTemp
+                    return temp < maxTemp && !eliminatedPlayersAutoNext.includes(p)
                 })
                 const playerCount = activePlayers.length
                 // WICHTIG: Prüfe auf votes statt ready - alle müssen abgestimmt haben
@@ -3060,9 +3068,10 @@ function App() {
         if (!isCurrentHost && !isHost) {
             // Prüfe ob Failover erlaubt ist (alle bereit, alle abgestimmt, etc.)
             const maxTemp = currentData.config?.maxTemp || 100
+            const eliminatedPlayersFailover = currentData.eliminatedPlayers || []
             const activePlayers = Object.keys(currentData.players || {}).filter(p => {
                 const temp = currentData.players?.[p]?.temp || 0
-                return temp < maxTemp
+                return temp < maxTemp && !eliminatedPlayersFailover.includes(p)
             })
             const playerCount = activePlayers.length
             // WICHTIG: Zähle nur Votes mit richtiger roundId
@@ -3539,15 +3548,34 @@ function App() {
         
         // WICHTIG: Wenn es keine Angreifer gibt (alle haben falsch geraten), fahre trotzdem fort
         // wenn alle Nicht-Angreifer entschieden haben (Strafhitze wurde bereits angewendet)
+        // ABER: Wenn niemand angreifen kann, fahre trotzdem fort (auch wenn noch nicht alle attackDecisions gesetzt sind)
+        // Das verhindert, dass das Spiel hängen bleibt, wenn niemand richtig geraten hat
         if (playersWhoCanAttack.length === 0 && !allNonAttackersDecided && playersWhoCannotAttack.length > 0) {
             const missing = playersWhoCannotAttack.filter(p => !attackDecisions[p])
+            // FALLBACK: Wenn niemand angreifen kann und alle Spieler falsch geraten haben (inkl. Hotseat),
+            // warte maximal kurz, dann fahre trotzdem fort
             logger.warn('⚔️ [EXECUTE ATTACKS] ❌ Nicht alle Nicht-Angreifer haben entschieden, warte noch...', {
                 roundId: currentData.roundId,
                 playersWhoCannotAttack: playersWhoCannotAttack,
                 missing: missing,
                 attackDecisions: attackDecisions,
-                allNonAttackersDecided: allNonAttackersDecided
+                allNonAttackersDecided: allNonAttackersDecided,
+                totalPlayers: playerNames.length,
+                hotseatName: hotseatName
             })
+            
+            // WICHTIG: Wenn ALLE aktiven Spieler (inkl. Hotseat) falsch geraten haben,
+            // fahre nach kurzer Wartezeit trotzdem fort (Race Condition Prevention)
+            const allPlayersGuessedWrong = playerNames.length === (playersWhoCannotAttack.length + 1) // +1 für Hotseat
+            if (allPlayersGuessedWrong) {
+                logger.log('⚔️ [EXECUTE ATTACKS] ✅ FALLBACK: Alle haben falsch geraten (inkl. Hotseat), fahre fort...')
+                await updateDoc(doc(db, "lobbies", roomId), {
+                    roundRecapShown: true,
+                    attackResults: {} // Nur Strafhitze, keine normalen Angriffe
+                })
+                return
+            }
+            
             return
         }
         
@@ -3810,7 +3838,7 @@ function App() {
                     ? currentEliminated 
                     : [...currentEliminated, eliminatedName]
                 
-                await updateDoc(doc(db, "lobbies", roomId), {
+                const updatePayload = {
                     eliminationInfo: {
                         player: eliminatedName,
                         roundId: updatedData.roundId,
@@ -3819,7 +3847,27 @@ function App() {
                     eliminatedPlayers: updatedEliminated,
                     // WICHTIG: Entferne aus lobbyReady, damit ausgeschiedene Spieler nicht mehr als "bereit" zählen
                     [`lobbyReady.${eliminatedName}`]: deleteField()
-                })
+                }
+                
+                // WICHTIG: Wenn der eliminierte Spieler der Host ist, weise einen neuen Host zu
+                const currentHost = updatedData.host
+                if (eliminatedName === currentHost) {
+                    // Finde den ersten noch aktiven Spieler (nicht eliminiert)
+                    const remainingActivePlayers = activePlayers.filter(p => p !== eliminatedName)
+                    if (remainingActivePlayers.length > 0) {
+                        const newHost = remainingActivePlayers[0]
+                        logger.log('👑 [HOST REASSIGNMENT] Host wurde eliminiert, neuer Host:', {
+                            oldHost: eliminatedName,
+                            newHost: newHost,
+                            remainingPlayers: remainingActivePlayers
+                        })
+                        updatePayload.host = newHost
+                    } else {
+                        logger.warn('👑 [HOST REASSIGNMENT] Kein aktiver Spieler mehr für Host-Zuweisung!')
+                    }
+                }
+                
+                await updateDoc(doc(db, "lobbies", roomId), updatePayload)
             }
             
             // Wenn nur noch ein Spieler übrig ist, setze Status auf 'winner'
@@ -4880,16 +4928,34 @@ function App() {
                 )
             })()}
             
-            {/* RESULT SCREEN / ANGRIFFSPHASE */}
+            {/* RESULT SCREEN / ANGRIFFSPHASE / ZWISCHENERGEBNIS */}
             {currentScreen === 'result' && globalData && (() => {
                 // WICHTIG: Definiere isHotseat hier im Scope, damit es im JSX verwendet werden kann
                 const isHotseat = myName === globalData.hotseat
+                const roundRecapShown = globalData.roundRecapShown ?? false
+                const maxTemp = globalData.config?.maxTemp || 100
+                const activePlayers = Object.keys(globalData.players || {}).filter(p => {
+                    const temp = globalData.players?.[p]?.temp || 0
+                    return temp < maxTemp
+                })
+                const popupConfirmed = globalData.popupConfirmed || {}
+                const hasAttackResults = globalData.attackResults && Object.keys(globalData.attackResults).length > 0
+                const allPopupConfirmed = !hasAttackResults || activePlayers.every(p => {
+                    if (!globalData.attackResults?.[p]) return true
+                    return popupConfirmed[p] === true
+                })
+                
+                // ZWISCHENERGEBNIS-PHASE: Sobald Angriffe ausgeführt wurden (roundRecapShown = true)
+                // Popups werden darüber angezeigt, aber im Hintergrund ist bereits das Zwischenergebnis zu sehen
+                const showIntermediateResult = roundRecapShown
+                
                 return (
                 <div className="screen active card">
-                    <h3 className={styles.resultTitle}>⚔️ Angriffsphase</h3>
-                    {/* THERMOMETER RANGLISTE - AUSGEBLENDET - Wird später auf einer separaten Seite angezeigt */}
-                    <div className="thermo-grid" style={{ display: 'none' }}>
-                        {renderPlayers().map((player) => {
+                    {showIntermediateResult && <h3 className={styles.resultTitle}>📊 Zwischenergebnis</h3>}
+                    
+                    {/* THERMOMETER RANGLISTE - Zeige in Zwischenergebnis-Phase, sortiert nach Hitze */}
+                    <div className="thermo-grid" style={{ display: showIntermediateResult ? 'grid' : 'none' }}>
+                        {renderPlayers().sort((a, b) => b.temp - a.temp).map((player) => {
                             const maxTemp = globalData.config?.maxTemp || 100
                             const tempPercent = Math.min((player.temp / maxTemp) * 100, 100)
                             
@@ -4925,8 +4991,8 @@ function App() {
                         })}
                     </div>
                     
-                    {/* Status-Anzeige */}
-                    {(() => {
+                    {/* Status-Anzeige - Nur in Angriffsphase, nicht in Zwischenergebnis */}
+                    {!showIntermediateResult && (() => {
                         // WICHTIG: Stelle sicher, dass hotseat ein String ist
                         const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
                         const truth = globalData.votes?.[hotseatName]?.choice
@@ -5014,14 +5080,7 @@ function App() {
                                 return (
                                     <div className={styles.correctGuessContainer}>
                                         <p className={styles.correctGuessTitle}>✅ RICHTIG GERATEN!</p>
-                                        <p className={styles.correctGuessSubtitle}>Wähle einen Spieler zum Aufheizen!</p>
-                                        
-                                        {/* Kategorie anzeigen */}
-                                        {globalData.currentQ?.category && (
-                                            <div className={styles.categoryInfo}>
-                                                {questionCategories[globalData.currentQ.category]?.emoji} {questionCategories[globalData.currentQ.category]?.name}
-                                            </div>
-                                        )}
+                                        <p className={styles.correctGuessSubtitle}>Zur Belohnung darfst du einen Spieler aufheizen</p>
                                         
                                         {/* Angriffsauswahl Container */}
                                         <div className={styles.attackSelectionWrapper}>
@@ -5038,16 +5097,12 @@ function App() {
                                                     const activePlayers = allPlayers.filter(p => (globalData?.players?.[p.name]?.temp || 0) < maxTemp)
                                                     const activePlayerCount = activePlayers.length
                                                     
-                                                    // In einem 2-Spieler-Spiel: Hotseat ist angreifbar
-                                                    // In mehr als 2 Spielern: Hotseat ist NICHT angreifbar
-                                                    const canAttackHotseat = activePlayerCount <= 2
-                                                    
-                                                    // Filtere: Nicht mich selbst, nicht eliminierte Spieler, und in 3+ Spieler-Spielen nicht den Hotseat
+                                                    // NEUE REGEL: Hotseat ist immer angreifbar
+                                                    // Filtere: Nicht mich selbst (da ich Hotseat bin), nicht eliminierte Spieler
                                                     const attackablePlayers = allPlayers.filter(p => {
                                                         if (p.name === myName) return false // Nicht mich selbst
                                                         const playerTemp = globalData?.players?.[p.name]?.temp || 0
                                                         if (playerTemp >= maxTemp) return false // Nicht eliminierte Spieler
-                                                        if (!canAttackHotseat && p.name === hotseatName) return false // In 3+ Spielern nicht den Hotseat
                                                         return true
                                                     })
                                                     
@@ -5114,7 +5169,8 @@ function App() {
                                                 <div className={styles.attackSelectionGrid}>
                                                     {(() => {
                                                         const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
-                                                        const attackablePlayers = renderPlayers().filter(p => p.name !== myName && p.name !== hotseatName)
+                                                        // NEUE REGEL: Hotseat ist angreifbar - nur ich selbst darf nicht angegriffen werden
+                                                        const attackablePlayers = renderPlayers().filter(p => p.name !== myName)
                                                         if (attackablePlayers.length === 0) {
                                                             return (
                                                                 <div key="no-players" className={styles.attackNoPlayers}>
@@ -5229,11 +5285,21 @@ function App() {
                                 // attackDecisions ist bereits gesetzt (Strafhitze wurde angewendet)
                                 setLocalActionDone(true)
                             }
+                            // Zeige Strafhitze-Info + Wartetext
                             return (
-                                <div className={styles.wrongAnswerContainer}>
-                                    <div className={styles.wrongAnswerIcon}>❌</div>
-                                    <p className={styles.wrongAnswerTitleRed}>FALSCH GERATEN</p>
-                                    {isPartyMode && <p className={styles.wrongAnswerTextWhite}>Du erhältst 10°C Strafhitze.</p>}
+                                <div className={styles.hotseatWaitContainer}>
+                                    {/* Strafhitze-Information */}
+                                    <div className={styles.wrongAnswerContainer}>
+                                        <div className={styles.wrongAnswerIcon}>❌</div>
+                                        <p className={styles.wrongAnswerTitleRed}>FALSCH GERATEN</p>
+                                        {isPartyMode && <p className={styles.wrongAnswerTextWhite}>Du erhältst 10°C Strafhitze.</p>}
+                                    </div>
+                                    
+                                    {/* Wartetext */}
+                                    <div className={styles.hotseatWaitBox}>
+                                        <p className={styles.hotseatWaitTitle}>⏳ Warte bis alle Spieler ihre Hitze verteilt haben</p>
+                                        <p className={styles.hotseatWaitSubtitle}>Die anderen Spieler greifen gerade an...</p>
+                                    </div>
                                 </div>
                             )
                         } else if (myVote && (truth === undefined || truth === null)) {
@@ -5252,16 +5318,38 @@ function App() {
                         }
                     })()}
                     
-                    {/* WICHTIG: Button immer anzeigen, außer Spieler ist ausgeschieden */}
+                    {/* WICHTIG: Button immer anzeigen, außer Spieler ist ausgeschieden ODER gerade am Angreifen */}
                     {(() => {
                         const playerData = globalData.players?.[myName]
                         const maxTemp = globalData.config?.maxTemp || 100
                         const isEliminated = (playerData?.temp || 0) >= maxTemp
                         
-                        // Button anzeigen wenn: localActionDone ODER Hotseat (Hotseat hat automatisch localActionDone)
-                        const shouldShowButton = localActionDone || isHotseat || isEliminated
+                        // Prüfe ob Spieler gerade angreift (richtig geraten und noch nicht entschieden)
+                        const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
+                        const isHotseat = myName === hotseatName
+                        const truth = globalData.votes?.[hotseatName]?.choice
+                        const myVote = globalData.votes?.[myName]
+                        const guessedCorrectly = myVote && truth !== undefined && String(myVote.choice) === String(truth)
+                        const guessedWrong = myVote && truth !== undefined && String(myVote.choice) !== String(truth)
+                        const attackDecisions = globalData.attackDecisions || {}
+                        const hasAttackDecision = attackDecisions[myName] === true
+                        const isCurrentlyAttacking = !showIntermediateResult && guessedCorrectly && !hasAttackDecision && !isHotseat
+                        
+                        // Button anzeigen wenn: localActionDone
+                        // ABER NICHT wenn Spieler gerade angreift
+                        // ABER NICHT in Angriffsphase wenn falsch geraten (warten auf andere)
+                        // ABER NICHT in Angriffsphase wenn Hotseat (wartet auch nur)
+                        // IN Zwischenergebnis-Phase: ALLE sehen den Button
+                        const shouldShowButton = showIntermediateResult ? 
+                            (localActionDone || isHotseat || isEliminated) : // Zwischenergebnis: wie bisher
+                            (localActionDone || isEliminated) && !isCurrentlyAttacking && !guessedWrong && !isHotseat // Angriffsphase: Hotseat sieht auch keinen Button
                         
                         if (!shouldShowButton) return null
+                        
+                        // Button Text: In Zwischenergebnis-Phase "Nächste Frage", sonst "Bereit"
+                        const buttonText = showIntermediateResult ? 
+                            ((globalData.ready || []).includes(myName) ? '✅ Bereit für nächste Frage' : '➡️ Nächste Frage') :
+                            ((globalData.ready || []).includes(myName) ? '❌ Nicht bereit' : '👍 Bereit')
                         
                         return (
                             <button 
@@ -5270,35 +5358,55 @@ function App() {
                                 disabled={isEliminated}
                                 style={{marginTop: '20px'}}
                             >
-                                {isEliminated ? '🔥 Hitzkopf - Ausgeschieden' : (globalData.ready || []).includes(myName) ? '❌ Nicht bereit' : '👍 Bereit'}
+                                {isEliminated ? '🔥 Hitzkopf - Ausgeschieden' : buttonText}
                             </button>
                         )
                     })()}
                     
-                    {/* Spieler-Bereit-Status unter dem Button */}
-                    <div className={styles.playerReadyList}>
-                        {(() => {
-                            const maxTemp = globalData.config?.maxTemp || 100
-                            const activePlayers = renderPlayers().filter(p => (globalData.players?.[p.name]?.temp || 0) < maxTemp)
-                            const readyList = globalData.ready || []
-                            
-                            // Sortiere alphabetisch
-                            const sortedPlayers = [...activePlayers].sort((a, b) => a.name.localeCompare(b.name))
-                            
-                            // Erstelle Komma-getrennte Liste
-                            const playerText = sortedPlayers.map(player => {
-                                const isReady = readyList.includes(player.name)
-                                const icon = isReady ? '✅' : '⏳'
-                                return `${icon} ${player.emoji} ${player.name}`
-                            }).join(', ')
-                            
-                            return (
-                                <div className={styles.playerReadyText}>
-                                    {playerText}
-                                </div>
-                            )
-                        })()}
-                    </div>
+                    {/* Spieler-Bereit-Status unter dem Button - Nur anzeigen wenn Button auch angezeigt wird */}
+                    {(() => {
+                        // Prüfe ob Button angezeigt wird (gleiche Logik wie oben)
+                        const hotseatName = typeof globalData.hotseat === 'string' ? globalData.hotseat : (globalData.hotseat?.name || String(globalData.hotseat || ''))
+                        const isHotseat = myName === hotseatName
+                        const truth = globalData.votes?.[hotseatName]?.choice
+                        const myVote = globalData.votes?.[myName]
+                        const guessedCorrectly = myVote && truth !== undefined && String(myVote.choice) === String(truth)
+                        const guessedWrong = myVote && truth !== undefined && String(myVote.choice) !== String(truth)
+                        const attackDecisions = globalData.attackDecisions || {}
+                        const hasAttackDecision = attackDecisions[myName] === true
+                        const isCurrentlyAttacking = !showIntermediateResult && guessedCorrectly && !hasAttackDecision && !isHotseat
+                        
+                        // Nur anzeigen wenn nicht gerade am Angreifen UND nicht falsch geraten UND nicht Hotseat (außer in Zwischenergebnis-Phase)
+                        if (isCurrentlyAttacking) return null
+                        if (!showIntermediateResult && guessedWrong) return null
+                        if (!showIntermediateResult && isHotseat) return null
+                        
+                        return (
+                            <div className={styles.playerReadyList}>
+                                {(() => {
+                                    const maxTemp = globalData.config?.maxTemp || 100
+                                    const activePlayers = renderPlayers().filter(p => (globalData.players?.[p.name]?.temp || 0) < maxTemp)
+                                    const readyList = globalData.ready || []
+                                    
+                                    // Sortiere alphabetisch
+                                    const sortedPlayers = [...activePlayers].sort((a, b) => a.name.localeCompare(b.name))
+                                    
+                                    // Erstelle Komma-getrennte Liste
+                                    const playerText = sortedPlayers.map(player => {
+                                        const isReady = readyList.includes(player.name)
+                                        const icon = isReady ? '✅' : '⏳'
+                                        return `${icon} ${player.emoji} ${player.name}`
+                                    }).join(', ')
+                                    
+                                    return (
+                                        <div className={styles.playerReadyText}>
+                                            {playerText}
+                                        </div>
+                                    )
+                                })()}
+                            </div>
+                        )
+                    })()}
                 </div>
                 )
             })()}
