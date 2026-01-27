@@ -161,6 +161,10 @@ function App() {
     const [joinPassword, setJoinPassword] = useState("")
     const [roomList, setRoomList] = useState([])
     
+    // Question Generator
+    const [currentGeneratorQuestion, setCurrentGeneratorQuestion] = useState(null)
+    const [questionHistory, setQuestionHistory] = useState([])
+    
     // Game Screen
     const [mySelection, setMySelection] = useState(null)
     const [myStrategy, setMyStrategy] = useState(null)
@@ -2131,6 +2135,43 @@ function App() {
             })
         }
     }, [])
+    
+    // Fragengenerator: Neue Frage generieren
+    const generateNewQuestion = useCallback(() => {
+        if (selectedCategories.length === 0) {
+            alert("Bitte wähle mindestens eine Kategorie aus!")
+            return
+        }
+        const questions = getAllQuestions().filter(q => selectedCategories.includes(q.category))
+        if (questions.length === 0) {
+            alert("Keine Fragen in den ausgewählten Kategorien gefunden!")
+            return
+        }
+        const randomQuestion = questions[Math.floor(Math.random() * questions.length)]
+        
+        // Aktuelle Frage zur Historie hinzufügen, bevor wir zur neuen wechseln
+        if (currentGeneratorQuestion) {
+            setQuestionHistory(prev => [...prev, currentGeneratorQuestion])
+        }
+        
+        setCurrentGeneratorQuestion(randomQuestion)
+    }, [selectedCategories, currentGeneratorQuestion])
+    
+    // Fragengenerator: Zur vorherigen Frage zurück
+    const goToPreviousQuestion = useCallback(() => {
+        if (questionHistory.length === 0) {
+            return // Keine vorherige Frage vorhanden
+        }
+        
+        // Letzte Frage aus der Historie holen
+        const previousQuestion = questionHistory[questionHistory.length - 1]
+        
+        // Historie um die letzte Frage kürzen
+        setQuestionHistory(prev => prev.slice(0, -1))
+        
+        // Vorherige Frage anzeigen
+        setCurrentGeneratorQuestion(previousQuestion)
+    }, [questionHistory])
     
     // Spiel erstellen
     const createGame = async () => {
@@ -4146,7 +4187,13 @@ function App() {
             {currentScreen === 'create' && (
                 <div className={`menu-btn help-btn ${styles.helpButtonLeft}`} onClick={() => setCurrentScreen('start')}>←</div>
             )}
-            {currentScreen !== 'landing' && currentScreen !== 'create' && (
+            {currentScreen === 'questionGeneratorCategories' && (
+                <div className={`menu-btn help-btn ${styles.helpButtonLeft}`} onClick={() => setCurrentScreen('start')}>←</div>
+            )}
+            {currentScreen === 'questionGenerator' && (
+                <div className={`menu-btn help-btn ${styles.helpButtonLeft}`} onClick={() => setCurrentScreen('questionGeneratorCategories')}>←</div>
+            )}
+            {currentScreen !== 'landing' && currentScreen !== 'create' && currentScreen !== 'questionGeneratorCategories' && currentScreen !== 'questionGenerator' && (
                 <div className={`menu-btn help-btn ${styles.helpButtonLeft}`} onClick={() => setShowRulesModal(true)}>?</div>
             )}
             
@@ -4455,6 +4502,17 @@ function App() {
                 </div>
             )}
             
+            {/* QUESTION GENERATOR BUTTON - Full Width außerhalb des Containers */}
+            {currentScreen === 'start' && (
+                <button 
+                    className={styles.fullWidthButton} 
+                    onClick={() => setCurrentScreen('questionGeneratorCategories')}
+                    style={{ opacity: 1 }}
+                >
+                    📝 Fragengenerator
+                </button>
+            )}
+            
             {/* CREATE GAME SCREEN */}
             {currentScreen === 'create' && (
                 <div className="screen active card">
@@ -4481,6 +4539,141 @@ function App() {
                         className={`btn-secondary ${styles.backButton}`}
                     >
                         ← Zurück
+                    </button>
+                </div>
+            )}
+            
+            {/* QUESTION GENERATOR CATEGORIES SCREEN */}
+            {currentScreen === 'questionGeneratorCategories' && (
+                <div className="screen active card">
+                    <label className={styles.labelWithMargin}>
+                        Wähle Fragenkategorien:
+                    </label>
+                    <div className={styles.grid3Cols}>
+                        <div className={`category-card ${selectedCategories.length === Object.keys(questionCategories).length ? 'selected' : ''}`} onClick={() => toggleCategory('all')}>
+                            <div className="category-emoji">🌟</div>
+                            <div className="category-name">Alle</div>
+                        </div>
+                        {Object.entries(questionCategories).map(([key, cat]) => (
+                            <div key={key} className={`category-card ${selectedCategories.includes(key) ? 'selected' : ''}`} onClick={() => toggleCategory(key)}>
+                                <div className="category-emoji">{cat.emoji}</div>
+                                <div className="category-name">{cat.name.split(' ')[0]}</div>
+                            </div>
+                        ))}
+                    </div>
+                    <button className={`btn-primary ${styles.buttonMarginTop}`} onClick={() => {
+                        if (selectedCategories.length === 0) {
+                            alert("Bitte wähle mindestens eine Kategorie aus!")
+                            return
+                        }
+                        // Erste Frage generieren und zum Generator-Screen wechseln
+                        const questions = getAllQuestions().filter(q => selectedCategories.includes(q.category))
+                        if (questions.length === 0) {
+                            alert("Keine Fragen in den ausgewählten Kategorien gefunden!")
+                            return
+                        }
+                        const randomQuestion = questions[Math.floor(Math.random() * questions.length)]
+                        setCurrentGeneratorQuestion(randomQuestion)
+                        setQuestionHistory([]) // Historie zurücksetzen beim Start
+                        setCurrentScreen('questionGenerator')
+                    }} disabled={selectedCategories.length === 0}>
+                        📝 Fragen generieren
+                    </button>
+                    <button 
+                        onClick={() => setCurrentScreen('start')}
+                        className={`btn-secondary ${styles.backButton}`}
+                    >
+                        ← Zurück
+                    </button>
+                </div>
+            )}
+            
+            {/* QUESTION GENERATOR SCREEN */}
+            {currentScreen === 'questionGenerator' && currentGeneratorQuestion && (
+                <div className="screen active card">
+                    {/* Kategorie anzeigen */}
+                    {currentGeneratorQuestion.category && (
+                        <div className={styles.gameCategory} style={{ marginBottom: '20px' }}>
+                            {questionCategories[currentGeneratorQuestion.category]?.emoji} {questionCategories[currentGeneratorQuestion.category]?.name}
+                        </div>
+                    )}
+                    
+                    {/* Frage */}
+                    <h3 className={styles.gameQuestion}>
+                        {currentGeneratorQuestion.q || 'Lade Frage...'}
+                    </h3>
+                    
+                    {/* Antwortmöglichkeiten - NICHT anklickbar */}
+                    <div className="option-row">
+                        <div 
+                            className="btn-option" 
+                            style={{ 
+                                cursor: 'default', 
+                                opacity: 0.9,
+                                pointerEvents: 'none'
+                            }}
+                        >
+                            a) {currentGeneratorQuestion.a || 'A'}
+                        </div>
+                        <div 
+                            className="btn-option" 
+                            style={{ 
+                                cursor: 'default', 
+                                opacity: 0.9,
+                                pointerEvents: 'none'
+                            }}
+                        >
+                            b) {currentGeneratorQuestion.b || 'B'}
+                        </div>
+                    </div>
+                    {/* Zeige C und D nur an, wenn sie existieren */}
+                    {(currentGeneratorQuestion.c || currentGeneratorQuestion.d) && (
+                        <div className="option-row">
+                            {currentGeneratorQuestion.c && (
+                                <div 
+                                    className="btn-option" 
+                                    style={{ 
+                                        cursor: 'default', 
+                                        opacity: 0.9,
+                                        pointerEvents: 'none'
+                                    }}
+                                >
+                                    c) {currentGeneratorQuestion.c}
+                                </div>
+                            )}
+                            {currentGeneratorQuestion.d && (
+                                <div 
+                                    className="btn-option" 
+                                    style={{ 
+                                        cursor: 'default', 
+                                        opacity: 0.9,
+                                        pointerEvents: 'none'
+                                    }}
+                                >
+                                    d) {currentGeneratorQuestion.d}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    
+                    {/* Nächste Frage Button - Orange */}
+                    <button 
+                        className={`btn-primary ${styles.submitButtonMargin}`}
+                        onClick={generateNewQuestion}
+                        style={{
+                            background: 'linear-gradient(135deg, #ff8c00 0%, #ff6b00 100%)',
+                            marginTop: '30px'
+                        }}
+                    >
+                        ➡️ Nächste Frage
+                    </button>
+                    
+                    <button 
+                        onClick={goToPreviousQuestion}
+                        className={`btn-secondary ${styles.backButton}`}
+                        disabled={questionHistory.length === 0}
+                    >
+                        ← Vorherige Frage
                     </button>
                 </div>
             )}
