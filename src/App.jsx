@@ -163,7 +163,8 @@ function App() {
     
     // Question Generator
     const [currentGeneratorQuestion, setCurrentGeneratorQuestion] = useState(null)
-    const [questionHistory, setQuestionHistory] = useState([])
+    const [shuffledQuestions, setShuffledQuestions] = useState([])
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
     
     // Game Screen
     const [mySelection, setMySelection] = useState(null)
@@ -2136,42 +2137,44 @@ function App() {
         }
     }, [])
     
-    // Fragengenerator: Neue Frage generieren
+    // Fragengenerator: Fragen mischen (Fisher-Yates Shuffle)
+    const shuffleQuestions = useCallback((questions) => {
+        const shuffled = [...questions]
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+        }
+        return shuffled
+    }, [])
+    
+    // Fragengenerator: Nächste Frage anzeigen
     const generateNewQuestion = useCallback(() => {
-        if (selectedCategories.length === 0) {
-            alert("Bitte wähle mindestens eine Kategorie aus!")
+        if (shuffledQuestions.length === 0) {
             return
         }
-        const questions = getAllQuestions().filter(q => selectedCategories.includes(q.category))
-        if (questions.length === 0) {
-            alert("Keine Fragen in den ausgewählten Kategorien gefunden!")
-            return
-        }
-        const randomQuestion = questions[Math.floor(Math.random() * questions.length)]
         
-        // Aktuelle Frage zur Historie hinzufügen, bevor wir zur neuen wechseln
-        if (currentGeneratorQuestion) {
-            setQuestionHistory(prev => [...prev, currentGeneratorQuestion])
-        }
+        const nextIndex = currentQuestionIndex + 1
         
-        setCurrentGeneratorQuestion(randomQuestion)
-    }, [selectedCategories, currentGeneratorQuestion])
+        if (nextIndex >= shuffledQuestions.length) {
+            // Alle Fragen durchgegangen - von vorne beginnen
+            setCurrentQuestionIndex(0)
+            setCurrentGeneratorQuestion(shuffledQuestions[0])
+        } else {
+            setCurrentQuestionIndex(nextIndex)
+            setCurrentGeneratorQuestion(shuffledQuestions[nextIndex])
+        }
+    }, [shuffledQuestions, currentQuestionIndex])
     
     // Fragengenerator: Zur vorherigen Frage zurück
     const goToPreviousQuestion = useCallback(() => {
-        if (questionHistory.length === 0) {
-            return // Keine vorherige Frage vorhanden
+        if (currentQuestionIndex === 0) {
+            return // Bereits bei der ersten Frage
         }
         
-        // Letzte Frage aus der Historie holen
-        const previousQuestion = questionHistory[questionHistory.length - 1]
-        
-        // Historie um die letzte Frage kürzen
-        setQuestionHistory(prev => prev.slice(0, -1))
-        
-        // Vorherige Frage anzeigen
-        setCurrentGeneratorQuestion(previousQuestion)
-    }, [questionHistory])
+        const previousIndex = currentQuestionIndex - 1
+        setCurrentQuestionIndex(previousIndex)
+        setCurrentGeneratorQuestion(shuffledQuestions[previousIndex])
+    }, [shuffledQuestions, currentQuestionIndex])
     
     // Spiel erstellen
     const createGame = async () => {
@@ -4566,15 +4569,24 @@ function App() {
                             alert("Bitte wähle mindestens eine Kategorie aus!")
                             return
                         }
-                        // Erste Frage generieren und zum Generator-Screen wechseln
+                        // Fragen holen und mischen
                         const questions = getAllQuestions().filter(q => selectedCategories.includes(q.category))
                         if (questions.length === 0) {
                             alert("Keine Fragen in den ausgewählten Kategorien gefunden!")
                             return
                         }
-                        const randomQuestion = questions[Math.floor(Math.random() * questions.length)]
-                        setCurrentGeneratorQuestion(randomQuestion)
-                        setQuestionHistory([]) // Historie zurücksetzen beim Start
+                        
+                        // Fragen mischen (Fisher-Yates Shuffle)
+                        const shuffled = [...questions]
+                        for (let i = shuffled.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+                        }
+                        
+                        // Gemischte Fragen speichern und erste Frage anzeigen
+                        setShuffledQuestions(shuffled)
+                        setCurrentQuestionIndex(0)
+                        setCurrentGeneratorQuestion(shuffled[0])
                         setCurrentScreen('questionGenerator')
                     }} disabled={selectedCategories.length === 0}>
                         📝 Fragen generieren
@@ -4671,7 +4683,7 @@ function App() {
                     <button 
                         onClick={goToPreviousQuestion}
                         className={`btn-secondary ${styles.backButton}`}
-                        disabled={questionHistory.length === 0}
+                        disabled={currentQuestionIndex === 0}
                     >
                         ← Vorherige Frage
                     </button>
