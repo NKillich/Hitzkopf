@@ -1,0 +1,1759 @@
+/* Menu Modal Styles */
+.menuModal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(95vw, 400px);
+    max-height: 85vh;
+    background: var(--glass-bg);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1.5px solid var(--glass-border);
+    border-radius: 24px;
+    padding: 24px;
+    z-index: 2002;
+    box-shadow: var(--shadow-xl);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.menuHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.menuTitle {
+    color: #fff;
+    margin: 0;
+}
+
+.menuCloseButton {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.menuButton {
+    padding: 16px;
+    font-size: 1rem;
+    background: rgba(22, 27, 34, 0.6);
+    border-radius: 12px;
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: left;
+}
+
+.menuButton:hover {
+    background: rgba(22, 27, 34, 0.8);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.menuBackButton {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.menuSection {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.menuSectionTitle {
+    color: #fff;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.menuLogContainer {
+    max-height: 400px;
+    font-size: 0.85rem;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.menuLogEntry {
+    margin-bottom: 8px;
+    color: #aaa;
+    line-height: 1.4;
+}
+
+.menuLogEmpty {
+    color: #666;
+}
+
+/* Landing Page Styles */
+.landingContainer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.landingLogoContainer {
+    position: relative;
+    z-index: 2;
+    margin-bottom: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.landingLogo {
+    max-width: 300px;
+    width: 80%;
+    height: auto;
+    object-fit: contain;
+}
+
+.landingButton {
+    position: relative;
+    z-index: 2;
+    padding: 16px 40px;
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #fff;
+    background: #ff6b35;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    width: auto;
+    min-width: 200px;
+}
+
+.landingButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    background: #ff7a4a;
+}
+
+.landingButton:active {
+    transform: translateY(1px);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Zurück zur Projektauswahl Button */
+.backToProjectsButton {
+    position: fixed;
+    top: 1.5rem;
+    left: 1.5rem;
+    padding: 0.75rem 1.5rem;
+    background: rgba(22, 27, 34, 0.8);
+    border: 2px solid rgba(255, 107, 53, 0.3);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+}
+
+.backToProjectsButton:hover {
+    background: rgba(22, 27, 34, 0.95);
+    border-color: #ff6b35;
+    transform: translateX(-4px);
+    box-shadow: 0 4px 16px rgba(255, 107, 53, 0.3);
+}
+
+/* Logo Container */
+.logoContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+    margin-top: 10px;
+}
+
+.logoHorizontal {
+    max-width: 300px;
+    width: auto;
+    height: auto;
+    max-height: 80px;
+    object-fit: contain;
+}
+
+/* Emoji Gallery Styles */
+.emojiGalleryWrapper {
+    position: relative;
+    margin-bottom: 15px;
+    padding: 0;
+    margin: 0 0 15px 0;
+    width: calc(100% + 48px);
+    margin-left: -24px;
+    margin-right: -24px;
+    padding-left: 24px;
+    padding-right: 24px;
+    overflow: visible;
+}
+
+.emojiGallery {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px 0;
+    scroll-behavior: smooth;
+    width: 100%;
+    max-width: 100%;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    margin: 0;
+    padding-left: 0;
+    padding-right: 0;
+    cursor: grab;
+}
+
+.emojiGallery:active {
+    cursor: grabbing;
+}
+
+.emojiSpacer {
+    min-width: calc(50% - 40px);
+    flex-shrink: 0;
+}
+
+/* Game Screen Styles */
+.eliminatedContainer {
+    margin-bottom: 15px;
+    color: #ff0000;
+}
+
+.eliminatedInfo {
+    padding: 20px;
+    background: rgba(139, 0, 0, 0.3);
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.eliminatedText {
+    color: #fff;
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+}
+
+.eliminatedSubtext {
+    color: #aaa;
+    font-size: 0.9rem;
+}
+
+.thermoItem {
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 12px;
+    background: rgba(22, 27, 34, 0.6);
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+}
+
+.thermoItem.answered {
+    border: 2px solid #22c55e;
+    background: rgba(34, 197, 94, 0.2);
+    opacity: 1;
+}
+
+.thermoTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.thermoTopLeft {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.thermoTemp {
+    font-weight: bold;
+    color: #fff;
+}
+
+.thermoTemp.max {
+    color: #ff0000;
+}
+
+.thermoBar {
+    width: 100%;
+    height: 20px;
+    background: #333;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.thermoFill {
+    width: 100%;
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+/* Attack Selection Styles */
+.attackSelectionContainer {
+    background: #3a1a1a;
+    padding: 10px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+.attackSelectionTitle {
+    margin: 0 0 10px 0;
+}
+
+.attackSelectionGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.attackPlayerCard {
+    padding: 15px;
+    background: rgba(22, 27, 34, 0.8);
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: center;
+    border: 2px solid #444;
+}
+
+.attackPlayerEmoji {
+    font-size: 2rem;
+    margin-bottom: 5px;
+}
+
+.attackPlayerName {
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: #fff;
+}
+
+.attackPlayerDmg {
+    font-size: 0.8rem;
+    color: #ff8c00;
+}
+
+.attackNoPlayers {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 20px;
+    color: #aaa;
+}
+
+.attackButtons {
+    display: flex;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.attackButton {
+    flex: 1;
+    background: transparent;
+    border: 1px solid #666;
+    color: #aaa;
+    font-size: 0.85rem;
+    padding: 8px;
+}
+
+/* Joker Shop Styles */
+.jokerShopContainer {
+    background: #1a2a3a;
+    padding: 10px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+.jokerShopTitle {
+    margin: 0 0 10px 0;
+}
+
+.jokerShopGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+}
+
+.jokerCard {
+    padding: 15px;
+    background: rgba(22, 27, 34, 0.8);
+    border-radius: 10px;
+    border: 2px solid #444;
+    cursor: pointer;
+    text-align: center;
+}
+
+.jokerCardTitle {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.jokerCardDescription {
+    font-size: 0.8rem;
+    color: #aaa;
+}
+
+/* Volume Control Styles */
+.volumeSection {
+    margin-bottom: 24px;
+}
+
+.volumeTitle {
+    color: #fff;
+    margin-bottom: 12px;
+    font-size: 1rem;
+}
+
+.volumeControl {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.volumeIcon {
+    font-size: 1.2rem;
+}
+
+.volumeSlider {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.volumeSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: var(--primary);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.volumeSlider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: var(--primary);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+/* Settings Styles */
+.settingsTitle {
+    color: #fff;
+    margin: 0;
+}
+
+.settingsSection {
+    margin-top: 8px;
+}
+
+/* Admin Button Styles */
+.adminButton {
+    padding: 12px;
+    font-size: 0.9rem;
+    background: rgba(255, 107, 53, 0.2);
+    border: 1px solid rgba(255, 107, 53, 0.4);
+    border-radius: 8px;
+    color: #ff6b35;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+.adminButton:hover {
+    background: rgba(255, 107, 53, 0.3);
+    border-color: rgba(255, 107, 53, 0.6);
+}
+
+/* Wait Text */
+.waitText {
+    color: #666;
+    font-size: 0.9rem;
+    margin-top: 20px;
+}
+
+/* Button Margin */
+.buttonMarginTop {
+    margin-top: 20px;
+}
+
+/* Help Button Position */
+.helpButtonLeft {
+    left: max(15px, env(safe-area-inset-left));
+    right: auto;
+}
+
+/* Close Icon */
+.closeIcon {
+    color: #9ca3af;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* Spacer */
+.spacer {
+    margin-top: 8px;
+}
+
+/* Settings Page Styles */
+.settingsButton {
+    padding: 12px;
+    font-size: 0.9rem;
+    margin: 8px 0;
+    border-radius: 8px;
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    cursor: pointer;
+}
+
+.settingsButtonGray {
+    background: #333;
+}
+
+.settingsButtonRed {
+    background: #550000;
+    border-color: rgba(255, 0, 0, 0.3);
+}
+
+.settingsButtonDarkRed {
+    background: #880000;
+    border-color: rgba(255, 0, 0, 0.3);
+}
+
+.settingsButtonDanger {
+    background: #660000;
+    border-color: rgba(255, 0, 0, 0.5);
+    font-weight: bold;
+}
+
+.settingsButtonMusic {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.settingsButtonMusicEnabled {
+    background: #334400;
+}
+
+.settingsButtonMusicDisabled {
+    background: #444;
+}
+
+/* Volume Slider Styles */
+.volumeSliderContainer {
+    margin-bottom: 24px;
+}
+
+.volumeSliderWrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.volumeSliderInput {
+    flex: 1;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    outline: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+.volumeSliderInput::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: var(--primary);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.volumeSliderInput::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: var(--primary);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+/* Game Screen Status Styles */
+.gameStatusContainer {
+    margin: 20px 0;
+    padding: 15px;
+    background: rgba(22, 27, 34, 0.6);
+    border-radius: 10px;
+}
+
+.gameStatusText {
+    color: #aaa;
+}
+
+.correctGuessContainer {
+    margin: 20px 0;
+}
+
+.correctGuessTitle {
+    color: #0f0;
+    font-weight: bold;
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+}
+
+.correctGuessSubtitle {
+    color: #aaa;
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+}
+
+.categoryInfo {
+    margin-bottom: 15px;
+    color: #888;
+    font-size: 0.85rem;
+}
+
+.attackSelectionWrapper {
+    background: rgba(139, 0, 0, 0.3);
+    border-radius: 15px;
+    padding: 20px;
+    margin-top: 15px;
+    border: 2px solid rgba(255, 69, 0, 0.5);
+}
+
+.attackSelectionHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 15px;
+    color: #ff8c00;
+    font-weight: bold;
+}
+
+.attackSelectionHeaderIcon {
+    font-size: 1.2rem;
+}
+
+.attackSelectionGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.attackPlayerCardLarge {
+    padding: 20px;
+    background: rgba(22, 27, 34, 0.8);
+    border-radius: 12px;
+    cursor: pointer;
+    text-align: center;
+    border: 2px solid #444;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.attackPlayerCardLarge:hover {
+    border: 2px solid #ff8c00;
+    background: rgba(255, 140, 0, 0.1);
+}
+
+.attackPlayerEmojiLarge {
+    font-size: 3rem;
+    margin-bottom: 5px;
+}
+
+.attackPlayerNameLarge {
+    font-size: 1rem;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 5px;
+}
+
+.attackPlayerDmgLarge {
+    font-size: 0.9rem;
+    color: #ff8c00;
+    font-weight: bold;
+}
+
+.attackNoPlayersLarge {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 20px;
+    color: #aaa;
+}
+
+/* Hotseat Modal Styles */
+.hotseatModalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.hotseatModalContent {
+    background: linear-gradient(145deg, #1e1e1e, #252525);
+    padding: 40px;
+    border-radius: 20px;
+    max-width: min(500px, 95vw);
+    margin: 20px;
+    border: 2px solid #ff4500;
+    box-shadow: 0 8px 32px rgba(255, 69, 0, 0.6);
+    text-align: center;
+    position: relative;
+    z-index: 10001;
+}
+
+.hotseatModalIcon {
+    font-size: 5rem;
+    margin-bottom: 20px;
+}
+
+.hotseatModalTitle {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, #ff4500, #ff8c00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 18px rgba(255, 69, 0, 0.6);
+    margin-bottom: 15px;
+}
+
+.hotseatModalText {
+    font-size: 1.2rem;
+    color: #fff;
+    margin-bottom: 25px;
+}
+
+.hotseatModalHeader {
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.hotseatModalEmoji {
+    font-size: 2.5rem;
+}
+
+.hotseatModalButton {
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #ff4500, #ff8c00);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(255, 69, 0, 0.4);
+    transition: all 0.2s;
+}
+
+.hotseatModalButton:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(255, 69, 0, 0.6);
+}
+
+/* Countdown Styles */
+.countdownSubtext {
+    margin-top: 16px;
+    font-size: clamp(1rem, 4vw, 1.5rem);
+    color: #fff;
+    letter-spacing: 0.3em;
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+/* Start Screen Styles */
+.label {
+    display: block;
+    font-size: 0.85rem;
+    color: #aaa;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.labelWithMargin {
+    display: block;
+    font-size: 0.85rem;
+    color: #aaa;
+    margin-top: 12px;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.grid2Cols {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+    margin-bottom: 15px;
+}
+
+.grid3Cols {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+    margin-bottom: 15px;
+}
+
+.buttonMarginTop {
+    margin-top: 15px;
+}
+
+.backButton {
+    margin-top: 20px;
+    width: calc(50% - 10px);
+    max-width: 240px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.joinScreenTitle {
+    margin-bottom: 15px;
+    color: #ff8c00;
+}
+
+.refreshButton {
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+    padding: 10px;
+}
+
+.noRoomsText {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+}
+
+.roomCard {
+    cursor: pointer;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+    text-align: center;
+}
+
+.categoryEmojiLarge {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}
+
+.categoryNameLarge {
+    font-size: 0.9rem;
+    line-height: 1.3;
+    color: #f0f6fc;
+}
+
+/* Lobby Screen Styles */
+.lobbyTitle {
+    margin-bottom: 15px;
+    color: #ff8c00;
+}
+
+.myPlayerCard {
+    padding: 20px;
+    background: rgba(22, 27, 34, 0.6);
+    border-radius: 12px;
+    border: 2px solid rgba(255, 140, 0, 0.3);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    cursor: pointer;
+    margin-bottom: 20px;
+}
+
+.myPlayerCard:hover {
+    border-color: rgba(255, 140, 0, 0.5);
+}
+
+.myPlayerCard.ready {
+    opacity: 1;
+}
+
+.myPlayerCard.notReady {
+    opacity: 0.6;
+}
+
+.myPlayerCard.eliminated {
+    opacity: 0.5;
+}
+
+.myPlayerEmoji {
+    font-size: 4rem;
+    flex-shrink: 0;
+}
+
+.myPlayerInfo {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.myPlayerName {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.crownIcon {
+    font-size: 1.4rem;
+}
+
+.readyToggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.readyLabel {
+    font-size: 0.95rem;
+    color: #aaa;
+    font-weight: 500;
+}
+
+.toggleSwitch {
+    position: relative;
+    width: 50px;
+    height: 28px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    padding: 2px;
+}
+
+.toggleSwitch.ready {
+    background: #22c55e;
+}
+
+.toggleSwitch.notReady {
+    background: #d1d5db;
+}
+
+.toggleSwitch:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.toggleThumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    background: #fff;
+    transition: transform 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggleThumb.ready {
+    transform: translateX(22px);
+}
+
+.toggleThumb.notReady {
+    transform: translateX(0);
+}
+
+.toggleCheck {
+    color: #22c55e;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.toggleCross {
+    color: #9ca3af;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.otherPlayersGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.otherPlayerCard {
+    padding: 16px;
+    background: rgba(22, 27, 34, 0.6);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: opacity 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    cursor: default;
+}
+
+.otherPlayerCard.ready {
+    opacity: 1;
+}
+
+.otherPlayerCard.notReady {
+    opacity: 0.4;
+}
+
+.otherPlayerCard.eliminated {
+    opacity: 0.5;
+}
+
+.otherPlayerEmoji {
+    font-size: 2.5rem;
+    margin-bottom: 4px;
+}
+
+.otherPlayerName {
+    font-size: 1rem;
+    font-weight: bold;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.crownIconSmall {
+    font-size: 1.2rem;
+}
+
+.otherPlayerReady {
+    font-size: 0.85rem;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.waitText {
+    color: #666;
+    font-size: 0.9rem;
+    margin-top: 20px;
+}
+
+/* Game Screen Styles */
+.gameQuestion {
+    margin: 20px 0;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.gameCategory {
+    margin-top: 10px;
+    margin-bottom: 20px;
+    color: #888;
+    font-size: 0.9rem;
+    text-align: center;
+    font-style: italic;
+}
+
+.voteSubmitted {
+    padding: 20px;
+    background: rgba(255, 140, 0, 0.2);
+    border-radius: 10px;
+    margin-top: 20px;
+}
+
+.voteSubmittedTitle {
+    color: #ff8c00;
+    font-weight: bold;
+}
+
+.voteSubmittedText {
+    color: #aaa;
+    font-size: 0.9rem;
+    margin-top: 10px;
+}
+
+.submitButtonMargin {
+    margin-top: 20px;
+}
+
+/* Result Screen Styles */
+.resultTitle {
+    margin-bottom: 15px;
+    color: #ff8c00;
+}
+
+.resultThermoItem {
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 12px;
+    background: rgba(22, 27, 34, 0.6);
+}
+
+/* Eliminated Screen Styles */
+.eliminatedTitle {
+    margin-bottom: 15px;
+    color: #ff0000;
+}
+
+.eliminatedInfoBox {
+    padding: 20px;
+    background: rgba(139, 0, 0, 0.3);
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.eliminatedText {
+    color: #fff;
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+}
+
+.eliminatedSubtext {
+    color: #aaa;
+    font-size: 0.9rem;
+}
+
+.thermoItemAnswered {
+    border: 2px solid #22c55e;
+    background: rgba(34, 197, 94, 0.2);
+    opacity: 1;
+}
+
+.thermoItemNotAnswered {
+    border: 1px solid #333;
+    background: rgba(22, 27, 34, 0.6);
+    opacity: 0.5;
+}
+
+.thermoTopLeft {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.thermoTemp {
+    font-weight: bold;
+    color: #fff;
+}
+
+.thermoTempMax {
+    font-weight: bold;
+    color: #ff0000;
+}
+
+/* Reward Choice Styles */
+.rewardContainer {
+    margin: 20px 0;
+}
+
+.rewardTitle {
+    color: #0f0;
+    font-weight: bold;
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+}
+
+.rewardChoiceBox {
+    background: #2a3a1a;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    border: 2px solid #4a6a2a;
+}
+
+.rewardChoiceTitle {
+    margin: 0 0 12px 0;
+    color: #8fef8f;
+}
+
+.rewardGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.rewardButtonAttack {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    border: none;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.rewardButtonInvest {
+    background: linear-gradient(135deg, #1a2a3a, #2a3a4a);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    border: none;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.rewardDecisionMade {
+    margin: 20px 0;
+    padding: 15px;
+    background: rgba(0, 255, 0, 0.1);
+    border-radius: 10px;
+}
+
+.rewardDecisionTitle {
+    color: #0f0;
+    font-weight: bold;
+}
+
+.rewardDecisionText {
+    color: #aaa;
+    font-size: 0.9rem;
+}
+
+/* Wrong Answer Styles */
+.wrongAnswerContainer {
+    margin: 20px 0;
+    padding: 20px;
+    background: rgba(139, 0, 0, 0.3);
+    border-radius: 15px;
+    border: 2px solid rgba(255, 0, 0, 0.5);
+    text-align: center;
+}
+
+.wrongAnswerIcon {
+    font-size: 3rem;
+    margin-bottom: 10px;
+}
+
+.wrongAnswerTitle {
+    color: #ff0000;
+    font-weight: bold;
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+}
+
+.wrongAnswerText {
+    color: #aaa;
+    font-size: 0.9rem;
+}
+
+/* Attack Modal Styles */
+.attackModalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.attackModalContent {
+    background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+    padding: 30px;
+    border-radius: 20px;
+    max-width: min(500px, 95vw);
+    width: 90%;
+    text-align: center;
+    border: 2px solid #ff4500;
+    box-shadow: 0 0 30px rgba(255, 69, 0, 0.5);
+    z-index: 10001;
+}
+
+.attackModalTitle {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, #ff4500, #ff8c00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 18px rgba(255, 69, 0, 0.6);
+    margin-bottom: 15px;
+}
+
+.attackModalSubtext {
+    font-size: 0.9rem;
+    color: #aaa;
+    margin-bottom: 25px;
+}
+
+.attackModalNoDamage {
+    font-size: 0.9rem;
+    color: #aaa;
+    margin-bottom: 25px;
+}
+
+.attackModalDetails {
+    font-size: 0.9rem;
+    color: #aaa;
+    margin-bottom: 25px;
+    text-align: left;
+    max-width: 80%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-top: 15px;
+    border-top: 1px solid #333;
+}
+
+.attackModalDetailsTitle {
+    color: #fff;
+}
+
+.attackModalDetailItem {
+    margin-top: 8px;
+    color: #ccc;
+}
+
+.attackModalBar {
+    width: 100%;
+    height: 20px;
+    background: #333;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.attackModalTemp {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+.attackModalTempDamage {
+    color: #ff4500;
+}
+
+.attackModalTempNoDamage {
+    color: #4a9eff;
+}
+
+.attackModalButton {
+    margin-top: 25px;
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #ff4500, #ff8c00);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    cursor: pointer;
+    width: 100%;
+}
+
+/* Elimination Modal Styles */
+.eliminationModalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.eliminationModalContent {
+    background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+    padding: 30px;
+    border-radius: 20px;
+    max-width: 500px;
+    width: 90%;
+    text-align: center;
+    border: 2px solid #ff4500;
+    box-shadow: 0 0 30px rgba(255, 69, 0, 0.5);
+    z-index: 10001;
+}
+
+.eliminationModalLogoContainer {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.eliminationModalLogo {
+    max-width: 250px;
+    width: 80%;
+    height: auto;
+    object-fit: contain;
+}
+
+.eliminationModalTitle {
+    color: #ff4500;
+    margin-bottom: 15px;
+    font-size: 1.8rem;
+}
+
+.eliminationModalText {
+    color: #fff;
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+}
+
+.eliminationModalButton {
+    margin-top: 25px;
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #ff4500, #ff8c00);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    cursor: pointer;
+    width: 100%;
+}
+
+/* Rules Modal Styles */
+.rulesModalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.rulesModalContent {
+    background: linear-gradient(145deg, #1e1e1e, #252525);
+    padding: 30px;
+    border-radius: 20px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 85vh;
+    overflow-y: auto;
+    border: 2px solid #ff4500;
+    box-shadow: 0 0 30px rgba(255, 69, 0, 0.5);
+    z-index: 10001;
+}
+
+.rulesModalTitle {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, #ff4500, #ff8c00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 18px rgba(255, 69, 0, 0.6);
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.rulesModalSection {
+    margin-bottom: 25px;
+}
+
+.rulesModalSectionTitle {
+    color: #ff8c00;
+    font-size: 1.3rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.rulesModalText {
+    color: #fff;
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+
+.rulesModalButton {
+    margin-top: 25px;
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #ff4500, #ff8c00);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    cursor: pointer;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.rulesModalHeader {
+    color: #ff4500;
+    margin-bottom: 30px;
+    font-size: 1.8rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.rulesModalHeaderIcon {
+    font-size: 1.5rem;
+}
+
+.rulesModalBody {
+    color: #fff;
+    line-height: 1.8;
+    text-align: left;
+}
+
+.rulesModalSectionBox {
+    margin-bottom: 25px;
+    padding: 15px;
+    background: rgba(22, 27, 34, 0.6);
+    border-radius: 10px;
+}
+
+.rulesModalSectionHeader {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.rulesModalSectionIcon {
+    font-size: 1.5rem;
+}
+
+.rulesModalSectionTitle {
+    color: #ff8c00;
+    font-size: 1.1rem;
+}
+
+.rulesModalSectionText {
+    color: #ccc;
+    margin-left: 35px;
+}
+
+/* Attack Modal Dynamic Styles */
+.attackModalContentDamage {
+    border: 2px solid #ff4500;
+    box-shadow: 0 8px 32px rgba(255, 69, 0, 0.8);
+}
+
+.attackModalContentNoDamage {
+    border: 2px solid #4a9eff;
+    box-shadow: 0 8px 32px rgba(74, 158, 255, 0.8);
+}
+
+.attackModalIcon {
+    font-size: 5rem;
+    margin-bottom: 20px;
+}
+
+.attackModalName {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 15px;
+}
+
+.attackModalNameDamage {
+    color: #ff4500;
+    text-shadow: 0 0 18px rgba(255, 69, 0, 0.6);
+}
+
+.attackModalNameNoDamage {
+    color: #4a9eff;
+    text-shadow: 0 0 18px rgba(74, 158, 255, 0.6);
+}
+
+.attackModalMessage {
+    font-size: 1.2rem;
+    color: #fff;
+    margin-bottom: 15px;
+}
+
+.attackModalBarFill {
+    height: 100%;
+    width: 0%;
+    transition: width 1.2s ease-out;
+}
+
+.attackModalBarFillDamage {
+    background: linear-gradient(90deg, #ffae00, #ff0000);
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.7);
+}
+
+.attackModalBarFillNoDamage {
+    background: linear-gradient(90deg, #4a9eff, #0066cc);
+}
+
+.attackModalTempDamage {
+    color: #ff4500;
+}
+
+.attackModalTempNoDamage {
+    color: #4a9eff;
+}
+
+/* Hotseat Wait Container - Angriffsphase */
+.hotseatWaitContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.hotseatWaitBox {
+    background: rgba(22, 27, 34, 0.8);
+    border: 2px solid #ff8c00;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+
+.hotseatWaitTitle {
+    margin: 0 0 10px 0;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #ff8c00;
+}
+
+.hotseatWaitSubtitle {
+    margin: 0;
+    font-size: 1rem;
+    color: #aaa;
+}
+
+/* Guess Overview - Wer hat richtig/falsch geraten */
+.guessOverviewContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.guessOverviewSection {
+    background: rgba(22, 27, 34, 0.6);
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 15px;
+}
+
+.guessOverviewTitle {
+    margin: 0 0 12px 0;
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+.guessOverviewList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.guessOverviewItem {
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Player Ready List - Zeigt Spielernamen mit Bereit-Status */
+.playerReadyList {
+    margin-top: 12px;
+}
+
+.playerReadyText {
+    font-size: 0.8rem;
+    color: #aaa;
+    text-align: center;
+    line-height: 1.4;
+}
+
+/* Full Width Button für Fragengenerator */
+.fullWidthButton {
+    max-width: min(480px, 95vw);
+    width: calc(100% - 30px);
+    padding: 18px 24px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, #ff6b35, #e55a2b);
+    color: white;
+    border: 1.5px solid rgba(255, 107, 53, 0.2);
+    border-radius: 24px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 107, 53, 0.4);
+    margin: 16px auto 0 auto;
+    display: block;
+}
+
+.fullWidthButton:hover {
+    background: linear-gradient(135deg, #ff8050, #ff6b35);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7), 0 0 32px rgba(255, 107, 53, 0.5);
+    transform: translateY(-2px);
+}
+
+.fullWidthButton:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 107, 53, 0.4);
+}
