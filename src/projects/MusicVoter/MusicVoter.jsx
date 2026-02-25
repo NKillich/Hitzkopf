@@ -50,7 +50,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         }
         return Math.floor(availableEmojis.length / 2)
     })
-    const [roomId, setRoomId] = useState('')
+    const [roomId, setRoomId] = useState(sessionStorage.getItem('mv_roomId') || '')
     const [isHost, setIsHost] = useState(false)
     const [lobbyData, setLobbyData] = useState(null)
     const [availableLobbies, setAvailableLobbies] = useState([])
@@ -69,11 +69,16 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     const [manualArtist, setManualArtist] = useState('')
     const [manualType, setManualType] = useState('song') // 'song' or 'album'
 
+    // Im Hinzufügen-Modal bereits hinzugefügte IDs (für grünen Haken)
+    const [addedInModalIds, setAddedInModalIds] = useState(() => new Set())
+
     // Spotify Playback (nur Host)
     const [spotifyConnected, setSpotifyConnected] = useState(false)
     const [spotifyPlayerReady, setSpotifyPlayerReady] = useState(false)
     const [spotifyPlaying, setSpotifyPlaying] = useState(false)
     const [spotifyError, setSpotifyError] = useState(null)
+    const [spotifyDevices, setSpotifyDevices] = useState([])
+    const [selectedSpotifyDeviceId, setSelectedSpotifyDeviceId] = useState('active') // 'active' | deviceId
 
     // Refs
     const unsubscribeRef = useRef(null)
@@ -81,6 +86,12 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     const emojiGalleryRef = useRef(null)
     const isScrollingRef = useRef(false)
     const touchStartRef = useRef({ x: 0, y: 0, time: 0 })
+    const lastPlayedTrackIdRef = useRef(null) // für automatisches Entfernen abgespielter Songs
+    const lastSentQueueOrderRef = useRef(null) // letzte an Spotify gesendete Warteschlangen-Reihenfolge (Spotify-IDs)
+    const queueSyncTimeoutRef = useRef(null)
+    const pendingQueueSyncRef = useRef(null) // Daten für debounced Queue-Sync
+    const myNameRef = useRef(myName)
+    useEffect(() => { myNameRef.current = myName }, [myName])
 
     // Firebase Initialisierung
     useEffect(() => {
@@ -197,6 +208,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             setMyEmoji(emoji)
             setRoomId(newRoomId)
             setIsHost(true)
+            sessionStorage.setItem('mv_roomId', newRoomId)
             setCurrentScreen('room')
             
             subscribeToLobby(newRoomId)
@@ -235,6 +247,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             setMyEmoji(emoji)
             setRoomId(joinRoomId)
             setIsHost(false)
+            sessionStorage.setItem('mv_roomId', joinRoomId)
             setCurrentScreen('room')
             
             subscribeToLobby(joinRoomId)
@@ -378,6 +391,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             setIsHost(false)
             setLobbyData(null)
             setPlaylist([])
+            sessionStorage.removeItem('mv_roomId')
         } catch (error) {
             console.error('Fehler beim Schließen:', error)
             alert('Fehler beim Schließen der Playlist')
@@ -395,6 +409,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                 const data = snapshot.data()
                 setLobbyData(data)
                 setPlaylist(data.playlist || [])
+                setIsHost(data.host === myNameRef.current)
             } else {
                 alert('Playlist wurde geschlossen')
                 handleLeaveLobby()
@@ -432,7 +447,39 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         setIsHost(false)
         setLobbyData(null)
         setPlaylist([])
+        sessionStorage.removeItem('mv_roomId')
     }
+
+    // Beim Laden: Wieder in die Lobby einsteigen, wenn Session vorhanden (z. B. nach Reload)
+    useEffect(() => {
+        const storedRoomId = sessionStorage.getItem('mv_roomId')
+        const storedName = sessionStorage.getItem('mv_name')
+        if (!db || !storedRoomId || !storedName?.trim()) return
+
+        let cancelled = false
+        const lobbyRef = doc(db, 'musicVoterLobbies', storedRoomId)
+        getDoc(lobbyRef).then((snap) => {
+            if (cancelled) return
+            if (!snap.exists()) {
+                sessionStorage.removeItem('mv_roomId')
+                return
+            }
+            const data = snap.data()
+            if (!data.players?.[storedName]) {
+                sessionStorage.removeItem('mv_roomId')
+                return
+            }
+            setRoomId(storedRoomId)
+            setMyName(storedName)
+            setMyEmoji(sessionStorage.getItem('mv_emoji') || '😊')
+            setIsHost(data.host === storedName)
+            setCurrentScreen('room')
+            subscribeToLobby(storedRoomId)
+        }).catch(() => {
+            if (!cancelled) sessionStorage.removeItem('mv_roomId')
+        })
+        return () => { cancelled = true }
+    }, [db])
 
     // Song/Album hinzufügen (Manuell)
     const handleAddManual = async () => {
@@ -628,6 +675,75 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         return 'transparent'
     }
 
+    /** Millisekunden als "m:ss" formatieren */
+    const formatPlaybackTime = (ms) => {
+        if (ms == null || Number.isNaN(ms)) return '0:00'
+        const total = Math.floor(Number(ms) / 1000)
+        const m = Math.floor(total / 60)
+        const s = total % 60
+        return `${m}:${s.toString().padStart(2, '0')}`
+    }
+
+    // Now Playing: Aktuelle Position (läuft jede Sekunde wenn etwas spielt, für Anzeige)
+    const [nowPlayingTick, setNowPlayingTick] = useState(0)
+    const nowPlaying = lobbyData?.nowPlaying
+    const nowPlayingPositionMs = nowPlaying
+        ? (nowPlaying.isPlaying
+            ? Math.min(
+                (nowPlaying.positionMs || 0) + (Date.now() - (nowPlaying.updatedAt || 0)),
+                nowPlaying.durationMs || 0
+            )
+            : (nowPlaying.positionMs || 0))
+        : 0
+
+    useEffect(() => {
+        if (!nowPlaying?.isPlaying) return
+        const id = setInterval(() => setNowPlayingTick((t) => t + 1), 1000)
+        return () => clearInterval(id)
+    }, [nowPlaying?.isPlaying])
+
+    // Host: Playback-Status regelmäßig in Firestore schreiben + abgespielte Songs aus Playlist entfernen
+    useEffect(() => {
+        if (!isHost || !spotifyConnected || !db || !roomId) return
+        const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
+        const interval = setInterval(async () => {
+            try {
+                const state = await spotifyService.getPlaybackState()
+                await updateDoc(lobbyRef, {
+                    nowPlaying: state
+                        ? {
+                            trackId: state.trackId,
+                            trackName: state.trackName,
+                            artist: state.artist,
+                            imageUrl: state.imageUrl,
+                            positionMs: state.positionMs,
+                            durationMs: state.durationMs,
+                            isPlaying: state.isPlaying,
+                            updatedAt: state.updatedAt
+                        }
+                        : null
+                })
+                // Wenn der Track gewechselt hat: vorherigen Song aus der Playlist entfernen
+                if (state?.trackId && lastPlayedTrackIdRef.current !== null && lastPlayedTrackIdRef.current !== state.trackId) {
+                    try {
+                        const snap = await getDoc(lobbyRef)
+                        const currentPlaylist = snap.data()?.playlist || []
+                        const stillHasTrack = currentPlaylist.some((i) => i.spotifyId === lastPlayedTrackIdRef.current)
+                        if (stillHasTrack) {
+                            const updatedPlaylist = currentPlaylist.filter((i) => i.spotifyId !== lastPlayedTrackIdRef.current)
+                            await updateDoc(lobbyRef, { playlist: updatedPlaylist })
+                            lastSentQueueOrderRef.current = null
+                        }
+                    } catch (_) {}
+                }
+                if (state?.trackId) lastPlayedTrackIdRef.current = state.trackId
+            } catch (_) {
+                // z.B. kein Token oder Player inaktiv – ignorieren
+            }
+        }, 2000)
+        return () => clearInterval(interval)
+    }, [isHost, spotifyConnected, db, roomId])
+
     // Spotify: Login-Status prüfen (Host), auch nach OAuth-Callback
     useEffect(() => {
         if (!isHost) return
@@ -648,6 +764,20 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         }
     }, [isHost, spotifyConnected])
 
+    // Spotify: Geräteliste laden (Browser, Alexa, …), wenn verbunden
+    useEffect(() => {
+        if (!isHost || !spotifyConnected) return
+        const load = async () => {
+            try {
+                const list = await spotifyService.getDevices()
+                setSpotifyDevices(list)
+            } catch (_) {}
+        }
+        load()
+        const interval = setInterval(load, 10000)
+        return () => clearInterval(interval)
+    }, [isHost, spotifyConnected])
+
     const handleSpotifyConnect = async () => {
         try {
             sessionStorage.setItem('spotify_return_to', 'musicvoter')
@@ -658,7 +788,12 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         }
     }
 
-    const handleSpotifyDisconnect = () => {
+    const handleSpotifyDisconnect = async () => {
+        if (db && roomId && isHost) {
+            try {
+                await updateDoc(doc(db, 'musicVoterLobbies', roomId), { nowPlaying: null })
+            } catch (_) {}
+        }
         spotifyService.clearUserTokens()
         spotifyService.disconnectPlayer()
         setSpotifyConnected(false)
@@ -667,23 +802,103 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         setSpotifyError(null)
     }
 
-    const handleStartPlayback = async () => {
-        const spotifyUris = sortedPlaylist
+    const getSpotifyUris = () =>
+        sortedPlaylist
             .filter((item) => item.source === 'spotify' && item.spotifyId && item.type === 'song')
             .map((item) => `spotify:track:${item.spotifyId}`)
+
+    const handleStartPlayback = async () => {
+        const spotifyUris = getSpotifyUris()
         if (spotifyUris.length === 0) {
             alert('In der Playlist sind keine Spotify-Songs. Füge zuerst Songs über die Spotify-Suche hinzu.')
             return
         }
         setSpotifyError(null)
         try {
-            await spotifyService.playOnDevice(spotifyUris)
+            await spotifyService.playOnDevice(spotifyUris, selectedSpotifyDeviceId === 'active' ? 'active' : selectedSpotifyDeviceId)
+            lastSentQueueOrderRef.current = sortedPlaylist
+                .filter((i) => i.source === 'spotify' && i.spotifyId && i.type === 'song')
+                .map((i) => i.spotifyId)
             setSpotifyPlaying(true)
         } catch (e) {
             setSpotifyError(e.message || 'Abspielen fehlgeschlagen')
             alert('Spotify abspielen: ' + (e.message || 'Fehler'))
         }
     }
+
+    /** Warteschlange bei Spotify an neue Vote-Reihenfolge anpassen (aktueller Song läuft weiter). Nutzt Ref-Daten. */
+    const syncQueueToSpotifyFromRefs = async () => {
+        const pending = pendingQueueSyncRef.current
+        if (!pending) return
+        try {
+            const state = await spotifyService.getPlaybackState()
+            if (!state || state.trackId !== pending.currentTrackId) return
+            const uris = [`spotify:track:${state.trackId}`, ...pending.queueOrder.map((id) => `spotify:track:${id}`)]
+            await spotifyService.playOnDevice(uris, pending.deviceId, state.positionMs)
+            lastSentQueueOrderRef.current = pending.queueOrder
+        } catch (_) {}
+    }
+
+    /** Playlist erneut auf das gewählte Gerät senden (z. B. nach Wechsel zu Alexa per Connect). */
+    const handleResendPlaylist = async () => {
+        const spotifyUris = getSpotifyUris()
+        if (spotifyUris.length === 0) return
+        setSpotifyError(null)
+        try {
+            await spotifyService.playOnDevice(spotifyUris, selectedSpotifyDeviceId === 'active' ? 'active' : selectedSpotifyDeviceId)
+            lastSentQueueOrderRef.current = sortedPlaylist
+                .filter((i) => i.source === 'spotify' && i.spotifyId && i.type === 'song')
+                .map((i) => i.spotifyId)
+            setSpotifyPlaying(true)
+        } catch (e) {
+            setSpotifyError(e.message || 'Fehler')
+        }
+    }
+
+    // Host: Wenn sich die Warteschlange ändert, Spotify anpassen – bei reinen Zugaben nur "Add to Queue" (kein Stocken), bei Umordnung debounced voller Sync
+    const queueOrderKey = sortedPlaylist
+        .filter((i) => i.source === 'spotify' && i.spotifyId && i.type === 'song')
+        .filter((i) => i.spotifyId !== nowPlaying?.trackId)
+        .map((i) => i.spotifyId)
+        .join(',')
+    useEffect(() => {
+        if (!isHost || !spotifyConnected || !nowPlaying?.trackId) return
+        const queueOrder = sortedPlaylist
+            .filter((i) => i.source === 'spotify' && i.spotifyId && i.type === 'song')
+            .filter((i) => i.spotifyId !== nowPlaying.trackId)
+            .map((i) => i.spotifyId)
+        const last = lastSentQueueOrderRef.current
+        const same = last && last.length === queueOrder.length && last.every((id, i) => id === queueOrder[i])
+        if (same) return
+        if (queueSyncTimeoutRef.current) clearTimeout(queueSyncTimeoutRef.current)
+        const deviceId = selectedSpotifyDeviceId === 'active' ? 'active' : selectedSpotifyDeviceId
+        pendingQueueSyncRef.current = {
+            queueOrder,
+            currentTrackId: nowPlaying.trackId,
+            deviceId
+        }
+        const isOnlyAdditions = last && queueOrder.length >= last.length && last.every((id, i) => id === queueOrder[i])
+        if (isOnlyAdditions) {
+            const newIds = queueOrder.slice(last.length)
+            queueSyncTimeoutRef.current = setTimeout(async () => {
+                queueSyncTimeoutRef.current = null
+                try {
+                    for (const id of newIds) {
+                        await spotifyService.addToQueue(`spotify:track:${id}`, deviceId)
+                    }
+                    lastSentQueueOrderRef.current = queueOrder
+                } catch (_) {}
+            }, 400)
+        } else {
+            queueSyncTimeoutRef.current = setTimeout(() => {
+                queueSyncTimeoutRef.current = null
+                syncQueueToSpotifyFromRefs()
+            }, 4000)
+        }
+        return () => {
+            if (queueSyncTimeoutRef.current) clearTimeout(queueSyncTimeoutRef.current)
+        }
+    }, [isHost, spotifyConnected, nowPlaying?.trackId, queueOrderKey, selectedSpotifyDeviceId])
 
     const handlePausePlayback = async () => {
         try {
@@ -844,14 +1059,6 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                             className={styles.lobbyCard}
                                             onClick={() => handleJoinLobbyFromBrowser(lobby.id)}
                                         >
-                                            <button
-                                                className={styles.lobbyCardDelete}
-                                                onClick={(e) => handleDeleteLobbyFromBrowser(lobby.id, lobby.host, e)}
-                                                title="Playlist löschen"
-                                            >
-                                                ×
-                                            </button>
-
                                             <div className={styles.lobbyCardHeader}>
                                                 <div className={styles.lobbyCardTitle}>
                                                     <span className={styles.lobbyCardIcon}>🎵</span>
@@ -979,24 +1186,49 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                         ✓ Mit Spotify verbunden
                                         {spotifyPlayerReady && ' • Player bereit'}
                                     </p>
+                                    <div className={styles.spotifyDeviceSelect}>
+                                        <label className={styles.spotifyDeviceLabel}>Wiedergabe auf:</label>
+                                        <select
+                                            className={styles.spotifyDeviceSelectEl}
+                                            value={selectedSpotifyDeviceId}
+                                            onChange={(e) => setSelectedSpotifyDeviceId(e.target.value)}
+                                        >
+                                            <option value="active">Aktives Gerät (z. B. Alexa)</option>
+                                            {spotifyDevices.map((d) => (
+                                                <option key={d.id} value={d.id}>
+                                                    {d.name}{d.is_active ? ' ● aktiv' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                     <div className={styles.spotifyPlaybackButtons}>
                                         {!spotifyPlaying ? (
                                             <button
                                                 type="button"
                                                 className={styles.spotifyPlayButton}
                                                 onClick={handleStartPlayback}
-                                                disabled={!spotifyPlayerReady || sortedPlaylist.filter((i) => i.source === 'spotify' && i.type === 'song').length === 0}
+                                                disabled={sortedPlaylist.filter((i) => i.source === 'spotify' && i.type === 'song').length === 0}
                                             >
                                                 ▶ Playlist abspielen
                                             </button>
                                         ) : (
-                                            <button
-                                                type="button"
-                                                className={styles.spotifyPauseButton}
-                                                onClick={handlePausePlayback}
-                                            >
-                                                ⏸ Pause
-                                            </button>
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    className={styles.spotifyPauseButton}
+                                                    onClick={handlePausePlayback}
+                                                >
+                                                    ⏸ Pause
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={styles.spotifyResendButton}
+                                                    onClick={handleResendPlaylist}
+                                                    title="Interaktive Playlist erneut auf das gewählte Gerät senden (z. B. nach Wechsel per Spotify Connect)"
+                                                >
+                                                    🔄 Playlist erneut senden
+                                                </button>
+                                            </>
                                         )}
                                         <button
                                             type="button"
@@ -1011,6 +1243,32 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                         </div>
                     )}
 
+                    {/* Now Playing (für alle sichtbar, wenn Host Spotify abspielt) */}
+                    {nowPlaying && (
+                        <div className={styles.nowPlayingSection}>
+                            <h3 className={styles.sectionTitle}>Now Playing</h3>
+                            <div className={styles.nowPlayingCard}>
+                                {nowPlaying.imageUrl && (
+                                    <img
+                                        src={nowPlaying.imageUrl}
+                                        alt=""
+                                        className={styles.nowPlayingImage}
+                                    />
+                                )}
+                                <div className={styles.nowPlayingInfo}>
+                                    <div className={styles.nowPlayingTrack}>{nowPlaying.trackName}</div>
+                                    <div className={styles.nowPlayingArtist}>{nowPlaying.artist}</div>
+                                    <div className={styles.nowPlayingTime}>
+                                        {formatPlaybackTime(nowPlayingPositionMs)} / {formatPlaybackTime(nowPlaying.durationMs)}
+                                    </div>
+                                </div>
+                                {nowPlaying.isPlaying && (
+                                    <span className={styles.nowPlayingBadge} title="Läuft">▶</span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Add Button */}
                     <div className={styles.addSection}>
                         <button 
@@ -1021,23 +1279,26 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                         </button>
                     </div>
 
-                    {/* Playlist */}
+                    {/* Playlist (aktuell laufender Song wird ausgeblendet, nur in Now Playing sichtbar) */}
+                    {(() => {
+                        const playlistQueue = sortedPlaylist.filter((item) => item.spotifyId !== nowPlaying?.trackId)
+                        return (
                     <div className={styles.playlistSection}>
                         <h3 className={styles.sectionTitle}>
-                            Playlist ({sortedPlaylist.length})
+                            Playlist ({playlistQueue.length}{nowPlaying?.trackId ? ' + 1 läuft' : ''})
                         </h3>
                         
-                        {sortedPlaylist.length === 0 ? (
+                        {playlistQueue.length === 0 ? (
                             <div className={styles.emptyPlaylist}>
                                 <div className={styles.emptyIcon}>🎵</div>
-                                <p>Noch keine Songs in der Playlist</p>
+                                <p>{nowPlaying?.trackId ? 'Keine weiteren Songs in der Warteschlange' : 'Noch keine Songs in der Playlist'}</p>
                                 <p className={styles.emptyHint}>
-                                    Füge Songs hinzu, um abzustimmen!
+                                    {nowPlaying?.trackId ? 'Der aktuelle Song läuft oben bei Now Playing.' : 'Füge Songs hinzu, um abzustimmen!'}
                                 </p>
                             </div>
                         ) : (
                             <div className={styles.playlistItems}>
-                                {sortedPlaylist.map((item, index) => {
+                                {playlistQueue.map((item, index) => {
                                     const score = calculateScore(item)
                                     const myVote = item.votes?.[myName] || 0
 
@@ -1047,7 +1308,6 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                             className={styles.playlistItem}
                                             style={{ '--item-color': getVoteColor(myVote) }}
                                         >
-                                            {/* Entfernen-Button ganz links */}
                                             {(isHost || item.addedBy === myName) && (
                                                 <button
                                                     className={styles.removeButton}
@@ -1093,14 +1353,33 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                             </div>
                         )}
                     </div>
+                        )
+                    })()}
                 </div>
             )}
 
             {/* Add Modal */}
             {showAddModal && (
-                <div className={styles.modalOverlay} onClick={() => setShowAddModal(false)}>
+                <div className={styles.modalOverlay} onClick={() => { setAddedInModalIds(new Set()); setShowAddModal(false) }}>
                     <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-                        <h2 className={styles.modalTitle}>Hinzufügen</h2>
+                        <div className={styles.modalHeader}>
+                            <h2 className={styles.modalTitle}>Hinzufügen</h2>
+                            <button
+                                type="button"
+                                className={styles.modalCloseButton}
+                                onClick={() => {
+                                    setAddedInModalIds(new Set())
+                                    setShowAddModal(false)
+                                    setAddMode(null)
+                                    setManualTitle('')
+                                    setManualArtist('')
+                                }}
+                                title="Schließen"
+                                aria-label="Schließen"
+                            >
+                                ×
+                            </button>
+                        </div>
                         
                         {!addMode && (
                             <div className={styles.addModeButtons}>
@@ -1192,57 +1471,76 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
 
                                 {!isSearching && searchResults.length > 0 && (
                                     <div className={styles.searchResults}>
-                                        {searchResults.map((item) => (
-                                            <div 
-                                                key={item.id} 
-                                                className={styles.searchResultItem}
-                                                onClick={async () => {
-                                                    try {
-                                                        const itemToAdd = {
-                                                            ...item,
-                                                            addedBy: myName,
-                                                            votes: {}
+                                        {searchResults.map((item) => {
+                                            const isAdded = addedInModalIds.has(item.id)
+                                            return (
+                                                <div 
+                                                    key={item.id} 
+                                                    className={styles.searchResultItem}
+                                                    onClick={async (e) => {
+                                                        if (isAdded) return
+                                                        if (e.target.closest('button')) return
+                                                        try {
+                                                            const itemToAdd = {
+                                                                ...item,
+                                                                addedBy: myName,
+                                                                votes: {}
+                                                            }
+                                                            console.log('🎵 Füge hinzu:', item.title)
+                                                            await addToPlaylist(itemToAdd)
+                                                            setAddedInModalIds((prev) => new Set(prev).add(item.id))
+                                                        } catch (error) {
+                                                            console.error('Fehler beim Klick:', error)
                                                         }
-                                                        
-                                                        console.log('🎵 Füge hinzu:', item.title)
-                                                        await addToPlaylist(itemToAdd)
-                                                        
-                                                        // Modal schließen und aufräumen
-                                                        setShowAddModal(false)
-                                                        setAddMode(null)
-                                                        setSearchQuery('')
-                                                        setSearchResults([])
-                                                    } catch (error) {
-                                                        console.error('Fehler beim Klick:', error)
-                                                    }
-                                                }}
-                                            >
-                                                {item.imageUrl && (
-                                                    <img 
-                                                        src={item.imageUrl} 
-                                                        alt={item.title}
-                                                        className={styles.resultImage}
-                                                    />
-                                                )}
-                                                <div className={styles.resultInfo}>
-                                                    <div className={styles.resultTitle}>
-                                                        {item.type === 'album' && '📀 '}
-                                                        {item.title}
-                                                    </div>
-                                                    <div className={styles.resultArtist}>
-                                                        {item.artist}
-                                                    </div>
-                                                    {item.album && item.type === 'song' && (
-                                                        <div className={styles.resultAlbum}>
-                                                            {item.album}
-                                                        </div>
+                                                    }}
+                                                >
+                                                    {item.imageUrl && (
+                                                        <img 
+                                                            src={item.imageUrl} 
+                                                            alt={item.title}
+                                                            className={styles.resultImage}
+                                                        />
                                                     )}
+                                                    <div className={styles.resultInfo}>
+                                                        <div className={styles.resultTitle}>
+                                                            {item.type === 'album' && '📀 '}
+                                                            {item.title}
+                                                        </div>
+                                                        <div className={styles.resultArtist}>
+                                                            {item.artist}
+                                                        </div>
+                                                        {item.album && item.type === 'song' && (
+                                                            <div className={styles.resultAlbum}>
+                                                                {item.album}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className={`${styles.addResultButton} ${isAdded ? styles.addResultButtonAdded : ''}`}
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation()
+                                                            if (isAdded) return
+                                                            try {
+                                                                const itemToAdd = {
+                                                                    ...item,
+                                                                    addedBy: myName,
+                                                                    votes: {}
+                                                                }
+                                                                await addToPlaylist(itemToAdd)
+                                                                setAddedInModalIds((prev) => new Set(prev).add(item.id))
+                                                            } catch (err) {
+                                                                console.error('Fehler beim Hinzufügen:', err)
+                                                            }
+                                                        }}
+                                                        disabled={isAdded}
+                                                        title={isAdded ? 'Bereits hinzugefügt' : 'Zur Playlist hinzufügen'}
+                                                    >
+                                                        {isAdded ? '✓' : '+'}
+                                                    </button>
                                                 </div>
-                                                <button className={styles.addResultButton}>
-                                                    +
-                                                </button>
-                                            </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 )}
 
@@ -1258,24 +1556,17 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                         )}
 
                         <div className={styles.modalButtons}>
-                            {addMode && (
-                                <button
-                                    className={styles.btnSecondary}
-                                    onClick={() => setAddMode(null)}
-                                >
-                                    Zurück
-                                </button>
-                            )}
                             <button
-                                className={styles.btnSecondary}
+                                className={styles.btnFertig}
                                 onClick={() => {
+                                    setAddedInModalIds(new Set())
                                     setShowAddModal(false)
                                     setAddMode(null)
                                     setManualTitle('')
                                     setManualArtist('')
                                 }}
                             >
-                                Abbrechen
+                                Fertig
                             </button>
                         </div>
                     </div>

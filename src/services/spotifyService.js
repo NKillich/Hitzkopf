@@ -1,5 +1,5 @@
 /**
- * Spotify API Service für Music Voter
+ * Spotify API Service für Amplify
  * 
  * Hinweis: Um die Spotify API zu nutzen, benötigst du:
  * 1. Einen Spotify Developer Account (https://developer.spotify.com/)
@@ -27,12 +27,11 @@ class SpotifyService {
     constructor() {
         this.clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
         this.clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
-        // Redirect URI: Exakt diese URL muss im Spotify-Dashboard unter "Redirect URIs" stehen.
-        // Nur diese eine Zeichenkette – kein Slash am Ende, kein /callback.
-        this.redirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI || 'https://nkillich.github.io/Hitzkopf'
-        if (this.redirectUri.endsWith('/')) {
-            this.redirectUri = this.redirectUri.slice(0, -1)
-        }
+        // Redirect URI: Immer diese Production-URL für Spotify (muss exakt so im Dashboard stehen).
+        const productionRedirect = 'https://nkillich.github.io/Hitzkopf'
+        const fromEnv = import.meta.env.VITE_SPOTIFY_REDIRECT_URI
+        const isLocalhostUri = fromEnv && (/localhost|127\.0\.0\.1/i.test(fromEnv) || fromEnv.startsWith('http://'))
+        this.redirectUri = (fromEnv && !isLocalhostUri ? fromEnv : productionRedirect).replace(/\/$/, '')
         if (typeof console !== 'undefined') {
             console.log('🎵 Spotify Redirect URI:', this.redirectUri)
         }
@@ -607,31 +606,79 @@ class SpotifyService {
     }
 
     /**
-     * Startet die Wiedergabe auf dem Host-Gerät (nur Spotify-Tracks mit spotifyId).
-     * uris: Array von "spotify:track:ID"
+     * Liste aller Spotify-Connect-Geräte (Browser, Alexa, Handy, …).
+     * Returns [{ id, name, type, is_active }, …]
      */
-    async playOnDevice(uris) {
+    async getDevices() {
+        const token = await this.getStoredUserToken()
+        if (!token) return []
+        const res = await fetch(`${SPOTIFY_API_BASE}/me/player/devices`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!res.ok) return []
+        const data = await res.json()
+        const list = (data.devices || []).map((d) => ({
+            id: d.id,
+            name: d.name || 'Unbekannt',
+            type: d.type || 'unknown',
+            is_active: !!d.is_active
+        }))
+        return list
+    }
+
+    /**
+     * Startet die Wiedergabe auf einem Gerät (Browser, Alexa, …).
+     * uris: Array von "spotify:track:ID"
+     * deviceId: optional – Gerät-ID, oder 'active' = aktives Gerät (kein device_id), oder null/undefined = dieser Browser.
+     * positionMs: optional – Position in ms, um an gleicher Stelle weiterzuspielen (z. B. bei Queue-Update).
+     */
+    async playOnDevice(uris, deviceId, positionMs) {
         const token = await this.getStoredUserToken()
         if (!token) throw new Error('Nicht mit Spotify verbunden.')
-        const deviceId = this._deviceId
-        if (!deviceId) throw new Error('Spotify-Player noch nicht bereit. Bitte kurz warten.')
+        const useActive = deviceId === 'active'
+        const targetId = useActive ? null : (deviceId || this._deviceId)
+        if (!useActive && !targetId) throw new Error('Wähle ein Gerät aus oder warte, bis „Amplify Host“ erscheint.')
 
-        const url = `${SPOTIFY_API_BASE}/me/player/play${deviceId ? `?device_id=${deviceId}` : ''}`
+        const url = `${SPOTIFY_API_BASE}/me/player/play${targetId ? `?device_id=${targetId}` : ''}`
+        const body = { uris }
+        if (positionMs != null && positionMs >= 0) body.position_ms = Math.floor(positionMs)
         const res = await fetch(url, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ uris })
+            body: JSON.stringify(body)
         })
 
         if (!res.ok) {
             const err = await res.json().catch(() => ({}))
             if (res.status === 404) {
-                throw new Error('Kein aktiver Player. Bitte "Mit Spotify verbinden" und Playlist starten.')
+                throw new Error('Kein aktiver Player. Bitte "Mit Spotify verbinden" und in Amplify starten.')
             }
             throw new Error(err.error?.message || 'Wiedergabe fehlgeschlagen')
+        }
+    }
+
+    /**
+     * Fügt einen Track ans Ende der Warteschlange hinzu, ohne die aktuelle Wiedergabe zu unterbrechen.
+     * uri: "spotify:track:ID"
+     * deviceId: optional – wie bei playOnDevice ('active' oder Gerät-ID).
+     */
+    async addToQueue(uri, deviceId) {
+        const token = await this.getStoredUserToken()
+        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        const useActive = deviceId === 'active'
+        const targetId = useActive ? null : (deviceId || this._deviceId)
+        const params = new URLSearchParams({ uri })
+        if (targetId) params.set('device_id', targetId)
+        const res = await fetch(`${SPOTIFY_API_BASE}/me/player/queue?${params}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error?.message || 'Queue hinzufügen fehlgeschlagen')
         }
     }
 
@@ -660,6 +707,32 @@ class SpotifyService {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         })
+    }
+
+    /**
+     * Aktuellen Wiedergabe-Status abrufen (für Now Playing Anzeige).
+     * Returns { trackName, artist, imageUrl, positionMs, durationMs, isPlaying, updatedAt } oder null.
+     */
+    async getPlaybackState() {
+        const token = await this.getStoredUserToken()
+        if (!token) return null
+        const res = await fetch(`${SPOTIFY_API_BASE}/me/player`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (res.status === 204 || !res.ok) return null
+        const data = await res.json()
+        const item = data.item
+        if (!item) return null
+        return {
+            trackId: item.id,
+            trackName: item.name,
+            artist: item.artists?.map((a) => a.name).join(', ') || '',
+            imageUrl: item.album?.images?.[0]?.url || null,
+            positionMs: data.progress_ms ?? 0,
+            durationMs: item.duration_ms ?? 0,
+            isPlaying: !!data.is_playing,
+            updatedAt: Date.now()
+        }
     }
 
     /**
