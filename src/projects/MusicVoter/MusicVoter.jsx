@@ -112,46 +112,66 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         }
     }, [])
 
-    // Emoji Gallery Scroll Handler
+    // Emoji-Galerie: Scroll-Listener + Zentrierung wie bei Hitzkopf (ausgewählter Charakter in der Mitte, optisch hervorgehoben)
     useEffect(() => {
         const gallery = emojiGalleryRef.current
-        if (!gallery) return
+        if (!gallery || currentScreen !== 'browse') return
 
         const handleScroll = () => {
             isScrollingRef.current = true
-            const scrollLeft = gallery.scrollLeft
-            const itemWidth = gallery.scrollWidth / (availableEmojis.length + 2)
-            const index = Math.round(scrollLeft / itemWidth)
-            const clampedIndex = Math.max(0, Math.min(index, availableEmojis.length - 1))
+            const viewportCenter = gallery.scrollLeft + gallery.clientWidth / 2
+            const cards = gallery.querySelectorAll('[data-emoji-index]')
+            let closestIndex = 0
+            let closestDist = Infinity
+            cards.forEach((card) => {
+                const idx = parseInt(card.getAttribute('data-emoji-index'), 10)
+                const cardCenter = card.offsetLeft + card.offsetWidth / 2
+                const dist = Math.abs(cardCenter - viewportCenter)
+                if (dist < closestDist) {
+                    closestDist = dist
+                    closestIndex = idx
+                }
+            })
+            const clampedIndex = Math.max(0, Math.min(closestIndex, availableEmojis.length - 1))
             setEmojiScrollIndex(clampedIndex)
             setMyEmoji(availableEmojis[clampedIndex])
-            
             setTimeout(() => {
                 isScrollingRef.current = false
             }, 100)
         }
 
         gallery.addEventListener('scroll', handleScroll)
-        
+
         const centerEmoji = () => {
-            const itemWidth = gallery.scrollWidth / (availableEmojis.length + 2)
-            gallery.scrollLeft = emojiScrollIndex * itemWidth
+            const card = gallery.querySelector(`[data-emoji-index="${emojiScrollIndex}"]`)
+            if (!card) return
+            isScrollingRef.current = true
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const galleryWidth = gallery.clientWidth
+                    const cardWidth = card.offsetWidth || 80
+                    const cardLeft = card.offsetLeft
+                    const scrollPosition = cardLeft - galleryWidth / 2 + cardWidth / 2
+                    const finalScrollPosition = Math.max(0, Math.min(scrollPosition, gallery.scrollWidth - gallery.clientWidth))
+                    gallery.scrollLeft = finalScrollPosition
+                    setTimeout(() => {
+                        if (Math.abs(gallery.scrollLeft - finalScrollPosition) > 10) {
+                            gallery.scrollLeft = finalScrollPosition
+                        }
+                        setTimeout(() => {
+                            isScrollingRef.current = false
+                        }, 100)
+                    }, 50)
+                })
+            })
         }
-        setTimeout(centerEmoji, 100)
+        const t = setTimeout(centerEmoji, 150)
 
-        return () => gallery.removeEventListener('scroll', handleScroll)
-    }, [emojiScrollIndex])
-
-    // Initial center when browse screen opens
-    useEffect(() => {
-        if (currentScreen === 'browse' && emojiGalleryRef.current) {
-            const gallery = emojiGalleryRef.current
-            setTimeout(() => {
-                const itemWidth = gallery.scrollWidth / (availableEmojis.length + 2)
-                gallery.scrollLeft = emojiScrollIndex * itemWidth
-            }, 150)
+        return () => {
+            gallery.removeEventListener('scroll', handleScroll)
+            clearTimeout(t)
         }
-    }, [currentScreen])
+    }, [currentScreen, emojiScrollIndex])
 
     // Handler-Funktionen für Browse-Screen
     const handleNameChange = (e) => {
@@ -165,7 +185,8 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         setEmojiScrollIndex(index)
         setMyEmoji(emoji)
         sessionStorage.setItem('mv_emoji', emoji)
-        
+        // Im Browse-Screen übernimmt der useEffect die Zentrierung (wie bei Hitzkopf)
+        if (currentScreen === 'browse') return
         const gallery = emojiGalleryRef.current
         if (gallery) {
             const itemWidth = gallery.scrollWidth / (availableEmojis.length + 2)
@@ -996,6 +1017,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                     return (
                                         <div
                                             key={`${emoji}-${index}`}
+                                            data-emoji-index={index}
                                             className={`${styles.emojiCard} ${isSelected ? styles.selected : ''}`}
                                             onClick={() => {
                                                 if (!isScrollingRef.current) {
