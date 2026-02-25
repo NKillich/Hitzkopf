@@ -15,14 +15,31 @@
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1'
 const SPOTIFY_AUTH_BASE = 'https://accounts.spotify.com'
 
+const STORAGE_KEYS = {
+    PKCE_VERIFIER: 'spotify_pkce_verifier',
+    USER_ACCESS: 'spotify_user_access_token',
+    USER_REFRESH: 'spotify_user_refresh_token',
+    USER_EXPIRY: 'spotify_user_expiry',
+    RETURN_TO: 'spotify_return_to'
+}
+
 class SpotifyService {
     constructor() {
         this.clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
         this.clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
-        this.redirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI
+        // Redirect URI: aus .env ODER dynamisch (Origin + Base + /callback), damit es auf GitHub Pages mit deinem bestehenden Eintrag funktioniert
+        const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+        const dynamicRedirect = typeof window !== 'undefined'
+            ? `${window.location.origin}${base}/callback`
+            : 'https://nkillich.github.io/Hitzkopf/callback'
+        this.redirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI || dynamicRedirect
         this.accessToken = null
         this.tokenExpiry = null
-        
+        this._userToken = null
+        this._deviceId = null
+        this._player = null
+        this._sdkReady = false
+
         // Debug: Prüfe ob Credentials geladen wurden
         if (!this.clientId || !this.clientSecret) {
             console.warn('⚠️ Spotify Credentials fehlen! Überprüfe .env.local')
@@ -34,7 +51,167 @@ class SpotifyService {
     }
 
     /**
-     * Generiert die Spotify Login-URL für OAuth
+     * PKCE: Zufälligen String erzeugen
+     */
+    _generateRandomString(length) {
+        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+        const values = crypto.getRandomValues(new Uint8Array(length))
+        return values.reduce((acc, x) => acc + possible[x % possible.length], '')
+    }
+
+    /**
+     * PKCE: SHA256-Hash für Code Challenge
+     */
+    async _sha256(plain) {
+        const encoder = new TextEncoder()
+        const data = encoder.encode(plain)
+        return window.crypto.subtle.digest('SHA-256', data)
+    }
+
+    _base64urlEncode(buffer) {
+        return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+            .replace(/=/g, '')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+    }
+
+    /**
+     * Login-URL für Host (PKCE, mit Streaming-Scopes für Web Playback)
+     * Speichert code_verifier in sessionStorage. Vor Redirect sessionStorage.setItem('spotify_return_to', 'musicvoter') setzen.
+     */
+    async getAuthUrlWithPKCE() {
+        if (!this.clientId) throw new Error('Spotify Client ID fehlt')
+        const codeVerifier = this._generateRandomString(64)
+        const hashed = await this._sha256(codeVerifier)
+        const codeChallenge = this._base64urlEncode(hashed)
+
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem(STORAGE_KEYS.PKCE_VERIFIER, codeVerifier)
+        }
+
+        const scopes = [
+            'streaming',
+            'user-read-email',
+            'user-read-private',
+            'user-modify-playback-state',
+            'user-read-playback-state'
+        ].join(' ')
+
+        const params = new URLSearchParams({
+            response_type: 'code',
+            client_id: this.clientId,
+            scope: scopes,
+            code_challenge_method: 'S256',
+            code_challenge: codeChallenge,
+            redirect_uri: this.redirectUri,
+            state: this._generateRandomString(16)
+        })
+
+        return `${SPOTIFY_AUTH_BASE}/authorize?${params.toString()}`
+    }
+
+    /**
+     * Authorization Code gegen User Access Token tauschen (PKCE, kein Client Secret nötig)
+     */
+    async exchangeCodeForToken(code) {
+        const codeVerifier = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(STORAGE_KEYS.PKCE_VERIFIER) : null
+        if (!codeVerifier) throw new Error('Code Verifier nicht gefunden – bitte erneut verbinden.')
+
+        const response = await fetch(`${SPOTIFY_AUTH_BASE}/api/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                client_id: this.clientId,
+                grant_type: 'authorization_code',
+                code,
+                redirect_uri: this.redirectUri,
+                code_verifier: codeVerifier
+            })
+        })
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}))
+            throw new Error(err.error_description || err.error || 'Token-Austausch fehlgeschlagen')
+        }
+
+        const data = await response.json()
+        this._storeUserTokens(data.access_token, data.refresh_token, data.expires_in)
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem(STORAGE_KEYS.PKCE_VERIFIER)
+        }
+        return data
+    }
+
+    _storeUserTokens(accessToken, refreshToken, expiresIn) {
+        const expiry = Date.now() + (expiresIn * 1000)
+        this._userToken = accessToken
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem(STORAGE_KEYS.USER_ACCESS, accessToken)
+            sessionStorage.setItem(STORAGE_KEYS.USER_REFRESH, refreshToken || '')
+            sessionStorage.setItem(STORAGE_KEYS.USER_EXPIRY, String(expiry))
+        }
+    }
+
+    /**
+     * User Access Token aus Speicher laden (oder per Refresh erneuern)
+     */
+    async getStoredUserToken() {
+        if (typeof sessionStorage === 'undefined') return null
+        let token = sessionStorage.getItem(STORAGE_KEYS.USER_ACCESS)
+        const refresh = sessionStorage.getItem(STORAGE_KEYS.USER_REFRESH)
+        const expiry = Number(sessionStorage.getItem(STORAGE_KEYS.USER_EXPIRY) || 0)
+        if (token && Date.now() >= expiry - 60000 && refresh) {
+            try {
+                const data = await this.refreshUserToken()
+                token = data.access_token
+            } catch (_) {
+                return null
+            }
+        }
+        this._userToken = token
+        return token || null
+    }
+
+    async refreshUserToken() {
+        const refresh = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(STORAGE_KEYS.USER_REFRESH) : null
+        if (!refresh) throw new Error('Kein Refresh Token')
+
+        const response = await fetch(`${SPOTIFY_AUTH_BASE}/api/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                grant_type: 'refresh_token',
+                refresh_token: refresh,
+                client_id: this.clientId
+            })
+        })
+
+        if (!response.ok) {
+            this.clearUserTokens()
+            throw new Error('Token-Erneuerung fehlgeschlagen')
+        }
+
+        const data = await response.json()
+        this._storeUserTokens(data.access_token, data.refresh_token || refresh, data.expires_in)
+        return data
+    }
+
+    clearUserTokens() {
+        this._userToken = null
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem(STORAGE_KEYS.USER_ACCESS)
+            sessionStorage.removeItem(STORAGE_KEYS.USER_REFRESH)
+            sessionStorage.removeItem(STORAGE_KEYS.USER_EXPIRY)
+        }
+    }
+
+    async isUserLoggedIn() {
+        const token = await this.getStoredUserToken()
+        return !!token
+    }
+
+    /**
+     * Generiert die Spotify Login-URL für OAuth (Legacy, ohne PKCE)
      */
     getAuthUrl() {
         const scopes = [
@@ -342,6 +519,155 @@ class SpotifyService {
         }
 
         return await response.json()
+    }
+
+    // ---------- Web Playback (Host) ----------
+
+    /**
+     * Lädt das Spotify Web Playback SDK
+     */
+    loadSpotifySDK() {
+        return new Promise((resolve) => {
+            if (window.Spotify) {
+                this._sdkReady = true
+                resolve()
+                return
+            }
+            if (document.querySelector('script[src*="spotify-player"]')) {
+                window.onSpotifyWebPlaybackSDKReady = () => {
+                    this._sdkReady = true
+                    resolve()
+                }
+                return
+            }
+            const script = document.createElement('script')
+            script.src = 'https://sdk.scdn.co/spotify-player.js'
+            script.async = true
+            window.onSpotifyWebPlaybackSDKReady = () => {
+                this._sdkReady = true
+                resolve()
+            }
+            document.body.appendChild(script)
+        })
+    }
+
+    /**
+     * Initialisiert den Web Playback Player (Host). Erzeugt ein Gerät im Browser.
+     * onReady({ deviceId }) wird aufgerufen, wenn das Gerät bereit ist.
+     */
+    async initPlaybackPlayer(onReady, onError) {
+        const token = await this.getStoredUserToken()
+        if (!token) {
+            onError?.('Nicht mit Spotify angemeldet.')
+            return
+        }
+        await this.loadSpotifySDK()
+        if (!window.Spotify) {
+            onError?.('Spotify SDK konnte nicht geladen werden.')
+            return
+        }
+
+        const player = new window.Spotify.Player({
+            name: 'Amplify Host',
+            getOAuthToken: (cb) => {
+                this.getStoredUserToken().then((t) => cb(t || ''))
+            },
+            volume: 0.8
+        })
+
+        player.addListener('ready', ({ device_id }) => {
+            this._deviceId = device_id
+            this._player = player
+            console.log('✅ Spotify Web Playback bereit, Device ID:', device_id)
+            onReady({ deviceId: device_id })
+        })
+
+        player.addListener('not_ready', ({ device_id }) => {
+            console.log('Spotify Device offline:', device_id)
+        })
+
+        player.addListener('authentication_error', ({ message }) => {
+            console.error('Spotify Auth-Fehler:', message)
+            onError?.(message)
+        })
+
+        player.addListener('initialization_error', ({ message }) => {
+            console.error('Spotify Init-Fehler:', message)
+            onError?.(message)
+        })
+
+        player.connect()
+    }
+
+    getDeviceId() {
+        return this._deviceId
+    }
+
+    /**
+     * Startet die Wiedergabe auf dem Host-Gerät (nur Spotify-Tracks mit spotifyId).
+     * uris: Array von "spotify:track:ID"
+     */
+    async playOnDevice(uris) {
+        const token = await this.getStoredUserToken()
+        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        const deviceId = this._deviceId
+        if (!deviceId) throw new Error('Spotify-Player noch nicht bereit. Bitte kurz warten.')
+
+        const url = `${SPOTIFY_API_BASE}/me/player/play${deviceId ? `?device_id=${deviceId}` : ''}`
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ uris })
+        })
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            if (res.status === 404) {
+                throw new Error('Kein aktiver Player. Bitte "Mit Spotify verbinden" und Playlist starten.')
+            }
+            throw new Error(err.error?.message || 'Wiedergabe fehlgeschlagen')
+        }
+    }
+
+    async pausePlayback() {
+        const token = await this.getStoredUserToken()
+        if (!token) return
+        await fetch(`${SPOTIFY_API_BASE}/me/player/pause`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+    }
+
+    async resumePlayback() {
+        const token = await this.getStoredUserToken()
+        if (!token) return
+        await fetch(`${SPOTIFY_API_BASE}/me/player/play`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+    }
+
+    async nextTrack() {
+        const token = await this.getStoredUserToken()
+        if (!token) return
+        await fetch(`${SPOTIFY_API_BASE}/me/player/next`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+    }
+
+    /**
+     * Trennt den Web-Player (z.B. beim Verlassen)
+     */
+    disconnectPlayer() {
+        if (this._player) {
+            this._player.disconnect()
+            this._player = null
+        }
+        this._deviceId = null
     }
 }
 

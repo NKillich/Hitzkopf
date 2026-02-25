@@ -27,7 +27,7 @@ const firebaseConfig = {
     appId: "1:828164655874:web:1cab759bdb03bfb736101b"
 }
 
-const MusicVoter = ({ onBack }) => {
+const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     // Firebase
     const [app, setApp] = useState(null)
     const [db, setDb] = useState(null)
@@ -68,6 +68,12 @@ const MusicVoter = ({ onBack }) => {
     const [manualTitle, setManualTitle] = useState('')
     const [manualArtist, setManualArtist] = useState('')
     const [manualType, setManualType] = useState('song') // 'song' or 'album'
+
+    // Spotify Playback (nur Host)
+    const [spotifyConnected, setSpotifyConnected] = useState(false)
+    const [spotifyPlayerReady, setSpotifyPlayerReady] = useState(false)
+    const [spotifyPlaying, setSpotifyPlaying] = useState(false)
+    const [spotifyError, setSpotifyError] = useState(null)
 
     // Refs
     const unsubscribeRef = useRef(null)
@@ -622,6 +628,72 @@ const MusicVoter = ({ onBack }) => {
         return 'transparent'
     }
 
+    // Spotify: Login-Status prüfen (Host), auch nach OAuth-Callback
+    useEffect(() => {
+        if (!isHost) return
+        spotifyService.isUserLoggedIn().then(setSpotifyConnected)
+    }, [isHost, spotifyCallbackDone])
+
+    // Spotify: Web Playback Player initialisieren, wenn Host verbunden
+    useEffect(() => {
+        if (!isHost || !spotifyConnected || spotifyPlayerReady) return
+        setSpotifyError(null)
+        spotifyService.initPlaybackPlayer(
+            () => setSpotifyPlayerReady(true),
+            (msg) => setSpotifyError(msg || 'Spotify-Fehler')
+        )
+        return () => {
+            spotifyService.disconnectPlayer()
+            setSpotifyPlayerReady(false)
+        }
+    }, [isHost, spotifyConnected])
+
+    const handleSpotifyConnect = async () => {
+        try {
+            sessionStorage.setItem('spotify_return_to', 'musicvoter')
+            const url = await spotifyService.getAuthUrlWithPKCE()
+            window.location.href = url
+        } catch (e) {
+            alert('Spotify-Verbindung starten fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'))
+        }
+    }
+
+    const handleSpotifyDisconnect = () => {
+        spotifyService.clearUserTokens()
+        spotifyService.disconnectPlayer()
+        setSpotifyConnected(false)
+        setSpotifyPlayerReady(false)
+        setSpotifyPlaying(false)
+        setSpotifyError(null)
+    }
+
+    const handleStartPlayback = async () => {
+        const spotifyUris = sortedPlaylist
+            .filter((item) => item.source === 'spotify' && item.spotifyId && item.type === 'song')
+            .map((item) => `spotify:track:${item.spotifyId}`)
+        if (spotifyUris.length === 0) {
+            alert('In der Playlist sind keine Spotify-Songs. Füge zuerst Songs über die Spotify-Suche hinzu.')
+            return
+        }
+        setSpotifyError(null)
+        try {
+            await spotifyService.playOnDevice(spotifyUris)
+            setSpotifyPlaying(true)
+        } catch (e) {
+            setSpotifyError(e.message || 'Abspielen fehlgeschlagen')
+            alert('Spotify abspielen: ' + (e.message || 'Fehler'))
+        }
+    }
+
+    const handlePausePlayback = async () => {
+        try {
+            await spotifyService.pausePlayback()
+            setSpotifyPlaying(false)
+        } catch (e) {
+            console.error('Pause fehlgeschlagen:', e)
+        }
+    }
+
     return (
         <div className={styles.musicVoter}>
             <div className={styles.backgroundOverlay}></div>
@@ -880,6 +952,64 @@ const MusicVoter = ({ onBack }) => {
                             ))}
                         </div>
                     </div>
+
+                    {/* Spotify (nur Host) */}
+                    {isHost && (
+                        <div className={styles.spotifySection}>
+                            <h3 className={styles.sectionTitle}>Spotify abspielen</h3>
+                            {spotifyError && (
+                                <p className={styles.spotifyError}>{spotifyError}</p>
+                            )}
+                            {!spotifyConnected ? (
+                                <div className={styles.spotifyConnectBlock}>
+                                    <p className={styles.spotifyNote}>
+                                        Verbinde dich mit Spotify, damit die Playlist im Browser abspielt (Spotify Premium nötig).
+                                    </p>
+                                    <button
+                                        type="button"
+                                        className={styles.spotifyConnectButton}
+                                        onClick={handleSpotifyConnect}
+                                    >
+                                        Mit Spotify verbinden
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className={styles.spotifyPlaybackBlock}>
+                                    <p className={styles.spotifyConnected}>
+                                        ✓ Mit Spotify verbunden
+                                        {spotifyPlayerReady && ' • Player bereit'}
+                                    </p>
+                                    <div className={styles.spotifyPlaybackButtons}>
+                                        {!spotifyPlaying ? (
+                                            <button
+                                                type="button"
+                                                className={styles.spotifyPlayButton}
+                                                onClick={handleStartPlayback}
+                                                disabled={!spotifyPlayerReady || sortedPlaylist.filter((i) => i.source === 'spotify' && i.type === 'song').length === 0}
+                                            >
+                                                ▶ Playlist abspielen
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                className={styles.spotifyPauseButton}
+                                                onClick={handlePausePlayback}
+                                            >
+                                                ⏸ Pause
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            className={styles.spotifyDisconnectButton}
+                                            onClick={handleSpotifyDisconnect}
+                                        >
+                                            Verbindung trennen
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Add Button */}
                     <div className={styles.addSection}>

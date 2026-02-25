@@ -1,42 +1,29 @@
 # Spotify API - Redirect URI Info
 
-## 🔍 Wichtig zu verstehen:
+## 🔍 Zwei Anwendungsfälle:
 
-### Client Credentials Flow (Was wir nutzen)
-- ✅ **Keine User-Anmeldung** erforderlich
-- ✅ **Redirect URI wird NICHT genutzt**
-- ✅ Funktioniert lokal ohne GitHub Pages
-- ✅ Nur App-Level Zugriff (Suche, etc.)
+### 1. Suche (Client Credentials)
+- ✅ Keine User-Anmeldung, keine Redirect URI nötig
+- ✅ Nur für Spotify-Suche nach Songs/Alben
 
-### Authorization Code Flow (Nutzen wir NICHT)
-- ❌ Erfordert User-Login bei Spotify
-- ❌ Redirect URI wird benötigt
-- ❌ Komplexer Setup
+### 2. Playlist abspielen (Host – PKCE)
+- ✅ **Redirect URI wird benötigt**, damit der Host sich mit Spotify anmelden kann
+- ✅ Im Spotify Dashboard **exakt** eintragen, z. B. `http://localhost:5173/` oder `http://localhost:5173/callback`
+- ✅ Erfordert **Spotify Premium** (Web Playback SDK)
 
 ## 🎯 Für Music Voter:
 
-Die **Redirect URI in den Spotify Settings ist OPTIONAL**!
-
-Wir nutzen sie nicht, weil:
-1. Keine User-Anmeldung nötig
-2. Nur öffentliche Daten (Suche)
-3. Client Credentials reichen aus
+- **Nur Suche:** Redirect URI im Dashboard optional.
+- **Playlist abspielen (Host):** Redirect URI in den Spotify-Einstellungen **exakt** setzen (wie in `.env.local` unter `VITE_SPOTIFY_REDIRECT_URI`).
 
 ## 🚀 Setup für lokale Entwicklung:
 
-### Option 1: Redirect URI weglassen (Empfohlen für lokal)
+### Wenn der Host die Playlist abspielen will:
 ```
 Spotify Dashboard → Settings → Redirect URIs:
-[leer lassen oder beliebige URL]
+http://localhost:5173/
 ```
-
-### Option 2: GitHub Pages URL eintragen (Für Production)
-```
-Spotify Dashboard → Settings → Redirect URIs:
-https://nkillich.github.io/Hitzkopf/callback
-```
-
-**Wichtig:** Für unsere Zwecke (Musik-Suche) ist die Redirect URI egal!
+(Oder z. B. `http://localhost:5173/callback` – muss mit VITE_SPOTIFY_REDIRECT_URI übereinstimmen.)
 
 ## ✅ Was wichtig ist:
 
