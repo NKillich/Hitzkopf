@@ -1315,24 +1315,32 @@
 /* Styles für Browse-Screen mit LobbySystem-Design */
 .lobbySystem {
     min-height: 100vh;
+    min-height: 100dvh;
     width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
     padding: 2rem;
-    padding-bottom: max(2rem, env(safe-area-inset-bottom) + 1.5rem);
+    padding-bottom: 5.5rem;
     gap: 1rem;
     overflow-y: auto;
+    overflow-x: hidden;
     box-sizing: border-box;
+    -webkit-overflow-scrolling: touch;
 }
 
+/* Fixiert am unteren Bildschirmrand, damit auf dem Handy immer sichtbar und nicht abgeschnitten */
 .backButtonBottom {
-    width: 100%;
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 2rem);
     max-width: 600px;
     padding: 0.75rem 1.5rem;
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
-    background: rgba(22, 27, 34, 0.8);
+    background: rgba(22, 27, 34, 0.95);
     border: 2px solid rgba(78, 205, 196, 0.3);
     border-radius: 12px;
     color: var(--text-primary);
@@ -1341,13 +1349,13 @@
     cursor: pointer;
     transition: all 0.3s ease;
     backdrop-filter: blur(10px);
-    flex-shrink: 0;
+    z-index: 100;
+    box-sizing: border-box;
 }
 
 .backButtonBottom:hover {
     background: rgba(22, 27, 34, 0.95);
     border-color: var(--accent-color, #4ecdc4);
-    transform: translateY(-2px);
     box-shadow: 0 4px 16px rgba(78, 205, 196, 0.3);
 }
 
