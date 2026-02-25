@@ -27,16 +27,15 @@ class SpotifyService {
     constructor() {
         this.clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
         this.clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
-        // Redirect URI: Immer die gleiche Production-URL nutzen, damit es mit einer Eintragung im Spotify-Dashboard funktioniert (lokal + live).
-        const productionRedirect = 'https://nkillich.github.io/Hitzkopf/callback'
-        const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
-        const dynamicRedirect = typeof window !== 'undefined'
-            ? `${window.location.origin}${base}/callback`
-            : productionRedirect
-        // Von localhost aus: Production-URI nutzen, damit nach Spotify-Login die Live-Seite geladen wird.
-        const isLocalhost = typeof window !== 'undefined' &&
-            (/^https?:\/\/localhost(:\d+)?$/.test(window.location.origin) || /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(window.location.origin))
-        this.redirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI || (isLocalhost ? productionRedirect : dynamicRedirect)
+        // Redirect URI: Exakt diese URL muss im Spotify-Dashboard unter "Redirect URIs" stehen.
+        // Nur diese eine Zeichenkette – kein Slash am Ende, kein /callback.
+        this.redirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI || 'https://nkillich.github.io/Hitzkopf'
+        if (this.redirectUri.endsWith('/')) {
+            this.redirectUri = this.redirectUri.slice(0, -1)
+        }
+        if (typeof console !== 'undefined') {
+            console.log('🎵 Spotify Redirect URI:', this.redirectUri)
+        }
         this.accessToken = null
         this.tokenExpiry = null
         this._userToken = null
