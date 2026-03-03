@@ -27,7 +27,6 @@
 .backButtonBottom:hover {
     background: rgba(22, 27, 34, 0.95);
     border-color: var(--accent-color, #4ecdc4);
-    transform: translateY(-2px);
     box-shadow: 0 4px 16px rgba(78, 205, 196, 0.3);
 }
 
