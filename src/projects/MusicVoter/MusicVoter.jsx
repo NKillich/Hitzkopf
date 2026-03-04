@@ -61,6 +61,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     const [searchQuery, setSearchQuery] = useState('')
     const [searchResults, setSearchResults] = useState([])
     const [isSearching, setIsSearching] = useState(false)
+    const [hasSearched, setHasSearched] = useState(false)
     const [showAddModal, setShowAddModal] = useState(false)
 
     // Im Hinzufügen-Modal bereits hinzugefügte IDs (für grünen Haken)
@@ -91,6 +92,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     const myNameRef = useRef(myName)
     useEffect(() => { myNameRef.current = myName }, [myName])
     const [showHostSettings, setShowHostSettings] = useState(false)
+    const [queueExpanded, setQueueExpanded] = useState(false)
 
     // Firebase Initialisierung
     useEffect(() => {
@@ -214,6 +216,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         const lobbyRef = doc(db, 'musicVoterLobbies', newRoomId)
 
         try {
+            const songwahlDurationSec = 180 // 3 Min Standard
             await setDoc(lobbyRef, {
                 host: name,
                 createdAt: serverTimestamp(),
@@ -222,13 +225,19 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                 },
                 playlist: [],
                 status: 'active',
-                // Batch-Voting-Konfiguration (Standardwerte, vom Host änderbar)
+                // Phasen-Konfiguration
                 batchSize: 10,
+                maxSongsPerPerson: 5,
+                songwahlDurationSec,
                 votingDurationSec: 120,
-                votingActive: false,
-                votingEndsAt: null,
+                preQueueVotingMinutes: 1,
+                // Phase startet direkt mit Songwahl
+                lobbyPhase: 'songwahl',
+                phaseEndsAt: Date.now() + songwahlDurationSec * 1000,
                 votingRound: 0,
-                pendingBatch: null
+                pendingBatch: null,
+                queueStartedAt: null,
+                queueTotalDurationMs: null
             })
 
             setMyName(name)
@@ -529,38 +538,50 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     // Song/Album zur Playlist hinzufügen
     const addToPlaylist = async (item) => {
         if (!db || !roomId) {
-            console.error('❌ Hinzufügen fehlgeschlagen: DB oder RoomID fehlt', { db: !!db, roomId })
             alert('Fehler: Nicht mit Lobby verbunden')
             return
         }
 
-        console.log('➕ Versuche Song hinzuzufügen:', item.title)
+        // Während Abstimmung nicht hinzufügen
+        if (lobbyData?.lobbyPhase === 'abstimmung') {
+            alert('Während der Abstimmung können keine Songs hinzugefügt werden.')
+            return
+        }
+
+        // Song-Limit pro Person
+        const maxSongs = lobbyData?.maxSongsPerPerson || 5
+        const myCount = playlist.filter(p => p.addedBy === myName && p.queuedRound == null).length
+        if (myCount >= maxSongs) {
+            alert(`Du hast bereits ${maxSongs} Songs eingereicht. Warte auf die nächste Runde.`)
+            return
+        }
+
+        // Duplikat-Schutz: Song bereits in der Playlist?
+        const isDuplicate = playlist.some(
+            (p) => (p.spotifyId && p.spotifyId === item.spotifyId) || p.id === item.id
+        )
+        if (isDuplicate) return
 
         // Bereinige das Item: Entferne alle undefined Werte
         const cleanItem = Object.keys(item).reduce((acc, key) => {
-            if (item[key] !== undefined) {
-                acc[key] = item[key]
-            }
+            if (item[key] !== undefined) acc[key] = item[key]
             return acc
         }, {})
 
-        console.log('🧹 Bereinigtes Item:', cleanItem)
-
         const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
-        
         try {
-            await updateDoc(lobbyRef, {
-                playlist: arrayUnion(cleanItem)
-            })
-            console.log('✅ Song erfolgreich hinzugefügt:', item.title)
+            // Lese aktuelle Playlist für serverseitigen Duplikat-Check
+            const snap = await getDoc(lobbyRef)
+            if (!snap.exists()) return
+            const currentPlaylist = snap.data().playlist || []
+            const alreadyExists = currentPlaylist.some(
+                (p) => (p.spotifyId && p.spotifyId === item.spotifyId) || p.id === item.id
+            )
+            if (alreadyExists) return
+
+            await updateDoc(lobbyRef, { playlist: arrayUnion(cleanItem) })
         } catch (error) {
             console.error('❌ Fehler beim Hinzufügen:', error)
-            console.error('Fehler Details:', {
-                code: error.code,
-                message: error.message,
-                roomId,
-                item: item.title
-            })
             alert('Fehler beim Hinzufügen: ' + (error.message || 'Unbekannter Fehler'))
         }
     }
@@ -569,9 +590,9 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     const handleVote = async (itemId, voteType) => {
         if (!db || !roomId || !myName) return
 
-        // Voting nur während aktiver Voting-Phase
-        if (!lobbyData?.votingActive || !lobbyData?.votingEndsAt || lobbyData.votingEndsAt <= Date.now()) {
-            alert('Voting ist aktuell nicht aktiv. Warte bis der nächste Voting-Timer startet.')
+        // Voting nur während Abstimmungs-Phase
+        if (lobbyData?.lobbyPhase !== 'abstimmung') {
+            alert('Voting ist nur während der Abstimmungsphase möglich.')
             return
         }
 
@@ -666,6 +687,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         if (!searchQuery.trim()) return
 
         setIsSearching(true)
+        setHasSearched(true)
         
         try {
             const results = await spotifyService.search(searchQuery, 10)
@@ -736,91 +758,76 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         }
     }
 
-    const handleStartVotingRound = async () => {
-        if (!isHost || !db || !roomId) {
-            alert('Nur der Host kann die Voting-Runde starten!')
-            return
-        }
-        const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
-        const durationSec = lobbyData?.votingDurationSec || 120
-        const newRound = (lobbyData?.votingRound || 0) + 1
-        const endsAt = Date.now() + durationSec * 1000
-        try {
-            await updateDoc(lobbyRef, {
-                votingActive: true,
-                votingEndsAt: endsAt,
-                votingRound: newRound
-            })
-        } catch (e) {
-            console.error('Fehler beim Starten der Voting-Runde:', e)
-        }
+    // Admin: Abstimmung manuell aus Songwahl-Phase starten
+    const handleStartAbstimmung = async () => {
+        if (!isHost || !db || !roomId) return
+        const snap = await getDoc(doc(db, 'musicVoterLobbies', roomId))
+        if (!snap.exists()) return
+        const data = snap.data()
+        if (data.lobbyPhase === 'abstimmung') return
+        const durationSec = data.votingDurationSec || 120
+        const newRound = (data.votingRound || 0) + 1
+        await updateDoc(doc(db, 'musicVoterLobbies', roomId), {
+            lobbyPhase: 'abstimmung',
+            phaseEndsAt: Date.now() + durationSec * 1000,
+            votingRound: newRound
+        })
     }
 
-    // Host: Wenn Voting abgelaufen ist, Top-N-Songs für nächste Batch bestimmen
+    // Host: Phase-Übergänge automatisch steuern
     useEffect(() => {
         if (!isHost || !db || !roomId || !lobbyData) return
-        if (!lobbyData.votingActive || !lobbyData.votingEndsAt) return
+        const phase = lobbyData.lobbyPhase
+        if (!phase || !lobbyData.phaseEndsAt) return
 
         const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
 
-        const finalizeRound = async () => {
-            try {
-                // Verhindern, dass mehrfach ausgeführt wird
-                const snap = await getDoc(lobbyRef)
-                if (!snap.exists()) return
-                const data = snap.data()
-                if (!data.votingActive) return
+        const transition = async () => {
+            const snap = await getDoc(lobbyRef)
+            if (!snap.exists()) return
+            const data = snap.data()
+            if (data.lobbyPhase !== phase) return // bereits gewechselt
 
+            if (phase === 'songwahl') {
+                // → Abstimmung
+                const durationSec = data.votingDurationSec || 120
+                const newRound = (data.votingRound || 0) + 1
+                await updateDoc(lobbyRef, {
+                    lobbyPhase: 'abstimmung',
+                    phaseEndsAt: Date.now() + durationSec * 1000,
+                    votingRound: newRound
+                })
+            } else if (phase === 'abstimmung') {
+                // → Läuft: Top-N Songs auswählen und an Spotify schicken
                 const batchSize = data.batchSize || 10
                 const currentRound = data.votingRound || 0
                 const currentPlaylist = data.playlist || []
-
-                // Nur Spotify-Songs, die noch keiner Runde zugeordnet wurden
                 const candidates = currentPlaylist
-                    .filter(
-                        (item) =>
-                            item.source === 'spotify' &&
-                            item.spotifyId &&
-                            item.type === 'song' &&
-                            (item.queuedRound === undefined || item.queuedRound === null)
-                    )
+                    .filter(i => i.source === 'spotify' && i.spotifyId && i.type === 'song' && i.queuedRound == null)
                     .sort((a, b) => {
-                        const scoreA = calculateScore(a)
-                        const scoreB = calculateScore(b)
-                        if (scoreB !== scoreA) return scoreB - scoreA
+                        const sA = calculateScore(a), sB = calculateScore(b)
+                        if (sB !== sA) return sB - sA
                         return (a.addedAt || 0) - (b.addedAt || 0)
                     })
-
                 const selected = candidates.slice(0, batchSize)
-                const selectedIds = selected.map((i) => i.spotifyId)
-
-                // Markiere ausgewählte Songs mit queuedRound
-                const updatedPlaylist = currentPlaylist.map((item) =>
-                    selectedIds.includes(item.spotifyId)
-                        ? { ...item, queuedRound: currentRound }
-                        : item
+                const selectedIds = selected.map(i => i.spotifyId)
+                const updatedPlaylist = currentPlaylist.map(i =>
+                    selectedIds.includes(i.spotifyId) ? { ...i, queuedRound: currentRound } : i
                 )
-
                 await updateDoc(lobbyRef, {
                     playlist: updatedPlaylist,
-                    votingActive: false,
-                    pendingBatch: selectedIds.length
-                        ? { round: currentRound, spotifyIds: selectedIds }
-                        : null
+                    lobbyPhase: 'laeuft',
+                    phaseEndsAt: null,
+                    pendingBatch: selectedIds.length ? { round: currentRound, spotifyIds: selectedIds } : null
                 })
-            } catch (e) {
-                console.error('Fehler beim Finalisieren der Voting-Runde:', e)
             }
         }
 
-        const remaining = lobbyData.votingEndsAt - Date.now()
-        if (remaining <= 0) {
-            finalizeRound()
-            return
-        }
-        const id = setTimeout(finalizeRound, remaining + 100)
+        const remaining = lobbyData.phaseEndsAt - Date.now()
+        if (remaining <= 0) { transition(); return }
+        const id = setTimeout(transition, remaining + 100)
         return () => clearTimeout(id)
-    }, [isHost, db, roomId, lobbyData?.votingActive, lobbyData?.votingEndsAt])
+    }, [isHost, db, roomId, lobbyData?.lobbyPhase, lobbyData?.phaseEndsAt])
 
     /** Millisekunden als "m:ss" formatieren */
     const formatPlaybackTime = (ms) => {
@@ -833,7 +840,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
 
     // Now Playing: Aktuelle Position (läuft jede Sekunde wenn etwas spielt, für Anzeige)
     const [nowPlayingTick, setNowPlayingTick] = useState(0)
-    const [votingRemainingMs, setVotingRemainingMs] = useState(0)
+    const [phaseRemainingMs, setPhaseRemainingMs] = useState(0)
     const nowPlaying = lobbyData?.nowPlaying
     const nowPlayingPositionMs = nowPlaying
         ? (nowPlaying.isPlaying
@@ -850,20 +857,20 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         return () => clearInterval(id)
     }, [nowPlaying?.isPlaying])
 
-    // Voting-Countdown für alle Clients (nur Anzeige, Host steuert Logik)
+    // Phasen-Countdown für alle Clients (nur Anzeige)
     useEffect(() => {
-        if (!lobbyData?.votingActive || !lobbyData?.votingEndsAt) {
-            setVotingRemainingMs(0)
+        if (!lobbyData?.phaseEndsAt || lobbyData.lobbyPhase === 'laeuft') {
+            setPhaseRemainingMs(0)
             return
         }
         const update = () => {
-            const remaining = lobbyData.votingEndsAt - Date.now()
-            setVotingRemainingMs(remaining > 0 ? remaining : 0)
+            const remaining = lobbyData.phaseEndsAt - Date.now()
+            setPhaseRemainingMs(remaining > 0 ? remaining : 0)
         }
         update()
         const id = setInterval(update, 500)
         return () => clearInterval(id)
-    }, [lobbyData?.votingActive, lobbyData?.votingEndsAt])
+    }, [lobbyData?.lobbyPhase, lobbyData?.phaseEndsAt])
 
     // Host: Playback-Status regelmäßig in Firestore schreiben + abgespielte Songs aus Playlist entfernen
     useEffect(() => {
@@ -1023,10 +1030,23 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
 
     const handlePausePlayback = async () => {
         try {
-            await spotifyService.pausePlayback()
-            setSpotifyPlaying(false)
+            if (nowPlaying?.isPlaying) {
+                await spotifyService.pausePlayback()
+                setSpotifyPlaying(false)
+            } else {
+                await spotifyService.resumePlayback()
+                setSpotifyPlaying(true)
+            }
         } catch (e) {
-            console.error('Pause fehlgeschlagen:', e)
+            console.error('Pause/Resume fehlgeschlagen:', e)
+        }
+    }
+
+    const handleSkipTrack = async () => {
+        try {
+            await spotifyService.skipNext()
+        } catch (e) {
+            console.error('Skip fehlgeschlagen:', e)
         }
     }
 
@@ -1036,7 +1056,6 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             if (!isHost || !spotifyConnected || !db || !roomId) return
             const pending = lobbyData?.pendingBatch
             if (!pending || !Array.isArray(pending.spotifyIds) || pending.spotifyIds.length === 0) return
-            // Nur updaten, wenn gerade nichts spielt
             if (nowPlaying?.isPlaying) return
 
             const deviceId = selectedSpotifyDeviceId === 'active' ? 'active' : selectedSpotifyDeviceId
@@ -1044,11 +1063,19 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             if (uris.length === 0) return
 
             try {
+                // Queue-Gesamtdauer aus den gequeueten Songs berechnen
+                const currentSnap = await getDoc(doc(db, 'musicVoterLobbies', roomId))
+                const currentPlaylist = currentSnap.data()?.playlist || []
+                const queuedSongs = currentPlaylist.filter(s => pending.spotifyIds.includes(s.spotifyId))
+                const queueTotalDurationMs = queuedSongs.reduce((sum, s) => sum + (s.duration || 210000), 0)
+
                 await spotifyService.playOnDevice(uris, deviceId)
                 lastSentQueueOrderRef.current = pending.spotifyIds
                 setSpotifyPlaying(true)
                 await updateDoc(doc(db, 'musicVoterLobbies', roomId), {
-                    pendingBatch: null
+                    pendingBatch: null,
+                    queueStartedAt: Date.now(),
+                    queueTotalDurationMs
                 })
             } catch (e) {
                 console.error('Fehler beim Senden der Batch an Spotify:', e)
@@ -1058,6 +1085,33 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         applyPendingBatch()
     }, [isHost, spotifyConnected, nowPlaying?.isPlaying, lobbyData?.pendingBatch, selectedSpotifyDeviceId, db, roomId])
 
+    // Host: X Minuten vor Queue-Ende → Abstimmung für nächste Runde starten
+    useEffect(() => {
+        if (!isHost || !db || !roomId || !lobbyData) return
+        if (lobbyData.lobbyPhase !== 'laeuft') return
+        const { queueStartedAt, queueTotalDurationMs } = lobbyData
+        if (!queueStartedAt || !queueTotalDurationMs) return
+
+        const preMs = (lobbyData.preQueueVotingMinutes || 1) * 60 * 1000
+        const delayMs = (queueStartedAt + queueTotalDurationMs - preMs) - Date.now()
+
+        const triggerAbstimmung = async () => {
+            const snap = await getDoc(doc(db, 'musicVoterLobbies', roomId))
+            if (!snap.exists() || snap.data().lobbyPhase !== 'laeuft') return
+            const data = snap.data()
+            const newRound = (data.votingRound || 0) + 1
+            await updateDoc(doc(db, 'musicVoterLobbies', roomId), {
+                lobbyPhase: 'abstimmung',
+                phaseEndsAt: Date.now() + (data.votingDurationSec || 120) * 1000,
+                votingRound: newRound
+            })
+        }
+
+        if (delayMs <= 0) { triggerAbstimmung(); return }
+        const id = setTimeout(triggerAbstimmung, delayMs)
+        return () => clearTimeout(id)
+    }, [isHost, db, roomId, lobbyData?.lobbyPhase, lobbyData?.queueStartedAt, lobbyData?.queueTotalDurationMs])
+
     return (
         <div className={styles.musicVoter}>
             <div className={styles.backgroundOverlay}></div>
@@ -1066,11 +1120,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             {currentScreen === 'lobby' && (
                 <div className={styles.lobbyStartScreen}>
                     <div className={styles.lobbyStartCard}>
-                        <h1 className={styles.lobbyStartTitle}>
-                            <span className={styles.emoji}>🎵</span>
-                            Amplify
-                        </h1>
-                        <p className={styles.lobbyStartSlogan}>Gemeinsam den Ton angeben</p>
+                        <h1 className={styles.lobbyStartTitle}>Amplify</h1>
 
                         {/* Aktive Session – Zurück zur Playlist */}
                         {roomId && (
@@ -1292,7 +1342,6 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                             ←
                         </button>
                         <div className={styles.headerCenter}>
-                            <p className={styles.headerSubtitle}>Playlist</p>
                             <h1 className={styles.roomTitle}>Amplify</h1>
                         </div>
                         <div className={styles.headerActions}>
@@ -1327,18 +1376,23 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                 <div className={styles.settingsPanelSectionHeader}>
                                     <span className={styles.settingsPanelIcon}>&#127925;</span>
                                     <span className={styles.settingsPanelSectionTitle}>Spotify</span>
-                                    {spotifyConnected && (
-                                        <span className={styles.settingsBadgeGreen}>Verbunden</span>
-                                    )}
+                                    {spotifyConnected
+                                        ? <span className={styles.settingsBadgeGreen}>● Verbunden</span>
+                                        : <span className={styles.settingsBadgeRed}>● Nicht verbunden</span>
+                                    }
                                 </div>
                                 {spotifyError && (
                                     <p className={styles.spotifyError}>{spotifyError}</p>
                                 )}
                                 {!spotifyConnected ? (
                                     <div className={styles.settingsPanelBody}>
-                                        <p className={styles.settingsHint}>
-                                            Verbinde dich über den <strong>+ Song/Album</strong> Button mit Spotify.
-                                        </p>
+                                        <button
+                                            type="button"
+                                            className={styles.spotifyConnectButton}
+                                            onClick={handleSpotifyConnect}
+                                        >
+                                            Mit Spotify verbinden
+                                        </button>
                                     </div>
                                 ) : (
                                     <div className={styles.settingsPanelBody}>
@@ -1401,7 +1455,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                             <div className={styles.settingsPanelSection}>
                                 <div className={styles.settingsPanelSectionHeader}>
                                     <span className={styles.settingsPanelIcon}>&#128499;</span>
-                                    <span className={styles.settingsPanelSectionTitle}>Voting-Runden</span>
+                                    <span className={styles.settingsPanelSectionTitle}>Runden</span>
                                     <span className={styles.settingsBadgeMuted}>Runde {lobbyData.votingRound || 0}</span>
                                 </div>
                                 <div className={styles.settingsPanelBody}>
@@ -1421,6 +1475,36 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                         </select>
                                     </div>
                                     <div className={styles.settingsRow}>
+                                        <span className={styles.settingsRowLabel}>Max. Songs/Person</span>
+                                        <select
+                                            className={styles.settingsRowSelect}
+                                            value={lobbyData.maxSongsPerPerson || 5}
+                                            onChange={(e) =>
+                                                updateLobbyConfig({ maxSongsPerPerson: Number(e.target.value) || 5 })
+                                            }
+                                        >
+                                            <option value={2}>2</option>
+                                            <option value={3}>3</option>
+                                            <option value={5}>5</option>
+                                            <option value={10}>10</option>
+                                        </select>
+                                    </div>
+                                    <div className={styles.settingsRow}>
+                                        <span className={styles.settingsRowLabel}>Songwahl-Dauer</span>
+                                        <select
+                                            className={styles.settingsRowSelect}
+                                            value={lobbyData.songwahlDurationSec || 180}
+                                            onChange={(e) =>
+                                                updateLobbyConfig({ songwahlDurationSec: Number(e.target.value) || 180 })
+                                            }
+                                        >
+                                            <option value={60}>1 Min</option>
+                                            <option value={120}>2 Min</option>
+                                            <option value={180}>3 Min</option>
+                                            <option value={300}>5 Min</option>
+                                        </select>
+                                    </div>
+                                    <div className={styles.settingsRow}>
                                         <span className={styles.settingsRowLabel}>Voting-Dauer</span>
                                         <select
                                             className={styles.settingsRowSelect}
@@ -1435,38 +1519,94 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                             <option value={300}>5 Min</option>
                                         </select>
                                     </div>
-                                    <div className={styles.settingsButtonRow}>
-                                        <button
-                                            type="button"
-                                            className={styles.settingsPrimaryBtn}
-                                            onClick={handleStartVotingRound}
+                                    <div className={styles.settingsRow}>
+                                        <span className={styles.settingsRowLabel}>Voting startet</span>
+                                        <select
+                                            className={styles.settingsRowSelect}
+                                            value={lobbyData.preQueueVotingMinutes || 1}
+                                            onChange={(e) =>
+                                                updateLobbyConfig({ preQueueVotingMinutes: Number(e.target.value) || 1 })
+                                            }
                                         >
-                                            Voting starten
-                                        </button>
+                                            <option value={1}>1 Min vor Ende</option>
+                                            <option value={2}>2 Min vor Ende</option>
+                                            <option value={3}>3 Min vor Ende</option>
+                                            <option value={5}>5 Min vor Ende</option>
+                                        </select>
                                     </div>
+                                    {/* Admin: Phase manuell vorziehen */}
+                                    {lobbyData.lobbyPhase === 'songwahl' && (
+                                        <div className={styles.settingsButtonRow}>
+                                            <button
+                                                type="button"
+                                                className={styles.settingsPrimaryBtn}
+                                                onClick={handleStartAbstimmung}
+                                            >
+                                                Abstimmung jetzt starten
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
                         </div>
                     )}
 
-                    {/* Timer-Banner (wenn Voting aktiv) */}
-                    {lobbyData.votingActive && votingRemainingMs > 0 && (
-                        <div className={styles.timerBanner}>
-                            <div className={styles.timerBannerLeft}>
-                                <span className={styles.timerBannerDot} />
-                                <span className={styles.timerBannerLabel}>Voting läuft</span>
-                            </div>
-                            <span className={styles.timerBannerTime}>
-                                {formatPlaybackTime(votingRemainingMs)}
-                            </span>
-                        </div>
-                    )}
+                    {/* Phase-Banner */}
+                    {(() => {
+                        const phase = lobbyData.lobbyPhase
+                        const myUnqueuedCount = playlist.filter(p => p.addedBy === myName && p.queuedRound == null).length
+                        const maxSongs = lobbyData.maxSongsPerPerson || 5
 
-                    {/* Now Playing (für alle sichtbar, wenn Host Spotify abspielt) */}
+                        if (phase === 'songwahl') return (
+                            <div className={`${styles.phaseBanner} ${styles.phaseBannerSongwahl}`}>
+                                <span className={styles.phaseBannerIcon}>🎵</span>
+                                <div className={styles.phaseBannerInfo}>
+                                    <span className={styles.phaseBannerTitle}>Songwahl</span>
+                                    <span className={styles.phaseBannerSub}>
+                                        Deine Songs: {myUnqueuedCount}/{maxSongs}
+                                        {phaseRemainingMs > 0 && ` · Voting in ${formatPlaybackTime(phaseRemainingMs)}`}
+                                    </span>
+                                </div>
+                                {phaseRemainingMs > 0 && (
+                                    <span className={styles.phaseBannerTimer}>{formatPlaybackTime(phaseRemainingMs)}</span>
+                                )}
+                            </div>
+                        )
+                        if (phase === 'abstimmung') return (
+                            <div className={`${styles.phaseBanner} ${styles.phaseBannerAbstimmung}`}>
+                                <span className={styles.phaseBannerIcon}>🗳</span>
+                                <div className={styles.phaseBannerInfo}>
+                                    <span className={styles.phaseBannerTitle}>Abstimmung läuft</span>
+                                    <span className={styles.phaseBannerSub}>
+                                        {phaseRemainingMs > 0
+                                            ? `Top ${lobbyData.batchSize || 10} Songs spielen in ${formatPlaybackTime(phaseRemainingMs)}`
+                                            : 'Wird ausgewertet…'}
+                                    </span>
+                                </div>
+                                {phaseRemainingMs > 0 && (
+                                    <span className={styles.phaseBannerTimer}>{formatPlaybackTime(phaseRemainingMs)}</span>
+                                )}
+                            </div>
+                        )
+                        if (phase === 'laeuft') return (
+                            <div className={`${styles.phaseBanner} ${styles.phaseBannerLaeuft}`}>
+                                <span className={styles.phaseBannerIcon}>▶</span>
+                                <div className={styles.phaseBannerInfo}>
+                                    <span className={styles.phaseBannerTitle}>Playlist läuft</span>
+                                    <span className={styles.phaseBannerSub}>
+                                        Nächste Runde sammeln · {myUnqueuedCount}/{maxSongs} Songs
+                                    </span>
+                                </div>
+                                <span className={styles.phaseBannerLive}>LIVE</span>
+                            </div>
+                        )
+                        return null
+                    })()}
+
+                    {/* Now Playing + Queue Toggle */}
                     {nowPlaying && (
                         <div className={styles.nowPlayingSection}>
-                            <h3 className={styles.sectionTitle}>Now Playing</h3>
                             <div className={styles.nowPlayingCard}>
                                 {nowPlaying.imageUrl && (
                                     <img
@@ -1482,107 +1622,180 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                         {formatPlaybackTime(nowPlayingPositionMs)} / {formatPlaybackTime(nowPlaying.durationMs)}
                                     </div>
                                 </div>
-                                {nowPlaying.isPlaying && (
-                                    <span className={styles.nowPlayingBadge} title="Läuft">▶</span>
-                                )}
+                                <div className={styles.nowPlayingRight}>
+                                    {/* Host: Pause/Skip Controls */}
+                                    {isHost && spotifyConnected && (
+                                        <div className={styles.nowPlayingControls}>
+                                            <button
+                                                className={styles.playerControlBtn}
+                                                onClick={handlePausePlayback}
+                                                title={nowPlaying.isPlaying ? 'Pause' : 'Weiter'}
+                                            >
+                                                {nowPlaying.isPlaying ? '⏸' : '▶'}
+                                            </button>
+                                            <button
+                                                className={styles.playerControlBtn}
+                                                onClick={handleSkipTrack}
+                                                title="Überspringen"
+                                            >
+                                                ⏭
+                                            </button>
+                                        </div>
+                                    )}
+                                    {/* Queue-Toggle Button */}
+                                    {sortedPlaylist.filter(i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId).length > 0 && (
+                                        <button
+                                            className={`${styles.queueToggleBtn} ${queueExpanded ? styles.queueToggleBtnActive : ''}`}
+                                            onClick={() => setQueueExpanded(v => !v)}
+                                            title="Warteschlange anzeigen"
+                                        >
+                                            <span className={styles.queueToggleIcon}>☰</span>
+                                            <span className={styles.queueToggleCount}>
+                                                {sortedPlaylist.filter(i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId).length}
+                                            </span>
+                                        </button>
+                                    )}
+                                </div>
                             </div>
+
+                            {/* Ausgeklappte Queue */}
+                            {queueExpanded && (() => {
+                                const queueItems = sortedPlaylist.filter(
+                                    i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId
+                                )
+                                return queueItems.length > 0 ? (
+                                    <div className={styles.queueDropdown}>
+                                        <div className={styles.queueDropdownHeader}>Warteschlange</div>
+                                        {queueItems.map((item, i) => (
+                                            <div key={item.id} className={styles.queueDropdownItem}>
+                                                <span className={styles.queueDropdownRank}>{i + 1}</span>
+                                                {item.imageUrl && (
+                                                    <img src={item.imageUrl} alt="" className={styles.queueDropdownImg} />
+                                                )}
+                                                <div className={styles.queueDropdownInfo}>
+                                                    <div className={styles.queueDropdownTitle}>{item.title}</div>
+                                                    <div className={styles.queueDropdownArtist}>{item.artist}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null
+                            })()}
                         </div>
                     )}
 
-                    {/* Add Button */}
-                    <div className={styles.addSection}>
-                        <button 
-                            className={styles.addButton}
-                            onClick={() => setShowAddModal(true)}
+                    {/* FAB: Song hinzufügen – nur während Songwahl und Läuft */}
+                    {lobbyData.lobbyPhase !== 'abstimmung' && (
+                        <button
+                            className={styles.fabAddButton}
+                            onClick={() => {
+                                const existingIds = new Set(
+                                    playlist.flatMap(p => [p.spotifyId, p.id].filter(Boolean))
+                                )
+                                setAddedInModalIds(existingIds)
+                                setShowAddModal(true)
+                            }}
                         >
-                            + Song/Album hinzufügen
+                            <span className={styles.fabAddIcon}>+</span>
+                            <span className={styles.fabAddLabel}>Song hinzufügen</span>
                         </button>
-                    </div>
+                    )}
 
-                    {/* Playlist (aktuell laufender Song wird ausgeblendet, nur in Now Playing sichtbar) */}
+                    {/* Playlist – phasengerechte Anzeige */}
                     {(() => {
-                        const playlistQueue = sortedPlaylist.filter((item) => item.spotifyId !== nowPlaying?.trackId)
-                        return (
-                    <div className={styles.playlistSection}>
-                        <h3 className={styles.sectionTitle}>
-                            Playlist ({playlistQueue.length}{nowPlaying?.trackId ? ' + 1 läuft' : ''})
-                        </h3>
-                        
-                        {playlistQueue.length === 0 ? (
-                            <div className={styles.emptyPlaylist}>
-                                <div className={styles.emptyIcon}>🎵</div>
-                                <p>{nowPlaying?.trackId ? 'Keine weiteren Songs in der Warteschlange' : 'Noch keine Songs in der Playlist'}</p>
-                                <p className={styles.emptyHint}>
-                                    {nowPlaying?.trackId ? 'Der aktuelle Song läuft oben bei Now Playing.' : 'Füge Songs hinzu, um abzustimmen!'}
-                                </p>
-                            </div>
-                        ) : (
-                            <div className={styles.playlistItems}>
-                                {playlistQueue.map((item, index) => {
-                                    const score = calculateScore(item)
-                                    const myVote = item.votes?.[myName] || 0
+                        const phase = lobbyData.lobbyPhase
+                        const queueItems = sortedPlaylist.filter(
+                            (item) => item.queuedRound != null && item.spotifyId !== nowPlaying?.trackId
+                        )
+                        const voteItems = sortedPlaylist.filter(
+                            (item) => item.queuedRound == null
+                        )
+                        const showVoting = phase === 'abstimmung'
 
-                                    return (
-                                        <div 
-                                            key={item.id} 
-                                            className={styles.playlistItem}
-                                            style={{ '--item-color': getVoteColor(myVote) }}
-                                        >
-                                            <div className={styles.playlistArtwork}>
-                                                {item.imageUrl && item.source === 'spotify' ? (
-                                                    <img
-                                                        src={item.imageUrl}
-                                                        alt={item.title}
-                                                    />
-                                                ) : (
-                                                    <div className={styles.playlistArtworkPlaceholder}>
-                                                        {item.type === 'album' ? '📀' : '♪'}
-                                                    </div>
-                                                )}
-                                                <div className={styles.itemRankBadge}>{index + 1}</div>
+                        const playlistItem = (item, index, withVoting, isQueued = false) => {
+                            const score = calculateScore(item)
+                            const myVote = item.votes?.[myName] || 0
+                            return (
+                                <div
+                                    key={item.id}
+                                    className={`${styles.playlistItem} ${isQueued ? styles.playlistItemQueued : ''}`}
+                                    style={{ '--item-color': withVoting ? getVoteColor(myVote) : 'rgba(255,255,255,0.06)' }}
+                                >
+                                    <div className={styles.playlistArtwork}>
+                                        {item.imageUrl && item.source === 'spotify' ? (
+                                            <img src={item.imageUrl} alt={item.title} />
+                                        ) : (
+                                            <div className={styles.playlistArtworkPlaceholder}>
+                                                {item.type === 'album' ? '📀' : '♪'}
                                             </div>
+                                        )}
+                                        <div className={styles.itemRankBadge}>{index + 1}</div>
+                                    </div>
 
-                                            <div className={styles.itemInfo}>
-                                                <div className={styles.itemTitle}>
-                                                    {item.title}
-                                                </div>
-                                                <div className={styles.itemArtist}>{item.artist}</div>
-                                                <div className={styles.itemMeta}>
-                                                    von {item.addedBy}
-                                                    {item.source === 'spotify' && ' • Spotify'}
-                                                </div>
-                                            </div>
+                                    <div className={styles.itemInfo}>
+                                        <div className={styles.itemTitle}>{item.title}</div>
+                                        <div className={styles.itemArtist}>{item.artist}</div>
+                                        <div className={styles.itemMeta}>
+                                            von {item.addedBy}{item.source === 'spotify' && ' • Spotify'}
+                                        </div>
+                                    </div>
 
-                                            <div className={styles.itemVoting}>
+                                    <div className={styles.itemVoting}>
+                                        {withVoting ? (
+                                            <>
                                                 <button
                                                     className={`${styles.voteButton} ${myVote === 1 ? styles.voted : ''}`}
                                                     onClick={() => handleVote(item.id, 'up')}
-                                                >
-                                                    👍
-                                                </button>
+                                                >👍</button>
                                                 <div className={styles.voteScore}>{score > 0 ? '+' : ''}{score}</div>
                                                 <button
                                                     className={`${styles.voteButton} ${myVote === -1 ? styles.voted : ''}`}
                                                     onClick={() => handleVote(item.id, 'down')}
-                                                >
-                                                    👎
-                                                </button>
-                                                {(isHost || item.addedBy === myName) && (
-                                                    <button
-                                                        className={styles.removeButton}
-                                                        onClick={() => handleRemoveItem(item.id)}
-                                                        title="Entfernen"
-                                                    >
-                                                        ⋮
-                                                    </button>
-                                                )}
-                                            </div>
+                                                >👎</button>
+                                            </>
+                                        ) : (
+                                            <span className={styles.queuedBadge}>▶</span>
+                                        )}
+                                        {(phase === 'songwahl' || phase === 'laeuft') && (isHost || item.addedBy === myName) && (
+                                            <button
+                                                className={styles.removeButton}
+                                                onClick={() => handleRemoveItem(item.id)}
+                                                title="Entfernen"
+                                            >⋮</button>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        }
+
+                        return (
+                            <div className={styles.playlistSection}>
+                                {/* Queue ist jetzt im Now-Playing-Block ausklappbar */}
+
+                                {/* Song-Pool: Songwahl = sammeln, Abstimmung = voten, Läuft = nächste Runde */}
+                                <div className={styles.playlistSubSection}>
+                                    <div className={styles.subSectionHeader}>
+                                        <span className={`${styles.subSectionDot} ${phase === 'abstimmung' ? styles.subSectionDotVote : phase === 'laeuft' ? styles.subSectionDotLaeuft : styles.subSectionDotSongwahl}`} />
+                                        <span className={styles.subSectionTitle}>
+                                            {phase === 'abstimmung' ? 'Zur Abstimmung' : phase === 'laeuft' ? 'Nächste Runde' : 'Eingereichte Songs'}
+                                        </span>
+                                        <span className={styles.subSectionCount}>{voteItems.length}</span>
+                                    </div>
+                                    {voteItems.length === 0 ? (
+                                        <div className={styles.emptyPlaylist}>
+                                            <div className={styles.emptyIcon}>🎵</div>
+                                            <p>{phase === 'abstimmung' ? 'Keine Songs zum Abstimmen' : 'Noch keine Songs eingereicht'}</p>
+                                            <p className={styles.emptyHint}>
+                                                {phase === 'abstimmung' ? 'Songs wurden vorab eingereicht.' : 'Füge Songs über den + Button hinzu!'}
+                                            </p>
                                         </div>
-                                    )
-                                })}
+                                    ) : (
+                                        <div className={styles.playlistItems}>
+                                            {voteItems.map((item, i) => playlistItem(item, i, showVoting))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        )}
-                    </div>
                         )
                     })()}
                 </div>
@@ -1590,7 +1803,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
 
             {/* Add Modal */}
             {showAddModal && (
-                <div className={styles.modalOverlay} onClick={() => { setAddedInModalIds(new Set()); setAlbumTracks(null); setSearchResults([]); setSearchQuery(''); setShowAddModal(false) }}>
+                <div className={styles.modalOverlay} onClick={() => { setAddedInModalIds(new Set()); setAlbumTracks(null); setSearchResults([]); setSearchQuery(''); setHasSearched(false); setShowAddModal(false) }}>
                     <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
                             <h2 className={styles.modalTitle}>Song hinzufügen</h2>
@@ -1602,6 +1815,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                     setAlbumTracks(null)
                                     setSearchResults([])
                                     setSearchQuery('')
+                                    setHasSearched(false)
                                     setShowAddModal(false)
                                 }}
                                 title="Schließen"
@@ -1611,26 +1825,9 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                             </button>
                         </div>
 
-                        {/* Host: Spotify-Verbindung nötig */}
-                        {isHost && !spotifyConnected ? (
-                            <div className={styles.spotifyConnectPrompt}>
-                                <div className={styles.spotifyConnectPromptIcon}>🎵</div>
-                                <h3 className={styles.spotifyConnectPromptTitle}>Spotify verbinden</h3>
-                                <p className={styles.spotifyConnectPromptText}>
-                                    Als Host musst du dich einmalig mit Spotify verbinden, damit Songs gesucht und abgespielt werden können.
-                                </p>
-                                {spotifyError && (
-                                    <p className={styles.spotifyError}>{spotifyError}</p>
-                                )}
-                                <button
-                                    type="button"
-                                    className={styles.spotifyConnectButton}
-                                    onClick={handleSpotifyConnect}
-                                >
-                                    Mit Spotify verbinden
-                                </button>
-                            </div>
-                        ) : (
+                        {/* Suche – direkt für alle (Host + Gäste) */}
+                        {(() => {
+                            return (
                             <div className={styles.spotifySearch}>
                                 {/* Album-Track-Ansicht */}
                                 {albumTracks ? (
@@ -1786,7 +1983,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                             </div>
                                         )}
 
-                                        {!isSearching && searchQuery && searchResults.length === 0 && (
+                                        {!isSearching && hasSearched && searchResults.length === 0 && (
                                             <div className={styles.noResults}>
                                                 <p>Keine Ergebnisse gefunden</p>
                                                 <p className={styles.noResultsHint}>Versuche einen anderen Suchbegriff</p>
@@ -1795,7 +1992,8 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                     </>
                                 )}
                             </div>
-                        )}
+                            )
+                        })()}
                     </div>
                 </div>
             )}

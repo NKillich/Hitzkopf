@@ -700,6 +700,15 @@ class SpotifyService {
         })
     }
 
+    async skipNext() {
+        const token = await this.getStoredUserToken()
+        if (!token) return
+        await fetch(`${SPOTIFY_API_BASE}/me/player/next`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+    }
+
     async nextTrack() {
         const token = await this.getStoredUserToken()
         if (!token) return

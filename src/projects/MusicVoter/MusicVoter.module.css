@@ -242,6 +242,17 @@
     letter-spacing: 0.02em;
 }
 
+.settingsBadgeRed {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #ff4d4d;
+    background: rgba(255, 77, 77, 0.12);
+    border: 1px solid rgba(255, 77, 77, 0.3);
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
+    letter-spacing: 0.02em;
+}
+
 .settingsBadgeMuted {
     font-size: 0.72rem;
     font-weight: 600;
@@ -402,51 +413,97 @@
 }
 
 /* Timer-Banner */
-.timerBanner {
+/* ── Phase-Banner ────────────────────────────────── */
+.phaseBanner {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: rgba(78, 205, 196, 0.1);
-    border: 1px solid rgba(78, 205, 196, 0.25);
-    border-radius: 12px;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
     margin-bottom: 0.75rem;
+    border: 1.5px solid transparent;
 }
 
-.timerBannerLeft {
+.phaseBannerSongwahl {
+    background: rgba(29, 185, 84, 0.08);
+    border-color: rgba(29, 185, 84, 0.25);
+}
+
+.phaseBannerAbstimmung {
+    background: rgba(255, 165, 0, 0.08);
+    border-color: rgba(255, 165, 0, 0.3);
+}
+
+.phaseBannerLaeuft {
+    background: rgba(78, 205, 196, 0.08);
+    border-color: rgba(78, 205, 196, 0.25);
+}
+
+.phaseBannerIcon {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.phaseBannerInfo {
+    flex: 1;
+    min-width: 0;
     display: flex;
-    align-items: center;
-    gap: 0.6rem;
+    flex-direction: column;
+    gap: 0.1rem;
 }
 
-.timerBannerDot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #4ecdc4;
-    box-shadow: 0 0 6px rgba(78, 205, 196, 0.7);
-    animation: pulse 1.5s ease-in-out infinite;
+.phaseBannerTitle {
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.phaseBannerSongwahl .phaseBannerTitle { color: #1DB954; }
+.phaseBannerAbstimmung .phaseBannerTitle { color: #FFA500; }
+.phaseBannerLaeuft .phaseBannerTitle { color: #4ecdc4; }
+
+.phaseBannerSub {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.phaseBannerTimer {
+    font-size: 1.2rem;
+    font-weight: 800;
+    font-family: 'SF Mono', 'Fira Mono', monospace;
+    letter-spacing: 0.04em;
     flex-shrink: 0;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.8); }
-}
+.phaseBannerSongwahl .phaseBannerTimer { color: #1DB954; }
+.phaseBannerAbstimmung .phaseBannerTimer { color: #FFA500; }
 
-.timerBannerLabel {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #4ecdc4;
-}
-
-.timerBannerTime {
-    font-size: 1.1rem;
+.phaseBannerLive {
+    font-size: 0.65rem;
     font-weight: 800;
-    font-family: monospace;
+    letter-spacing: 0.12em;
     color: #4ecdc4;
-    letter-spacing: 0.05em;
+    background: rgba(78, 205, 196, 0.15);
+    border: 1px solid rgba(78, 205, 196, 0.3);
+    border-radius: 4px;
+    padding: 0.2rem 0.4rem;
+    flex-shrink: 0;
+    animation: pulseLive 2s ease-in-out infinite;
 }
+
+@keyframes pulseLive {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Dot-Farben für Sektions-Header */
+.subSectionDotSongwahl { background: #1DB954; }
+.subSectionDotVote { background: #FFA500; }
+.subSectionDotLaeuft { background: #4ecdc4; }
 
 /* Alte settingsButton-Klasse (Legacy, nicht mehr aktiv im Room-Screen) */
 .settingsButton {
@@ -454,42 +511,58 @@
 }
 
 /* Add Section */
-.addSection {
-    margin: 1rem 0;
-    display: flex;
-    justify-content: center;
-}
-
-.addButton {
-    width: 100% !important;
+/* Floating Action Button – "Song hinzufügen" */
+.fabAddButton {
+    position: fixed !important;
+    bottom: 1.5rem !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 100;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    padding: 0 1.5rem !important;
+    height: 52px !important;
+    width: auto !important;
+    min-width: 0 !important;
     min-height: 0 !important;
-    padding: 0.85rem 1.5rem !important;
-    margin: 0 !important;
-    background: rgba(255, 255, 255, 0.06) !important;
-    border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+    background: #1DB954 !important;
+    border: none !important;
     border-radius: 999px !important;
-    color: #fff !important;
+    color: #000 !important;
     font-size: 1rem !important;
-    font-weight: 600;
+    font-weight: 700 !important;
+    letter-spacing: 0.01em;
     cursor: pointer;
-    transition: border-color 0.2s ease, background 0.2s ease !important;
-    letter-spacing: 0.02em;
-    transform: none !important;
-    box-shadow: none !important;
+    box-shadow: 0 4px 20px rgba(29, 185, 84, 0.45) !important;
+    transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease !important;
     -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
 }
 
-.addButton:hover,
-.addButton:active {
-    border-color: rgba(255, 255, 255, 0.5) !important;
-    background: rgba(255, 255, 255, 0.1) !important;
-    transform: none !important;
-    box-shadow: none !important;
+.fabAddButton:hover,
+.fabAddButton:active {
+    background: #1ed760 !important;
+    box-shadow: 0 6px 28px rgba(29, 185, 84, 0.6) !important;
+    transform: translateX(-50%) scale(1.04) !important;
+}
+
+.fabAddIcon {
+    font-size: 1.4rem;
+    line-height: 1;
+    font-weight: 400;
+}
+
+.fabAddLabel {
+    font-size: 1rem;
+    font-weight: 700;
 }
 
 /* Playlist Section */
 .playlistSection {
     margin-top: 0.5rem;
+    /* Abstand damit FAB den letzten Song nicht verdeckt */
+    padding-bottom: 5rem;
 }
 
 .emptyPlaylist {
@@ -698,25 +771,19 @@
     backdrop-filter: blur(4px);
 }
 
-@media (min-width: 600px) {
-    .modalOverlay {
-        align-items: center;
-        padding: 1rem;
-    }
-}
-
 .modal {
     width: 100%;
-    max-width: 600px;
-    max-height: 90dvh;
+    max-width: 100%;
+    /* Bottom-Sheet: maximal 80% der Bildschirmhöhe */
+    max-height: 80dvh;
     background: #161b22;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 20px 20px 0 0;
-    padding: 1.5rem 1.25rem;
+    padding: 1.25rem 1.25rem;
     padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
     backdrop-filter: blur(20px);
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.7);
-    animation: slideUp 0.3s ease;
+    animation: slideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
     overflow-y: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -727,7 +794,12 @@
 }
 
 @media (min-width: 600px) {
+    .modalOverlay {
+        align-items: center;
+        padding: 1rem;
+    }
     .modal {
+        max-width: 560px;
         border-radius: 20px;
         padding: 2rem;
         padding-bottom: 2rem;
@@ -738,7 +810,7 @@
 @keyframes slideUp {
     from {
         opacity: 0;
-        transform: translateY(30px);
+        transform: translateY(100%);
     }
     to {
         opacity: 1;
@@ -1210,6 +1282,224 @@
     color: #1DB954;
 }
 
+/* Host Pause/Skip Controls in Now Playing */
+.nowPlayingRight {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.nowPlayingControls {
+    display: flex;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+/* Queue-Toggle Button (☰ + Zahl) */
+.queueToggleBtn {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.3rem !important;
+    padding: 0.25rem 0.6rem !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    background: rgba(255, 255, 255, 0.07) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 999px !important;
+    color: rgba(255, 255, 255, 0.5) !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s !important;
+    transform: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.queueToggleBtnActive {
+    background: rgba(78, 205, 196, 0.12) !important;
+    border-color: rgba(78, 205, 196, 0.3) !important;
+    color: #4ecdc4 !important;
+}
+
+.queueToggleIcon { font-size: 0.8rem; }
+.queueToggleCount { font-size: 0.75rem; font-weight: 700; }
+
+/* Ausgeklappte Warteschlange */
+.queueDropdown {
+    margin-top: 0.5rem;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.queueDropdownHeader {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.35);
+    padding: 0.5rem 0.75rem 0.3rem;
+}
+
+.queueDropdownItem {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.queueDropdownRank {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.3);
+    width: 14px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.queueDropdownImg {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    object-fit: cover;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.queueDropdownInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.queueDropdownTitle {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queueDropdownArtist {
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.35);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playerControlBtn {
+    width: 44px !important;
+    height: 44px !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: none !important;
+    border-radius: 50% !important;
+    color: #fff !important;
+    font-size: 1.1rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer;
+    transition: background 0.15s ease !important;
+    transform: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.playerControlBtn:hover,
+.playerControlBtn:active {
+    background: rgba(255, 255, 255, 0.2) !important;
+    transform: none !important;
+}
+
+/* Playlist Sub-Sektionen */
+.playlistSubSection {
+    margin-bottom: 0.5rem;
+}
+
+.subSectionHeader {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0 0.4rem;
+    margin-bottom: 0.25rem;
+}
+
+.subSectionDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    flex-shrink: 0;
+}
+
+.subSectionDotVote {
+    background: #1DB954;
+}
+
+.subSectionTitle {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+    flex: 1;
+}
+
+.subSectionCount {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.35);
+    font-weight: 500;
+}
+
+/* Queue-Songs (bereits an Spotify geschickt) – leicht gedimmt */
+.playlistItemQueued {
+    opacity: 0.65;
+}
+
+.queuedBadge {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.4);
+    flex-shrink: 0;
+}
+
+.queueExpandBtn {
+    width: 100% !important;
+    min-height: 0 !important;
+    height: 36px !important;
+    padding: 0 1rem !important;
+    margin: 0.25rem 0 0 !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 8px !important;
+    color: rgba(255, 255, 255, 0.45) !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease !important;
+    transform: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.queueExpandBtn:hover,
+.queueExpandBtn:active {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+    transform: none !important;
+}
+
 /* Spotify Playback (Host) */
 .spotifySection {
     margin-bottom: 1.5rem;
@@ -1629,16 +1919,12 @@
 }
 
 .lobbyStartTitle {
-    font-size: clamp(2rem, 5vw, 3rem);
+    font-size: clamp(2.2rem, 6vw, 3.2rem);
     font-weight: 900;
-    color: #4ecdc4;
+    color: #fff;
     text-align: center;
-    margin: 0 0 0.5rem 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    text-shadow: 0 0 20px rgba(78, 205, 196, 0.3);
+    margin: 0 0 2rem 0;
+    letter-spacing: -0.01em;
 }
 
 .lobbyStartSlogan {
