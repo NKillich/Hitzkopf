@@ -150,6 +150,38 @@
     pointer-events: none;
 }
 
+.spotifyConnectBtn {
+    width: 100%;
+    padding: 0.8rem 1.2rem;
+    background: rgba(30, 215, 96, 0.1);
+    border: 2px solid rgba(30, 215, 96, 0.4);
+    border-radius: 12px;
+    color: #1ed760;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    transition: all 0.2s ease;
+}
+
+.spotifyConnectBtn:hover {
+    background: rgba(30, 215, 96, 0.18);
+    border-color: #1ed760;
+}
+
+.spotifyConnectedBadge {
+    width: 100%;
+    padding: 0.8rem 1.2rem;
+    background: rgba(30, 215, 96, 0.08);
+    border: 2px solid rgba(30, 215, 96, 0.25);
+    border-radius: 12px;
+    color: rgba(30, 215, 96, 0.7);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: default;
+    margin-bottom: 1rem;
+}
+
 .buttonGroup {
     display: flex;
     flex-direction: column;
@@ -194,6 +226,33 @@
 .btnSecondary:hover {
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.2);
+}
+
+.randomNameDisplay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(78, 205, 196, 0.08);
+    border: 2px solid rgba(78, 205, 196, 0.25);
+    border-radius: 16px;
+    padding: 1.2rem 2rem;
+    margin-bottom: 2rem;
+}
+
+.randomNameLabel {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.randomNameValue {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--accent-color, #4ecdc4);
+    letter-spacing: 0.02em;
 }
 
 @media (max-width: 768px) {

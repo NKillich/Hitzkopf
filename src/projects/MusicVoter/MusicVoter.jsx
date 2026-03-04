@@ -2,20 +2,27 @@ import { useState, useEffect, useRef } from 'react'
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, deleteDoc, deleteField, collection, query, where, getDocs } from 'firebase/firestore'
-import LobbySystem from '../../shared/LobbySystem'
+import LobbySystem, { generateRandomName } from '../../shared/LobbySystem'
 import spotifyService from '../../services/spotifyService'
 import styles from './MusicVoter.module.css'
 
-// Emojis für Charakter-Auswahl
 const baseEmojis = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵']
-const availableEmojis = (() => {
-    const shuffled = [...baseEmojis]
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-    }
-    return shuffled
-})()
+const getRandomEmoji = () => baseEmojis[Math.floor(Math.random() * baseEmojis.length)]
+
+const getOrCreateName = () => {
+    const stored = sessionStorage.getItem('mv_name')
+    if (stored) return stored
+    const name = generateRandomName()
+    sessionStorage.setItem('mv_name', name)
+    return name
+}
+const getOrCreateEmoji = () => {
+    const stored = sessionStorage.getItem('mv_emoji')
+    if (stored) return stored
+    const emoji = getRandomEmoji()
+    sessionStorage.setItem('mv_emoji', emoji)
+    return emoji
+}
 
 // Firebase Config (gleiche wie Hitzkopf)
 const firebaseConfig = {
@@ -35,21 +42,8 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
 
     // State
     const [currentScreen, setCurrentScreen] = useState('lobby')
-    const [myName, setMyName] = useState(sessionStorage.getItem('mv_name') || '')
-    const [myEmoji, setMyEmoji] = useState(() => {
-        const saved = sessionStorage.getItem('mv_emoji')
-        if (saved) return saved
-        const middleIndex = Math.floor(availableEmojis.length / 2)
-        return availableEmojis[middleIndex]
-    })
-    const [emojiScrollIndex, setEmojiScrollIndex] = useState(() => {
-        const saved = sessionStorage.getItem('mv_emoji')
-        if (saved) {
-            const index = availableEmojis.indexOf(saved)
-            return index !== -1 ? index : Math.floor(availableEmojis.length / 2)
-        }
-        return Math.floor(availableEmojis.length / 2)
-    })
+    const [myName, setMyName] = useState(getOrCreateName)
+    const [myEmoji, setMyEmoji] = useState(getOrCreateEmoji)
     const [roomId, setRoomId] = useState(sessionStorage.getItem('mv_roomId') || '')
     const [isHost, setIsHost] = useState(false)
     const [lobbyData, setLobbyData] = useState(null)
@@ -82,9 +76,6 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     // Refs
     const unsubscribeRef = useRef(null)
     const lobbiesUnsubscribeRef = useRef(null)
-    const emojiGalleryRef = useRef(null)
-    const isScrollingRef = useRef(false)
-    const touchStartRef = useRef({ x: 0, y: 0, time: 0 })
     const lastPlayedTrackIdRef = useRef(null) // für automatisches Entfernen abgespielter Songs
     const lastSentQueueOrderRef = useRef(null) // letzte an Spotify gesendete Warteschlangen-Reihenfolge (Spotify-IDs)
     const queueSyncTimeoutRef = useRef(null)
@@ -93,6 +84,13 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     useEffect(() => { myNameRef.current = myName }, [myName])
     const [showHostSettings, setShowHostSettings] = useState(false)
     const [queueExpanded, setQueueExpanded] = useState(false)
+    const [showWelcomePopup, setShowWelcomePopup] = useState(false)
+    const [spotifyReadyForLobby, setSpotifyReadyForLobby] = useState(false)
+
+    // Spotify-Status beim ersten Laden und nach OAuth-Callback prüfen
+    useEffect(() => {
+        spotifyService.isUserLoggedIn().then(setSpotifyReadyForLobby)
+    }, [spotifyCallbackDone])
 
     // Firebase Initialisierung
     useEffect(() => {
@@ -113,98 +111,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         }
     }, [])
 
-    // Emoji-Galerie: Scroll-Listener + Zentrierung wie bei Hitzkopf (ausgewählter Charakter in der Mitte, optisch hervorgehoben)
-    useEffect(() => {
-        const gallery = emojiGalleryRef.current
-        if (!gallery || currentScreen !== 'browse') return
-
-        const handleScroll = () => {
-            isScrollingRef.current = true
-            const viewportCenter = gallery.scrollLeft + gallery.clientWidth / 2
-            const cards = gallery.querySelectorAll('[data-emoji-index]')
-            let closestIndex = 0
-            let closestDist = Infinity
-            cards.forEach((card) => {
-                const idx = parseInt(card.getAttribute('data-emoji-index'), 10)
-                const cardCenter = card.offsetLeft + card.offsetWidth / 2
-                const dist = Math.abs(cardCenter - viewportCenter)
-                if (dist < closestDist) {
-                    closestDist = dist
-                    closestIndex = idx
-                }
-            })
-            const clampedIndex = Math.max(0, Math.min(closestIndex, availableEmojis.length - 1))
-            setEmojiScrollIndex(clampedIndex)
-            setMyEmoji(availableEmojis[clampedIndex])
-            setTimeout(() => {
-                isScrollingRef.current = false
-            }, 100)
-        }
-
-        gallery.addEventListener('scroll', handleScroll)
-
-        const centerEmoji = () => {
-            const card = gallery.querySelector(`[data-emoji-index="${emojiScrollIndex}"]`)
-            if (!card) return
-            isScrollingRef.current = true
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    const galleryWidth = gallery.clientWidth
-                    const cardWidth = card.offsetWidth || 80
-                    const cardLeft = card.offsetLeft
-                    const scrollPosition = cardLeft - galleryWidth / 2 + cardWidth / 2
-                    const finalScrollPosition = Math.max(0, Math.min(scrollPosition, gallery.scrollWidth - gallery.clientWidth))
-                    gallery.scrollLeft = finalScrollPosition
-                    setTimeout(() => {
-                        if (Math.abs(gallery.scrollLeft - finalScrollPosition) > 10) {
-                            gallery.scrollLeft = finalScrollPosition
-                        }
-                        setTimeout(() => {
-                            isScrollingRef.current = false
-                        }, 100)
-                    }, 50)
-                })
-            })
-        }
-        const t = setTimeout(centerEmoji, 150)
-
-        return () => {
-            gallery.removeEventListener('scroll', handleScroll)
-            clearTimeout(t)
-        }
-    }, [currentScreen, emojiScrollIndex])
-
-    // Handler-Funktionen für Browse-Screen
-    const handleNameChange = (e) => {
-        const name = e.target.value.slice(0, 20)
-        setMyName(name)
-        sessionStorage.setItem('mv_name', name)
-    }
-
-    const selectEmoji = (emoji) => {
-        const index = availableEmojis.indexOf(emoji)
-        setEmojiScrollIndex(index)
-        setMyEmoji(emoji)
-        sessionStorage.setItem('mv_emoji', emoji)
-        // Im Browse-Screen übernimmt der useEffect die Zentrierung (wie bei Hitzkopf)
-        if (currentScreen === 'browse') return
-        const gallery = emojiGalleryRef.current
-        if (gallery) {
-            const itemWidth = gallery.scrollWidth / (availableEmojis.length + 2)
-            gallery.scrollTo({
-                left: index * itemWidth,
-                behavior: 'smooth'
-            })
-        }
-    }
-
     const handleJoinLobbyFromBrowser = (lobbyId) => {
-        if (!myName.trim()) {
-            alert('Bitte gib einen Namen ein!')
-            return
-        }
-        sessionStorage.setItem('mv_name', myName)
-        sessionStorage.setItem('mv_emoji', myEmoji)
         handleJoinLobby({ name: myName, emoji: myEmoji, roomId: lobbyId })
     }
 
@@ -216,7 +123,6 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         const lobbyRef = doc(db, 'musicVoterLobbies', newRoomId)
 
         try {
-            const songwahlDurationSec = 180 // 3 Min Standard
             await setDoc(lobbyRef, {
                 host: name,
                 createdAt: serverTimestamp(),
@@ -228,12 +134,11 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                 // Phasen-Konfiguration
                 batchSize: 10,
                 maxSongsPerPerson: 5,
-                songwahlDurationSec,
                 votingDurationSec: 120,
                 preQueueVotingMinutes: 1,
-                // Phase startet direkt mit Songwahl
+                // Sammelphase ohne Timer – Admin startet manuell
                 lobbyPhase: 'songwahl',
-                phaseEndsAt: Date.now() + songwahlDurationSec * 1000,
+                phaseEndsAt: null,
                 votingRound: 0,
                 pendingBatch: null,
                 queueStartedAt: null,
@@ -246,6 +151,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             setIsHost(true)
             sessionStorage.setItem('mv_roomId', newRoomId)
             setCurrentScreen('room')
+            setShowWelcomePopup(true)
             
             subscribeToLobby(newRoomId)
         } catch (error) {
@@ -285,6 +191,7 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             setIsHost(false)
             sessionStorage.setItem('mv_roomId', joinRoomId)
             setCurrentScreen('room')
+            setShowWelcomePopup(true)
             
             subscribeToLobby(joinRoomId)
         } catch (error) {
@@ -420,10 +327,15 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                 unsubscribeRef.current()
             }
             
+            const newName = generateRandomName()
+            const newEmoji = getRandomEmoji()
+            sessionStorage.setItem('mv_name', newName)
+            sessionStorage.setItem('mv_emoji', newEmoji)
+            setMyName(newName)
+            setMyEmoji(newEmoji)
+            myNameRef.current = newName
             setCurrentScreen('lobby')
             setRoomId('')
-            setMyName('')
-            setMyEmoji('')
             setIsHost(false)
             setLobbyData(null)
             setPlaylist([])
@@ -479,10 +391,15 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             unsubscribeRef.current()
             unsubscribeRef.current = null
         }
+        const newName = generateRandomName()
+        const newEmoji = getRandomEmoji()
+        sessionStorage.setItem('mv_name', newName)
+        sessionStorage.setItem('mv_emoji', newEmoji)
+        setMyName(newName)
+        setMyEmoji(newEmoji)
+        myNameRef.current = newName
         setCurrentScreen('lobby')
         setRoomId('')
-        setMyName('')
-        setMyEmoji('')
         setIsHost(false)
         setLobbyData(null)
         setPlaylist([])
@@ -920,6 +837,44 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         spotifyService.isUserLoggedIn().then(setSpotifyConnected)
     }, [isHost, spotifyCallbackDone])
 
+    // Spotify: Nach Verbindung den Spotify-Displaynamen als Spielernamen übernehmen
+    useEffect(() => {
+        if (!isHost || !spotifyConnected || !db || !roomId) return
+        const applySpotifyName = async () => {
+            try {
+                const profile = await spotifyService.getUserProfile()
+                if (!profile?.displayName) return
+                const spotifyName = profile.displayName.trim()
+                if (!spotifyName || spotifyName === myNameRef.current) return
+
+                const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
+                const snap = await getDoc(lobbyRef)
+                if (!snap.exists()) return
+                const data = snap.data()
+                const oldName = myNameRef.current
+
+                if (data.players?.[spotifyName]) return
+
+                const playerData = data.players?.[oldName] || { joinedAt: serverTimestamp() }
+                const updatedPlaylist = (data.playlist || []).map(item =>
+                    item.addedBy === oldName ? { ...item, addedBy: spotifyName } : item
+                )
+
+                await updateDoc(lobbyRef, {
+                    host: spotifyName,
+                    [`players.${spotifyName}`]: playerData,
+                    [`players.${oldName}`]: deleteField(),
+                    playlist: updatedPlaylist
+                })
+
+                sessionStorage.setItem('mv_name', spotifyName)
+                setMyName(spotifyName)
+                myNameRef.current = spotifyName
+            } catch (_) {}
+        }
+        applySpotifyName()
+    }, [isHost, spotifyConnected, db, roomId])
+
     // Spotify: Web Playback Player initialisieren, wenn Host verbunden
     useEffect(() => {
         if (!isHost || !spotifyConnected || spotifyPlayerReady) return
@@ -1112,8 +1067,14 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
         return () => clearTimeout(id)
     }, [isHost, db, roomId, lobbyData?.lobbyPhase, lobbyData?.queueStartedAt, lobbyData?.queueTotalDurationMs])
 
+    const bgPhaseClass = lobbyData?.lobbyPhase === 'abstimmung'
+        ? styles.bgVoting
+        : lobbyData?.lobbyPhase === 'laeuft'
+            ? styles.bgLaeuft
+            : styles.bgCollecting
+
     return (
-        <div className={styles.musicVoter}>
+        <div className={`${styles.musicVoter} ${currentScreen === 'room' ? bgPhaseClass : ''}`}>
             <div className={styles.backgroundOverlay}></div>
 
             {/* Lobby Screen */}
@@ -1174,12 +1135,13 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
             {currentScreen === 'create' && (
                 <LobbySystem
                     onCreateLobby={handleCreateLobby}
-                    onJoinLobby={() => {}}
                     storagePrefix="mv"
                     title="Playlist erstellen"
                     buttonText="Playlist erstellen"
                     accentColor="#4ecdc4"
                     onBack={() => setCurrentScreen('lobby')}
+                    onSpotifyConnect={handleSpotifyConnect}
+                    spotifyConnected={spotifyReadyForLobby}
                 />
             )}
 
@@ -1188,67 +1150,20 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                 <div className={styles.lobbySystem} style={{ '--accent-color': '#4ecdc4' }}>
                     <div className={styles.screen}>
                         <h1 className={styles.title}>Playlist beitreten</h1>
-                        
-                        <input 
-                            type="text" 
-                            value={myName}
-                            onChange={handleNameChange}
-                            placeholder="Dein Name" 
-                            maxLength={20} 
-                            autoComplete="name"
-                            className={styles.nameInput}
-                        />
-                        
-                        <div className={styles.emojiGalleryWrapper}>
-                            <div 
-                                ref={emojiGalleryRef}
-                                className={styles.emojiGallery}
-                            >
-                                <div className={styles.emojiSpacer}></div>
-                                
-                                {availableEmojis.map((emoji, index) => {
-                                    const isSelected = index === emojiScrollIndex
-                                    
-                                    return (
-                                        <div
-                                            key={`${emoji}-${index}`}
-                                            data-emoji-index={index}
-                                            className={`${styles.emojiCard} ${isSelected ? styles.selected : ''}`}
-                                            onClick={() => {
-                                                if (!isScrollingRef.current) {
-                                                    selectEmoji(emoji)
-                                                }
-                                            }}
-                                            onTouchStart={(e) => {
-                                                touchStartRef.current = {
-                                                    x: e.touches[0].clientX,
-                                                    y: e.touches[0].clientY,
-                                                    time: Date.now()
-                                                }
-                                            }}
-                                            onTouchMove={(e) => {
-                                                if (touchStartRef.current.x !== 0) {
-                                                    const deltaX = Math.abs(e.touches[0].clientX - touchStartRef.current.x)
-                                                    const deltaY = Math.abs(e.touches[0].clientY - touchStartRef.current.y)
-                                                    if (deltaX > 10 || deltaY > 10) {
-                                                        isScrollingRef.current = true
-                                                    }
-                                                }
-                                            }}
-                                            onTouchEnd={() => {
-                                                setTimeout(() => {
-                                                    touchStartRef.current = { x: 0, y: 0, time: 0 }
-                                                }, 50)
-                                            }}
-                                        >
-                                            <div className={styles.emojiCharacter}>{emoji}</div>
-                                        </div>
-                                    )
-                                })}
-                                
-                                <div className={styles.emojiSpacer}></div>
-                            </div>
+
+                        <div className={styles.randomNameDisplay}>
+                            <span className={styles.randomNameLabel}>Dein Name</span>
+                            <span className={styles.randomNameValue}>{myName}</span>
                         </div>
+
+                        <button
+                            type="button"
+                            className={spotifyReadyForLobby ? styles.spotifyConnectedBadge : styles.spotifyConnectBtn}
+                            onClick={spotifyReadyForLobby ? undefined : handleSpotifyConnect}
+                            disabled={spotifyReadyForLobby}
+                        >
+                            {spotifyReadyForLobby ? '✓ Spotify verbunden' : '🎧 Mit Spotify verbinden'}
+                        </button>
 
                         {/* Lobby Liste */}
                         <div className={styles.lobbyListSection}>
@@ -1342,7 +1257,34 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                             ←
                         </button>
                         <div className={styles.headerCenter}>
-                            <h1 className={styles.roomTitle}>Amplify</h1>
+                            {isHost ? (() => {
+                                const phase = lobbyData.lobbyPhase
+                                const isVoting = phase === 'abstimmung'
+                                const isCollecting = phase === 'songwahl' || phase === 'laeuft'
+                                return (
+                                    <div className={styles.phaseToggle}>
+                                        <button
+                                            type="button"
+                                            className={`${styles.phaseToggleBtn} ${isCollecting ? styles.phaseToggleBtnCollecting : ''}`}
+                                            disabled={isVoting}
+                                            title={isVoting ? 'Abstimmung läuft – kein Zurück' : undefined}
+                                        >
+                                            🎵 Sammeln
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`${styles.phaseToggleBtn} ${isVoting ? styles.phaseToggleBtnVoting : ''}`}
+                                            onClick={isCollecting ? handleStartAbstimmung : undefined}
+                                            disabled={isVoting}
+                                            title={isCollecting ? 'Abstimmung starten' : undefined}
+                                        >
+                                            🗳 Voting
+                                        </button>
+                                    </div>
+                                )
+                            })() : (
+                                <h1 className={styles.roomTitle}>Amplify</h1>
+                            )}
                         </div>
                         <div className={styles.headerActions}>
                             {isHost && (
@@ -1490,21 +1432,6 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                         </select>
                                     </div>
                                     <div className={styles.settingsRow}>
-                                        <span className={styles.settingsRowLabel}>Songwahl-Dauer</span>
-                                        <select
-                                            className={styles.settingsRowSelect}
-                                            value={lobbyData.songwahlDurationSec || 180}
-                                            onChange={(e) =>
-                                                updateLobbyConfig({ songwahlDurationSec: Number(e.target.value) || 180 })
-                                            }
-                                        >
-                                            <option value={60}>1 Min</option>
-                                            <option value={120}>2 Min</option>
-                                            <option value={180}>3 Min</option>
-                                            <option value={300}>5 Min</option>
-                                        </select>
-                                    </div>
-                                    <div className={styles.settingsRow}>
                                         <span className={styles.settingsRowLabel}>Voting-Dauer</span>
                                         <select
                                             className={styles.settingsRowSelect}
@@ -1534,18 +1461,6 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                             <option value={5}>5 Min vor Ende</option>
                                         </select>
                                     </div>
-                                    {/* Admin: Phase manuell vorziehen */}
-                                    {lobbyData.lobbyPhase === 'songwahl' && (
-                                        <div className={styles.settingsButtonRow}>
-                                            <button
-                                                type="button"
-                                                className={styles.settingsPrimaryBtn}
-                                                onClick={handleStartAbstimmung}
-                                            >
-                                                Abstimmung jetzt starten
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
@@ -1562,15 +1477,14 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                             <div className={`${styles.phaseBanner} ${styles.phaseBannerSongwahl}`}>
                                 <span className={styles.phaseBannerIcon}>🎵</span>
                                 <div className={styles.phaseBannerInfo}>
-                                    <span className={styles.phaseBannerTitle}>Songwahl</span>
+                                    <span className={styles.phaseBannerTitle}>Songs sammeln</span>
                                     <span className={styles.phaseBannerSub}>
-                                        Deine Songs: {myUnqueuedCount}/{maxSongs}
-                                        {phaseRemainingMs > 0 && ` · Voting in ${formatPlaybackTime(phaseRemainingMs)}`}
+                                        {isHost
+                                            ? `Deine Songs: ${myUnqueuedCount}/${maxSongs} · Starte die Abstimmung wenn alle fertig sind`
+                                            : `Deine Songs: ${myUnqueuedCount}/${maxSongs} · Warte auf den Admin…`
+                                        }
                                     </span>
                                 </div>
-                                {phaseRemainingMs > 0 && (
-                                    <span className={styles.phaseBannerTimer}>{formatPlaybackTime(phaseRemainingMs)}</span>
-                                )}
                             </div>
                         )
                         if (phase === 'abstimmung') return (
@@ -1623,25 +1537,6 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                                     </div>
                                 </div>
                                 <div className={styles.nowPlayingRight}>
-                                    {/* Host: Pause/Skip Controls */}
-                                    {isHost && spotifyConnected && (
-                                        <div className={styles.nowPlayingControls}>
-                                            <button
-                                                className={styles.playerControlBtn}
-                                                onClick={handlePausePlayback}
-                                                title={nowPlaying.isPlaying ? 'Pause' : 'Weiter'}
-                                            >
-                                                {nowPlaying.isPlaying ? '⏸' : '▶'}
-                                            </button>
-                                            <button
-                                                className={styles.playerControlBtn}
-                                                onClick={handleSkipTrack}
-                                                title="Überspringen"
-                                            >
-                                                ⏭
-                                            </button>
-                                        </div>
-                                    )}
                                     {/* Queue-Toggle Button */}
                                     {sortedPlaylist.filter(i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId).length > 0 && (
                                         <button
@@ -1994,6 +1889,47 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
                             </div>
                             )
                         })()}
+                    </div>
+                </div>
+            )}
+
+            {/* Welcome Popup – kurze Erklärung nach dem Beitreten */}
+            {showWelcomePopup && (
+                <div className={styles.welcomeOverlay} onClick={() => setShowWelcomePopup(false)}>
+                    <div className={styles.welcomePopup} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.welcomeHeader}>
+                            <span className={styles.welcomeIcon}>🎵</span>
+                            <h2 className={styles.welcomeTitle}>Willkommen bei Amplify!</h2>
+                        </div>
+                        <div className={styles.welcomePhases}>
+                            <div className={styles.welcomePhase}>
+                                <span className={styles.welcomePhaseIcon}>🎵</span>
+                                <div>
+                                    <strong>Songwahl</strong>
+                                    <p>Füge bis zu 5 Songs zur Playlist hinzu.</p>
+                                </div>
+                            </div>
+                            <div className={styles.welcomePhase}>
+                                <span className={styles.welcomePhaseIcon}>🗳️</span>
+                                <div>
+                                    <strong>Abstimmung</strong>
+                                    <p>Vote für oder gegen Songs – die besten kommen in die Queue.</p>
+                                </div>
+                            </div>
+                            <div className={styles.welcomePhase}>
+                                <span className={styles.welcomePhaseIcon}>▶️</span>
+                                <div>
+                                    <strong>Abspielen</strong>
+                                    <p>Die Playlist läuft! Währenddessen kannst du neue Songs für die nächste Runde vorschlagen.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <button
+                            className={styles.welcomeCloseBtn}
+                            onClick={() => setShowWelcomePopup(false)}
+                        >
+                            Los geht's!
+                        </button>
                     </div>
                 </div>
             )}

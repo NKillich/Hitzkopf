@@ -745,6 +745,28 @@ class SpotifyService {
     }
 
     /**
+     * Holt das Spotify-Profil des eingeloggten Users (Display Name, ID).
+     * Returns { displayName, id } oder null.
+     */
+    async getUserProfile() {
+        const token = await this.getStoredUserToken()
+        if (!token) return null
+        try {
+            const res = await fetch(`${SPOTIFY_API_BASE}/me`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            if (!res.ok) return null
+            const data = await res.json()
+            return {
+                displayName: data.display_name || data.id || null,
+                id: data.id || null
+            }
+        } catch (_) {
+            return null
+        }
+    }
+
+    /**
      * Trennt den Web-Player (z.B. beim Verlassen)
      */
     disconnectPlayer() {
