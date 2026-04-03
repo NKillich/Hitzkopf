@@ -21,6 +21,14 @@ const ProjectHub = ({ onSelectProject }) => {
             color: '#4ecdc4',
             emoji: '🎵',
             available: true
+        },
+        {
+            id: 'quizroyale',
+            name: 'Quiz Royale',
+            description: 'Rundenbasiertes Quiz mit Upgrades & Charakteren',
+            color: '#9b59b6',
+            emoji: '🧠',
+            available: true
         }
     ]
 

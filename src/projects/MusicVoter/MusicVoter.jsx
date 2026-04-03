@@ -34,7 +34,7 @@ const firebaseConfig = {
     appId: "1:828164655874:web:1cab759bdb03bfb736101b"
 }
 
-const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
+const MusicVoter = ({ onBack }) => {
     // Firebase
     const [app, setApp] = useState(null)
     const [db, setDb] = useState(null)
@@ -87,10 +87,30 @@ const MusicVoter = ({ onBack, spotifyCallbackDone }) => {
     const [showWelcomePopup, setShowWelcomePopup] = useState(false)
     const [spotifyReadyForLobby, setSpotifyReadyForLobby] = useState(false)
 
-    // Spotify-Status beim ersten Laden und nach OAuth-Callback prüfen
+    // Spotify OAuth-Callback verarbeiten und Login-Status prüfen
     useEffect(() => {
-        spotifyService.isUserLoggedIn().then(setSpotifyReadyForLobby)
-    }, [spotifyCallbackDone])
+        const params = new URLSearchParams(window.location.search)
+        const code = params.get('code')
+
+        if (code) {
+            let cancelled = false
+            ;(async () => {
+                try {
+                    await spotifyService.exchangeCodeForToken(code)
+                    if (cancelled) return
+                    window.history.replaceState({}, '', window.location.pathname || '/')
+                } catch (e) {
+                    console.error('Spotify Callback Fehler:', e)
+                    if (!cancelled) alert('Spotify-Verbindung fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'))
+                } finally {
+                    if (!cancelled) spotifyService.isUserLoggedIn().then(setSpotifyReadyForLobby)
+                }
+            })()
+            return () => { cancelled = true }
+        } else {
+            spotifyService.isUserLoggedIn().then(setSpotifyReadyForLobby)
+        }
+    }, [])
 
     // Firebase Initialisierung
     useEffect(() => {
