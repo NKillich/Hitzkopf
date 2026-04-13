@@ -3,7 +3,7 @@ import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore, doc, setDoc, updateDoc, onSnapshot, increment, arrayUnion, deleteDoc, deleteField, collection, query, where } from 'firebase/firestore'
 import { characters, getCharacterById, getPassiveById, getCharacterQuip } from '../../data/quizCharacters'
-import { getUpgradeById, generateUpgradeOffers, RARITY_CONFIG } from '../../data/quizUpgrades'
+import { getUpgradeById, generateUpgradeOffers, generateSingleUpgrade, RARITY_CONFIG } from '../../data/quizUpgrades'
 import { quizCategories, getQuestionsForCategories, tiebreakerQuestions } from '../../data/quizQuestions'
 import styles from './QuizGame.module.css'
 
@@ -151,6 +151,8 @@ function QuizGame({ onBack }) {
     const winCountedRef = useRef(false)
     const [pendingCharacter, setPendingCharacter] = useState(null) // character clicked, waiting for passive selection
     const [carouselIdx, setCarouselIdx] = useState(0)
+    const [rerolledSlots, setRerolledSlots] = useState(new Set())
+    const [offerOverrides, setOfferOverrides] = useState({})
 
     // Quips sind client-side zufällig, werden bei reveal gerendert
     const quipsRef = useRef({})
@@ -210,6 +212,10 @@ function QuizGame({ onBack }) {
             quipsRef.current = {}
         }
         if (lobbyData?.status === 'tiebreaker') { setTiebreakerGuess(''); setTieGuessSubmitted(false) }
+        if (lobbyData?.status === 'upgrade') {
+            setRerolledSlots(new Set())
+            setOfferOverrides({})
+        }
     }, [lobbyData?.status, lobbyData?.questionIndex])
 
     // Auto-confirm when timer hits 0 and player has a selection
@@ -469,6 +475,15 @@ function QuizGame({ onBack }) {
             offerUpdates[`players.${uid}.masterStudentCharges`] = 0
         }
         await updateDoc(doc(db, 'quizLobbies', lobbyId), { status: 'upgrade', questionIndex: 0, ...offerUpdates })
+    }
+
+    const handleReroll = (index) => {
+        const currentOffers = myOffers.map((id, i) => offerOverrides[i] ?? id)
+        const exclude = [...new Set([...currentOffers, ...myUpgrades])]
+        const newUpg = generateSingleUpgrade(exclude)
+        if (!newUpg) return
+        setOfferOverrides(prev => ({ ...prev, [index]: newUpg.id }))
+        setRerolledSlots(prev => new Set([...prev, index]))
     }
 
     const handlePickUpgrade = async (upgradeId) => {
@@ -885,19 +900,31 @@ function QuizGame({ onBack }) {
                             </div>
                         ) : (
                             <div className={styles.upgradeCards}>
-                                {myOffers.map(upgradeId => {
-                                    const upg = getUpgradeById(upgradeId)
+                                {myOffers.map((originalId, idx) => {
+                                    const effectiveId = offerOverrides[idx] ?? originalId
+                                    const upg = getUpgradeById(effectiveId)
                                     if (!upg) return null
                                     const cfg = RARITY_CONFIG[upg.rarity]
+                                    const canReroll = !rerolledSlots.has(idx)
                                     return (
-                                        <button key={upg.id} className={styles.upgradeCard} onClick={() => handlePickUpgrade(upg.id)}
+                                        <div key={idx} className={styles.upgradeCard}
                                             style={{ '--rarity-color': cfg.color, '--rarity-bg': cfg.bg, '--rarity-border': cfg.border, '--rarity-glow': cfg.glow }}>
-                                            <div className={styles.rarityBadge} style={{ color: cfg.color, borderColor: cfg.border }}>{cfg.label.toUpperCase()}</div>
                                             <div className={styles.upgradeEmoji}>{upg.emoji}</div>
-                                            <div className={styles.upgradeName}>{upg.name}</div>
-                                            <div className={styles.upgradeDesc}>{upg.description}</div>
-                                            <div className={styles.upgradeSelectBtn}>Wählen</div>
-                                        </button>
+                                            <div className={styles.upgradeCardText}>
+                                                <div className={styles.rarityBadge} style={{ color: cfg.color }}>{cfg.label.toUpperCase()}</div>
+                                                <div className={styles.upgradeName}>{upg.name}</div>
+                                                <div className={styles.upgradeDesc}>{upg.description}</div>
+                                            </div>
+                                            <div className={styles.upgradeBtnRow}>
+                                                <button className={styles.upgradeSelectBtn} onClick={() => handlePickUpgrade(upg.id)}>Wählen</button>
+                                                <button
+                                                    className={`${styles.rerollBtn} ${!canReroll ? styles.rerollUsed : ''}`}
+                                                    onClick={() => canReroll && handleReroll(idx)}
+                                                    disabled={!canReroll}>
+                                                    {canReroll ? '🎲 Neu würfeln' : '✓ Verwendet'}
+                                                </button>
+                                            </div>
+                                        </div>
                                     )
                                 })}
                             </div>

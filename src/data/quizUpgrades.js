@@ -105,19 +105,25 @@ export const upgrades = [
 
 export const getUpgradeById = (id) => upgrades.find(u => u.id === id)
 
+const getWeightedRandom = (pool) => {
+    const totalWeight = pool.reduce((sum, u) => sum + RARITY_CONFIG[u.rarity].weight, 0)
+    let rand = Math.random() * totalWeight
+    for (const upg of pool) {
+        rand -= RARITY_CONFIG[upg.rarity].weight
+        if (rand <= 0) return upg
+    }
+    return pool[pool.length - 1]
+}
+
+export const generateSingleUpgrade = (excludeIds = []) => {
+    const available = upgrades.filter(u => !excludeIds.includes(u.id))
+    if (available.length === 0) return null
+    return getWeightedRandom(available)
+}
+
 export const generateUpgradeOffers = (count = 3, existingUpgradeIds = []) => {
     const available = upgrades.filter(u => !existingUpgradeIds.includes(u.id))
     if (available.length === 0) return []
-
-    const getWeightedRandom = (pool) => {
-        const totalWeight = pool.reduce((sum, u) => sum + RARITY_CONFIG[u.rarity].weight, 0)
-        let rand = Math.random() * totalWeight
-        for (const upg of pool) {
-            rand -= RARITY_CONFIG[upg.rarity].weight
-            if (rand <= 0) return upg
-        }
-        return pool[pool.length - 1]
-    }
 
     const offers = []
     const used = new Set()
