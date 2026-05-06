@@ -148,14 +148,27 @@ export default function SecondSound({ onBack }) {
         setUserProfile(null)
         setUserPlaylists([])
         const userId = extractUserId(userQuery)
+
+        // Profil-Fetch ist optional – Spotify blockt diesen Endpoint oft (403)
+        let profile = null
         try {
-            const profile = await spotifyService.getUserProfile(userId)
+            profile = await spotifyService.getUserProfile(userId)
+        } catch (e) {
+            console.warn('[SecondSound] getUserProfile fehlgeschlagen (oft API-Restriction):', e.message)
+            profile = { id: userId, displayName: userId, imageUrl: null, restricted: true }
+        }
+
+        // Playlists separat laden – funktioniert oft auch wenn Profil 403 gibt
+        try {
             const playlists = await spotifyService.getUserPlaylists(userId, 30)
             setUserProfile(profile)
             setUserPlaylists(playlists)
+            if (playlists.length === 0) {
+                setUserProfile({ ...profile, warning: `Keine öffentlichen Playlists für „${userId}" gefunden.` })
+            }
         } catch (e) {
-            console.error('Nutzer-Suche fehlgeschlagen:', e)
-            setUserProfile({ error: e.message })
+            console.error('[SecondSound] getUserPlaylists fehlgeschlagen:', e)
+            setUserProfile({ ...profile, error: `Playlists konnten nicht geladen werden: ${e.message}` })
         } finally {
             setSearchLoading(false)
         }
@@ -490,7 +503,11 @@ export default function SecondSound({ onBack }) {
                                     <div className={styles.userNotFound}>{userProfile.error}</div>
                                 )}
 
-                                {userProfile && !userProfile.error && (
+                                {userProfile?.warning && !userProfile.error && (
+                                    <div className={styles.userNotFound}>{userProfile.warning}</div>
+                                )}
+
+                                {userProfile && !userProfile.error && !userProfile.warning && (
                                     <div className={styles.userCard}>
                                         {userProfile.imageUrl
                                             ? <img src={userProfile.imageUrl} alt="" className={styles.userAvatar} />
@@ -498,7 +515,12 @@ export default function SecondSound({ onBack }) {
                                         }
                                         <div className={styles.userInfo}>
                                             <span className={styles.userName}>{userProfile.displayName}</span>
-                                            <span className={styles.userMeta}>{userPlaylists.length} öffentliche Playlist{userPlaylists.length !== 1 ? 's' : ''}</span>
+                                            <span className={styles.userMeta}>
+                                                {userProfile.restricted
+                                                    ? `${userPlaylists.length} öffentliche Playlist${userPlaylists.length !== 1 ? 's' : ''}`
+                                                    : `${userPlaylists.length} öffentliche Playlist${userPlaylists.length !== 1 ? 's' : ''} · ${userProfile.followers?.toLocaleString() ?? 0} Follower`
+                                                }
+                                            </span>
                                         </div>
                                     </div>
                                 )}
