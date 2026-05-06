@@ -24,12 +24,11 @@ export default function SecondSound({ onBack }) {
     const [playerError, setPlayerError] = useState(null)
 
     // Setup state
-    const [searchMode, setSearchMode] = useState('playlist') // 'playlist' | 'user'
+    const [searchMode, setSearchMode] = useState('playlist') // 'playlist' | 'mine'
     const [playlistQuery, setPlaylistQuery] = useState('')
     const [playlistResults, setPlaylistResults] = useState([])
-    const [userQuery, setUserQuery] = useState('')
-    const [userProfile, setUserProfile] = useState(null)
-    const [userPlaylists, setUserPlaylists] = useState([])
+    const [myPlaylists, setMyPlaylists] = useState([])
+    const [myPlaylistsLoaded, setMyPlaylistsLoaded] = useState(false)
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
     const [songCount, setSongCount] = useState(10)
     const [searchLoading, setSearchLoading] = useState(false)
@@ -131,44 +130,15 @@ export default function SecondSound({ onBack }) {
         }
     }
 
-    // Spotify User-ID aus URL oder direkter Eingabe extrahieren
-    const extractUserId = (input) => {
-        const trimmed = input.trim()
-        // https://open.spotify.com/user/USERNAME oder spotify:user:USERNAME
-        const urlMatch = trimmed.match(/spotify\.com\/user\/([^?/]+)/)
-        if (urlMatch) return urlMatch[1]
-        const uriMatch = trimmed.match(/spotify:user:([^?/]+)/)
-        if (uriMatch) return uriMatch[1]
-        return trimmed
-    }
-
-    const handleSearchUser = async () => {
-        if (!userQuery.trim()) return
+    const handleLoadMyPlaylists = async () => {
+        if (myPlaylistsLoaded) return
         setSearchLoading(true)
-        setUserProfile(null)
-        setUserPlaylists([])
-        const userId = extractUserId(userQuery)
-
-        // Profil-Fetch ist optional – Spotify blockt diesen Endpoint oft (403)
-        let profile = null
         try {
-            profile = await spotifyService.getUserProfile(userId)
+            const playlists = await spotifyService.getMyPlaylists(50)
+            setMyPlaylists(playlists)
+            setMyPlaylistsLoaded(true)
         } catch (e) {
-            console.warn('[SecondSound] getUserProfile fehlgeschlagen (oft API-Restriction):', e.message)
-            profile = { id: userId, displayName: userId, imageUrl: null, restricted: true }
-        }
-
-        // Playlists separat laden – funktioniert oft auch wenn Profil 403 gibt
-        try {
-            const playlists = await spotifyService.getUserPlaylists(userId, 30)
-            setUserProfile(profile)
-            setUserPlaylists(playlists)
-            if (playlists.length === 0) {
-                setUserProfile({ ...profile, warning: `Keine öffentlichen Playlists für „${userId}" gefunden.` })
-            }
-        } catch (e) {
-            console.error('[SecondSound] getUserPlaylists fehlgeschlagen:', e)
-            setUserProfile({ ...profile, error: `Playlists konnten nicht geladen werden: ${e.message}` })
+            console.error('[SecondSound] getMyPlaylists fehlgeschlagen:', e)
         } finally {
             setSearchLoading(false)
         }
@@ -420,15 +390,15 @@ export default function SecondSound({ onBack }) {
                         <div className={styles.searchTabs}>
                             <button
                                 className={`${styles.searchTab} ${searchMode === 'playlist' ? styles.searchTabActive : ''}`}
-                                onClick={() => { setSearchMode('playlist'); setPlaylistResults([]); setUserProfile(null); setUserPlaylists([]) }}
+                                onClick={() => { setSearchMode('playlist'); setPlaylistResults([]) }}
                             >
                                 🔍 Playlist
                             </button>
                             <button
-                                className={`${styles.searchTab} ${searchMode === 'user' ? styles.searchTabActive : ''}`}
-                                onClick={() => { setSearchMode('user'); setPlaylistResults([]); setUserProfile(null); setUserPlaylists([]) }}
+                                className={`${styles.searchTab} ${searchMode === 'mine' ? styles.searchTabActive : ''}`}
+                                onClick={() => { setSearchMode('mine'); handleLoadMyPlaylists() }}
                             >
-                                👤 Nutzer
+                                🎧 Meine Playlists
                             </button>
                         </div>
 
@@ -475,59 +445,20 @@ export default function SecondSound({ onBack }) {
                             </>
                         )}
 
-                        {/* Nutzer-Suche */}
-                        {searchMode === 'user' && (
+                        {/* Meine Playlists */}
+                        {searchMode === 'mine' && (
                             <>
-                                <p className={styles.userSearchHint}>
-                                    Spotify User-ID oder Profil-URL eingeben<br />
-                                    <span>z.B. <code>nkillich</code> oder <code>open.spotify.com/user/nkillich</code></span>
-                                </p>
-                                <div className={styles.searchRow}>
-                                    <input
-                                        className={styles.searchInput}
-                                        placeholder="User-ID oder Spotify-URL..."
-                                        value={userQuery}
-                                        onChange={e => setUserQuery(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && handleSearchUser()}
-                                    />
-                                    <button
-                                        className={styles.searchBtn}
-                                        onClick={handleSearchUser}
-                                        disabled={searchLoading || !userQuery.trim()}
-                                    >
-                                        {searchLoading ? <span className={styles.spinnerSmall} /> : 'Suchen'}
-                                    </button>
-                                </div>
-
-                                {userProfile?.error && (
-                                    <div className={styles.userNotFound}>{userProfile.error}</div>
-                                )}
-
-                                {userProfile?.warning && !userProfile.error && (
-                                    <div className={styles.userNotFound}>{userProfile.warning}</div>
-                                )}
-
-                                {userProfile && !userProfile.error && !userProfile.warning && (
-                                    <div className={styles.userCard}>
-                                        {userProfile.imageUrl
-                                            ? <img src={userProfile.imageUrl} alt="" className={styles.userAvatar} />
-                                            : <div className={styles.userAvatarFallback}>👤</div>
-                                        }
-                                        <div className={styles.userInfo}>
-                                            <span className={styles.userName}>{userProfile.displayName}</span>
-                                            <span className={styles.userMeta}>
-                                                {userProfile.restricted
-                                                    ? `${userPlaylists.length} öffentliche Playlist${userPlaylists.length !== 1 ? 's' : ''}`
-                                                    : `${userPlaylists.length} öffentliche Playlist${userPlaylists.length !== 1 ? 's' : ''} · ${userProfile.followers?.toLocaleString() ?? 0} Follower`
-                                                }
-                                            </span>
-                                        </div>
+                                {searchLoading && (
+                                    <div className={styles.loadingRow}>
+                                        <span className={styles.spinnerSmall} /> Playlists werden geladen…
                                     </div>
                                 )}
-
-                                {userPlaylists.length > 0 && (
+                                {!searchLoading && myPlaylistsLoaded && myPlaylists.length === 0 && (
+                                    <div className={styles.userNotFound}>Keine Playlists gefunden.</div>
+                                )}
+                                {myPlaylists.length > 0 && (
                                     <div className={styles.playlistResults}>
-                                        {userPlaylists.map(p => {
+                                        {myPlaylists.map(p => {
                                             const isAdded = !!selectedPlaylists.find(s => s.id === p.id)
                                             return (
                                                 <button key={p.id}

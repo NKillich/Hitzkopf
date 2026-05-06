@@ -848,50 +848,34 @@ class SpotifyService {
     }
 
     /**
-     * Holt das Profil eines Spotify-Nutzers anhand der User-ID.
+     * Holt alle Playlists des eingeloggten Nutzers (eigene + gefolgten).
+     * Nutzt /me/playlists – funktioniert zuverlässig mit playlist-read-private.
      */
-    async getUserProfile(userId) {
+    async getMyPlaylists(limit = 50) {
         const token = await this.getStoredUserToken()
         if (!token) throw new Error('Nicht mit Spotify verbunden.')
-        const res = await fetch(`${SPOTIFY_API_BASE}/users/${encodeURIComponent(userId)}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        })
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}))
-            throw new Error(err.error?.message || `Nutzer „${userId}" nicht gefunden.`)
+        let playlists = []
+        let url = `${SPOTIFY_API_BASE}/me/playlists?limit=${Math.min(limit, 50)}`
+        while (url) {
+            const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                throw new Error(err.error?.message || 'Eigene Playlists konnten nicht geladen werden.')
+            }
+            const data = await res.json()
+            const page = (data.items || []).filter(Boolean).map(pl => ({
+                id: pl.id,
+                name: pl.name,
+                owner: pl.owner?.display_name || pl.owner?.id || '',
+                imageUrl: pl.images?.[0]?.url || null,
+                trackCount: pl.tracks?.total ?? 0,
+                uri: pl.uri || `spotify:playlist:${pl.id}`
+            }))
+            playlists = [...playlists, ...page]
+            // Nur erste Seite laden wenn limit ≤ 50
+            url = limit > 50 ? (data.next || null) : null
         }
-        const data = await res.json()
-        return {
-            id: data.id,
-            displayName: data.display_name || data.id,
-            imageUrl: data.images?.[0]?.url || null,
-            followers: data.followers?.total ?? 0
-        }
-    }
-
-    /**
-     * Holt die öffentlichen Playlists eines Spotify-Nutzers.
-     */
-    async getUserPlaylists(userId, limit = 30) {
-        const token = await this.getStoredUserToken()
-        if (!token) throw new Error('Nicht mit Spotify verbunden.')
-        const params = new URLSearchParams({ limit: String(Math.min(limit, 50)) })
-        const res = await fetch(`${SPOTIFY_API_BASE}/users/${encodeURIComponent(userId)}/playlists?${params}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        })
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}))
-            throw new Error(err.error?.message || `Playlists von „${userId}" konnten nicht geladen werden.`)
-        }
-        const data = await res.json()
-        return (data.items || []).filter(Boolean).map(pl => ({
-            id: pl.id,
-            name: pl.name,
-            owner: pl.owner?.display_name || pl.owner?.id || '',
-            imageUrl: pl.images?.[0]?.url || null,
-            trackCount: pl.tracks?.total ?? 0,
-            uri: pl.uri || `spotify:playlist:${pl.id}`
-        }))
+        return playlists
     }
 
     /**
