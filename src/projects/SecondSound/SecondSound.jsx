@@ -46,8 +46,12 @@ export default function SecondSound({ onBack }) {
     const [score, setScore] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
 
+    const [skipNotice, setSkipNotice] = useState(false)
+
     const timerRef = useRef(null)
-    const fetchGenRef = useRef(0)      // Generation-Counter: verhindert stale Track-Fetches
+    const fetchGenRef = useRef(0)           // Generation-Counter: verhindert stale Track-Fetches
+    const lastPlayedTrackIdRef = useRef(null) // letzter bestätigter Track-ID (auch Duplikate)
+    const songsRef = useRef([])             // Referenz auf songs-Array (stale-closure-safe)
     const usedTrackIds = useRef(new Set())
     const usedArtists = useRef(new Set())
     const searchInputRef = useRef(null)
@@ -231,6 +235,8 @@ export default function SecondSound({ onBack }) {
             usedTrackIds.current = new Set()
             usedArtists.current = new Set()
             fetchGenRef.current = 0
+            lastPlayedTrackIdRef.current = null
+            songsRef.current = selected
 
             setSongs(selected)
             setCurrentIndex(0)
@@ -278,7 +284,8 @@ export default function SecondSound({ onBack }) {
 
             // Generation hochzählen – stale Fetches aus vorherigem Song werden ignoriert
             const gen = ++fetchGenRef.current
-            const prevId = currentTrackInfo?.trackId ?? null
+            // prevId aus Ref – bleibt korrekt auch nach Skip (wo currentTrackInfo null ist)
+            const prevId = lastPlayedTrackIdRef.current
 
             // Polling: wartet bis Spotify wirklich den neuen Track geladen hat (max ~5s)
             const pollTrackInfo = async (attempt = 0) => {
@@ -286,19 +293,36 @@ export default function SecondSound({ onBack }) {
                 if (attempt > 10) return
                 const state = await spotifyService.getPlaybackState().catch(() => null)
                 if (!state || fetchGenRef.current !== gen) return
-                if (state.trackId && state.trackId === prevId) {
+                if (prevId && state.trackId === prevId) {
                     // Spotify spielt noch den alten Track – warten und nochmal
                     await new Promise(r => setTimeout(r, 500))
                     return pollTrackInfo(attempt + 1)
                 }
-                // Neuer Track erkannt – Duplikat-Check
+                // Track-ID merken (auch wenn Duplikat) damit nächster Poll korrekt wartet
+                lastPlayedTrackIdRef.current = state.trackId
+
+                // Duplikat-Check
                 const trackKey = state.trackId
                 const artistKey = state.artist?.toLowerCase().trim()
                 const isDupTrack = usedTrackIds.current.has(trackKey)
                 const isDupArtist = artistKey && usedArtists.current.has(artistKey)
                 if (isDupTrack || isDupArtist) {
                     console.log('[SecondSound] Duplikat übersprungen:', state.trackName, isDupArtist ? '(Künstler bereits gespielt)' : '(Track bereits gespielt)')
-                    skipDuplicate()
+                    // skipDuplicate direkt hier ausführen (stale-closure-safe via Refs)
+                    await stopPlayback()
+                    fetchGenRef.current++
+                    setSkipNotice(true)
+                    setTimeout(() => setSkipNotice(false), 2500)
+                    setIsRevealed(false)
+                    setCurrentTrackInfo(null)
+                    setIsPlaying(false)
+                    setCurrentIndex(prev => {
+                        const next = prev + 1
+                        if (next >= songsRef.current.length) {
+                            setPhase(PHASES.RESULTS)
+                        }
+                        return next < songsRef.current.length ? next : prev
+                    })
                     return
                 }
                 // Song ist neu → als verwendet markieren
@@ -342,20 +366,6 @@ export default function SecondSound({ onBack }) {
         advanceAfterAnswer(correct)
     }
 
-    // Überspringt einen Duplikat-Song ohne ihn zu zählen
-    const skipDuplicate = async () => {
-        await stopPlayback()
-        fetchGenRef.current++
-        setIsRevealed(false)
-        setCurrentTrackInfo(null)
-        if (currentIndex + 1 >= songs.length) {
-            // Kein Backup mehr → Runde beenden
-            setPhase(PHASES.RESULTS)
-        } else {
-            setCurrentIndex(prev => prev + 1)
-        }
-    }
-
     const handleNewRound = () => {
         setSongs([])
         setCurrentIndex(0)
@@ -368,6 +378,8 @@ export default function SecondSound({ onBack }) {
         usedTrackIds.current = new Set()
         usedArtists.current = new Set()
         fetchGenRef.current = 0
+        lastPlayedTrackIdRef.current = null
+        songsRef.current = []
         setPhase(PHASES.SETUP)
     }
 
@@ -653,6 +665,12 @@ export default function SecondSound({ onBack }) {
                             {score} ✓
                         </div>
                     </div>
+
+                    {skipNotice && (
+                        <div className={styles.skipNotice}>
+                            ⏭ Künstler bereits gespielt – nächster Song
+                        </div>
+                    )}
 
                     <div className={styles.progressBar}>
                         <div className={styles.progressFill} style={{ width: `${progressPct}%` }} />

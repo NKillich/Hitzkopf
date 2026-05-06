@@ -755,6 +755,25 @@
     flex-shrink: 0;
 }
 
+.skipNotice {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    color: #ffc107;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-align: center;
+    padding: 0.5rem 0.75rem;
+    border-radius: 10px;
+    animation: fadeInOut 2.5s ease forwards;
+}
+
+@keyframes fadeInOut {
+    0%   { opacity: 0; transform: translateY(-4px); }
+    15%  { opacity: 1; transform: translateY(0); }
+    75%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+
 .progressBar {
     height: 3px;
     background: rgba(255, 255, 255, 0.08);
