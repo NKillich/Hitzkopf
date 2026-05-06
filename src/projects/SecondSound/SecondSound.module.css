@@ -126,6 +126,7 @@
     -webkit-text-fill-color: transparent;
     background-clip: text;
     margin: 0;
+    text-align: center;
 }
 
 .appSubtitle {
@@ -189,29 +190,30 @@
 }
 
 .setupTopBar {
+    position: relative;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    min-height: 2.2rem;
     margin-bottom: 0.25rem;
 }
 
 .setupTopBarSpacer {
-    /* Spiegelt den Zurück-Button, damit der Titel perfekt zentriert ist */
-    width: 72px;
-    flex-shrink: 0;
+    display: none;
 }
 
 .setupBackBtn {
+    position: absolute;
+    left: 0;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: #b3b3b3;
-    padding: 0.4rem 0.85rem;
+    padding: 0.35rem 0.75rem;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     transition: all 0.2s ease;
     white-space: nowrap;
-    flex-shrink: 0;
 }
 
 .setupBackBtn:hover {

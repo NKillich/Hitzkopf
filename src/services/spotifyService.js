@@ -816,7 +816,7 @@ class SpotifyService {
         if (!token) throw new Error('Nicht mit Spotify verbunden.')
 
         let tracks = []
-        let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(id,name,uri,type,artists(name),album(name,images)))`
+        let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=100`
 
         while (url) {
             const res = await fetch(url, {
