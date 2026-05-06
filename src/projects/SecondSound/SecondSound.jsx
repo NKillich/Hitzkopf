@@ -235,7 +235,7 @@ export default function SecondSound({ onBack }) {
         return (
             <div className={styles.wrapper}>
                 <div className={styles.bg} />
-                <button className={styles.backBtn} onClick={handleBack}>← Zurück</button>
+                <button className={styles.loginBackBtn} onClick={handleBack}>← Zurück</button>
                 <div className={styles.loginContainer}>
                     <div className={styles.appIcon}>🎧</div>
                     <h1 className={styles.appTitle}>SecondSound</h1>
@@ -261,9 +261,12 @@ export default function SecondSound({ onBack }) {
                 <div className={styles.bg} />
                 <div className={styles.setupContainer}>
                     <div className={styles.setupTopBar}>
-                        <button className={styles.backBtn} onClick={handleBack}>← Zurück</button>
+                        <button className={styles.setupBackBtn} onClick={handleBack}>← Zurück</button>
                         <h1 className={styles.appTitleSmall}>🎧 SecondSound</h1>
+                        <div className={styles.setupTopBarSpacer} />
                     </div>
+
+                    <p className={styles.setupHint}>Wähle Playlists aus, stelle die Song-Anzahl ein und starte das Quiz.</p>
 
                     {loadingError && <div className={styles.errorMsg}>{loadingError}</div>}
 
