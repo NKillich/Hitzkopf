@@ -769,6 +769,26 @@ class SpotifyService {
     }
 
     /**
+     * Testet ob der User-Token tatsächlich Tracks eines Playlists laden kann.
+     * Nutzt eine bekannte öffentliche Spotify-Playlist als Referenz.
+     * /me/playlists reicht NICHT als Test – gibt auch ohne Playlist-Scope 200 zurück.
+     */
+    async testPlaylistAccess() {
+        const token = await this.getStoredUserToken()
+        if (!token) return false
+        try {
+            // "Today's Top Hits" – immer öffentlich, repräsentiert den echten Endpunkt
+            const res = await fetch(`${SPOTIFY_API_BASE}/playlists/37i9dQZEVXbMDoHDwVN2tF/tracks?limit=1`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            console.log('[SpotifyService] Playlist-Tracks-Scope Test:', res.status)
+            return res.ok
+        } catch {
+            return false
+        }
+    }
+
+    /**
      * Sucht nach Playlists auf Spotify.
      * Nutzt den User-Token (falls vorhanden), sonst Client Credentials.
      */
@@ -824,6 +844,7 @@ class SpotifyService {
         if (!activeToken) throw new Error('Nicht mit Spotify verbunden.')
 
         const fetchPage = async (url, token) => {
+            console.log(`[SpotifyService] GET ${url.replace(SPOTIFY_API_BASE, '')} | Token: ${token ? token.slice(0,8) + '…' : 'null'}`)
             const res = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
@@ -845,13 +866,14 @@ class SpotifyService {
             }
 
             if (!res.ok) {
-                const errData = await res.json().catch(() => ({}))
-                console.error(`[SpotifyService] getPlaylistTracks ${res.status}:`, errData)
-                throw new Error(
-                    `Playlist-Tracks Fehler (HTTP ${res.status}): ${errData.error?.message || 'Zugriff verweigert – bitte neu bei Spotify anmelden.'}`
-                )
+                const errText = await res.text().catch(() => '')
+                console.error(`[SpotifyService] getPlaylistTracks FEHLER ${res.status} ${res.statusText}`)
+                console.error(`[SpotifyService] Response Body:`, errText)
+                let errMsg = 'Zugriff verweigert'
+                try { errMsg = JSON.parse(errText)?.error?.message || errMsg } catch {}
+                throw new Error(`Playlist-Tracks Fehler (HTTP ${res.status}): ${errMsg}`)
             }
-            console.log(`[SpotifyService] Tracks-Seite geladen, Status: ${res.status}`)
+            console.log(`[SpotifyService] ✓ Tracks-Seite OK (${res.status})`)
 
             const data = await res.json()
 

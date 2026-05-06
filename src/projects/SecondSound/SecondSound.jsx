@@ -31,6 +31,7 @@ export default function SecondSound({ onBack }) {
     const [searchLoading, setSearchLoading] = useState(false)
     const [loadingError, setLoadingError] = useState(null)
     const [isAuthError, setIsAuthError] = useState(false)
+    const [needsRelogin, setNeedsRelogin] = useState(false)
 
     // Game state
     const [songs, setSongs] = useState([])
@@ -52,16 +53,37 @@ export default function SecondSound({ onBack }) {
                 try {
                     await spotifyService.exchangeCodeForToken(code)
                     window.history.replaceState({}, '', window.location.pathname || '/')
-                    setPhase(PHASES.SETUP)
+                    // Frischer Token: Playlist-Scope testen
+                    const hasScope = await spotifyService.testPlaylistAccess()
+                    console.log('[SecondSound] Playlist-Scope nach Login:', hasScope)
+                    if (hasScope) {
+                        setNeedsRelogin(false)
+                        setPhase(PHASES.SETUP)
+                    } else {
+                        setNeedsRelogin(true)
+                        setPhase(PHASES.LOGIN)
+                    }
                 } catch (e) {
                     console.error('Spotify Callback Fehler:', e)
                     setPhase(PHASES.LOGIN)
                 }
             })()
         } else {
-            spotifyService.isUserLoggedIn().then(loggedIn => {
-                if (loggedIn) setPhase(PHASES.SETUP)
-            })
+            ;(async () => {
+                const loggedIn = await spotifyService.isUserLoggedIn()
+                if (!loggedIn) return
+                // Prüfen ob Token Playlist-Zugriff hat
+                const hasScope = await spotifyService.testPlaylistAccess()
+                console.log('[SecondSound] Playlist-Scope beim Start:', hasScope)
+                if (hasScope) {
+                    setNeedsRelogin(false)
+                    setPhase(PHASES.SETUP)
+                } else {
+                    // Token vorhanden aber ohne Playlist-Scope → Neu-Login nötig
+                    setNeedsRelogin(true)
+                    setPhase(PHASES.LOGIN)
+                }
+            })()
         }
     }, [])
 
@@ -155,9 +177,17 @@ export default function SecondSound({ onBack }) {
             console.error('[SecondSound] Fehler beim Laden:', e)
             const msg = e.message || 'Unbekannter Fehler'
             const isAuth = msg.includes('403') || msg.includes('401') || msg.includes('Forbidden') || msg.includes('Unauthorized')
-            setIsAuthError(isAuth)
-            setLoadingError(msg)
-            setPhase(PHASES.SETUP)
+            if (isAuth) {
+                // Token hat keine Playlist-Berechtigung → Token löschen, Neu-Login erzwingen
+                console.warn('[SecondSound] Auth-Fehler → Token wird gelöscht, Neu-Login nötig')
+                spotifyService.clearUserTokens()
+                setNeedsRelogin(true)
+                setPhase(PHASES.LOGIN)
+            } else {
+                setIsAuthError(false)
+                setLoadingError(msg)
+                setPhase(PHASES.SETUP)
+            }
         }
     }
 
@@ -248,9 +278,18 @@ export default function SecondSound({ onBack }) {
                     <div className={styles.appIcon}>🎧</div>
                     <h1 className={styles.appTitle}>SecondSound</h1>
                     <p className={styles.appSubtitle}>Das Spotify Musik-Quiz</p>
-                    <p className={styles.loginHint}>
-                        Melde dich an und ratle Songs aus deinen eigenen Playlists
-                    </p>
+
+                    {needsRelogin ? (
+                        <div className={styles.reloginBanner}>
+                            <strong>Neu anmelden erforderlich</strong>
+                            <p>Dein bestehender Spotify-Token hat keine Playlist-Berechtigung. Bitte einmal neu anmelden — SecondSound benötigt <code>playlist-read-private</code>.</p>
+                        </div>
+                    ) : (
+                        <p className={styles.loginHint}>
+                            Melde dich an und errate Songs aus deinen eigenen Playlists.
+                        </p>
+                    )}
+
                     <button className={styles.spotifyBtn} onClick={handleSpotifyLogin}>
                         <svg className={styles.spotifyIcon} viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
