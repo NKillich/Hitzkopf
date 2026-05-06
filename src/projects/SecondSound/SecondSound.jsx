@@ -319,10 +319,9 @@ export default function SecondSound({ onBack }) {
         return (
             <div className={styles.wrapper}>
                 <div className={styles.bg} />
-                <button className={styles.loginBackBtn} onClick={handleBack}>← Zurück</button>
                 <div className={styles.loginContainer}>
                     <div className={styles.appIcon}>🎧</div>
-                    <h1 className={styles.appTitle}>SecondSound</h1>
+                    <h1 className={styles.appTitle}>Song raten</h1>
                     <p className={styles.appSubtitle}>Das Spotify Musik-Quiz</p>
 
                     {needsRelogin ? (
@@ -345,6 +344,10 @@ export default function SecondSound({ onBack }) {
                         </svg>
                         Mit Spotify anmelden
                     </button>
+
+                    <button className={styles.loginBackBtnInline} onClick={handleBack}>
+                        ← Zurück zum Menü
+                    </button>
                 </div>
             </div>
         )
@@ -356,7 +359,7 @@ export default function SecondSound({ onBack }) {
             <div className={styles.wrapper}>
                 <div className={styles.bg} />
                 <div className={styles.setupContainer}>
-                    <h1 className={styles.appTitleSmall}>🎧 SecondSound</h1>
+                    <h1 className={styles.appTitleSmall}>🎧 Song raten</h1>
                     <p className={styles.setupHint}>Wähle Playlists aus, stelle die Song-Anzahl ein und starte das Quiz.</p>
 
                     {loadingError && (
@@ -641,11 +644,11 @@ export default function SecondSound({ onBack }) {
                                 { label: '1s', seconds: 1 },
                                 { label: '5s', seconds: 5 },
                                 { label: '10s', seconds: 10 },
-                                { label: '▶ Komplett', seconds: null }
+                                { label: '30s', seconds: 30 }
                             ].map(({ label, seconds }) => (
                                 <button
                                     key={label}
-                                    className={`${styles.playBtn} ${seconds === null ? styles.playBtnFull : ''}`}
+                                    className={styles.playBtn}
                                     onClick={() => handlePlayFor(seconds)}
                                     disabled={!playerReady}
                                 >
@@ -686,7 +689,7 @@ export default function SecondSound({ onBack }) {
             <div className={styles.wrapper}>
                 <div className={styles.bg} />
                 <div className={styles.resultsContainer}>
-                    <h1 className={styles.appTitleSmall}>🎧 SecondSound</h1>
+                    <h1 className={styles.appTitleSmall}>🎧 Song raten</h1>
 
                     <div className={styles.resultsCard}>
                         <div className={styles.resultEmoji}>{result.emoji}</div>
