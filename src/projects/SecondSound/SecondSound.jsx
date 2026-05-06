@@ -33,10 +33,11 @@ export default function SecondSound({ onBack }) {
     const [isAuthError, setIsAuthError] = useState(false)
     const [needsRelogin, setNeedsRelogin] = useState(false)
 
-    // Game state
+    // Game state – songs sind jetzt {playlistUri, offset, playlistName, playlistImage}
     const [songs, setSongs] = useState([])
     const [currentIndex, setCurrentIndex] = useState(0)
     const [isRevealed, setIsRevealed] = useState(false)
+    const [currentTrackInfo, setCurrentTrackInfo] = useState(null)
     const [score, setScore] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
 
@@ -142,52 +143,64 @@ export default function SecondSound({ onBack }) {
         setIsAuthError(false)
 
         try {
-            let allTracks = []
+            // Kein /tracks Endpoint mehr! Wir holen nur Metadaten und spielen per context_uri+offset.
+            let allSlots = []
             for (const playlist of selectedPlaylists) {
-                console.log(`[SecondSound] Lade Tracks für Playlist: ${playlist.name} (${playlist.id})`)
-                const tracks = await spotifyService.getPlaylistTracks(playlist.id)
-                console.log(`[SecondSound] Geladene Tracks: ${tracks.length}`)
-                allTracks = [...allTracks, ...tracks]
+                let trackCount = playlist.trackCount
+
+                // Wenn trackCount aus der Suche 0 war → direkt von Spotify holen
+                if (!trackCount) {
+                    try {
+                        const info = await spotifyService.getPlaylistInfo(playlist.id)
+                        trackCount = info.trackCount
+                        console.log(`[SecondSound] Playlist "${playlist.name}" hat ${trackCount} Tracks`)
+                    } catch (e) {
+                        console.warn(`[SecondSound] getPlaylistInfo fehlgeschlagen, nutze Fallback 100:`, e.message)
+                        trackCount = 100
+                    }
+                }
+
+                if (!trackCount) {
+                    console.warn(`[SecondSound] Keine Tracks für "${playlist.name}", wird übersprungen`)
+                    continue
+                }
+
+                // Alle möglichen Positionen, zufällig gemischt
+                const positions = Array.from({ length: trackCount }, (_, i) => i)
+                    .sort(() => Math.random() - 0.5)
+
+                positions.forEach(pos => {
+                    allSlots.push({
+                        playlistUri: playlist.uri || `spotify:playlist:${playlist.id}`,
+                        offset: pos,
+                        playlistName: playlist.name,
+                        playlistImage: playlist.imageUrl
+                    })
+                })
             }
 
-            // Duplikate entfernen (gleiche Track-ID)
-            const seen = new Set()
-            allTracks = allTracks.filter(t => {
-                if (!t.uri || !t.name || seen.has(t.id)) return false
-                seen.add(t.id)
-                return true
-            })
-
-            if (allTracks.length === 0) {
+            if (allSlots.length === 0) {
                 setLoadingError('Keine abspielbaren Songs in den ausgewählten Playlists gefunden.')
                 setPhase(PHASES.SETUP)
                 return
             }
 
-            const shuffled = [...allTracks].sort(() => Math.random() - 0.5)
-            const selected = shuffled.slice(0, Math.min(songCount, shuffled.length))
+            // Zufällig mischen und songCount entnehmen
+            const selected = allSlots
+                .sort(() => Math.random() - 0.5)
+                .slice(0, Math.min(songCount, allSlots.length))
 
             setSongs(selected)
             setCurrentIndex(0)
             setIsRevealed(false)
+            setCurrentTrackInfo(null)
             setScore(0)
             setIsPlaying(false)
             setPhase(PHASES.GAME)
         } catch (e) {
             console.error('[SecondSound] Fehler beim Laden:', e)
-            const msg = e.message || 'Unbekannter Fehler'
-            const isAuth = msg.includes('403') || msg.includes('401') || msg.includes('Forbidden') || msg.includes('Unauthorized')
-            if (isAuth) {
-                // Token hat keine Playlist-Berechtigung → Token löschen, Neu-Login erzwingen
-                console.warn('[SecondSound] Auth-Fehler → Token wird gelöscht, Neu-Login nötig')
-                spotifyService.clearUserTokens()
-                setNeedsRelogin(true)
-                setPhase(PHASES.LOGIN)
-            } else {
-                setIsAuthError(false)
-                setLoadingError(msg)
-                setPhase(PHASES.SETUP)
-            }
+            setLoadingError(e.message || 'Unbekannter Fehler')
+            setPhase(PHASES.SETUP)
         }
     }
 
@@ -207,18 +220,26 @@ export default function SecondSound({ onBack }) {
         }
 
         const song = songs[currentIndex]
-        if (!song?.uri) return
+        if (!song?.playlistUri) return
 
-        // Laufenden Timer stoppen
         if (timerRef.current) {
             clearTimeout(timerRef.current)
             timerRef.current = null
         }
 
         try {
-            await spotifyService.playOnDevice([song.uri], null)
+            await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
             setIsPlaying(true)
             setPlayerError(null)
+
+            // Track-Info für Aufdecken nach kurzem Delay holen (Player braucht ~500ms zum Starten)
+            setTimeout(async () => {
+                const state = await spotifyService.getPlaybackState().catch(() => null)
+                if (state) {
+                    console.log('[SecondSound] Aktueller Track:', state.trackName, '-', state.artist)
+                    setCurrentTrackInfo(state)
+                }
+            }, 700)
 
             if (seconds !== null) {
                 timerRef.current = setTimeout(async () => {
@@ -242,6 +263,7 @@ export default function SecondSound({ onBack }) {
         } else {
             setCurrentIndex(prev => prev + 1)
             setIsRevealed(false)
+            setCurrentTrackInfo(null)
         }
     }
 
@@ -249,6 +271,7 @@ export default function SecondSound({ onBack }) {
         setSongs([])
         setCurrentIndex(0)
         setIsRevealed(false)
+        setCurrentTrackInfo(null)
         setScore(0)
         setIsPlaying(false)
         setLoadingError(null)
@@ -266,7 +289,7 @@ export default function SecondSound({ onBack }) {
         return RESULT_MESSAGES.find(m => percent >= m.minPercent) || RESULT_MESSAGES[RESULT_MESSAGES.length - 1]
     }
 
-    const currentSong = songs[currentIndex]
+    const currentSong = songs[currentIndex] // {playlistUri, offset, playlistName, playlistImage}
 
     // ─── Login ───────────────────────────────────────────────────────────────
     if (phase === PHASES.LOGIN) {
@@ -506,15 +529,22 @@ export default function SecondSound({ onBack }) {
                         )}
 
                         {isRevealed ? (
-                            <div className={styles.revealedInfo}>
-                                {currentSong?.albumImage
-                                    ? <img src={currentSong.albumImage} alt="" className={styles.albumArt} />
-                                    : <div className={styles.albumArtFallback}>🎵</div>
-                                }
-                                <div className={styles.songName}>{currentSong?.name}</div>
-                                <div className={styles.songArtist}>{currentSong?.artist}</div>
-                                <div className={styles.songAlbum}>{currentSong?.album}</div>
-                            </div>
+                            currentTrackInfo ? (
+                                <div className={styles.revealedInfo}>
+                                    {currentTrackInfo.imageUrl
+                                        ? <img src={currentTrackInfo.imageUrl} alt="" className={styles.albumArt} />
+                                        : <div className={styles.albumArtFallback}>🎵</div>
+                                    }
+                                    <div className={styles.songName}>{currentTrackInfo.trackName}</div>
+                                    <div className={styles.songArtist}>{currentTrackInfo.artist}</div>
+                                </div>
+                            ) : (
+                                <div className={styles.revealedInfo}>
+                                    <div className={styles.albumArtFallback}>🎵</div>
+                                    <div className={styles.songName}>Erst abspielen!</div>
+                                    <div className={styles.songArtist}>Drücke einen Play-Button um den Song zu laden</div>
+                                </div>
+                            )
                         ) : (
                             <div className={styles.hiddenSong}>
                                 <div className={styles.questionMark}>?</div>

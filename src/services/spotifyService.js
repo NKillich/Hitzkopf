@@ -797,6 +797,54 @@ class SpotifyService {
     }
 
     /**
+     * Holt Playlist-Metadaten (Name, URI, Track-Anzahl, Cover).
+     * Benötigt KEINEN /tracks Endpoint – umgeht die API-Restriction von 2024.
+     */
+    async getPlaylistInfo(playlistId) {
+        const token = await this.getStoredUserToken()
+        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        const res = await fetch(
+            `${SPOTIFY_API_BASE}/playlists/${playlistId}?fields=id,name,uri,tracks(total),images`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+        )
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}))
+            console.error('[SpotifyService] getPlaylistInfo FEHLER', res.status, errData)
+            throw new Error(`Playlist-Info Fehler (HTTP ${res.status}): ${errData.error?.message || 'Unbekannt'}`)
+        }
+        const data = await res.json()
+        return {
+            id: data.id,
+            name: data.name,
+            uri: data.uri,
+            trackCount: data.tracks?.total || 0,
+            imageUrl: data.images?.[0]?.url || null
+        }
+    }
+
+    /**
+     * Spielt eine Playlist ab einem bestimmten Track-Index ab.
+     * Umgeht /playlists/{id}/tracks – der Player holt die Songs direkt von Spotify.
+     */
+    async playContextAtOffset(contextUri, offsetPosition, deviceId) {
+        const token = await this.getStoredUserToken()
+        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        const targetId = deviceId || this._deviceId
+        if (!targetId) throw new Error('Kein Spotify-Gerät verfügbar. Warte bis der Player bereit ist.')
+        const url = `${SPOTIFY_API_BASE}/me/player/play?device_id=${targetId}`
+        const body = { context_uri: contextUri, offset: { position: offsetPosition } }
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error?.message || 'Wiedergabe fehlgeschlagen')
+        }
+    }
+
+    /**
      * Sucht nach Playlists auf Spotify.
      * Nutzt den User-Token (falls vorhanden), sonst Client Credentials.
      */
