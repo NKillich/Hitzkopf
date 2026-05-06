@@ -30,6 +30,7 @@ export default function SecondSound({ onBack }) {
     const [songCount, setSongCount] = useState(10)
     const [searchLoading, setSearchLoading] = useState(false)
     const [loadingError, setLoadingError] = useState(null)
+    const [isAuthError, setIsAuthError] = useState(false)
 
     // Game state
     const [songs, setSongs] = useState([])
@@ -116,11 +117,14 @@ export default function SecondSound({ onBack }) {
         if (selectedPlaylists.length === 0) return
         setPhase(PHASES.LOADING)
         setLoadingError(null)
+        setIsAuthError(false)
 
         try {
             let allTracks = []
             for (const playlist of selectedPlaylists) {
+                console.log(`[SecondSound] Lade Tracks für Playlist: ${playlist.name} (${playlist.id})`)
                 const tracks = await spotifyService.getPlaylistTracks(playlist.id)
+                console.log(`[SecondSound] Geladene Tracks: ${tracks.length}`)
                 allTracks = [...allTracks, ...tracks]
             }
 
@@ -148,7 +152,11 @@ export default function SecondSound({ onBack }) {
             setIsPlaying(false)
             setPhase(PHASES.GAME)
         } catch (e) {
-            setLoadingError('Fehler beim Laden der Songs: ' + (e.message || 'Unbekannter Fehler'))
+            console.error('[SecondSound] Fehler beim Laden:', e)
+            const msg = e.message || 'Unbekannter Fehler'
+            const isAuth = msg.includes('403') || msg.includes('401') || msg.includes('Forbidden') || msg.includes('Unauthorized')
+            setIsAuthError(isAuth)
+            setLoadingError(msg)
             setPhase(PHASES.SETUP)
         }
     }
@@ -260,22 +268,34 @@ export default function SecondSound({ onBack }) {
             <div className={styles.wrapper}>
                 <div className={styles.bg} />
                 <div className={styles.setupContainer}>
-                    <div className={styles.setupHeader}>
-                        <h1 className={styles.appTitleSmall}>🎧 SecondSound</h1>
-                        <button
-                            className={styles.disconnectBtn}
-                            onClick={() => {
-                                spotifyService.clearUserTokens()
-                                setPhase(PHASES.LOGIN)
-                            }}
-                            title="Spotify-Verbindung trennen und neu anmelden"
-                        >
-                            Spotify abmelden
-                        </button>
-                    </div>
+                    <h1 className={styles.appTitleSmall}>🎧 SecondSound</h1>
                     <p className={styles.setupHint}>Wähle Playlists aus, stelle die Song-Anzahl ein und starte das Quiz.</p>
 
-                    {loadingError && <div className={styles.errorMsg}>{loadingError}</div>}
+                    {loadingError && (
+                        <div className={styles.errorBlock}>
+                            <div className={styles.errorTitle}>⚠ Fehler beim Laden</div>
+                            <div className={styles.errorDetail}>{loadingError}</div>
+                            {isAuthError && (
+                                <div className={styles.errorHelp}>
+                                    <strong>Mögliche Ursachen:</strong>
+                                    <ul>
+                                        <li>Die Playlist ist <strong>privat</strong> → Spotify neu anmelden (Knopf unten) um Playlist-Zugriff zu erlauben</li>
+                                        <li>Oder die Playlist in Spotify auf <strong>öffentlich</strong> stellen</li>
+                                    </ul>
+                                    <button
+                                        className={styles.reloginBtn}
+                                        onClick={() => {
+                                            spotifyService.clearUserTokens()
+                                            setLoadingError(null)
+                                            setPhase(PHASES.LOGIN)
+                                        }}
+                                    >
+                                        🔑 Neu bei Spotify anmelden
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <div className={styles.setupCard}>
                         <h2 className={styles.sectionTitle}>Playlists auswählen</h2>
@@ -378,6 +398,17 @@ export default function SecondSound({ onBack }) {
 
                     <button className={styles.setupBackBtn} onClick={handleBack}>
                         ← Zurück zum Menü
+                    </button>
+
+                    <button
+                        className={styles.disconnectBtn}
+                        onClick={() => {
+                            spotifyService.clearUserTokens()
+                            setLoadingError(null)
+                            setPhase(PHASES.LOGIN)
+                        }}
+                    >
+                        Spotify abmelden & neu anmelden
                     </button>
                 </div>
             </div>

@@ -846,10 +846,12 @@ class SpotifyService {
 
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}))
+                console.error(`[SpotifyService] getPlaylistTracks ${res.status}:`, errData)
                 throw new Error(
                     `Playlist-Tracks Fehler (HTTP ${res.status}): ${errData.error?.message || 'Zugriff verweigert – bitte neu bei Spotify anmelden.'}`
                 )
             }
+            console.log(`[SpotifyService] Tracks-Seite geladen, Status: ${res.status}`)
 
             const data = await res.json()
 
