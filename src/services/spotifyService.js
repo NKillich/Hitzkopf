@@ -96,7 +96,9 @@ class SpotifyService {
             'user-read-email',
             'user-read-private',
             'user-modify-playback-state',
-            'user-read-playback-state'
+            'user-read-playback-state',
+            'playlist-read-private',
+            'playlist-read-collaborative'
         ].join(' ')
 
         const params = new URLSearchParams({
@@ -764,6 +766,81 @@ class SpotifyService {
         } catch (_) {
             return null
         }
+    }
+
+    /**
+     * Sucht nach Playlists auf Spotify.
+     * Nutzt den User-Token (falls vorhanden), sonst Client Credentials.
+     */
+    async searchPlaylists(query, limit = 8) {
+        let token = await this.getStoredUserToken()
+        if (!token) {
+            await this.ensureValidToken()
+            token = this.accessToken
+        }
+
+        const params = new URLSearchParams({
+            q: query,
+            type: 'playlist',
+            limit: String(Math.min(limit, 50))
+        })
+
+        const response = await fetch(`${SPOTIFY_API_BASE}/search?${params}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}))
+            throw new Error(err.error?.message || 'Playlist-Suche fehlgeschlagen')
+        }
+
+        const data = await response.json()
+        return (data.playlists?.items || [])
+            .filter(Boolean)
+            .map(pl => ({
+                id: pl.id,
+                name: pl.name,
+                owner: pl.owner?.display_name || pl.owner?.id || '',
+                imageUrl: pl.images?.[0]?.url || null,
+                trackCount: pl.tracks?.total || 0,
+                uri: pl.uri
+            }))
+    }
+
+    /**
+     * Lädt alle Tracks einer Playlist (mit Pagination).
+     * Benötigt User-Token für private Playlists.
+     */
+    async getPlaylistTracks(playlistId) {
+        const token = await this.getStoredUserToken()
+        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+
+        let tracks = []
+        let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(id,name,uri,type,artists(name),album(name,images)))`
+
+        while (url) {
+            const res = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            if (!res.ok) throw new Error('Playlist-Tracks konnten nicht geladen werden.')
+            const data = await res.json()
+
+            const pageTracks = (data.items || [])
+                .filter(item => item?.track?.uri && item.track.type !== 'episode')
+                .map(item => ({
+                    id: item.track.id,
+                    name: item.track.name,
+                    artist: item.track.artists?.map(a => a.name).join(', ') || '',
+                    album: item.track.album?.name || '',
+                    albumImage: item.track.album?.images?.[0]?.url || null,
+                    uri: item.track.uri
+                }))
+
+            tracks = [...tracks, ...pageTracks]
+            url = data.next || null
+        }
+
+        return tracks
     }
 
     /**

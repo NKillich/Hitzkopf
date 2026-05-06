@@ -635,7 +635,7 @@ function QuizGame({ onBack }) {
                     <button className={styles.backBtn} onClick={onBack}>← Zurück</button>
                     <div className={styles.landingContent}>
                         <div className={styles.heroEmoji}>🧠</div>
-                        <h1 className={styles.heroTitle}>Quiz<span className={styles.accent}>Royale</span></h1>
+                        <h1 className={styles.heroTitle}>Quiz <span className={styles.accent}>Royale</span></h1>
                         <p className={styles.heroSub}>Rundenbasiertes Quizgame mit Charakter-Passiven & Upgrades</p>
                         <div className={styles.nameSection}>
                             <input className={styles.input} placeholder="Dein Name..." value={myName}
@@ -643,7 +643,7 @@ function QuizGame({ onBack }) {
                                 onKeyDown={e => e.key === 'Enter' && myName.trim() && setScreen('create')} />
                         </div>
                         <button className={styles.btnPrimary} onClick={() => myName.trim() && setScreen('create')} disabled={!myName.trim()}>
-                            🏠 Lobby erstellen
+                            Lobby erstellen
                         </button>
 
                         {/* Open lobbies list */}
@@ -685,7 +685,10 @@ function QuizGame({ onBack }) {
                     <button className={styles.backBtn} onClick={() => setScreen('landing')}>← Zurück</button>
                     <h2 className={styles.sectionTitle}>Lobby erstellen</h2>
                     <div className={styles.createCard}>
-                        <h3 className={styles.subTitle}>Kategorien wählen</h3>
+                        <div className={styles.categoryGridHeader}>
+                            <h3 className={styles.subTitle} style={{ margin: 0 }}>Kategorien</h3>
+                            <span className={styles.categoryCount}>{selectedCategories.length} / {Object.keys(quizCategories).length} gewählt</span>
+                        </div>
                         <div className={styles.categoryGrid}>
                             {Object.entries(quizCategories).map(([key, cat]) => (
                                 <button key={key}
@@ -708,7 +711,7 @@ function QuizGame({ onBack }) {
                             </div>
                         </div>
                         <button className={styles.btnPrimary} onClick={handleCreateLobby}
-                            disabled={selectedCategories.length === 0 || !myUid}>🚀 Lobby starten</button>
+                            disabled={selectedCategories.length === 0 || !myUid}>Lobby starten</button>
                     </div>
                 </div>
             </div>
@@ -863,7 +866,7 @@ function QuizGame({ onBack }) {
                                     {myReady ? '✓ Bereit!' : 'Bereit?'}
                                 </button>
                                 {isHost && <button className={styles.btnPrimary} onClick={handleStartGame}
-                                    disabled={!allReady || Object.keys(players).length < 1}>🎮 Spiel starten</button>}
+                                    disabled={!allReady || Object.keys(players).length < 1}>Spiel starten</button>}
                                 {!isHost && <p className={styles.hint}>Warte auf den Host...</p>}
                             </div>
                         </div>
@@ -882,9 +885,8 @@ function QuizGame({ onBack }) {
                     <div className={styles.bg} />
                     <div className={styles.upgradeOverlay}>
                         <div className={styles.upgradeHeader}>
-                            <div className={styles.upgradeStars}>✨ ✨ ✨</div>
-                            <h2 className={styles.upgradeTitle}>{isInitial ? 'Starter-Upgrade wählen!' : 'Upgrade Zeit!'}</h2>
-                            <p className={styles.upgradeSub}>{isInitial ? 'Wähle ein Upgrade bevor das Spiel beginnt' : `Nach Frage ${qIndex} – wähle ein neues Upgrade`}</p>
+                            <h2 className={styles.upgradeTitle}>{isInitial ? 'Starter-Upgrade wählen' : 'Upgrade auswählen'}</h2>
+                            <p className={styles.upgradeSub}>{isInitial ? 'Wähle ein Upgrade bevor das Spiel beginnt' : `Nach Frage ${qIndex} – wähle dein nächstes Upgrade`}</p>
                         </div>
                         {myPickDone ? (
                             <div className={styles.waitingBox}>
@@ -952,7 +954,7 @@ function QuizGame({ onBack }) {
             const myUpgradesLocal = myPlayer.upgrades || []
             const totalTime = myUpgradesLocal.includes('time_warp') ? QUESTION_TIME * 2 : QUESTION_TIME
             const timerPct = (timeRemaining / totalTime) * 100
-            const timerColor = timerPct > 60 ? '#4ecdc4' : timerPct > 30 ? '#ffd700' : '#ff4757'
+            const timerColor = timerPct > 60 ? '#10B981' : timerPct > 30 ? '#F59E0B' : '#F43F5E'
 
             const qIdx = lobbyData.questionIndex || 0
             const nextUpgradeIn = upgradesUntilNext
@@ -969,10 +971,10 @@ function QuizGame({ onBack }) {
                                 <span className={styles.categoryBadge}>{quizCategories[q.category]?.emoji} {q.categoryName}</span>
                                 <span className={styles.questionNum}>Frage {qIdx + 1} / {lobbyData.totalQuestions}</span>
                                 {nextUpgradeIn === 0
-                                    ? <span className={styles.upgradeSoon}>⚡ Upgrade nach dieser Frage!</span>
+                                    ? <span className={styles.upgradeSoon}>Upgrade nach dieser Frage</span>
                                     : nextUpgradeIn === 1
-                                        ? <span className={styles.upgradeNext}>🔮 Upgrade in 1 Frage</span>
-                                        : <span className={styles.upgradeNext}>🔮 Upgrade in {nextUpgradeIn} Fragen</span>
+                                        ? <span className={styles.upgradeNext}>Upgrade in 1 Frage</span>
+                                        : <span className={styles.upgradeNext}>Upgrade in {nextUpgradeIn} Fragen</span>
                                 }
                             </div>
                             <div className={styles.headerRight}>
@@ -1113,7 +1115,7 @@ function QuizGame({ onBack }) {
                         </div>
 
                         {!isReveal && myUpgradesLocal.includes('omniscient') && timeRemaining <= 15 && (
-                            <div className={styles.omniscientHint}>🔮 Allwissend aktiv: Eine falsche Antwort ist markiert</div>
+                            <div className={styles.omniscientHint}>Allwissend: Eine falsche Antwort ist markiert</div>
                         )}
                         {!isReveal && hasAnswered && (
                             <div className={styles.answeredIndicator}>✓ Antwort abgeschickt – warte auf andere...</div>
@@ -1195,7 +1197,7 @@ function QuizGame({ onBack }) {
                                     )
                                 })}
                             </div>
-                            {isHost && <button className={styles.btnPrimary} onClick={handleRestartGame}>🔄 Nochmal spielen</button>}
+                            {isHost && <button className={styles.btnPrimary} onClick={handleRestartGame}>Nochmal spielen</button>}
                             <button className={styles.btnSecondary} onClick={handleBack}>Beenden</button>
                         </div>
                     </div>

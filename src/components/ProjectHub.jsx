@@ -29,6 +29,14 @@ const ProjectHub = ({ onSelectProject }) => {
             color: '#9b59b6',
             emoji: '🧠',
             available: true
+        },
+        {
+            id: 'secondsound',
+            name: 'SecondSound',
+            description: 'Errate Songs aus deinen Spotify-Playlists',
+            color: '#1DB954',
+            emoji: '🎧',
+            available: true
         }
     ]
 

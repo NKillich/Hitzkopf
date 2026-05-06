@@ -1,8 +1,8 @@
 export const RARITY_CONFIG = {
-    common:    { weight: 60, label: 'Gewöhnlich',    color: '#9e9e9e', bg: 'rgba(158,158,158,0.15)', border: 'rgba(158,158,158,0.4)',  glow: 'rgba(158,158,158,0.3)' },
-    uncommon:  { weight: 25, label: 'Ungewöhnlich',  color: '#4caf50', bg: 'rgba(76,175,80,0.12)',   border: 'rgba(76,175,80,0.45)',   glow: 'rgba(76,175,80,0.35)' },
-    rare:      { weight: 12, label: 'Selten',        color: '#2196f3', bg: 'rgba(33,150,243,0.12)',  border: 'rgba(33,150,243,0.45)',  glow: 'rgba(33,150,243,0.4)' },
-    legendary: { weight: 3,  label: 'Legendär',      color: '#ff9800', bg: 'rgba(255,152,0,0.12)',   border: 'rgba(255,152,0,0.5)',    glow: 'rgba(255,152,0,0.5)' }
+    common:    { weight: 60, label: 'Gewöhnlich',    color: 'rgba(148,163,184,0.7)', bg: 'rgba(148,163,184,0.07)', border: 'rgba(148,163,184,0.18)', glow: 'rgba(148,163,184,0.12)' },
+    uncommon:  { weight: 25, label: 'Ungewöhnlich',  color: '#10B981',               bg: 'rgba(16,185,129,0.07)',  border: 'rgba(16,185,129,0.22)',  glow: 'rgba(16,185,129,0.14)' },
+    rare:      { weight: 12, label: 'Selten',        color: '#3B82F6',               bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.25)',  glow: 'rgba(59,130,246,0.16)' },
+    legendary: { weight: 3,  label: 'Legendär',      color: '#F59E0B',               bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.28)',  glow: 'rgba(245,158,11,0.18)' }
 }
 
 export const upgrades = [

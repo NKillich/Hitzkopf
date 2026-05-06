@@ -3,12 +3,17 @@ import ProjectHub from './components/ProjectHub'
 import HitzkopfGame from './projects/Hitzkopf/HitzkopfGame'
 import MusicVoter from './projects/MusicVoter/MusicVoter'
 import QuizGame from './projects/QuizGame/QuizGame'
+import SecondSound from './projects/SecondSound/SecondSound'
 import './App.css'
 
 function App() {
     const [currentProject, setCurrentProject] = useState(() => {
         const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
-        return params.get('code') ? 'musicvoter' : null
+        if (params.get('code')) {
+            const returnTo = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('spotify_return_to') : null
+            return returnTo || 'musicvoter'
+        }
+        return null
     })
 
     const handleSelectProject = (projectId) => {
@@ -35,6 +40,10 @@ function App() {
 
             {currentProject === 'quizroyale' && (
                 <QuizGame onBack={handleBackToHub} />
+            )}
+
+            {currentProject === 'secondsound' && (
+                <SecondSound onBack={handleBackToHub} />
             )}
         </div>
     )
