@@ -803,8 +803,9 @@ class SpotifyService {
     async getPlaylistInfo(playlistId) {
         const token = await this.getStoredUserToken()
         if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        // Kein fields-Parameter: Spotify interpretiert tracks(total) manchmal falsch
         const res = await fetch(
-            `${SPOTIFY_API_BASE}/playlists/${playlistId}?fields=id,name,uri,tracks(total),images`,
+            `${SPOTIFY_API_BASE}/playlists/${playlistId}`,
             { headers: { 'Authorization': `Bearer ${token}` } }
         )
         if (!res.ok) {
@@ -813,11 +814,13 @@ class SpotifyService {
             throw new Error(`Playlist-Info Fehler (HTTP ${res.status}): ${errData.error?.message || 'Unbekannt'}`)
         }
         const data = await res.json()
+        const trackCount = data.tracks?.total ?? 0
+        console.log(`[SpotifyService] getPlaylistInfo "${data.name}": tracks.total=${trackCount}, uri=${data.uri}`)
         return {
             id: data.id,
             name: data.name,
             uri: data.uri,
-            trackCount: data.tracks?.total || 0,
+            trackCount,
             imageUrl: data.images?.[0]?.url || null
         }
     }
@@ -871,16 +874,27 @@ class SpotifyService {
         }
 
         const data = await response.json()
-        return (data.playlists?.items || [])
-            .filter(Boolean)
-            .map(pl => ({
-                id: pl.id,
-                name: pl.name,
-                owner: pl.owner?.display_name || pl.owner?.id || '',
-                imageUrl: pl.images?.[0]?.url || null,
-                trackCount: pl.tracks?.total || 0,
-                uri: pl.uri
-            }))
+        const items = (data.playlists?.items || []).filter(Boolean)
+        if (items.length > 0) {
+            console.log('[SpotifyService] Search Playlist Sample:', {
+                id: items[0].id,
+                name: items[0].name,
+                uri: items[0].uri,
+                public: items[0].public,
+                collaborative: items[0].collaborative,
+                tracks: items[0].tracks,
+                tracksTotal: items[0].tracks?.total,
+                tracksHref: items[0].tracks?.href
+            })
+        }
+        return items.map(pl => ({
+            id: pl.id,
+            name: pl.name,
+            owner: pl.owner?.display_name || pl.owner?.id || '',
+            imageUrl: pl.images?.[0]?.url || null,
+            trackCount: pl.tracks?.total ?? 0,
+            uri: pl.uri || `spotify:playlist:${pl.id}`
+        }))
     }
 
     /**

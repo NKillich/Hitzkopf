@@ -148,21 +148,27 @@ export default function SecondSound({ onBack }) {
             for (const playlist of selectedPlaylists) {
                 let trackCount = playlist.trackCount
 
-                // Wenn trackCount aus der Suche 0 war → direkt von Spotify holen
-                if (!trackCount) {
-                    try {
-                        const info = await spotifyService.getPlaylistInfo(playlist.id)
-                        trackCount = info.trackCount
-                        console.log(`[SecondSound] Playlist "${playlist.name}" hat ${trackCount} Tracks`)
-                    } catch (e) {
-                        console.warn(`[SecondSound] getPlaylistInfo fehlgeschlagen, nutze Fallback 100:`, e.message)
-                        trackCount = 100
-                    }
+                // Immer getPlaylistInfo aufrufen um echten Track-Count zu bekommen
+                // (Search-API liefert tracks.total oft als 0 oder gar nicht)
+                try {
+                    const info = await spotifyService.getPlaylistInfo(playlist.id)
+                    trackCount = info.trackCount
+                    // URI aus der Info-Antwort hat Vorrang (Search kann veraltet sein)
+                    playlist.uri = info.uri || playlist.uri || `spotify:playlist:${playlist.id}`
+                    console.log(`[SecondSound] Playlist "${playlist.name}": ${trackCount} Tracks, URI: ${playlist.uri}`)
+                } catch (e) {
+                    console.warn(`[SecondSound] getPlaylistInfo fehlgeschlagen für "${playlist.name}":`, e.message)
                 }
 
+                // Wenn immer noch 0 (leere Playlist oder API gibt nichts zurück): Fallback
                 if (!trackCount) {
-                    console.warn(`[SecondSound] Keine Tracks für "${playlist.name}", wird übersprungen`)
-                    continue
+                    console.warn(`[SecondSound] trackCount=0 für "${playlist.name}", nutze Fallback 300`)
+                    trackCount = 300
+                }
+
+                // URI sicherstellen
+                if (!playlist.uri) {
+                    playlist.uri = `spotify:playlist:${playlist.id}`
                 }
 
                 // Alle möglichen Positionen, zufällig gemischt
@@ -401,7 +407,7 @@ export default function SecondSound({ onBack }) {
                                             }
                                             <div className={styles.playlistInfo}>
                                                 <span className={styles.playlistName}>{p.name}</span>
-                                                <span className={styles.playlistMeta}>{p.owner} · {p.trackCount} Songs</span>
+                                                <span className={styles.playlistMeta}>{p.owner}{p.trackCount ? ` · ${p.trackCount} Songs` : ''}</span>
                                             </div>
                                             <span className={styles.addIcon}>{isAdded ? '✓' : '+'}</span>
                                         </button>
@@ -425,7 +431,7 @@ export default function SecondSound({ onBack }) {
                                         }
                                         <div className={styles.playlistInfo}>
                                             <span className={styles.playlistName}>{p.name}</span>
-                                            <span className={styles.playlistMeta}>{p.trackCount} Songs</span>
+                                            <span className={styles.playlistMeta}>{p.trackCount ? `${p.trackCount} Songs` : 'Songs werden geladen…'}</span>
                                         </div>
                                         <button className={styles.removeBtn} onClick={() => handleRemovePlaylist(p.id)}>✕</button>
                                     </div>
