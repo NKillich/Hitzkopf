@@ -185,17 +185,36 @@
     padding: 1.5rem 1.5rem 3rem;
     display: flex;
     flex-direction: column;
+    align-items: stretch;
     gap: 1rem;
     min-height: 100vh;
 }
 
-.setupTopBar {
-    position: relative;
+.setupHeader {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 2.2rem;
-    margin-bottom: 0.25rem;
+    position: relative;
+}
+
+.disconnectBtn {
+    position: absolute;
+    right: 0;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #444;
+    padding: 0.3rem 0.65rem;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.72rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.disconnectBtn:hover {
+    border-color: rgba(231, 76, 60, 0.4);
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.08);
 }
 
 .setupTopBarSpacer {
@@ -203,29 +222,29 @@
 }
 
 .setupBackBtn {
-    position: absolute;
-    left: 0;
-    background: rgba(255, 255, 255, 0.06);
+    background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #b3b3b3;
-    padding: 0.35rem 0.75rem;
-    border-radius: 8px;
+    color: #555;
+    padding: 0.7rem 1rem;
+    border-radius: 12px;
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: 0.85rem;
     transition: all 0.2s ease;
-    white-space: nowrap;
+    text-align: center;
+    margin-top: 0.25rem;
 }
 
 .setupBackBtn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+    color: #b3b3b3;
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .setupHint {
     font-size: 0.82rem;
     color: #555;
     text-align: center;
-    margin: 0 0 0.25rem;
+    margin: 0;
     line-height: 1.4;
 }
 

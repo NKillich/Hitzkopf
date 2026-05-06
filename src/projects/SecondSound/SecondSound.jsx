@@ -260,12 +260,19 @@ export default function SecondSound({ onBack }) {
             <div className={styles.wrapper}>
                 <div className={styles.bg} />
                 <div className={styles.setupContainer}>
-                    <div className={styles.setupTopBar}>
-                        <button className={styles.setupBackBtn} onClick={handleBack}>← Zurück</button>
+                    <div className={styles.setupHeader}>
                         <h1 className={styles.appTitleSmall}>🎧 SecondSound</h1>
-                        <div className={styles.setupTopBarSpacer} />
+                        <button
+                            className={styles.disconnectBtn}
+                            onClick={() => {
+                                spotifyService.clearUserTokens()
+                                setPhase(PHASES.LOGIN)
+                            }}
+                            title="Spotify-Verbindung trennen und neu anmelden"
+                        >
+                            Spotify abmelden
+                        </button>
                     </div>
-
                     <p className={styles.setupHint}>Wähle Playlists aus, stelle die Song-Anzahl ein und starte das Quiz.</p>
 
                     {loadingError && <div className={styles.errorMsg}>{loadingError}</div>}
@@ -367,6 +374,10 @@ export default function SecondSound({ onBack }) {
                         disabled={selectedPlaylists.length === 0}
                     >
                         Spiel starten →
+                    </button>
+
+                    <button className={styles.setupBackBtn} onClick={handleBack}>
+                        ← Zurück zum Menü
                     </button>
                 </div>
             </div>

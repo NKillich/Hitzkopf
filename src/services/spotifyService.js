@@ -809,24 +809,52 @@ class SpotifyService {
 
     /**
      * Lädt alle Tracks einer Playlist (mit Pagination).
-     * Benötigt User-Token für private Playlists.
+     * Versucht zuerst den User-Token; fällt bei 401/403 auf Client Credentials zurück
+     * (funktioniert für öffentliche Playlists ohne Playlist-Scope).
      */
     async getPlaylistTracks(playlistId) {
-        const token = await this.getStoredUserToken()
-        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        const userToken = await this.getStoredUserToken()
+
+        // Wähle initial den User-Token; bei Auth-Fehler Client-Credentials
+        let activeToken = userToken
+        if (!activeToken) {
+            await this.ensureValidToken()
+            activeToken = this.accessToken
+        }
+        if (!activeToken) throw new Error('Nicht mit Spotify verbunden.')
+
+        const fetchPage = async (url, token) => {
+            const res = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            return res
+        }
 
         let tracks = []
         let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=100`
 
         while (url) {
-            const res = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            if (!res.ok) throw new Error('Playlist-Tracks konnten nicht geladen werden.')
+            let res = await fetchPage(url, activeToken)
+
+            // Bei Auth-Fehler mit User-Token → auf Client Credentials umschwenken
+            if (!res.ok && userToken && activeToken === userToken && (res.status === 401 || res.status === 403)) {
+                console.warn(`⚠️ User-Token für Playlist ${playlistId} abgelehnt (${res.status}), versuche Client-Credentials…`)
+                await this.ensureValidToken()
+                activeToken = this.accessToken
+                res = await fetchPage(url, activeToken)
+            }
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}))
+                throw new Error(
+                    `Playlist-Tracks Fehler (HTTP ${res.status}): ${errData.error?.message || 'Zugriff verweigert – bitte neu bei Spotify anmelden.'}`
+                )
+            }
+
             const data = await res.json()
 
             const pageTracks = (data.items || [])
-                .filter(item => item?.track?.uri && item.track.type !== 'episode')
+                .filter(item => item?.track?.uri && item?.track?.type !== 'episode')
                 .map(item => ({
                     id: item.track.id,
                     name: item.track.name,
