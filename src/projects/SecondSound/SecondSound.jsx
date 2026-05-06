@@ -282,7 +282,10 @@ export default function SecondSound({ onBack }) {
                     {needsRelogin ? (
                         <div className={styles.reloginBanner}>
                             <strong>Neu anmelden erforderlich</strong>
-                            <p>Dein bestehender Spotify-Token hat keine Playlist-Berechtigung. Bitte einmal neu anmelden — SecondSound benötigt <code>playlist-read-private</code>.</p>
+                            <p>Dein Token hat kein <code>playlist-read-private</code>. Klicke auf den Button — Spotify zeigt jetzt den Berechtigungsdialog und gewährt alle Scopes.</p>
+                            <p className={styles.scopeDebug}>
+                                Aktuelle Scopes: <code>{spotifyService.getGrantedScopes() || '(keine gespeichert)'}</code>
+                            </p>
                         </div>
                     ) : (
                         <p className={styles.loginHint}>

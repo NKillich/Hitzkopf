@@ -20,6 +20,7 @@ const STORAGE_KEYS = {
     USER_ACCESS: 'spotify_user_access_token',
     USER_REFRESH: 'spotify_user_refresh_token',
     USER_EXPIRY: 'spotify_user_expiry',
+    USER_SCOPE: 'spotify_user_scope',
     RETURN_TO: 'spotify_return_to'
 }
 
@@ -108,7 +109,8 @@ class SpotifyService {
             code_challenge_method: 'S256',
             code_challenge: codeChallenge,
             redirect_uri: this.redirectUri,
-            state: this._generateRandomString(16)
+            state: this._generateRandomString(16),
+            show_dialog: 'true'   // Erzwingt Consent-Dialog → neue Scopes werden immer gewährt
         })
 
         return `${SPOTIFY_AUTH_BASE}/authorize?${params.toString()}`
@@ -139,21 +141,32 @@ class SpotifyService {
         }
 
         const data = await response.json()
-        this._storeUserTokens(data.access_token, data.refresh_token, data.expires_in)
+        this._storeUserTokens(data.access_token, data.refresh_token, data.expires_in, data.scope)
+        console.log('✅ Spotify Token erhalten. Scopes:', data.scope)
         if (typeof sessionStorage !== 'undefined') {
             sessionStorage.removeItem(STORAGE_KEYS.PKCE_VERIFIER)
         }
         return data
     }
 
-    _storeUserTokens(accessToken, refreshToken, expiresIn) {
+    _storeUserTokens(accessToken, refreshToken, expiresIn, scope) {
         const expiry = Date.now() + (expiresIn * 1000)
         this._userToken = accessToken
         if (typeof sessionStorage !== 'undefined') {
             sessionStorage.setItem(STORAGE_KEYS.USER_ACCESS, accessToken)
             sessionStorage.setItem(STORAGE_KEYS.USER_REFRESH, refreshToken || '')
             sessionStorage.setItem(STORAGE_KEYS.USER_EXPIRY, String(expiry))
+            if (scope) sessionStorage.setItem(STORAGE_KEYS.USER_SCOPE, scope)
         }
+    }
+
+    getGrantedScopes() {
+        if (typeof sessionStorage === 'undefined') return ''
+        return sessionStorage.getItem(STORAGE_KEYS.USER_SCOPE) || ''
+    }
+
+    hasScope(scopeName) {
+        return this.getGrantedScopes().split(' ').includes(scopeName)
     }
 
     /**
@@ -206,6 +219,7 @@ class SpotifyService {
             sessionStorage.removeItem(STORAGE_KEYS.USER_ACCESS)
             sessionStorage.removeItem(STORAGE_KEYS.USER_REFRESH)
             sessionStorage.removeItem(STORAGE_KEYS.USER_EXPIRY)
+            sessionStorage.removeItem(STORAGE_KEYS.USER_SCOPE)
         }
     }
 
@@ -769,23 +783,17 @@ class SpotifyService {
     }
 
     /**
-     * Testet ob der User-Token tatsächlich Tracks eines Playlists laden kann.
-     * Nutzt eine bekannte öffentliche Spotify-Playlist als Referenz.
-     * /me/playlists reicht NICHT als Test – gibt auch ohne Playlist-Scope 200 zurück.
+     * Prüft ob der gespeicherte Token den playlist-read-private Scope enthält.
+     * Spotify liefert die gewährten Scopes im Token-Response – wir speichern sie.
      */
     async testPlaylistAccess() {
         const token = await this.getStoredUserToken()
         if (!token) return false
-        try {
-            // "Today's Top Hits" – immer öffentlich, repräsentiert den echten Endpunkt
-            const res = await fetch(`${SPOTIFY_API_BASE}/playlists/37i9dQZEVXbMDoHDwVN2tF/tracks?limit=1`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            console.log('[SpotifyService] Playlist-Tracks-Scope Test:', res.status)
-            return res.ok
-        } catch {
-            return false
-        }
+        const scopes = this.getGrantedScopes()
+        const hasScope = scopes.includes('playlist-read-private')
+        console.log('[SpotifyService] Gespeicherte Scopes:', scopes || '(keine)')
+        console.log('[SpotifyService] playlist-read-private vorhanden:', hasScope)
+        return hasScope
     }
 
     /**

@@ -176,6 +176,17 @@
     font-size: 0.78rem;
 }
 
+.scopeDebug {
+    margin: 0.3rem 0 0;
+    font-size: 0.75rem;
+    color: #666;
+    word-break: break-all;
+}
+
+.scopeDebug code {
+    font-size: 0.72rem;
+}
+
 .spotifyBtn {
     display: flex;
     align-items: center;
