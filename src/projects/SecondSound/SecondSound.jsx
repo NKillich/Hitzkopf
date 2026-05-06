@@ -130,12 +130,20 @@ export default function SecondSound({ onBack }) {
         }
     }
 
+    const sortPlaylists = (playlists) => {
+        const startsWithEmoji = (str) => /^\p{Emoji}/u.test(str)
+        const letterPlaylists = playlists.filter(p => !startsWithEmoji(p.name))
+        const emojiPlaylists  = playlists.filter(p => startsWithEmoji(p.name))
+        const byName = (a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' })
+        return [...letterPlaylists.sort(byName), ...emojiPlaylists.sort(byName)]
+    }
+
     const handleLoadMyPlaylists = async () => {
         if (myPlaylistsLoaded) return
         setSearchLoading(true)
         try {
             const playlists = await spotifyService.getMyPlaylists(50)
-            setMyPlaylists(playlists)
+            setMyPlaylists(sortPlaylists(playlists))
             setMyPlaylistsLoaded(true)
         } catch (e) {
             console.error('[SecondSound] getMyPlaylists fehlgeschlagen:', e)
