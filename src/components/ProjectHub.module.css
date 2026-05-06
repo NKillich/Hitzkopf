@@ -2,11 +2,12 @@
     min-height: 100vh;
     width: 100%;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
     position: relative;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 .backgroundOverlay {
@@ -253,40 +254,60 @@
 /* Responsive */
 @media (max-width: 768px) {
     .content {
-        padding: 1.5rem;
-        gap: 2rem;
+        padding: 1.5rem 1rem 2rem;
+        gap: 1.5rem;
     }
 
     .projectGrid {
         grid-template-columns: 1fr;
-        gap: 1.5rem;
+        gap: 1rem;
         max-width: 400px;
     }
 
     .projectCard {
-        padding: 2rem 1.5rem;
+        padding: 1.5rem 1.25rem;
+        aspect-ratio: auto;
+        min-height: 160px;
     }
 
     .projectEmoji {
-        font-size: 3rem;
+        font-size: 2.5rem;
     }
 
     .projectName {
-        font-size: 1.5rem;
+        font-size: 1.4rem;
+    }
+
+    .projectDescription {
+        font-size: 0.88rem;
     }
 }
 
 @media (max-width: 480px) {
+    .content {
+        padding: 1.2rem 1rem 3rem;
+        gap: 1.2rem;
+    }
+
     .title {
         font-size: 2rem;
     }
 
     .subtitle {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
     }
 
     .projectCard {
-        aspect-ratio: auto;
-        min-height: 280px;
+        padding: 1.25rem 1rem;
+        min-height: 140px;
+        border-radius: 18px;
+    }
+
+    .projectEmoji {
+        font-size: 2.2rem;
+    }
+
+    .projectName {
+        font-size: 1.25rem;
     }
 }
