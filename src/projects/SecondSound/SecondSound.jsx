@@ -37,14 +37,19 @@ export default function SecondSound({ onBack }) {
     const [needsRelogin, setNeedsRelogin] = useState(false)
 
     // Game state – songs sind jetzt {playlistUri, offset, playlistName, playlistImage}
-    const [songs, setSongs] = useState([])
+    const [songs, setSongs] = useState([])          // kompletter Slot-Pool (3x Ziel)
     const [currentIndex, setCurrentIndex] = useState(0)
+    const [playedCount, setPlayedCount] = useState(0)  // tatsächlich gespielte Songs
+    const [targetCount, setTargetCount] = useState(10) // gewünschte Anzahl
     const [isRevealed, setIsRevealed] = useState(false)
     const [currentTrackInfo, setCurrentTrackInfo] = useState(null)
     const [score, setScore] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
 
     const timerRef = useRef(null)
+    const fetchGenRef = useRef(0)      // Generation-Counter: verhindert stale Track-Fetches
+    const usedTrackIds = useRef(new Set())
+    const usedArtists = useRef(new Set())
     const searchInputRef = useRef(null)
 
     // OAuth callback + initial login check
@@ -216,13 +221,21 @@ export default function SecondSound({ onBack }) {
                 return
             }
 
-            // Zufällig mischen und songCount entnehmen
+            // 3x so viele Slots wie gewünscht – Puffer für Duplikat-Skips
+            const poolSize = Math.min(songCount * 3, allSlots.length)
             const selected = allSlots
                 .sort(() => Math.random() - 0.5)
-                .slice(0, Math.min(songCount, allSlots.length))
+                .slice(0, poolSize)
+
+            // Tracking-Refs resetten
+            usedTrackIds.current = new Set()
+            usedArtists.current = new Set()
+            fetchGenRef.current = 0
 
             setSongs(selected)
             setCurrentIndex(0)
+            setPlayedCount(0)
+            setTargetCount(songCount)
             setIsRevealed(false)
             setCurrentTrackInfo(null)
             setScore(0)
@@ -263,14 +276,38 @@ export default function SecondSound({ onBack }) {
             setIsPlaying(true)
             setPlayerError(null)
 
-            // Track-Info für Aufdecken nach kurzem Delay holen (Player braucht ~500ms zum Starten)
-            setTimeout(async () => {
+            // Generation hochzählen – stale Fetches aus vorherigem Song werden ignoriert
+            const gen = ++fetchGenRef.current
+            const prevId = currentTrackInfo?.trackId ?? null
+
+            // Polling: wartet bis Spotify wirklich den neuen Track geladen hat (max ~5s)
+            const pollTrackInfo = async (attempt = 0) => {
+                if (fetchGenRef.current !== gen) return // wurde überholt
+                if (attempt > 10) return
                 const state = await spotifyService.getPlaybackState().catch(() => null)
-                if (state) {
-                    console.log('[SecondSound] Aktueller Track:', state.trackName, '-', state.artist)
-                    setCurrentTrackInfo(state)
+                if (!state || fetchGenRef.current !== gen) return
+                if (state.trackId && state.trackId === prevId) {
+                    // Spotify spielt noch den alten Track – warten und nochmal
+                    await new Promise(r => setTimeout(r, 500))
+                    return pollTrackInfo(attempt + 1)
                 }
-            }, 700)
+                // Neuer Track erkannt – Duplikat-Check
+                const trackKey = state.trackId
+                const artistKey = state.artist?.toLowerCase().trim()
+                const isDupTrack = usedTrackIds.current.has(trackKey)
+                const isDupArtist = artistKey && usedArtists.current.has(artistKey)
+                if (isDupTrack || isDupArtist) {
+                    console.log('[SecondSound] Duplikat übersprungen:', state.trackName, isDupArtist ? '(Künstler bereits gespielt)' : '(Track bereits gespielt)')
+                    skipDuplicate()
+                    return
+                }
+                // Song ist neu → als verwendet markieren
+                usedTrackIds.current.add(trackKey)
+                if (artistKey) usedArtists.current.add(artistKey)
+                console.log('[SecondSound] Track erkannt:', state.trackName, '-', state.artist)
+                setCurrentTrackInfo(state)
+            }
+            setTimeout(() => pollTrackInfo(), 600)
 
             if (seconds !== null) {
                 timerRef.current = setTimeout(async () => {
@@ -285,27 +322,52 @@ export default function SecondSound({ onBack }) {
         }
     }
 
-    const handleAnswer = async (correct) => {
-        await stopPlayback()
+    // Rückt zum nächsten Slot vor – zählt den Song als gespielt
+    const advanceAfterAnswer = (correct) => {
+        fetchGenRef.current++ // laufende Polls abbrechen
         if (correct) setScore(prev => prev + 1)
-
-        if (currentIndex + 1 >= songs.length) {
+        const newPlayed = playedCount + 1
+        setPlayedCount(newPlayed)
+        setIsRevealed(false)
+        setCurrentTrackInfo(null)
+        if (newPlayed >= targetCount || currentIndex + 1 >= songs.length) {
             setPhase(PHASES.RESULTS)
         } else {
             setCurrentIndex(prev => prev + 1)
-            setIsRevealed(false)
-            setCurrentTrackInfo(null)
+        }
+    }
+
+    const handleAnswer = async (correct) => {
+        await stopPlayback()
+        advanceAfterAnswer(correct)
+    }
+
+    // Überspringt einen Duplikat-Song ohne ihn zu zählen
+    const skipDuplicate = async () => {
+        await stopPlayback()
+        fetchGenRef.current++
+        setIsRevealed(false)
+        setCurrentTrackInfo(null)
+        if (currentIndex + 1 >= songs.length) {
+            // Kein Backup mehr → Runde beenden
+            setPhase(PHASES.RESULTS)
+        } else {
+            setCurrentIndex(prev => prev + 1)
         }
     }
 
     const handleNewRound = () => {
         setSongs([])
         setCurrentIndex(0)
+        setPlayedCount(0)
         setIsRevealed(false)
         setCurrentTrackInfo(null)
         setScore(0)
         setIsPlaying(false)
         setLoadingError(null)
+        usedTrackIds.current = new Set()
+        usedArtists.current = new Set()
+        fetchGenRef.current = 0
         setPhase(PHASES.SETUP)
     }
 
@@ -316,7 +378,7 @@ export default function SecondSound({ onBack }) {
     }
 
     const getResultMessage = () => {
-        const percent = songs.length > 0 ? (score / songs.length) * 100 : 0
+        const percent = playedCount > 0 ? (score / playedCount) * 100 : 0
         return RESULT_MESSAGES.find(m => percent >= m.minPercent) || RESULT_MESSAGES[RESULT_MESSAGES.length - 1]
     }
 
@@ -575,7 +637,7 @@ export default function SecondSound({ onBack }) {
 
     // ─── Game ─────────────────────────────────────────────────────────────────
     if (phase === PHASES.GAME) {
-        const progressPct = ((currentIndex) / songs.length) * 100
+        const progressPct = (playedCount / targetCount) * 100
 
         return (
             <div className={styles.wrapper}>
@@ -585,7 +647,7 @@ export default function SecondSound({ onBack }) {
                     <div className={styles.gameTopBar}>
                         <button className={styles.backBtnSmall} onClick={handleBack}>✕</button>
                         <div className={styles.gameProgress}>
-                            Song <strong>{currentIndex + 1}</strong> / {songs.length}
+                            Song <strong>{playedCount + 1}</strong> / {targetCount}
                         </div>
                         <div className={styles.scoreChip}>
                             {score} ✓
@@ -691,7 +753,7 @@ export default function SecondSound({ onBack }) {
     // ─── Results ─────────────────────────────────────────────────────────────
     if (phase === PHASES.RESULTS) {
         const result = getResultMessage()
-        const percent = songs.length > 0 ? Math.round((score / songs.length) * 100) : 0
+        const percent = playedCount > 0 ? Math.round((score / playedCount) * 100) : 0
 
         return (
             <div className={styles.wrapper}>
@@ -704,7 +766,7 @@ export default function SecondSound({ onBack }) {
                         <div className={styles.scoreDisplay}>
                             <span className={styles.scoreNum}>{score}</span>
                             <span className={styles.scoreSep}>/</span>
-                            <span className={styles.scoreTotal}>{songs.length}</span>
+                            <span className={styles.scoreTotal}>{playedCount}</span>
                         </div>
                         <div className={styles.scorePercent}>{percent}%</div>
                         <div className={styles.resultTitle}>{result.title}</div>
