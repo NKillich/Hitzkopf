@@ -24,8 +24,12 @@ export default function SecondSound({ onBack }) {
     const [playerError, setPlayerError] = useState(null)
 
     // Setup state
+    const [searchMode, setSearchMode] = useState('playlist') // 'playlist' | 'user'
     const [playlistQuery, setPlaylistQuery] = useState('')
     const [playlistResults, setPlaylistResults] = useState([])
+    const [userQuery, setUserQuery] = useState('')
+    const [userProfile, setUserProfile] = useState(null)
+    const [userPlaylists, setUserPlaylists] = useState([])
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
     const [songCount, setSongCount] = useState(10)
     const [searchLoading, setSearchLoading] = useState(false)
@@ -122,6 +126,36 @@ export default function SecondSound({ onBack }) {
             setPlaylistResults(results)
         } catch (e) {
             console.error('Playlist-Suche fehlgeschlagen:', e)
+        } finally {
+            setSearchLoading(false)
+        }
+    }
+
+    // Spotify User-ID aus URL oder direkter Eingabe extrahieren
+    const extractUserId = (input) => {
+        const trimmed = input.trim()
+        // https://open.spotify.com/user/USERNAME oder spotify:user:USERNAME
+        const urlMatch = trimmed.match(/spotify\.com\/user\/([^?/]+)/)
+        if (urlMatch) return urlMatch[1]
+        const uriMatch = trimmed.match(/spotify:user:([^?/]+)/)
+        if (uriMatch) return uriMatch[1]
+        return trimmed
+    }
+
+    const handleSearchUser = async () => {
+        if (!userQuery.trim()) return
+        setSearchLoading(true)
+        setUserProfile(null)
+        setUserPlaylists([])
+        const userId = extractUserId(userQuery)
+        try {
+            const profile = await spotifyService.getUserProfile(userId)
+            const playlists = await spotifyService.getUserPlaylists(userId, 30)
+            setUserProfile(profile)
+            setUserPlaylists(playlists)
+        } catch (e) {
+            console.error('Nutzer-Suche fehlgeschlagen:', e)
+            setUserProfile({ error: e.message })
         } finally {
             setSearchLoading(false)
         }
@@ -369,51 +403,127 @@ export default function SecondSound({ onBack }) {
                     )}
 
                     <div className={styles.setupCard}>
-                        <h2 className={styles.sectionTitle}>Playlists auswählen</h2>
-                        <div className={styles.searchRow}>
-                            <input
-                                ref={searchInputRef}
-                                className={styles.searchInput}
-                                placeholder="Playlist suchen..."
-                                value={playlistQuery}
-                                onChange={e => setPlaylistQuery(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleSearchPlaylists()}
-                            />
+                        {/* Tab-Toggle */}
+                        <div className={styles.searchTabs}>
                             <button
-                                className={styles.searchBtn}
-                                onClick={handleSearchPlaylists}
-                                disabled={searchLoading || !playlistQuery.trim()}
+                                className={`${styles.searchTab} ${searchMode === 'playlist' ? styles.searchTabActive : ''}`}
+                                onClick={() => { setSearchMode('playlist'); setPlaylistResults([]); setUserProfile(null); setUserPlaylists([]) }}
                             >
-                                {searchLoading ? (
-                                    <span className={styles.spinnerSmall} />
-                                ) : 'Suchen'}
+                                🔍 Playlist
+                            </button>
+                            <button
+                                className={`${styles.searchTab} ${searchMode === 'user' ? styles.searchTabActive : ''}`}
+                                onClick={() => { setSearchMode('user'); setPlaylistResults([]); setUserProfile(null); setUserPlaylists([]) }}
+                            >
+                                👤 Nutzer
                             </button>
                         </div>
 
-                        {playlistResults.length > 0 && (
-                            <div className={styles.playlistResults}>
-                                {playlistResults.map(p => {
-                                    const isAdded = !!selectedPlaylists.find(s => s.id === p.id)
-                                    return (
-                                        <button
-                                            key={p.id}
-                                            className={`${styles.playlistItem} ${isAdded ? styles.playlistItemAdded : ''}`}
-                                            onClick={() => handleAddPlaylist(p)}
-                                            disabled={isAdded}
-                                        >
-                                            {p.imageUrl
-                                                ? <img src={p.imageUrl} alt="" className={styles.playlistThumb} />
-                                                : <div className={styles.playlistThumbFallback}>🎵</div>
-                                            }
-                                            <div className={styles.playlistInfo}>
-                                                <span className={styles.playlistName}>{p.name}</span>
-                                                <span className={styles.playlistMeta}>{p.owner}{p.trackCount ? ` · ${p.trackCount} Songs` : ''}</span>
-                                            </div>
-                                            <span className={styles.addIcon}>{isAdded ? '✓' : '+'}</span>
-                                        </button>
-                                    )
-                                })}
-                            </div>
+                        {/* Playlist-Suche */}
+                        {searchMode === 'playlist' && (
+                            <>
+                                <div className={styles.searchRow}>
+                                    <input
+                                        ref={searchInputRef}
+                                        className={styles.searchInput}
+                                        placeholder="Playlist suchen..."
+                                        value={playlistQuery}
+                                        onChange={e => setPlaylistQuery(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleSearchPlaylists()}
+                                    />
+                                    <button
+                                        className={styles.searchBtn}
+                                        onClick={handleSearchPlaylists}
+                                        disabled={searchLoading || !playlistQuery.trim()}
+                                    >
+                                        {searchLoading ? <span className={styles.spinnerSmall} /> : 'Suchen'}
+                                    </button>
+                                </div>
+                                {playlistResults.length > 0 && (
+                                    <div className={styles.playlistResults}>
+                                        {playlistResults.map(p => {
+                                            const isAdded = !!selectedPlaylists.find(s => s.id === p.id)
+                                            return (
+                                                <button key={p.id}
+                                                    className={`${styles.playlistItem} ${isAdded ? styles.playlistItemAdded : ''}`}
+                                                    onClick={() => handleAddPlaylist(p)} disabled={isAdded}
+                                                >
+                                                    {p.imageUrl ? <img src={p.imageUrl} alt="" className={styles.playlistThumb} /> : <div className={styles.playlistThumbFallback}>🎵</div>}
+                                                    <div className={styles.playlistInfo}>
+                                                        <span className={styles.playlistName}>{p.name}</span>
+                                                        <span className={styles.playlistMeta}>{p.owner}{p.trackCount ? ` · ${p.trackCount} Songs` : ''}</span>
+                                                    </div>
+                                                    <span className={styles.addIcon}>{isAdded ? '✓' : '+'}</span>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* Nutzer-Suche */}
+                        {searchMode === 'user' && (
+                            <>
+                                <p className={styles.userSearchHint}>
+                                    Spotify User-ID oder Profil-URL eingeben<br />
+                                    <span>z.B. <code>nkillich</code> oder <code>open.spotify.com/user/nkillich</code></span>
+                                </p>
+                                <div className={styles.searchRow}>
+                                    <input
+                                        className={styles.searchInput}
+                                        placeholder="User-ID oder Spotify-URL..."
+                                        value={userQuery}
+                                        onChange={e => setUserQuery(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleSearchUser()}
+                                    />
+                                    <button
+                                        className={styles.searchBtn}
+                                        onClick={handleSearchUser}
+                                        disabled={searchLoading || !userQuery.trim()}
+                                    >
+                                        {searchLoading ? <span className={styles.spinnerSmall} /> : 'Suchen'}
+                                    </button>
+                                </div>
+
+                                {userProfile?.error && (
+                                    <div className={styles.userNotFound}>{userProfile.error}</div>
+                                )}
+
+                                {userProfile && !userProfile.error && (
+                                    <div className={styles.userCard}>
+                                        {userProfile.imageUrl
+                                            ? <img src={userProfile.imageUrl} alt="" className={styles.userAvatar} />
+                                            : <div className={styles.userAvatarFallback}>👤</div>
+                                        }
+                                        <div className={styles.userInfo}>
+                                            <span className={styles.userName}>{userProfile.displayName}</span>
+                                            <span className={styles.userMeta}>{userPlaylists.length} öffentliche Playlist{userPlaylists.length !== 1 ? 's' : ''}</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {userPlaylists.length > 0 && (
+                                    <div className={styles.playlistResults}>
+                                        {userPlaylists.map(p => {
+                                            const isAdded = !!selectedPlaylists.find(s => s.id === p.id)
+                                            return (
+                                                <button key={p.id}
+                                                    className={`${styles.playlistItem} ${isAdded ? styles.playlistItemAdded : ''}`}
+                                                    onClick={() => handleAddPlaylist(p)} disabled={isAdded}
+                                                >
+                                                    {p.imageUrl ? <img src={p.imageUrl} alt="" className={styles.playlistThumb} /> : <div className={styles.playlistThumbFallback}>🎵</div>}
+                                                    <div className={styles.playlistInfo}>
+                                                        <span className={styles.playlistName}>{p.name}</span>
+                                                        <span className={styles.playlistMeta}>{p.trackCount ? `${p.trackCount} Songs` : ''}</span>
+                                                    </div>
+                                                    <span className={styles.addIcon}>{isAdded ? '✓' : '+'}</span>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
 
