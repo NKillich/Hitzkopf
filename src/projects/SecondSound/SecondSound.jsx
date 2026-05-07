@@ -68,7 +68,11 @@ export default function SecondSound({ onBack }) {
     const timerRef = useRef(null)
     const fetchGenRef = useRef(0)
     const lastPlayedTrackIdRef = useRef(null)
-    const lastPlayedSlotRef = useRef(null)   // "{playlistUri}:{offset}" des zuletzt gespielten Slots
+    const lastPlayedSlotRef = useRef(null)      // "{playlistUri}:{offset}" des zuletzt gespielten Slots
+    const playedTrackIdsRef = useRef(new Set()) // alle bereits gespielten Track-IDs (Duplikat-Schutz)
+    const currentIndexRef = useRef(0)           // Spiegel von currentIndex für async-Callbacks
+    const isAnsweringRef = useRef(false)        // verhindert Doppel-Klick auf Antwort-Buttons
+    const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
     const songsRef = useRef([])
     const searchInputRef = useRef(null)
     const lastPlaySecondsRef = useRef(null)       // zuletzt gewählte Abspieldauer
@@ -264,6 +268,7 @@ export default function SecondSound({ onBack }) {
             fetchGenRef.current = 0
             lastPlayedTrackIdRef.current = null
             lastPlayedSlotRef.current = null
+            playedTrackIdsRef.current = new Set()
             songsRef.current = shuffled
             sessionSecondsCorrectRef.current = []
             lastPlaySecondsRef.current = null
@@ -271,6 +276,7 @@ export default function SecondSound({ onBack }) {
             console.log('[SS] Spiel gestartet – Song-Pool:', shuffled.length, 'Slots, Ziel:', songCount)
 
             setSongs(shuffled)
+            currentIndexRef.current = 0
             setCurrentIndex(0)
             setPlayedCount(0)
             setTargetCount(songCount)
@@ -302,6 +308,10 @@ export default function SecondSound({ onBack }) {
 
     const handlePlayFor = async (seconds) => {
         dbg(`handlePlayFor: ${seconds}s | currentIndex=${currentIndex} | songs.length=${songs.length}`)
+        if (isPlayingRequestRef.current) {
+            dbg('handlePlayFor: ignoriert (Request bereits aktiv)')
+            return
+        }
         if (!playerReady) {
             setPlayerError('Spotify Player noch nicht bereit. Bitte warte einen Moment.')
             return
@@ -327,8 +337,10 @@ export default function SecondSound({ onBack }) {
         const isSameSlot = lastPlayedSlotRef.current === slotKey
         lastPlayedSlotRef.current = slotKey
 
+        isPlayingRequestRef.current = true
         try {
             await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
+            isPlayingRequestRef.current = false
             setIsPlaying(true)
             setPlayerError(null)
 
@@ -360,8 +372,29 @@ export default function SecondSound({ onBack }) {
                     dbg('pollForInfo: max attempts erreicht! Spotify liefert immer noch denselben Track.')
                 }
 
+                // Duplikat-Check: wurde dieser Track in dieser Runde schon gespielt?
+                if (playedTrackIdsRef.current.has(state.trackId)) {
+                    dbg(`pollForInfo: DUPLIKAT erkannt! "${state.trackName}" (${state.trackId}) bereits gespielt – überspringe Slot`)
+                    // Auto-Pause und nächsten Slot vorbereiten
+                    await spotifyService.pausePlayback().catch(() => {})
+                    setIsPlaying(false)
+                    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+                    // Slot überspringen ohne Punkt und ohne History-Eintrag
+                    const nextIdx = currentIndexRef.current + 1
+                    if (nextIdx < songsRef.current.length) {
+                        currentIndexRef.current = nextIdx
+                        lastPlayedSlotRef.current = null
+                        setCurrentIndex(nextIdx)
+                        dbg(`Duplikat übersprungen → weiter mit Index ${nextIdx}`)
+                    } else {
+                        dbg('Duplikat übersprungen – keine weiteren Slots verfügbar')
+                    }
+                    return
+                }
+
                 dbg(`pollForInfo: Track gesetzt → "${state.trackName}" von "${state.artist}" (id=${state.trackId})`)
                 lastPlayedTrackIdRef.current = state.trackId
+                playedTrackIdsRef.current.add(state.trackId)
                 setCurrentTrackInfo(state)
             }
 
@@ -376,6 +409,7 @@ export default function SecondSound({ onBack }) {
                 }, seconds * 1000)
             }
         } catch (e) {
+            isPlayingRequestRef.current = false
             dbg('handlePlayFor Fehler:', e.message)
             setPlayerError(e.message || 'Wiedergabe fehlgeschlagen')
             setIsPlaying(false)
@@ -386,8 +420,11 @@ export default function SecondSound({ onBack }) {
     const advanceAfterAnswer = (correct) => {
         dbg(`advanceAfterAnswer: correct=${correct} | currentIndex=${currentIndex} | playedCount=${playedCount} | targetCount=${targetCount} | songs.length=${songs.length}`)
         dbg(`  aktueller Track: "${currentTrackInfo?.trackName}" von "${currentTrackInfo?.artist}" (id=${currentTrackInfo?.trackId})`)
-        fetchGenRef.current++       // laufende Polls abbrechen
+        if (currentTrackInfo?.trackId) playedTrackIdsRef.current.add(currentTrackInfo.trackId)
+        fetchGenRef.current++           // laufende Polls abbrechen
         lastPlayedSlotRef.current = null  // nächster Song ist ein neuer Slot
+        isAnsweringRef.current = false    // Sperre für nächsten Song freigeben
+        isPlayingRequestRef.current = false
         if (correct) {
             setScore(prev => prev + 1)
             if (lastPlaySecondsRef.current != null) {
@@ -414,15 +451,23 @@ export default function SecondSound({ onBack }) {
             setPhase(PHASES.RESULTS)
         } else {
             const nextIndex = currentIndex + 1
+            currentIndexRef.current = nextIndex
             dbg(`Nächster Song: index ${currentIndex} → ${nextIndex} | Slot: playlist=${songs[nextIndex]?.playlistUri} offset=${songs[nextIndex]?.offset}`)
             setCurrentIndex(prev => prev + 1)
         }
     }
 
     const handleAnswer = async (correct) => {
+        if (isAnsweringRef.current) {
+            dbg('handleAnswer: ignoriert (bereits am Antworten)')
+            return
+        }
+        isAnsweringRef.current = true
         dbg(`handleAnswer: ${correct ? '✓ RICHTIG' : '✕ FALSCH'}`)
         await stopPlayback()
         advanceAfterAnswer(correct)
+        // wird in advanceAfterAnswer nach dem State-Update nicht zurückgesetzt –
+        // das neue Lied setzt es zurück
     }
 
     const handleNewRound = () => {
