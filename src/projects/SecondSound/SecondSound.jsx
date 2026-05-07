@@ -68,6 +68,7 @@ export default function SecondSound({ onBack }) {
     const timerRef = useRef(null)
     const fetchGenRef = useRef(0)
     const lastPlayedTrackIdRef = useRef(null)
+    const lastPlayedSlotRef = useRef(null)   // "{playlistUri}:{offset}" des zuletzt gespielten Slots
     const songsRef = useRef([])
     const searchInputRef = useRef(null)
     const lastPlaySecondsRef = useRef(null)       // zuletzt gewählte Abspieldauer
@@ -262,12 +263,12 @@ export default function SecondSound({ onBack }) {
 
             fetchGenRef.current = 0
             lastPlayedTrackIdRef.current = null
+            lastPlayedSlotRef.current = null
             songsRef.current = shuffled
             sessionSecondsCorrectRef.current = []
             lastPlaySecondsRef.current = null
 
             console.log('[SS] Spiel gestartet – Song-Pool:', shuffled.length, 'Slots, Ziel:', songCount)
-            shuffled.forEach((s, i) => console.log(`[SS]  Slot ${i}: playlist=${s.playlistUri} offset=${s.offset}`))
 
             setSongs(shuffled)
             setCurrentIndex(0)
@@ -320,14 +321,20 @@ export default function SecondSound({ onBack }) {
 
         lastPlaySecondsRef.current = seconds
 
+        // Wenn derselbe Slot erneut gespielt wird, prevId nicht setzen –
+        // sonst wartet der Poll ewig auf einen Track-Wechsel der nie kommt
+        const slotKey = `${song.playlistUri}:${song.offset}`
+        const isSameSlot = lastPlayedSlotRef.current === slotKey
+        lastPlayedSlotRef.current = slotKey
+
         try {
             await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
             setIsPlaying(true)
             setPlayerError(null)
 
             const gen = ++fetchGenRef.current
-            const prevId = lastPlayedTrackIdRef.current
-            dbg(`pollForInfo gestartet: gen=${gen} prevId=${prevId}`)
+            const prevId = isSameSlot ? null : lastPlayedTrackIdRef.current
+            dbg(`pollForInfo gestartet: gen=${gen} prevId=${prevId} (isSameSlot=${isSameSlot})`)
 
             const pollForInfo = async (attempt = 0) => {
                 if (fetchGenRef.current !== gen) {
@@ -379,7 +386,8 @@ export default function SecondSound({ onBack }) {
     const advanceAfterAnswer = (correct) => {
         dbg(`advanceAfterAnswer: correct=${correct} | currentIndex=${currentIndex} | playedCount=${playedCount} | targetCount=${targetCount} | songs.length=${songs.length}`)
         dbg(`  aktueller Track: "${currentTrackInfo?.trackName}" von "${currentTrackInfo?.artist}" (id=${currentTrackInfo?.trackId})`)
-        fetchGenRef.current++ // laufende Polls abbrechen
+        fetchGenRef.current++       // laufende Polls abbrechen
+        lastPlayedSlotRef.current = null  // nächster Song ist ein neuer Slot
         if (correct) {
             setScore(prev => prev + 1)
             if (lastPlaySecondsRef.current != null) {
