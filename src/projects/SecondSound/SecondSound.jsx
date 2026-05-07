@@ -69,8 +69,6 @@ export default function SecondSound({ onBack }) {
     const fetchGenRef = useRef(0)
     const lastPlayedTrackIdRef = useRef(null)
     const songsRef = useRef([])
-    const usedTrackIds = useRef(new Set())
-    const usedArtists = useRef(new Set())
     const searchInputRef = useRef(null)
     const lastPlaySecondsRef = useRef(null)       // zuletzt gewählte Abspieldauer
     const sessionSecondsCorrectRef = useRef([])   // Sekunden pro richtig erratenen Song
@@ -264,8 +262,6 @@ export default function SecondSound({ onBack }) {
 
             fetchGenRef.current = 0
             lastPlayedTrackIdRef.current = null
-            usedTrackIds.current = new Set()
-            usedArtists.current = new Set()
             songsRef.current = shuffled
             sessionSecondsCorrectRef.current = []
             lastPlaySecondsRef.current = null
@@ -328,36 +324,12 @@ export default function SecondSound({ onBack }) {
                 const state = await spotifyService.getPlaybackState().catch(() => null)
                 if (!state || fetchGenRef.current !== gen) return
 
-                // Warten bis Spotify tatsächlich einen neuen Track spielt
+                // Warten bis Spotify tatsächlich einen neuen Track geladen hat
                 if (prevId && state.trackId === prevId && attempt < 15) {
                     await new Promise(r => setTimeout(r, 400))
                     return pollForInfo(attempt + 1)
                 }
 
-                // Duplikat-Prüfung (gleiche Track-ID oder gleicher Künstler)
-                const artistKey = state.artist?.toLowerCase().trim()
-                const isDup = usedTrackIds.current.has(state.trackId) ||
-                              (artistKey && usedArtists.current.has(artistKey))
-
-                if (isDup) {
-                    console.log(`[SecondSound] Duplikat: ${state.trackName} – überspringe`)
-                    fetchGenRef.current++
-                    await spotifyService.pausePlayback().catch(() => {})
-                    setIsPlaying(false)
-                    setCurrentTrackInfo(null)
-                    setCurrentIndex(prev => {
-                        const next = prev + 1
-                        if (next >= songsRef.current.length) {
-                            setPhase(PHASES.RESULTS)
-                            return prev
-                        }
-                        return next
-                    })
-                    return
-                }
-
-                usedTrackIds.current.add(state.trackId)
-                if (artistKey) usedArtists.current.add(artistKey)
                 lastPlayedTrackIdRef.current = state.trackId
                 setCurrentTrackInfo(state)
             }
@@ -427,8 +399,6 @@ export default function SecondSound({ onBack }) {
         lastPlaySecondsRef.current = null
         sessionSecondsCorrectRef.current = []
         songsRef.current = []
-        usedTrackIds.current = new Set()
-        usedArtists.current = new Set()
         setSongHistory([])
         setHistoryOpen(false)
         setPhase(PHASES.SETUP)
