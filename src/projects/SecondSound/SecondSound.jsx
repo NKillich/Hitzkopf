@@ -266,6 +266,9 @@ export default function SecondSound({ onBack }) {
             sessionSecondsCorrectRef.current = []
             lastPlaySecondsRef.current = null
 
+            console.log('[SS] Spiel gestartet – Song-Pool:', shuffled.length, 'Slots, Ziel:', songCount)
+            shuffled.forEach((s, i) => console.log(`[SS]  Slot ${i}: playlist=${s.playlistUri} offset=${s.offset}`))
+
             setSongs(shuffled)
             setCurrentIndex(0)
             setPlayedCount(0)
@@ -284,7 +287,10 @@ export default function SecondSound({ onBack }) {
         }
     }
 
+    const dbg = (...args) => console.log('[SS]', ...args)
+
     const stopPlayback = async () => {
+        dbg('stopPlayback aufgerufen')
         if (timerRef.current) {
             clearTimeout(timerRef.current)
             timerRef.current = null
@@ -294,13 +300,18 @@ export default function SecondSound({ onBack }) {
     }
 
     const handlePlayFor = async (seconds) => {
+        dbg(`handlePlayFor: ${seconds}s | currentIndex=${currentIndex} | songs.length=${songs.length}`)
         if (!playerReady) {
             setPlayerError('Spotify Player noch nicht bereit. Bitte warte einen Moment.')
             return
         }
 
         const song = songs[currentIndex]
-        if (!song) return
+        if (!song) {
+            dbg('handlePlayFor: kein Song an currentIndex', currentIndex)
+            return
+        }
+        dbg(`Song-Slot: playlist=${song.playlistUri} offset=${song.offset}`)
 
         if (timerRef.current) {
             clearTimeout(timerRef.current)
@@ -316,18 +327,33 @@ export default function SecondSound({ onBack }) {
 
             const gen = ++fetchGenRef.current
             const prevId = lastPlayedTrackIdRef.current
+            dbg(`pollForInfo gestartet: gen=${gen} prevId=${prevId}`)
 
             const pollForInfo = async (attempt = 0) => {
-                if (fetchGenRef.current !== gen) return
+                if (fetchGenRef.current !== gen) {
+                    dbg(`pollForInfo gen veraltet (${gen} != ${fetchGenRef.current}), abgebrochen`)
+                    return
+                }
                 const state = await spotifyService.getPlaybackState().catch(() => null)
-                if (!state || fetchGenRef.current !== gen) return
+                if (!state || fetchGenRef.current !== gen) {
+                    dbg(`pollForInfo: kein state oder gen veraltet, abgebrochen`)
+                    return
+                }
+
+                dbg(`pollForInfo attempt=${attempt}: trackId=${state.trackId} (prev=${prevId}) track="${state.trackName}" artist="${state.artist}"`)
 
                 // Warten bis Spotify tatsächlich einen neuen Track geladen hat
                 if (prevId && state.trackId === prevId && attempt < 15) {
+                    dbg(`pollForInfo: gleicher Track wie vorher, warte 400ms (attempt ${attempt})`)
                     await new Promise(r => setTimeout(r, 400))
                     return pollForInfo(attempt + 1)
                 }
 
+                if (attempt >= 15) {
+                    dbg('pollForInfo: max attempts erreicht! Spotify liefert immer noch denselben Track.')
+                }
+
+                dbg(`pollForInfo: Track gesetzt → "${state.trackName}" von "${state.artist}" (id=${state.trackId})`)
                 lastPlayedTrackIdRef.current = state.trackId
                 setCurrentTrackInfo(state)
             }
@@ -336,12 +362,14 @@ export default function SecondSound({ onBack }) {
 
             if (seconds !== null) {
                 timerRef.current = setTimeout(async () => {
+                    dbg(`Auto-Pause nach ${seconds}s`)
                     await spotifyService.pausePlayback().catch(() => {})
                     setIsPlaying(false)
                     timerRef.current = null
                 }, seconds * 1000)
             }
         } catch (e) {
+            dbg('handlePlayFor Fehler:', e.message)
             setPlayerError(e.message || 'Wiedergabe fehlgeschlagen')
             setIsPlaying(false)
         }
@@ -349,6 +377,8 @@ export default function SecondSound({ onBack }) {
 
     // Rückt zum nächsten Slot vor – zählt den Song als gespielt
     const advanceAfterAnswer = (correct) => {
+        dbg(`advanceAfterAnswer: correct=${correct} | currentIndex=${currentIndex} | playedCount=${playedCount} | targetCount=${targetCount} | songs.length=${songs.length}`)
+        dbg(`  aktueller Track: "${currentTrackInfo?.trackName}" von "${currentTrackInfo?.artist}" (id=${currentTrackInfo?.trackId})`)
         fetchGenRef.current++ // laufende Polls abbrechen
         if (correct) {
             setScore(prev => prev + 1)
@@ -368,17 +398,21 @@ export default function SecondSound({ onBack }) {
         }
         setCurrentTrackInfo(null)
         if (newPlayed >= targetCount || currentIndex + 1 >= songs.length) {
+            dbg(`Spiel beendet: newPlayed=${newPlayed} targetCount=${targetCount} nextIndex=${currentIndex + 1}`)
             const finalScore = correct ? score + 1 : score
             const secondsArr = sessionSecondsCorrectRef.current
             const totalSeconds = secondsArr.reduce((a, b) => a + b, 0)
             saveAndLoadStats(finalScore, newPlayed, totalSeconds, secondsArr.length)
             setPhase(PHASES.RESULTS)
         } else {
+            const nextIndex = currentIndex + 1
+            dbg(`Nächster Song: index ${currentIndex} → ${nextIndex} | Slot: playlist=${songs[nextIndex]?.playlistUri} offset=${songs[nextIndex]?.offset}`)
             setCurrentIndex(prev => prev + 1)
         }
     }
 
     const handleAnswer = async (correct) => {
+        dbg(`handleAnswer: ${correct ? '✓ RICHTIG' : '✕ FALSCH'}`)
         await stopPlayback()
         advanceAfterAnswer(correct)
     }
