@@ -970,7 +970,7 @@ class SpotifyService {
         }
 
         let tracks = []
-        let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=100`
+        let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=100&market=from_token`
 
         while (url) {
             let res = await fetchPage(url, activeToken)

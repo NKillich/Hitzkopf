@@ -234,6 +234,7 @@ export default function SecondSound({ onBack }) {
             let fallbackSlots = [] // Offset-basierte Fallback-Slots
 
             for (const playlist of selectedPlaylists) {
+                let tracksBlocked = false
                 try {
                     const tracks = await spotifyService.getPlaylistTracks(playlist.id)
                     if (tracks.length > 0) {
@@ -242,30 +243,48 @@ export default function SecondSound({ onBack }) {
                         continue
                     }
                 } catch (e) {
+                    if (e.message?.includes('403')) tracksBlocked = true
                     console.warn(`[SecondSound] getPlaylistTracks fehlgeschlagen für "${playlist.name}" (${e.message}) – nutze Offset-Fallback`)
                 }
 
                 // Fallback: Track-Liste nicht lesbar → Offsets generieren
                 try {
                     const info = await spotifyService.getPlaylistInfo(playlist.id)
-                    const trackCount = info.trackCount || 0
-                    if (trackCount === 0) {
+                    const uri = info.uri || `spotify:playlist:${playlist.id}`
+                    let trackCount = info.trackCount || 0
+
+                    // Wenn getPlaylistTracks 403 lieferte aber tracks.total=0:
+                    // Spotify sperrt die Track-Liste, die Playlist hat aber Songs.
+                    // Wir nutzen 300 Offsets als sicheren Fallback.
+                    if (trackCount === 0 && tracksBlocked) {
+                        console.warn(`[SecondSound] "${playlist.name}": Spotify sperrt Tracks-API (403) trotz tracks.total=0 – nutze 300 Fallback-Offsets`)
+                        trackCount = 300
+                    } else if (trackCount === 0) {
                         console.warn(`[SecondSound] "${playlist.name}" nicht zugreifbar (0 Tracks) – wird übersprungen`)
                         continue
                     }
-                    const uri = info.uri || `spotify:playlist:${playlist.id}`
+
                     console.log(`[SecondSound] Fallback für "${playlist.name}": ${trackCount} Offsets`)
-                    Array.from({ length: trackCount }, (_, i) => i)
+                    Array.from({ length: Math.min(trackCount, 500) }, (_, i) => i)
                         .sort(() => Math.random() - 0.5)
                         .slice(0, songCount * 3)
-                        .forEach(offset => fallbackSlots.push({ playlistUri: uri, offset }))
+                        .forEach(offset => fallbackSlots.push({ playlistUri: uri, offset, playlistName: playlist.name, playlistImage: playlist.image }))
                 } catch (e2) {
                     console.warn(`[SecondSound] Auch getPlaylistInfo fehlgeschlagen für "${playlist.name}":`, e2.message)
+                    // Letzter Ausweg: 403 gesehen → Playlist spielbar, 300 Offsets direkt nutzen
+                    if (tracksBlocked) {
+                        console.warn(`[SecondSound] Letzter Fallback für "${playlist.name}": 300 Offsets mit Playlist-ID`)
+                        const uri = `spotify:playlist:${playlist.id}`
+                        Array.from({ length: 300 }, (_, i) => i)
+                            .sort(() => Math.random() - 0.5)
+                            .slice(0, songCount * 3)
+                            .forEach(offset => fallbackSlots.push({ playlistUri: uri, offset, playlistName: playlist.name, playlistImage: playlist.image }))
+                    }
                 }
             }
 
             if (allTracks.length === 0 && fallbackSlots.length === 0) {
-                setLoadingError('Keine abspielbaren Songs gefunden. Mögliche Ursachen: Die Playlist enthält lokale Dateien (MP3s) die Spotify für externe Apps sperrt, oder die Playlist ist leer. Bitte eine andere Playlist wählen.')
+                setLoadingError('Keine abspielbaren Songs gefunden. Die ausgewählte Playlist scheint leer zu sein oder Spotify verweigert den Zugriff. Bitte eine andere Playlist wählen.')
                 setPhase(PHASES.SETUP)
                 return
             }
