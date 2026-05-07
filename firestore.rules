@@ -15,5 +15,10 @@ service cloud.firestore {
     match /quizLobbies/{lobbyId} {
       allow read, write: if request.auth != null;
     }
+
+    // Song-Raten User-Stats (gerätgebunden, kein Login nötig)
+    match /userStats/{deviceId} {
+      allow read, write: if true;
+    }
   }
 }

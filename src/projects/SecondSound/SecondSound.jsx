@@ -1,6 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
+import { getApp } from 'firebase/app'
+import { getFirestore, doc, getDoc, setDoc, increment } from 'firebase/firestore'
+import '../../firebase.js'
 import spotifyService from '../../services/spotifyService'
 import styles from './SecondSound.module.css'
+
+const getDeviceId = () => {
+    let id = localStorage.getItem('ss_deviceId')
+    if (!id) {
+        id = 'ss_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36)
+        localStorage.setItem('ss_deviceId', id)
+    }
+    return id
+}
 
 const PHASES = {
     LOGIN: 'login',
@@ -22,6 +34,9 @@ export default function SecondSound({ onBack }) {
     const [phase, setPhase] = useState(PHASES.LOGIN)
     const [playerReady, setPlayerReady] = useState(false)
     const [playerError, setPlayerError] = useState(null)
+    const [allTimeStats, setAllTimeStats] = useState(null)
+    const dbRef = useRef(null)
+    const deviceId = useRef(getDeviceId())
 
     // Setup state
     const [searchMode, setSearchMode] = useState('playlist') // 'playlist' | 'mine'
@@ -55,6 +70,32 @@ export default function SecondSound({ onBack }) {
     const usedTrackIds = useRef(new Set())
     const usedArtists = useRef(new Set())
     const searchInputRef = useRef(null)
+
+    // Firestore initialisieren
+    useEffect(() => {
+        dbRef.current = getFirestore(getApp())
+    }, [])
+
+    const saveAndLoadStats = async (finalScore, finalPlayed) => {
+        const db = dbRef.current
+        if (!db) return
+        const ref = doc(db, 'userStats', deviceId.current)
+        const percent = finalPlayed > 0 ? Math.round((finalScore / finalPlayed) * 100) : 0
+        try {
+            const snap = await getDoc(ref)
+            const currentBest = snap.exists() ? (snap.data().bestPercent || 0) : 0
+            await setDoc(ref, {
+                songsCorrect: increment(finalScore),
+                songsTotal: increment(finalPlayed),
+                gamesPlayed: increment(1),
+                bestPercent: Math.max(currentBest, percent),
+            }, { merge: true })
+            const updated = await getDoc(ref)
+            if (updated.exists()) setAllTimeStats(updated.data())
+        } catch (e) {
+            console.error('Stats speichern fehlgeschlagen:', e)
+        }
+    }
 
     // OAuth callback + initial login check
     useEffect(() => {
@@ -355,6 +396,8 @@ export default function SecondSound({ onBack }) {
         setIsRevealed(false)
         setCurrentTrackInfo(null)
         if (newPlayed >= targetCount || currentIndex + 1 >= songs.length) {
+            const finalScore = correct ? score + 1 : score
+            saveAndLoadStats(finalScore, newPlayed)
             setPhase(PHASES.RESULTS)
         } else {
             setCurrentIndex(prev => prev + 1)
@@ -790,6 +833,34 @@ export default function SecondSound({ onBack }) {
                         <div className={styles.resultTitle}>{result.title}</div>
                         <div className={styles.resultSub}>{result.sub}</div>
                     </div>
+
+                    {allTimeStats && (
+                        <div className={styles.statsCard}>
+                            <div className={styles.statsTitle}>📊 Deine Gesamt-Stats</div>
+                            <div className={styles.statsGrid}>
+                                <div className={styles.statItem}>
+                                    <span className={styles.statValue}>{allTimeStats.songsCorrect ?? 0}</span>
+                                    <span className={styles.statLabel}>Songs erraten</span>
+                                </div>
+                                <div className={styles.statItem}>
+                                    <span className={styles.statValue}>
+                                        {allTimeStats.songsTotal > 0
+                                            ? Math.round((allTimeStats.songsCorrect / allTimeStats.songsTotal) * 100)
+                                            : 0}%
+                                    </span>
+                                    <span className={styles.statLabel}>Trefferquote</span>
+                                </div>
+                                <div className={styles.statItem}>
+                                    <span className={styles.statValue}>{allTimeStats.gamesPlayed ?? 0}</span>
+                                    <span className={styles.statLabel}>Spiele</span>
+                                </div>
+                                <div className={styles.statItem}>
+                                    <span className={styles.statValue}>{allTimeStats.bestPercent ?? 0}%</span>
+                                    <span className={styles.statLabel}>Bestes Ergebnis</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <div className={styles.resultsActions}>
                         <button className={styles.newRoundBtn} onClick={handleNewRound}>
