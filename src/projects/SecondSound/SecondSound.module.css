@@ -1016,6 +1016,12 @@
     transform: scale(0.94);
 }
 
+.answerBtn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .wrongBtn {
     background: rgba(231, 76, 60, 0.1);
     border-color: rgba(231, 76, 60, 0.3);

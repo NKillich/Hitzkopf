@@ -244,7 +244,11 @@ export default function SecondSound({ onBack }) {
                 // Fallback: Track-Liste nicht lesbar → Offsets generieren
                 try {
                     const info = await spotifyService.getPlaylistInfo(playlist.id)
-                    const trackCount = info.trackCount || 300
+                    const trackCount = info.trackCount || 0
+                    if (trackCount === 0) {
+                        console.warn(`[SecondSound] "${playlist.name}" nicht zugreifbar (0 Tracks) – wird übersprungen`)
+                        continue
+                    }
                     const uri = info.uri || `spotify:playlist:${playlist.id}`
                     console.log(`[SecondSound] Fallback für "${playlist.name}": ${trackCount} Offsets`)
                     Array.from({ length: trackCount }, (_, i) => i)
@@ -257,7 +261,7 @@ export default function SecondSound({ onBack }) {
             }
 
             if (allTracks.length === 0 && fallbackSlots.length === 0) {
-                setLoadingError('Keine abspielbaren Songs in den ausgewählten Playlists gefunden.')
+                setLoadingError('Keine abspielbaren Songs gefunden. Einige Playlists sind über die Spotify-API nicht lesbar – versuche eine eigene oder öffentliche Playlist.')
                 setPhase(PHASES.SETUP)
                 return
             }
@@ -817,12 +821,14 @@ export default function SecondSound({ onBack }) {
                             <button
                                 className={`${styles.answerBtn} ${styles.wrongBtn}`}
                                 onClick={() => handleAnswer(false)}
+                                disabled={!currentTrackInfo}
                             >
                                 ✕
                             </button>
                             <button
                                 className={`${styles.answerBtn} ${styles.correctBtn}`}
                                 onClick={() => handleAnswer(true)}
+                                disabled={!currentTrackInfo}
                             >
                                 ✓
                             </button>
