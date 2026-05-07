@@ -307,8 +307,6 @@ export default function SecondSound({ onBack }) {
             timerRef.current = null
         }
 
-        setIsRevealed(false)
-        setCurrentTrackInfo(null)
         lastPlaySecondsRef.current = seconds
 
         try {
@@ -776,14 +774,12 @@ export default function SecondSound({ onBack }) {
                             <button
                                 className={`${styles.answerBtn} ${styles.wrongBtn}`}
                                 onClick={() => handleAnswer(false)}
-                                disabled={!currentTrackInfo}
                             >
                                 ✕
                             </button>
                             <button
                                 className={`${styles.answerBtn} ${styles.correctBtn}`}
                                 onClick={() => handleAnswer(true)}
-                                disabled={!currentTrackInfo}
                             >
                                 ✓
                             </button>
