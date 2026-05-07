@@ -70,13 +70,15 @@ export default function SecondSound({ onBack }) {
     const usedTrackIds = useRef(new Set())
     const usedArtists = useRef(new Set())
     const searchInputRef = useRef(null)
+    const lastPlaySecondsRef = useRef(null)       // zuletzt gewählte Abspieldauer
+    const sessionSecondsCorrectRef = useRef([])   // Sekunden pro richtig erratenen Song
 
     // Firestore initialisieren
     useEffect(() => {
         dbRef.current = getFirestore(getApp())
     }, [])
 
-    const saveAndLoadStats = async (finalScore, finalPlayed) => {
+    const saveAndLoadStats = async (finalScore, finalPlayed, totalSeconds, countWithTime) => {
         const db = dbRef.current
         if (!db) return
         const ref = doc(db, 'userStats', deviceId.current)
@@ -84,12 +86,17 @@ export default function SecondSound({ onBack }) {
         try {
             const snap = await getDoc(ref)
             const currentBest = snap.exists() ? (snap.data().bestPercent || 0) : 0
-            await setDoc(ref, {
+            const update = {
                 songsCorrect: increment(finalScore),
                 songsTotal: increment(finalPlayed),
                 gamesPlayed: increment(1),
                 bestPercent: Math.max(currentBest, percent),
-            }, { merge: true })
+            }
+            if (countWithTime > 0) {
+                update.totalSecondsCorrect = increment(totalSeconds)
+                update.correctGuessesWithTime = increment(countWithTime)
+            }
+            await setDoc(ref, update, { merge: true })
             const updated = await getDoc(ref)
             if (updated.exists()) setAllTimeStats(updated.data())
         } catch (e) {
@@ -318,6 +325,9 @@ export default function SecondSound({ onBack }) {
             timerRef.current = null
         }
 
+        setIsRevealed(false)
+        lastPlaySecondsRef.current = seconds
+
         try {
             await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
             setIsPlaying(true)
@@ -390,14 +400,22 @@ export default function SecondSound({ onBack }) {
     // Rückt zum nächsten Slot vor – zählt den Song als gespielt
     const advanceAfterAnswer = (correct) => {
         fetchGenRef.current++ // laufende Polls abbrechen
-        if (correct) setScore(prev => prev + 1)
+        if (correct) {
+            setScore(prev => prev + 1)
+            if (lastPlaySecondsRef.current != null) {
+                sessionSecondsCorrectRef.current.push(lastPlaySecondsRef.current)
+            }
+        }
+        lastPlaySecondsRef.current = null
         const newPlayed = playedCount + 1
         setPlayedCount(newPlayed)
         setIsRevealed(false)
         setCurrentTrackInfo(null)
         if (newPlayed >= targetCount || currentIndex + 1 >= songs.length) {
             const finalScore = correct ? score + 1 : score
-            saveAndLoadStats(finalScore, newPlayed)
+            const secondsArr = sessionSecondsCorrectRef.current
+            const totalSeconds = secondsArr.reduce((a, b) => a + b, 0)
+            saveAndLoadStats(finalScore, newPlayed, totalSeconds, secondsArr.length)
             setPhase(PHASES.RESULTS)
         } else {
             setCurrentIndex(prev => prev + 1)
@@ -422,6 +440,8 @@ export default function SecondSound({ onBack }) {
         usedArtists.current = new Set()
         fetchGenRef.current = 0
         lastPlayedTrackIdRef.current = null
+        lastPlaySecondsRef.current = null
+        sessionSecondsCorrectRef.current = []
         songsRef.current = []
         setPhase(PHASES.SETUP)
     }
@@ -859,6 +879,14 @@ export default function SecondSound({ onBack }) {
                                     <span className={styles.statLabel}>Bestes Ergebnis</span>
                                 </div>
                             </div>
+                            {(allTimeStats.correctGuessesWithTime > 0) && (
+                                <div className={styles.statItemWide}>
+                                    <span className={styles.statValue}>
+                                        {(allTimeStats.totalSecondsCorrect / allTimeStats.correctGuessesWithTime).toFixed(1)}s
+                                    </span>
+                                    <span className={styles.statLabel}>Ø Zeit zum Erraten</span>
+                                </div>
+                            )}
                         </div>
                     )}
 
