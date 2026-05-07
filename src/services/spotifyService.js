@@ -829,6 +829,23 @@ class SpotifyService {
      * Spielt eine Playlist ab einem bestimmten Track-Index ab.
      * Umgeht /playlists/{id}/tracks – der Player holt die Songs direkt von Spotify.
      */
+    async playTrackUri(trackUri) {
+        const token = await this.getStoredUserToken()
+        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        const targetId = this._deviceId
+        if (!targetId) throw new Error('Kein Spotify-Gerät verfügbar. Warte bis der Player bereit ist.')
+        const url = `${SPOTIFY_API_BASE}/me/player/play?device_id=${targetId}`
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uris: [trackUri] })
+        })
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error?.message || 'Wiedergabe fehlgeschlagen')
+        }
+    }
+
     async playContextAtOffset(contextUri, offsetPosition, deviceId) {
         const token = await this.getStoredUserToken()
         if (!token) throw new Error('Nicht mit Spotify verbunden.')

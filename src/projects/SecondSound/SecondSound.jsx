@@ -61,14 +61,11 @@ export default function SecondSound({ onBack }) {
     const [score, setScore] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
 
-    const [skipNotice, setSkipNotice] = useState(false)
 
     const timerRef = useRef(null)
-    const fetchGenRef = useRef(0)           // Generation-Counter: verhindert stale Track-Fetches
-    const lastPlayedTrackIdRef = useRef(null) // letzter bestätigter Track-ID (auch Duplikate)
-    const songsRef = useRef([])             // Referenz auf songs-Array (stale-closure-safe)
-    const usedTrackIds = useRef(new Set())
-    const usedArtists = useRef(new Set())
+    const fetchGenRef = useRef(0)
+    const lastPlayedTrackIdRef = useRef(null)
+    const songsRef = useRef([])
     const searchInputRef = useRef(null)
     const lastPlaySecondsRef = useRef(null)       // zuletzt gewählte Abspieldauer
     const sessionSecondsCorrectRef = useRef([])   // Sekunden pro richtig erratenen Song
@@ -225,71 +222,52 @@ export default function SecondSound({ onBack }) {
         setIsAuthError(false)
 
         try {
-            // Kein /tracks Endpoint mehr! Wir holen nur Metadaten und spielen per context_uri+offset.
-            let allSlots = []
+            // Alle Tracks aller Playlists vorab laden und deduplizieren
+            let allTracks = []
             for (const playlist of selectedPlaylists) {
-                let trackCount = playlist.trackCount
-
-                // Immer getPlaylistInfo aufrufen um echten Track-Count zu bekommen
-                // (Search-API liefert tracks.total oft als 0 oder gar nicht)
                 try {
-                    const info = await spotifyService.getPlaylistInfo(playlist.id)
-                    trackCount = info.trackCount
-                    // URI aus der Info-Antwort hat Vorrang (Search kann veraltet sein)
-                    playlist.uri = info.uri || playlist.uri || `spotify:playlist:${playlist.id}`
-                    console.log(`[SecondSound] Playlist "${playlist.name}": ${trackCount} Tracks, URI: ${playlist.uri}`)
+                    const tracks = await spotifyService.getPlaylistTracks(playlist.id)
+                    console.log(`[SecondSound] Playlist "${playlist.name}": ${tracks.length} Tracks geladen`)
+                    allTracks = [...allTracks, ...tracks]
                 } catch (e) {
-                    console.warn(`[SecondSound] getPlaylistInfo fehlgeschlagen für "${playlist.name}":`, e.message)
+                    console.warn(`[SecondSound] Tracks für "${playlist.name}" fehlgeschlagen:`, e.message)
                 }
-
-                // Wenn immer noch 0 (leere Playlist oder API gibt nichts zurück): Fallback
-                if (!trackCount) {
-                    console.warn(`[SecondSound] trackCount=0 für "${playlist.name}", nutze Fallback 300`)
-                    trackCount = 300
-                }
-
-                // URI sicherstellen
-                if (!playlist.uri) {
-                    playlist.uri = `spotify:playlist:${playlist.id}`
-                }
-
-                // Alle möglichen Positionen, zufällig gemischt
-                const positions = Array.from({ length: trackCount }, (_, i) => i)
-                    .sort(() => Math.random() - 0.5)
-
-                positions.forEach(pos => {
-                    allSlots.push({
-                        playlistUri: playlist.uri || `spotify:playlist:${playlist.id}`,
-                        offset: pos,
-                        playlistName: playlist.name,
-                        playlistImage: playlist.imageUrl
-                    })
-                })
             }
 
-            if (allSlots.length === 0) {
+            if (allTracks.length === 0) {
                 setLoadingError('Keine abspielbaren Songs in den ausgewählten Playlists gefunden.')
                 setPhase(PHASES.SETUP)
                 return
             }
 
-            // 3x so viele Slots wie gewünscht – Puffer für Duplikat-Skips
-            const poolSize = Math.min(songCount * 3, allSlots.length)
-            const selected = allSlots
-                .sort(() => Math.random() - 0.5)
-                .slice(0, poolSize)
+            // Deduplizieren: gleiche Track-ID und gleicher Künstler raus
+            const seenIds = new Set()
+            const seenArtists = new Set()
+            const deduped = allTracks.filter(t => {
+                const artistKey = t.artist?.toLowerCase().trim()
+                if (seenIds.has(t.id) || (artistKey && seenArtists.has(artistKey))) return false
+                seenIds.add(t.id)
+                if (artistKey) seenArtists.add(artistKey)
+                return true
+            })
 
-            // Tracking-Refs resetten
-            usedTrackIds.current = new Set()
-            usedArtists.current = new Set()
+            // Zufällig mischen und genau songCount nehmen
+            const shuffled = deduped.sort(() => Math.random() - 0.5).slice(0, songCount)
+
+            if (shuffled.length === 0) {
+                setLoadingError('Nicht genug einzigartige Songs gefunden.')
+                setPhase(PHASES.SETUP)
+                return
+            }
+
             fetchGenRef.current = 0
             lastPlayedTrackIdRef.current = null
-            songsRef.current = selected
+            songsRef.current = shuffled
 
-            setSongs(selected)
+            setSongs(shuffled)
             setCurrentIndex(0)
             setPlayedCount(0)
-            setTargetCount(songCount)
+            setTargetCount(shuffled.length)
             setIsRevealed(false)
             setCurrentTrackInfo(null)
             setScore(0)
@@ -318,7 +296,7 @@ export default function SecondSound({ onBack }) {
         }
 
         const song = songs[currentIndex]
-        if (!song?.playlistUri) return
+        if (!song?.uri) return
 
         if (timerRef.current) {
             clearTimeout(timerRef.current)
@@ -329,62 +307,15 @@ export default function SecondSound({ onBack }) {
         lastPlaySecondsRef.current = seconds
 
         try {
-            await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
+            await spotifyService.playTrackUri(song.uri)
             setIsPlaying(true)
             setPlayerError(null)
-
-            // Generation hochzählen – stale Fetches aus vorherigem Song werden ignoriert
-            const gen = ++fetchGenRef.current
-            // prevId aus Ref – bleibt korrekt auch nach Skip (wo currentTrackInfo null ist)
-            const prevId = lastPlayedTrackIdRef.current
-
-            // Polling: wartet bis Spotify wirklich den neuen Track geladen hat (max ~5s)
-            const pollTrackInfo = async (attempt = 0) => {
-                if (fetchGenRef.current !== gen) return // wurde überholt
-                const state = await spotifyService.getPlaybackState().catch(() => null)
-                if (!state || fetchGenRef.current !== gen) return
-                if (prevId && state.trackId === prevId) {
-                    if (attempt < 10) {
-                        // Spotify spielt noch den alten Track – warten und nochmal
-                        await new Promise(r => setTimeout(r, 500))
-                        return pollTrackInfo(attempt + 1)
-                    }
-                    // Nach 10 Versuchen: derselbe Track spielt wieder → Duplikat-Check greift
-                }
-                // Track-ID merken (auch wenn Duplikat) damit nächster Poll korrekt wartet
-                lastPlayedTrackIdRef.current = state.trackId
-
-                // Duplikat-Check
-                const trackKey = state.trackId
-                const artistKey = state.artist?.toLowerCase().trim()
-                const isDupTrack = usedTrackIds.current.has(trackKey)
-                const isDupArtist = artistKey && usedArtists.current.has(artistKey)
-                if (isDupTrack || isDupArtist) {
-                    console.log('[SecondSound] Duplikat übersprungen:', state.trackName, isDupArtist ? '(Künstler bereits gespielt)' : '(Track bereits gespielt)')
-                    // skipDuplicate direkt hier ausführen (stale-closure-safe via Refs)
-                    await stopPlayback()
-                    fetchGenRef.current++
-                    setSkipNotice(true)
-                    setTimeout(() => setSkipNotice(false), 2500)
-                    setIsRevealed(false)
-                    setCurrentTrackInfo(null)
-                    setIsPlaying(false)
-                    setCurrentIndex(prev => {
-                        const next = prev + 1
-                        if (next >= songsRef.current.length) {
-                            setPhase(PHASES.RESULTS)
-                        }
-                        return next < songsRef.current.length ? next : prev
-                    })
-                    return
-                }
-                // Song ist neu → als verwendet markieren
-                usedTrackIds.current.add(trackKey)
-                if (artistKey) usedArtists.current.add(artistKey)
-                console.log('[SecondSound] Track erkannt:', state.trackName, '-', state.artist)
-                setCurrentTrackInfo(state)
-            }
-            setTimeout(() => pollTrackInfo(), 600)
+            setCurrentTrackInfo({
+                trackName: song.name,
+                artist: song.artist,
+                imageUrl: song.albumImage,
+                trackId: song.id,
+            })
 
             if (seconds !== null) {
                 timerRef.current = setTimeout(async () => {
@@ -438,8 +369,6 @@ export default function SecondSound({ onBack }) {
         setScore(0)
         setIsPlaying(false)
         setLoadingError(null)
-        usedTrackIds.current = new Set()
-        usedArtists.current = new Set()
         fetchGenRef.current = 0
         lastPlayedTrackIdRef.current = null
         lastPlaySecondsRef.current = null
@@ -731,11 +660,6 @@ export default function SecondSound({ onBack }) {
                         </div>
                     </div>
 
-                    {skipNotice && (
-                        <div className={styles.skipNotice}>
-                            ⏭ Künstler bereits gespielt – nächster Song
-                        </div>
-                    )}
 
                     <div className={styles.progressBar}>
                         <div className={styles.progressFill} style={{ width: `${progressPct}%` }} />
