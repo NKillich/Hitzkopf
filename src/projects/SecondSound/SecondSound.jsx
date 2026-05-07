@@ -44,6 +44,7 @@ export default function SecondSound({ onBack }) {
     const [playlistResults, setPlaylistResults] = useState([])
     const [myPlaylists, setMyPlaylists] = useState([])
     const [myPlaylistsLoaded, setMyPlaylistsLoaded] = useState(false)
+    const [myPlaylistsError, setMyPlaylistsError] = useState(null)
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
     const [songCount, setSongCount] = useState(10)
     const [searchLoading, setSearchLoading] = useState(false)
@@ -196,15 +197,18 @@ export default function SecondSound({ onBack }) {
         return [...letterPlaylists.sort(byName), ...emojiPlaylists.sort(byName)]
     }
 
-    const handleLoadMyPlaylists = async () => {
-        if (myPlaylistsLoaded) return
+    const handleLoadMyPlaylists = async (force = false) => {
+        if (myPlaylistsLoaded && !force) return
         setSearchLoading(true)
+        setMyPlaylistsError(null)
         try {
             const playlists = await spotifyService.getMyPlaylists(50)
             setMyPlaylists(sortPlaylists(playlists))
             setMyPlaylistsLoaded(true)
         } catch (e) {
             console.error('[SecondSound] getMyPlaylists fehlgeschlagen:', e)
+            setMyPlaylistsError('Playlists konnten nicht geladen werden. Spotify antwortet gerade nicht – bitte nochmal versuchen.')
+            setMyPlaylistsLoaded(false)
         } finally {
             setSearchLoading(false)
         }
@@ -261,7 +265,7 @@ export default function SecondSound({ onBack }) {
             }
 
             if (allTracks.length === 0 && fallbackSlots.length === 0) {
-                setLoadingError('Keine abspielbaren Songs gefunden. Einige Playlists sind über die Spotify-API nicht lesbar – versuche eine eigene oder öffentliche Playlist.')
+                setLoadingError('Keine abspielbaren Songs gefunden. Mögliche Ursachen: Die Playlist enthält lokale Dateien (MP3s) die Spotify für externe Apps sperrt, oder die Playlist ist leer. Bitte eine andere Playlist wählen.')
                 setPhase(PHASES.SETUP)
                 return
             }
@@ -610,6 +614,14 @@ export default function SecondSound({ onBack }) {
                                 {searchLoading && (
                                     <div className={styles.loadingRow}>
                                         <span className={styles.spinnerSmall} /> Playlists werden geladen…
+                                    </div>
+                                )}
+                                {!searchLoading && myPlaylistsError && (
+                                    <div className={styles.myPlaylistsError}>
+                                        <span>{myPlaylistsError}</span>
+                                        <button className={styles.retryBtn} onClick={() => handleLoadMyPlaylists(true)}>
+                                            Erneut versuchen
+                                        </button>
                                     </div>
                                 )}
                                 {!searchLoading && myPlaylistsLoaded && myPlaylists.length === 0 && (
