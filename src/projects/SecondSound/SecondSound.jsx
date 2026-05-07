@@ -60,6 +60,8 @@ export default function SecondSound({ onBack }) {
     const [currentTrackInfo, setCurrentTrackInfo] = useState(null)
     const [score, setScore] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
+    const [songHistory, setSongHistory] = useState([])
+    const [historyOpen, setHistoryOpen] = useState(false)
 
 
     const timerRef = useRef(null)
@@ -343,6 +345,10 @@ export default function SecondSound({ onBack }) {
         const newPlayed = playedCount + 1
         setPlayedCount(newPlayed)
         setIsRevealed(false)
+        const playedSong = songs[currentIndex]
+        if (playedSong) {
+            setSongHistory(prev => [...prev, { song: playedSong, correct }])
+        }
         setCurrentTrackInfo(null)
         if (newPlayed >= targetCount || currentIndex + 1 >= songs.length) {
             const finalScore = correct ? score + 1 : score
@@ -374,6 +380,8 @@ export default function SecondSound({ onBack }) {
         lastPlaySecondsRef.current = null
         sessionSecondsCorrectRef.current = []
         songsRef.current = []
+        setSongHistory([])
+        setHistoryOpen(false)
         setPhase(PHASES.SETUP)
     }
 
@@ -811,6 +819,35 @@ export default function SecondSound({ onBack }) {
                                         {(allTimeStats.totalSecondsCorrect / allTimeStats.correctGuessesWithTime).toFixed(1)}s
                                     </span>
                                     <span className={styles.statLabel}>Ø Zeit zum Erraten</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {songHistory.length > 0 && (
+                        <div className={styles.historyCard}>
+                            <button
+                                className={styles.historyToggle}
+                                onClick={() => setHistoryOpen(o => !o)}
+                            >
+                                <span>🎵 Gespielte Songs</span>
+                                <span className={styles.historyChevron}>{historyOpen ? '▲' : '▼'}</span>
+                            </button>
+                            {historyOpen && (
+                                <div className={styles.historyList}>
+                                    {songHistory.map((entry, i) => (
+                                        <div key={i} className={`${styles.historyItem} ${entry.correct ? styles.historyCorrect : styles.historyWrong}`}>
+                                            {entry.song.albumImage
+                                                ? <img src={entry.song.albumImage} alt="" className={styles.historyThumb} />
+                                                : <div className={styles.historyThumbFallback}>🎵</div>
+                                            }
+                                            <div className={styles.historyInfo}>
+                                                <span className={styles.historyName}>{entry.song.name}</span>
+                                                <span className={styles.historyArtist}>{entry.song.artist}</span>
+                                            </div>
+                                            <span className={styles.historyIcon}>{entry.correct ? '✓' : '✕'}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>

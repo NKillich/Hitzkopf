@@ -1328,3 +1328,121 @@
     border-radius: 12px;
     padding: 0.75rem 0.5rem;
 }
+
+/* ── Song History ─────────────────────────────────────────────────────── */
+.historyCard {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.historyToggle {
+    width: 100%;
+    background: none;
+    border: none;
+    color: #b3b3b3;
+    font-size: 0.9rem;
+    font-weight: 700;
+    padding: 1rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+}
+
+.historyToggle:hover {
+    color: #fff;
+}
+
+.historyChevron {
+    font-size: 0.75rem;
+    opacity: 0.6;
+}
+
+.historyList {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.historyItem {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.historyItem:last-child {
+    border-bottom: none;
+}
+
+.historyCorrect {
+    background: rgba(29, 185, 84, 0.05);
+}
+
+.historyWrong {
+    background: rgba(231, 76, 60, 0.05);
+}
+
+.historyThumb {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.historyThumbFallback {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.historyInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.historyName {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.historyArtist {
+    font-size: 0.75rem;
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.historyIcon {
+    font-size: 0.9rem;
+    font-weight: 900;
+    flex-shrink: 0;
+}
+
+.historyCorrect .historyIcon {
+    color: #1DB954;
+}
+
+.historyWrong .historyIcon {
+    color: #e74c3c;
+}
