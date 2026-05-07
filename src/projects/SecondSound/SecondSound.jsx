@@ -341,13 +341,15 @@ export default function SecondSound({ onBack }) {
             // Polling: wartet bis Spotify wirklich den neuen Track geladen hat (max ~5s)
             const pollTrackInfo = async (attempt = 0) => {
                 if (fetchGenRef.current !== gen) return // wurde überholt
-                if (attempt > 10) return
                 const state = await spotifyService.getPlaybackState().catch(() => null)
                 if (!state || fetchGenRef.current !== gen) return
                 if (prevId && state.trackId === prevId) {
-                    // Spotify spielt noch den alten Track – warten und nochmal
-                    await new Promise(r => setTimeout(r, 500))
-                    return pollTrackInfo(attempt + 1)
+                    if (attempt < 10) {
+                        // Spotify spielt noch den alten Track – warten und nochmal
+                        await new Promise(r => setTimeout(r, 500))
+                        return pollTrackInfo(attempt + 1)
+                    }
+                    // Nach 10 Versuchen: derselbe Track spielt wieder → Duplikat-Check greift
                 }
                 // Track-ID merken (auch wenn Duplikat) damit nächster Poll korrekt wartet
                 lastPlayedTrackIdRef.current = state.trackId
