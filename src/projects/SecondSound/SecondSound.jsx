@@ -394,7 +394,6 @@ export default function SecondSound({ onBack }) {
 
                 dbg(`pollForInfo: Track gesetzt → "${state.trackName}" von "${state.artist}" (id=${state.trackId})`)
                 lastPlayedTrackIdRef.current = state.trackId
-                playedTrackIdsRef.current.add(state.trackId)
                 setCurrentTrackInfo(state)
             }
 
