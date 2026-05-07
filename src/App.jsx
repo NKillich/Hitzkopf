@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { logEvent } from './firebase.js'
 import ProjectHub from './components/ProjectHub'
 import HitzkopfGame from './projects/Hitzkopf/HitzkopfGame'
 import MusicVoter from './projects/MusicVoter/MusicVoter'
@@ -34,7 +35,10 @@ function App() {
         window.location.hash = hash ? `#${hash}` : ''
     }, [currentProject])
 
-    const handleSelectProject = (projectId) => setCurrentProject(projectId)
+    const handleSelectProject = (projectId) => {
+        logEvent('open_project', { project: projectId })
+        setCurrentProject(projectId)
+    }
     const handleBackToHub = () => setCurrentProject(null)
 
     return (

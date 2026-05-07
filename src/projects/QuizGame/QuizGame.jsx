@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { initializeApp, getApps } from 'firebase/app'
+import { firebaseConfig } from '../../firebase.js'
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore, doc, setDoc, updateDoc, onSnapshot, increment, arrayUnion, deleteDoc, deleteField, collection, query, where } from 'firebase/firestore'
 import { characters, getCharacterById, getPassiveById, getCharacterQuip } from '../../data/quizCharacters'
@@ -7,14 +8,6 @@ import { getUpgradeById, generateUpgradeOffers, generateSingleUpgrade, RARITY_CO
 import { quizCategories, getQuestionsForCategories, tiebreakerQuestions } from '../../data/quizQuestions'
 import styles from './QuizGame.module.css'
 
-const firebaseConfig = {
-    apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
-    authDomain: "hitzkopf-f0ea6.firebaseapp.com",
-    projectId: "hitzkopf-f0ea6",
-    storageBucket: "hitzkopf-f0ea6.firebasestorage.app",
-    messagingSenderId: "828164655874",
-    appId: "1:828164655874:web:1cab759bdb03bfb736101b"
-}
 
 const QUESTION_TIME = 30
 const UPGRADE_EVERY_N = 2

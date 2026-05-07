@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { initializeApp } from 'firebase/app'
+import { getApp } from 'firebase/app'
+import '../../firebase.js'
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, arrayUnion, arrayRemove, increment, deleteField, deleteDoc, runTransaction } from 'firebase/firestore'
 import { questionCategories, getAllQuestions } from '../../data/questionCategories'
@@ -77,15 +78,6 @@ const generateOperationId = (prefix = 'op') => {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
 }
 
-// Firebase Config
-const firebaseConfig = {
-    apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
-    authDomain: "hitzkopf-f0ea6.firebaseapp.com",
-    projectId: "hitzkopf-f0ea6",
-    storageBucket: "hitzkopf-f0ea6.firebasestorage.app",
-    messagingSenderId: "828164655874",
-    appId: "1:828164655874:web:1cab759bdb03bfb736101b"
-};
 
 // Emojis
 // PERFORMANCE-FIX: Sortiere nur einmal beim Initialisieren, nicht bei jedem Import
@@ -654,11 +646,10 @@ function HitzkopfGame({ onBack }) {
     
     // Firebase Initialisierung mit automatischer anonymer Authentifizierung
     useEffect(() => {
-        const firebaseApp = initializeApp(firebaseConfig)
+        const firebaseApp = getApp()
         const firestoreDb = getFirestore(firebaseApp)
         const auth = getAuth(firebaseApp)
         
-        setApp(firebaseApp)
         setDb(firestoreDb)
         
         // Automatische anonyme Anmeldung beim App-Start

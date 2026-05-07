@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { initializeApp } from 'firebase/app'
+import { getApp } from 'firebase/app'
+import '../../firebase.js'
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, deleteDoc, deleteField, collection, query, where, getDocs } from 'firebase/firestore'
 import LobbySystem, { generateRandomName } from '../../shared/LobbySystem'
@@ -24,15 +25,6 @@ const getOrCreateEmoji = () => {
     return emoji
 }
 
-// Firebase Config (gleiche wie Hitzkopf)
-const firebaseConfig = {
-    apiKey: "AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA",
-    authDomain: "hitzkopf-f0ea6.firebaseapp.com",
-    projectId: "hitzkopf-f0ea6",
-    storageBucket: "hitzkopf-f0ea6.firebasestorage.app",
-    messagingSenderId: "828164655874",
-    appId: "1:828164655874:web:1cab759bdb03bfb736101b"
-}
 
 const MusicVoter = ({ onBack }) => {
     // Firebase
@@ -114,11 +106,10 @@ const MusicVoter = ({ onBack }) => {
 
     // Firebase Initialisierung
     useEffect(() => {
-        const firebaseApp = initializeApp(firebaseConfig)
+        const firebaseApp = getApp()
         const firebaseAuth = getAuth(firebaseApp)
         const firebaseDb = getFirestore(firebaseApp)
         
-        setApp(firebaseApp)
         setAuth(firebaseAuth)
         setDb(firebaseDb)
 
