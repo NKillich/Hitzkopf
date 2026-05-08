@@ -67,13 +67,14 @@ export default function SecondSound({ onBack }) {
 
 
     const timerRef = useRef(null)
-    const currentIndexRef = useRef(0)           // Spiegel von currentIndex für advanceAfterAnswer
+    const fetchGenRef = useRef(0)               // bricht veraltete getPlaybackState-Callbacks ab
+    const currentIndexRef = useRef(0)
     const isAnsweringRef = useRef(false)        // verhindert Doppel-Klick auf Antwort-Buttons
     const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
     const songsRef = useRef([])
     const searchInputRef = useRef(null)
-    const lastPlaySecondsRef = useRef(null)       // zuletzt gewählte Abspieldauer
-    const sessionSecondsCorrectRef = useRef([])   // Sekunden pro richtig erratenen Song
+    const lastPlaySecondsRef = useRef(null)
+    const sessionSecondsCorrectRef = useRef([])
 
     // Firestore initialisieren
     useEffect(() => {
@@ -227,43 +228,53 @@ export default function SecondSound({ onBack }) {
         if (selectedPlaylists.length === 0) return
         setPhase(PHASES.LOADING)
         setLoadingError(null)
+        setLoadingStatus('Playlist wird vorbereitet…')
 
         try {
-            // Alle Tracks vorab laden – nach Track-ID deduplizieren
-            const trackMap = new Map()
+            const slots = []
 
             for (const playlist of selectedPlaylists) {
-                setLoadingStatus(`Lade „${playlist.name}"…`)
-                const tracks = await spotifyService.getPlaylistTracks(playlist.id)
-                for (const track of tracks) {
-                    if (!trackMap.has(track.id)) {
-                        trackMap.set(track.id, track)
+                let count = playlist.trackCount || 0
+                if (count === 0) {
+                    try {
+                        const info = await spotifyService.getPlaylistInfo(playlist.id)
+                        count = info.trackCount || 0
+                    } catch (e) {
+                        console.warn(`[SS] getPlaylistInfo fehlgeschlagen für "${playlist.name}":`, e.message)
                     }
                 }
-                console.log(`[SS] "${playlist.name}": ${tracks.length} Tracks geladen, Pool jetzt: ${trackMap.size}`)
+                if (count === 0) count = 200
+
+                const uri = `spotify:playlist:${playlist.id}`
+                // 2× Puffer – mehr als genug, kein Auto-Skip nötig
+                const poolSize = Math.min(count, songCount * 2)
+                const positions = Array.from({ length: count }, (_, i) => i)
+                    .sort(() => Math.random() - 0.5)
+                    .slice(0, poolSize)
+
+                positions.forEach(offset => slots.push({ playlistUri: uri, offset }))
+                console.log(`[SS] "${playlist.name}": ${count} Tracks, ${positions.length} Slots generiert`)
             }
 
-            const pool = [...trackMap.values()]
-                .sort(() => Math.random() - 0.5)
-                .slice(0, songCount)
-
-            if (pool.length === 0) {
-                setLoadingError('Keine Songs in den gewählten Playlists gefunden.')
+            if (slots.length === 0) {
+                setLoadingError('Keine Playlists verfügbar. Bitte eine Playlist auswählen.')
                 setPhase(PHASES.SETUP)
                 return
             }
 
-            console.log(`[SS] Spiel gestartet – ${pool.length} einzigartige Songs, Ziel: ${songCount}`)
+            const shuffled = slots.sort(() => Math.random() - 0.5)
+            console.log(`[SS] Spiel gestartet – ${shuffled.length} Slots, Ziel: ${songCount}`)
 
-            songsRef.current = pool
+            fetchGenRef.current = 0
+            songsRef.current = shuffled
             sessionSecondsCorrectRef.current = []
             lastPlaySecondsRef.current = null
 
-            setSongs(pool)
+            setSongs(shuffled)
             currentIndexRef.current = 0
             setCurrentIndex(0)
             setPlayedCount(0)
-            setTargetCount(pool.length)
+            setTargetCount(songCount)
             setIsRevealed(false)
             setCurrentTrackInfo(null)
             setScore(0)
@@ -272,8 +283,8 @@ export default function SecondSound({ onBack }) {
             setHistoryOpen(false)
             setPhase(PHASES.GAME)
         } catch (e) {
-            console.error('[SecondSound] Fehler beim Laden:', e)
-            setLoadingError(e.message || 'Songs konnten nicht geladen werden.')
+            console.error('[SS] Fehler beim Starten:', e)
+            setLoadingError(e.message || 'Fehler beim Starten des Spiels.')
             setPhase(PHASES.SETUP)
         }
     }
@@ -302,7 +313,7 @@ export default function SecondSound({ onBack }) {
         }
 
         const song = songs[currentIndex]
-        if (!song?.uri) {
+        if (!song) {
             dbg('handlePlayFor: kein Song an currentIndex', currentIndex)
             return
         }
@@ -316,19 +327,20 @@ export default function SecondSound({ onBack }) {
         isPlayingRequestRef.current = true
 
         try {
-            await spotifyService.playTrackUri(song.uri)
+            await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
             isPlayingRequestRef.current = false
             setIsPlaying(true)
             setPlayerError(null)
 
-            // Track-Info ist bereits bekannt – sofort setzen, kein Polling nötig
-            setCurrentTrackInfo({
-                trackId: song.id,
-                trackName: song.name,
-                artist: song.artist,
-                imageUrl: song.albumImage,
-            })
-            dbg(`Spielt: "${song.name}" von "${song.artist}"`)
+            // Einmalig nach 700ms Track-Info holen – kein Warte-Loop, kein Auto-Skip
+            const gen = ++fetchGenRef.current
+            setTimeout(async () => {
+                if (fetchGenRef.current !== gen) return
+                const state = await spotifyService.getPlaybackState().catch(() => null)
+                if (fetchGenRef.current !== gen || !state) return
+                dbg(`Track erkannt: "${state.trackName}" von "${state.artist}" (id=${state.trackId})`)
+                setCurrentTrackInfo(state)
+            }, 700)
 
             if (seconds !== null) {
                 timerRef.current = setTimeout(async () => {
@@ -350,6 +362,7 @@ export default function SecondSound({ onBack }) {
     const advanceAfterAnswer = (correct) => {
         dbg(`advanceAfterAnswer: correct=${correct} | currentIndex=${currentIndex} | playedCount=${playedCount} | targetCount=${targetCount}`)
         dbg(`  aktueller Track: "${currentTrackInfo?.trackName}" von "${currentTrackInfo?.artist}"`)
+        fetchGenRef.current++       // veraltete Polls abbrechen
         isAnsweringRef.current = false
         isPlayingRequestRef.current = false
         if (correct) {
