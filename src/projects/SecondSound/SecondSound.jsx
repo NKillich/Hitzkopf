@@ -234,26 +234,21 @@ export default function SecondSound({ onBack }) {
             const slots = []
 
             for (const playlist of selectedPlaylists) {
-                let count = playlist.trackCount || 0
-                if (count === 0) {
-                    try {
-                        const info = await spotifyService.getPlaylistInfo(playlist.id)
-                        count = info.trackCount || 0
-                    } catch (e) {
-                        console.warn(`[SS] getPlaylistInfo fehlgeschlagen für "${playlist.name}":`, e.message)
-                    }
-                }
-                if (count === 0) count = 200
+                // trackCount aus den Suchergebnissen ist die zuverlässigste Quelle –
+                // getPlaylistInfo zählt gelöschte/entfernte Einträge mit und liefert
+                // zu hohe Zahlen, die zu Out-of-bounds-Offsets führen.
+                // Fallback: nur so viele Positionen wie wir maximal brauchen (songCount * 2).
+                const count = playlist.trackCount > 0 ? playlist.trackCount : songCount * 2
+                const poolSize = Math.min(count, songCount * 2)
 
                 const uri = `spotify:playlist:${playlist.id}`
-                // 2× Puffer – mehr als genug, kein Auto-Skip nötig
-                const poolSize = Math.min(count, songCount * 2)
+                // Positionen NUR aus [0, count-1] – nie out of bounds
                 const positions = Array.from({ length: count }, (_, i) => i)
                     .sort(() => Math.random() - 0.5)
                     .slice(0, poolSize)
 
                 positions.forEach(offset => slots.push({ playlistUri: uri, offset }))
-                console.log(`[SS] "${playlist.name}": ${count} Tracks, ${positions.length} Slots generiert`)
+                console.log(`[SS] "${playlist.name}": trackCount=${count}, poolSize=${poolSize}, max offset=${Math.max(...positions)}`)
             }
 
             if (slots.length === 0) {
