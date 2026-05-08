@@ -49,6 +49,7 @@ export default function SecondSound({ onBack }) {
     const [songCount, setSongCount] = useState(10)
     const [searchLoading, setSearchLoading] = useState(false)
     const [loadingError, setLoadingError] = useState(null)
+    const [loadingStatus, setLoadingStatus] = useState('')
     const [isAuthError, setIsAuthError] = useState(false)
     const [needsRelogin, setNeedsRelogin] = useState(false)
 
@@ -66,11 +67,7 @@ export default function SecondSound({ onBack }) {
 
 
     const timerRef = useRef(null)
-    const fetchGenRef = useRef(0)
-    const lastPlayedTrackIdRef = useRef(null)
-    const lastPlayedSlotRef = useRef(null)      // "{playlistUri}:{offset}" des zuletzt gespielten Slots
-    const playedTrackIdsRef = useRef(new Set()) // alle bereits gespielten Track-IDs (Duplikat-Schutz)
-    const currentIndexRef = useRef(0)           // Spiegel von currentIndex für async-Callbacks
+    const currentIndexRef = useRef(0)           // Spiegel von currentIndex für advanceAfterAnswer
     const isAnsweringRef = useRef(false)        // verhindert Doppel-Klick auf Antwort-Buttons
     const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
     const songsRef = useRef([])
@@ -232,54 +229,41 @@ export default function SecondSound({ onBack }) {
         setLoadingError(null)
 
         try {
-            const slots = []
+            // Alle Tracks vorab laden – nach Track-ID deduplizieren
+            const trackMap = new Map()
 
             for (const playlist of selectedPlaylists) {
-                // Bekannte Anzahl aus den Suchergebnissen nutzen,
-                // andernfalls einmalig von der API holen
-                let count = playlist.trackCount || 0
-                if (count === 0) {
-                    try {
-                        const info = await spotifyService.getPlaylistInfo(playlist.id)
-                        count = info.trackCount || 0
-                    } catch (e) {
-                        console.warn(`[SecondSound] getPlaylistInfo fehlgeschlagen für "${playlist.name}":`, e.message)
+                setLoadingStatus(`Lade „${playlist.name}"…`)
+                const tracks = await spotifyService.getPlaylistTracks(playlist.id)
+                for (const track of tracks) {
+                    if (!trackMap.has(track.id)) {
+                        trackMap.set(track.id, track)
                     }
                 }
-                // Sicherer Standardwert falls Spotify die Anzahl nicht liefert
-                if (count === 0) count = 200
-
-                const uri = `spotify:playlist:${playlist.id}`
-                // 3× die Zielanzahl als Puffer für Duplikate
-                Array.from({ length: Math.min(count, 500) }, (_, i) => i)
-                    .sort(() => Math.random() - 0.5)
-                    .slice(0, songCount * 3)
-                    .forEach(offset => slots.push({ playlistUri: uri, offset }))
+                console.log(`[SS] "${playlist.name}": ${tracks.length} Tracks geladen, Pool jetzt: ${trackMap.size}`)
             }
 
-            if (slots.length === 0) {
-                setLoadingError('Keine Playlists verfügbar. Bitte eine Playlist auswählen.')
+            const pool = [...trackMap.values()]
+                .sort(() => Math.random() - 0.5)
+                .slice(0, songCount)
+
+            if (pool.length === 0) {
+                setLoadingError('Keine Songs in den gewählten Playlists gefunden.')
                 setPhase(PHASES.SETUP)
                 return
             }
 
-            const shuffled = slots.sort(() => Math.random() - 0.5)
+            console.log(`[SS] Spiel gestartet – ${pool.length} einzigartige Songs, Ziel: ${songCount}`)
 
-            fetchGenRef.current = 0
-            lastPlayedTrackIdRef.current = null
-            lastPlayedSlotRef.current = null
-            playedTrackIdsRef.current = new Set()
-            songsRef.current = shuffled
+            songsRef.current = pool
             sessionSecondsCorrectRef.current = []
             lastPlaySecondsRef.current = null
 
-            console.log('[SS] Spiel gestartet – Song-Pool:', shuffled.length, 'Slots, Ziel:', songCount)
-
-            setSongs(shuffled)
+            setSongs(pool)
             currentIndexRef.current = 0
             setCurrentIndex(0)
             setPlayedCount(0)
-            setTargetCount(songCount)
+            setTargetCount(pool.length)
             setIsRevealed(false)
             setCurrentTrackInfo(null)
             setScore(0)
@@ -288,8 +272,8 @@ export default function SecondSound({ onBack }) {
             setHistoryOpen(false)
             setPhase(PHASES.GAME)
         } catch (e) {
-            console.error('[SecondSound] Fehler beim Starten:', e)
-            setLoadingError(e.message || 'Fehler beim Starten des Spiels.')
+            console.error('[SecondSound] Fehler beim Laden:', e)
+            setLoadingError(e.message || 'Songs konnten nicht geladen werden.')
             setPhase(PHASES.SETUP)
         }
     }
@@ -307,7 +291,7 @@ export default function SecondSound({ onBack }) {
     }
 
     const handlePlayFor = async (seconds) => {
-        dbg(`handlePlayFor: ${seconds}s | currentIndex=${currentIndex} | songs.length=${songs.length}`)
+        dbg(`handlePlayFor: ${seconds}s | currentIndex=${currentIndex}`)
         if (isPlayingRequestRef.current) {
             dbg('handlePlayFor: ignoriert (Request bereits aktiv)')
             return
@@ -318,11 +302,10 @@ export default function SecondSound({ onBack }) {
         }
 
         const song = songs[currentIndex]
-        if (!song) {
+        if (!song?.uri) {
             dbg('handlePlayFor: kein Song an currentIndex', currentIndex)
             return
         }
-        dbg(`Song-Slot: playlist=${song.playlistUri} offset=${song.offset}`)
 
         if (timerRef.current) {
             clearTimeout(timerRef.current)
@@ -330,74 +313,22 @@ export default function SecondSound({ onBack }) {
         }
 
         lastPlaySecondsRef.current = seconds
-
-        // Wenn derselbe Slot erneut gespielt wird, prevId nicht setzen –
-        // sonst wartet der Poll ewig auf einen Track-Wechsel der nie kommt
-        const slotKey = `${song.playlistUri}:${song.offset}`
-        const isSameSlot = lastPlayedSlotRef.current === slotKey
-        lastPlayedSlotRef.current = slotKey
-
         isPlayingRequestRef.current = true
+
         try {
-            await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
+            await spotifyService.playTrackUri(song.uri)
             isPlayingRequestRef.current = false
             setIsPlaying(true)
             setPlayerError(null)
 
-            const gen = ++fetchGenRef.current
-            const prevId = isSameSlot ? null : lastPlayedTrackIdRef.current
-            dbg(`pollForInfo gestartet: gen=${gen} prevId=${prevId} (isSameSlot=${isSameSlot})`)
-
-            const pollForInfo = async (attempt = 0) => {
-                if (fetchGenRef.current !== gen) {
-                    dbg(`pollForInfo gen veraltet (${gen} != ${fetchGenRef.current}), abgebrochen`)
-                    return
-                }
-                const state = await spotifyService.getPlaybackState().catch(() => null)
-                if (!state || fetchGenRef.current !== gen) {
-                    dbg(`pollForInfo: kein state oder gen veraltet, abgebrochen`)
-                    return
-                }
-
-                dbg(`pollForInfo attempt=${attempt}: trackId=${state.trackId} (prev=${prevId}) track="${state.trackName}" artist="${state.artist}"`)
-
-                // Warten bis Spotify tatsächlich einen neuen Track geladen hat
-                if (prevId && state.trackId === prevId && attempt < 15) {
-                    dbg(`pollForInfo: gleicher Track wie vorher, warte 400ms (attempt ${attempt})`)
-                    await new Promise(r => setTimeout(r, 400))
-                    return pollForInfo(attempt + 1)
-                }
-
-                if (attempt >= 15) {
-                    dbg('pollForInfo: max attempts erreicht! Spotify liefert immer noch denselben Track.')
-                }
-
-                // Duplikat-Check: wurde dieser Track in dieser Runde schon gespielt?
-                if (playedTrackIdsRef.current.has(state.trackId)) {
-                    dbg(`pollForInfo: DUPLIKAT erkannt! "${state.trackName}" (${state.trackId}) bereits gespielt – überspringe Slot`)
-                    // Auto-Pause und nächsten Slot vorbereiten
-                    await spotifyService.pausePlayback().catch(() => {})
-                    setIsPlaying(false)
-                    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
-                    // Slot überspringen ohne Punkt und ohne History-Eintrag
-                    const nextIdx = currentIndexRef.current + 1
-                    if (nextIdx < songsRef.current.length) {
-                        currentIndexRef.current = nextIdx
-                        lastPlayedSlotRef.current = null
-                        setCurrentIndex(nextIdx)
-                        dbg(`Duplikat übersprungen → weiter mit Index ${nextIdx}`)
-                    } else {
-                        dbg('Duplikat übersprungen – keine weiteren Slots verfügbar')
-                    }
-                    return
-                }
-
-                dbg(`pollForInfo: Track gesetzt → "${state.trackName}" von "${state.artist}" (id=${state.trackId})`)
-                lastPlayedTrackIdRef.current = state.trackId
-                setCurrentTrackInfo(state)
-            }
-
-            setTimeout(() => pollForInfo(), 700)
+            // Track-Info ist bereits bekannt – sofort setzen, kein Polling nötig
+            setCurrentTrackInfo({
+                trackId: song.id,
+                trackName: song.name,
+                artist: song.artist,
+                imageUrl: song.albumImage,
+            })
+            dbg(`Spielt: "${song.name}" von "${song.artist}"`)
 
             if (seconds !== null) {
                 timerRef.current = setTimeout(async () => {
@@ -415,14 +346,11 @@ export default function SecondSound({ onBack }) {
         }
     }
 
-    // Rückt zum nächsten Slot vor – zählt den Song als gespielt
+    // Rückt zum nächsten Song vor – zählt den Song als gespielt
     const advanceAfterAnswer = (correct) => {
-        dbg(`advanceAfterAnswer: correct=${correct} | currentIndex=${currentIndex} | playedCount=${playedCount} | targetCount=${targetCount} | songs.length=${songs.length}`)
-        dbg(`  aktueller Track: "${currentTrackInfo?.trackName}" von "${currentTrackInfo?.artist}" (id=${currentTrackInfo?.trackId})`)
-        if (currentTrackInfo?.trackId) playedTrackIdsRef.current.add(currentTrackInfo.trackId)
-        fetchGenRef.current++           // laufende Polls abbrechen
-        lastPlayedSlotRef.current = null  // nächster Song ist ein neuer Slot
-        isAnsweringRef.current = false    // Sperre für nächsten Song freigeben
+        dbg(`advanceAfterAnswer: correct=${correct} | currentIndex=${currentIndex} | playedCount=${playedCount} | targetCount=${targetCount}`)
+        dbg(`  aktueller Track: "${currentTrackInfo?.trackName}" von "${currentTrackInfo?.artist}"`)
+        isAnsweringRef.current = false
         isPlayingRequestRef.current = false
         if (correct) {
             setScore(prev => prev + 1)
@@ -478,8 +406,6 @@ export default function SecondSound({ onBack }) {
         setScore(0)
         setIsPlaying(false)
         setLoadingError(null)
-        fetchGenRef.current = 0
-        lastPlayedTrackIdRef.current = null
         lastPlaySecondsRef.current = null
         sessionSecondsCorrectRef.current = []
         songsRef.current = []
@@ -754,7 +680,7 @@ export default function SecondSound({ onBack }) {
                 <div className={styles.bg} />
                 <div className={styles.loadingContainer}>
                     <div className={styles.loadingSpinner} />
-                    <p className={styles.loadingText}>Songs werden geladen...</p>
+                    <p className={styles.loadingText}>{loadingStatus || 'Songs werden geladen…'}</p>
                 </div>
             </div>
         )
