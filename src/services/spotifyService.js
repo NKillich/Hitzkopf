@@ -953,7 +953,6 @@ class SpotifyService {
     async getPlaylistTracks(playlistId) {
         const userToken = await this.getStoredUserToken()
 
-        // Wähle initial den User-Token; bei Auth-Fehler Client-Credentials
         let activeToken = userToken
         if (!activeToken) {
             await this.ensureValidToken()
@@ -961,40 +960,31 @@ class SpotifyService {
         }
         if (!activeToken) throw new Error('Nicht mit Spotify verbunden.')
 
+        const tokenType = activeToken === userToken ? 'User-Token' : 'Client-Credentials'
+        console.log(`[SpotifyService] getPlaylistTracks "${playlistId}" | Token-Typ: ${tokenType} | Token: ${activeToken?.slice(0,8)}…`)
+
         const fetchPage = async (url, token) => {
-            console.log(`[SpotifyService] GET ${url.replace(SPOTIFY_API_BASE, '')} | Token: ${token ? token.slice(0,8) + '…' : 'null'}`)
-            const res = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            return res
+            console.log(`[SpotifyService] GET ${url.replace(SPOTIFY_API_BASE, '')} | Token: ${token?.slice(0,8)}…`)
+            return fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
         }
 
         let tracks = []
-        let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=100&market=from_token`
+        // Kein market=from_token – funktioniert nicht mit Client-Credentials und blockiert manche öffentlichen Playlists
+        let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=100`
 
         while (url) {
             let res = await fetchPage(url, activeToken)
-
-            // Bei Auth-Fehler mit User-Token → auf Client Credentials umschwenken
-            if (!res.ok && userToken && activeToken === userToken && (res.status === 401 || res.status === 403)) {
-                console.warn(`⚠️ User-Token für Playlist ${playlistId} abgelehnt (${res.status}), versuche Client-Credentials…`)
-                await this.ensureValidToken()
-                activeToken = this.accessToken
-                res = await fetchPage(url, activeToken)
-            }
+            console.log(`[SpotifyService] Response: ${res.status} ${res.statusText}`)
 
             if (!res.ok) {
                 const errText = await res.text().catch(() => '')
-                console.error(`[SpotifyService] getPlaylistTracks FEHLER ${res.status} ${res.statusText}`)
-                console.error(`[SpotifyService] Response Body:`, errText)
+                console.error(`[SpotifyService] getPlaylistTracks FEHLER ${res.status}:`, errText)
                 let errMsg = 'Zugriff verweigert'
                 try { errMsg = JSON.parse(errText)?.error?.message || errMsg } catch {}
                 throw new Error(`Playlist-Tracks Fehler (HTTP ${res.status}): ${errMsg}`)
             }
-            console.log(`[SpotifyService] ✓ Tracks-Seite OK (${res.status})`)
 
             const data = await res.json()
-
             const pageTracks = (data.items || [])
                 .filter(item => item?.track?.uri && item?.track?.type !== 'episode')
                 .map(item => ({
@@ -1006,10 +996,12 @@ class SpotifyService {
                     uri: item.track.uri
                 }))
 
+            console.log(`[SpotifyService] Seite geladen: ${pageTracks.length} Tracks (gesamt: ${tracks.length + pageTracks.length})`)
             tracks = [...tracks, ...pageTracks]
             url = data.next || null
         }
 
+        console.log(`[SpotifyService] ✓ getPlaylistTracks fertig: ${tracks.length} Tracks total`)
         return tracks
     }
 
