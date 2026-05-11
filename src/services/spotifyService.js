@@ -29,7 +29,8 @@ class SpotifyService {
         this.clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
         this.clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
         // Redirect URI: Aus .env.local laden (lokal) oder Production-Fallback.
-        // Lokal: VITE_SPOTIFY_REDIRECT_URI=http://localhost:5173/Hitzkopf in .env.local setzen.
+        // Lokal: VITE_SPOTIFY_REDIRECT_URI=http://127.0.0.1:5173/Hitzkopf in .env.local setzen.
+        // Spotify erlaubt kein "localhost" – explizite IP 127.0.0.1 verwenden!
         const productionRedirect = 'https://nkillich.github.io/Hitzkopf'
         const fromEnv = import.meta.env.VITE_SPOTIFY_REDIRECT_URI
         this.redirectUri = (fromEnv || productionRedirect).replace(/\/$/, '')
