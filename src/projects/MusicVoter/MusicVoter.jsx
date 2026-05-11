@@ -85,12 +85,13 @@ const MusicVoter = ({ onBack }) => {
         const code = params.get('code')
 
         if (code) {
+            // URL sofort leeren – verhindert React StrictMode Doppelaufruf → "Invalid authorization code"
+            window.history.replaceState({}, '', window.location.pathname || '/')
             let cancelled = false
             ;(async () => {
                 try {
                     await spotifyService.exchangeCodeForToken(code)
                     if (cancelled) return
-                    window.history.replaceState({}, '', window.location.pathname || '/')
                 } catch (e) {
                     console.error('Spotify Callback Fehler:', e)
                     if (!cancelled) alert('Spotify-Verbindung fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'))

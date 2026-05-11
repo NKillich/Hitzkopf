@@ -33,7 +33,7 @@ class SpotifyService {
         // Spotify erlaubt kein "localhost" – explizite IP 127.0.0.1 verwenden!
         const productionRedirect = 'https://nkillich.github.io/Hitzkopf'
         const fromEnv = import.meta.env.VITE_SPOTIFY_REDIRECT_URI
-        this.redirectUri = (fromEnv || productionRedirect).replace(/\/$/, '')
+        this.redirectUri = fromEnv || productionRedirect
         if (typeof console !== 'undefined') {
             console.log('🎵 Spotify Redirect URI:', this.redirectUri)
         }

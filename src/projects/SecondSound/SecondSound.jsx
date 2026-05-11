@@ -113,20 +113,14 @@ export default function SecondSound({ onBack }) {
         const code = params.get('code')
 
         if (code) {
+            // URL sofort leeren – verhindert dass React StrictMode (Dev-Doppelaufruf)
+            // denselben Code ein zweites Mal an Spotify schickt → "Invalid authorization code"
+            window.history.replaceState({}, '', window.location.pathname || '/')
             ;(async () => {
                 try {
                     await spotifyService.exchangeCodeForToken(code)
-                    window.history.replaceState({}, '', window.location.pathname || '/')
-                    // Frischer Token: Playlist-Scope testen
-                    const hasScope = await spotifyService.testPlaylistAccess()
-                    console.log('[SecondSound] Playlist-Scope nach Login:', hasScope)
-                    if (hasScope) {
-                        setNeedsRelogin(false)
-                        setPhase(PHASES.SETUP)
-                    } else {
-                        setNeedsRelogin(true)
-                        setPhase(PHASES.LOGIN)
-                    }
+                    setNeedsRelogin(false)
+                    setPhase(PHASES.SETUP)
                 } catch (e) {
                     console.error('Spotify Callback Fehler:', e)
                     setPhase(PHASES.LOGIN)
