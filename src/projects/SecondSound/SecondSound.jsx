@@ -30,13 +30,52 @@ const RESULT_MESSAGES = [
     { minPercent: 0, emoji: '😬', title: 'Oje...', sub: 'Diese Playlists kennt wohl jemand noch nicht so gut.' }
 ]
 
+const SunIcon = () => (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <circle cx="12" cy="12" r="4.5"/>
+        <line x1="12" y1="2" x2="12" y2="4"/>
+        <line x1="12" y1="20" x2="12" y2="22"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="2" y1="12" x2="4" y2="12"/>
+        <line x1="20" y1="12" x2="22" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+)
+
+const MoonIcon = () => (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+)
+
 export default function SecondSound({ onBack }) {
     const [phase, setPhase] = useState(PHASES.LOGIN)
     const [playerReady, setPlayerReady] = useState(false)
     const [playerError, setPlayerError] = useState(null)
     const [allTimeStats, setAllTimeStats] = useState(null)
+    const [isDark, setIsDark] = useState(() => localStorage.getItem('ss_theme') !== 'light')
     const dbRef = useRef(null)
     const deviceId = useRef(getDeviceId())
+
+    const toggleTheme = () => {
+        setIsDark(prev => {
+            const next = !prev
+            localStorage.setItem('ss_theme', next ? 'dark' : 'light')
+            return next
+        })
+    }
+
+    const wrapperClass = `${styles.wrapper} ${isDark ? '' : styles.light}`
+
+    const ThemeToggle = () => (
+        <button className={styles.themeToggle} onClick={toggleTheme} aria-label="Theme wechseln">
+            <div className={styles.toggleKnob}>
+                {isDark ? <MoonIcon /> : <SunIcon />}
+            </div>
+        </button>
+    )
 
     // Setup state
     const [searchMode, setSearchMode] = useState('playlist') // 'playlist' | 'mine'
@@ -46,7 +85,7 @@ export default function SecondSound({ onBack }) {
     const [myPlaylistsLoaded, setMyPlaylistsLoaded] = useState(false)
     const [myPlaylistsError, setMyPlaylistsError] = useState(null)
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
-    const [songCount, setSongCount] = useState(10)
+    const [songCount, setSongCount] = useState(null)
     const [searchLoading, setSearchLoading] = useState(false)
     const [loadingError, setLoadingError] = useState(null)
     const [loadingStatus, setLoadingStatus] = useState('')
@@ -432,7 +471,8 @@ export default function SecondSound({ onBack }) {
     // ─── Login ───────────────────────────────────────────────────────────────
     if (phase === PHASES.LOGIN) {
         return (
-            <div className={styles.wrapper}>
+            <div className={wrapperClass}>
+                <ThemeToggle />
                 <div className={styles.bg} />
                 <div className={styles.loginContainer}>
                     <div className={styles.appIcon}>🎧</div>
@@ -471,7 +511,8 @@ export default function SecondSound({ onBack }) {
     // ─── Setup ───────────────────────────────────────────────────────────────
     if (phase === PHASES.SETUP) {
         return (
-            <div className={styles.wrapper}>
+            <div className={wrapperClass}>
+                <ThemeToggle />
                 <div className={styles.bg} />
                 <div className={styles.setupContainer}>
                     <h1 className={styles.appTitleSmall}>🎧 Song raten</h1>
@@ -503,23 +544,37 @@ export default function SecondSound({ onBack }) {
                         </div>
                     )}
 
-                    <div className={styles.setupCard}>
-                        {/* Tab-Toggle */}
-                        <div className={styles.searchTabs}>
-                            <button
+                    <div className={`${styles.stepSection} ${selectedPlaylists.length > 0 ? styles.stepDone : ''}`}>
+                        <div className={styles.stepLabel}>
+                            <span className={styles.stepNum}>1</span>
+                            Playlist(en) auswählen
+                        </div>
+                    <div className={styles.stepCard}>
+                        {/* Tab-Block: Reiter + Inhalt ohne Lücke */}
+                        <div className={styles.tabBlock}>
+                        <div className={styles.searchTabsWrapper}>
+                            <div
+                                role="tab"
+                                tabIndex={0}
                                 className={`${styles.searchTab} ${searchMode === 'playlist' ? styles.searchTabActive : ''}`}
                                 onClick={() => { setSearchMode('playlist'); setPlaylistResults([]) }}
+                                onKeyDown={e => e.key === 'Enter' && (setSearchMode('playlist'), setPlaylistResults([]))}
                             >
                                 🔍 Playlist
-                            </button>
-                            <button
+                            </div>
+                            <div
+                                role="tab"
+                                tabIndex={0}
                                 className={`${styles.searchTab} ${searchMode === 'mine' ? styles.searchTabActive : ''}`}
                                 onClick={() => { setSearchMode('mine'); handleLoadMyPlaylists() }}
+                                onKeyDown={e => e.key === 'Enter' && (setSearchMode('mine'), handleLoadMyPlaylists())}
                             >
                                 🎧 Meine Playlists
-                            </button>
+                            </div>
                         </div>
 
+                        {/* Tab-Inhalt */}
+                        <div className={styles.tabContent}>
                         {/* Playlist-Suche */}
                         {searchMode === 'playlist' && (
                             <>
@@ -604,57 +659,77 @@ export default function SecondSound({ onBack }) {
                                 )}
                             </>
                         )}
-                    </div>
+                        {selectedPlaylists.length > 0 && (
+                            <div className={styles.selectedSection}>
+                                <h2 className={styles.sectionTitle}>
+                                    Ausgewählt <span className={styles.badge}>{selectedPlaylists.length}</span>
+                                </h2>
+                                <div className={styles.selectedList}>
+                                    {selectedPlaylists.map(p => (
+                                        <div key={p.id} className={styles.selectedItem}>
+                                            {p.imageUrl
+                                                ? <img src={p.imageUrl} alt="" className={styles.playlistThumb} />
+                                                : <div className={styles.playlistThumbFallback}>🎵</div>
+                                            }
+                                            <div className={styles.playlistInfo}>
+                                                <span className={styles.playlistName}>{p.name}</span>
+                                                {p.trackCount > 0 && <span className={styles.playlistMeta}>{p.trackCount} Songs</span>}
+                                            </div>
+                                            <button className={styles.removeBtn} onClick={() => handleRemovePlaylist(p.id)}>✕</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        </div>{/* end tabContent */}
+                        </div>{/* end tabBlock */}
+                    </div>{/* end stepCard */}
+                    </div>{/* end stepSection 1 */}
 
-                    {selectedPlaylists.length > 0 && (
+                    <div className={`${styles.stepSection} ${selectedPlaylists.length === 0 ? styles.stepDimmed : ''}`}>
+                        <div className={styles.stepLabel}>
+                            <span className={styles.stepNum}>2</span>
+                            Anzahl der zu erratenden Songs wählen
+                        </div>
                         <div className={styles.setupCard}>
                             <h2 className={styles.sectionTitle}>
-                                Ausgewählt <span className={styles.badge}>{selectedPlaylists.length}</span>
+                                Anzahl Songs:{' '}
+                                {songCount === null
+                                    ? <span className={styles.countPlaceholder}>noch nicht gewählt</span>
+                                    : <span className={styles.countHighlight}>{songCount}</span>
+                                }
                             </h2>
-                            <div className={styles.selectedList}>
-                                {selectedPlaylists.map(p => (
-                                    <div key={p.id} className={styles.selectedItem}>
-                                        {p.imageUrl
-                                            ? <img src={p.imageUrl} alt="" className={styles.playlistThumb} />
-                                            : <div className={styles.playlistThumbFallback}>🎵</div>
-                                        }
-                                        <div className={styles.playlistInfo}>
-                                            <span className={styles.playlistName}>{p.name}</span>
-                                            <span className={styles.playlistMeta}>{p.trackCount ? `${p.trackCount} Songs` : 'Songs werden geladen…'}</span>
-                                        </div>
-                                        <button className={styles.removeBtn} onClick={() => handleRemovePlaylist(p.id)}>✕</button>
-                                    </div>
-                                ))}
+                            <input
+                                type="range"
+                                min={3}
+                                max={30}
+                                step={1}
+                                value={songCount ?? 3}
+                                onChange={e => setSongCount(Number(e.target.value))}
+                                onMouseDown={() => { if (songCount === null) setSongCount(3) }}
+                                onTouchStart={() => { if (songCount === null) setSongCount(3) }}
+                                className={`${styles.slider} ${songCount === null ? styles.sliderUnset : ''}`}
+                            />
+                            <div className={styles.sliderLabels}>
+                                <span>3</span>
+                                <span>30</span>
                             </div>
                         </div>
-                    )}
+                    </div>{/* end stepSection 2 */}
 
-                    <div className={styles.setupCard}>
-                        <h2 className={styles.sectionTitle}>
-                            Anzahl Songs: <span className={styles.countHighlight}>{songCount}</span>
-                        </h2>
-                        <input
-                            type="range"
-                            min={3}
-                            max={30}
-                            step={1}
-                            value={songCount}
-                            onChange={e => setSongCount(Number(e.target.value))}
-                            className={styles.slider}
-                        />
-                        <div className={styles.sliderLabels}>
-                            <span>3</span>
-                            <span>30</span>
+                    <div className={`${styles.stepSection} ${(selectedPlaylists.length === 0 || songCount === null) ? styles.stepDimmed : ''}`}>
+                        <div className={styles.stepLabel}>
+                            <span className={styles.stepNum}>3</span>
+                            Spiel starten
                         </div>
-                    </div>
-
-                    <button
-                        className={styles.startBtn}
-                        onClick={handleStartGame}
-                        disabled={selectedPlaylists.length === 0}
-                    >
-                        Spiel starten →
-                    </button>
+                        <button
+                            className={styles.startBtn}
+                            onClick={handleStartGame}
+                            disabled={selectedPlaylists.length === 0}
+                        >
+                            Spiel starten →
+                        </button>
+                    </div>{/* end stepSection 3 */}
 
                     <button className={styles.setupBackBtn} onClick={handleBack}>
                         ← Zurück zum Menü
@@ -678,7 +753,8 @@ export default function SecondSound({ onBack }) {
     // ─── Loading ─────────────────────────────────────────────────────────────
     if (phase === PHASES.LOADING) {
         return (
-            <div className={styles.wrapper}>
+            <div className={wrapperClass}>
+                <ThemeToggle />
                 <div className={styles.bg} />
                 <div className={styles.loadingContainer}>
                     <div className={styles.loadingSpinner} />
@@ -693,7 +769,8 @@ export default function SecondSound({ onBack }) {
         const progressPct = (playedCount / targetCount) * 100
 
         return (
-            <div className={styles.wrapper}>
+            <div className={wrapperClass}>
+                <ThemeToggle />
                 <div className={styles.bg} />
                 <div className={styles.gameContainer}>
 
@@ -810,7 +887,8 @@ export default function SecondSound({ onBack }) {
         const percent = playedCount > 0 ? Math.round((score / playedCount) * 100) : 0
 
         return (
-            <div className={styles.wrapper}>
+            <div className={wrapperClass}>
+                <ThemeToggle />
                 <div className={styles.bg} />
                 <div className={styles.resultsContainer}>
                     <h1 className={styles.appTitleSmall}>🎧 Song raten</h1>

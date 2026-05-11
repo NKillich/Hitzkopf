@@ -1,3 +1,47 @@
+/* ── Theme Variables ─────────────────────────────────────────────────── */
+.wrapper {
+    /* Dark theme (default) */
+    --ss-bg-1: #0a0a0a;
+    --ss-bg-2: #111111;
+    --ss-surface:    rgba(255, 255, 255, 0.04);
+    --ss-surface-md: rgba(255, 255, 255, 0.06);
+    --ss-surface-hi: rgba(255, 255, 255, 0.12);
+    --ss-border:     rgba(255, 255, 255, 0.08);
+    --ss-border-md:  rgba(255, 255, 255, 0.10);
+    --ss-border-hi:  rgba(255, 255, 255, 0.15);
+    --ss-text-1: #ffffff;
+    --ss-text-2: #e0e0e0;
+    --ss-text-3: #b3b3b3;
+    --ss-text-4: #777777;
+    --ss-text-5: #555555;
+    --ss-qmark:        rgba(255, 255, 255, 0.15);
+    --ss-slider:       rgba(255, 255, 255, 0.10);
+    --ss-progress:     rgba(255, 255, 255, 0.08);
+    --ss-history-sep:  rgba(255, 255, 255, 0.06);
+    --ss-history-row:  rgba(255, 255, 255, 0.04);
+}
+
+.light {
+    --ss-bg-1: #f2faf4;
+    --ss-bg-2: #f8fcf9;
+    --ss-surface:    rgba(0, 0, 0, 0.04);
+    --ss-surface-md: rgba(0, 0, 0, 0.06);
+    --ss-surface-hi: rgba(0, 0, 0, 0.12);
+    --ss-border:     rgba(0, 0, 0, 0.10);
+    --ss-border-md:  rgba(0, 0, 0, 0.13);
+    --ss-border-hi:  rgba(0, 0, 0, 0.18);
+    --ss-text-1: #0d0d0d;
+    --ss-text-2: #1a1a1a;
+    --ss-text-3: #444444;
+    --ss-text-4: #888888;
+    --ss-text-5: #999999;
+    --ss-qmark:       rgba(0, 0, 0, 0.10);
+    --ss-slider:      rgba(0, 0, 0, 0.10);
+    --ss-progress:    rgba(0, 0, 0, 0.08);
+    --ss-history-sep: rgba(0, 0, 0, 0.06);
+    --ss-history-row: rgba(0, 0, 0, 0.03);
+}
+
 /* ── Base ─────────────────────────────────────────────────────────────── */
 .wrapper {
     min-height: 100vh;
@@ -16,16 +60,64 @@
     background:
         radial-gradient(circle at 15% 20%, rgba(29, 185, 84, 0.12) 0%, transparent 45%),
         radial-gradient(circle at 85% 80%, rgba(29, 185, 84, 0.08) 0%, transparent 45%),
-        linear-gradient(160deg, #0a0a0a 0%, #111 50%, #0a0a0a 100%);
+        linear-gradient(160deg, var(--ss-bg-1) 0%, var(--ss-bg-2) 50%, var(--ss-bg-1) 100%);
     z-index: 0;
     pointer-events: none;
+    transition: background 0.3s ease;
+}
+
+/* ── Theme Toggle ─────────────────────────────────────────────────────── */
+.themeToggle {
+    position: fixed;
+    top: 0.85rem;
+    right: 0.85rem;
+    z-index: 200;
+    width: 44px !important;
+    height: 26px !important;
+    min-height: unset !important;
+    max-height: 26px !important;
+    border-radius: 9999px !important;
+    background: #2a2a2a;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+    display: flex !important;
+    align-items: center;
+    padding: 2px !important;
+    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.light .themeToggle {
+    background: #e0e0e0;
+    border-color: rgba(0, 0, 0, 0.12);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+.toggleKnob {
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s ease, color 0.3s ease;
+    flex-shrink: 0;
+    color: #ffffff;
+    transform: translateX(18px);
+}
+
+.light .toggleKnob {
+    transform: translateX(0);
+    background: #ffffff;
+    color: #1a1a1a;
 }
 
 /* ── Back Buttons ────────────────────────────────────────────────────── */
 .backBtn {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #b3b3b3;
+    background: var(--ss-surface-md);
+    border: 1px solid var(--ss-border-md);
+    color: var(--ss-text-3);
     padding: 0.4rem 0.85rem;
     border-radius: 8px;
     cursor: pointer;
@@ -34,14 +126,14 @@
 }
 
 .backBtn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
+    background: var(--ss-surface-hi);
+    color: var(--ss-text-1);
 }
 
 .loginBackBtnInline {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #555;
+    border: 1px solid var(--ss-border-md);
+    color: var(--ss-text-5);
     padding: 0.9rem 1.5rem;
     border-radius: 50px;
     cursor: pointer;
@@ -53,22 +145,24 @@
 }
 
 .loginBackBtnInline:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #b3b3b3;
-    border-color: rgba(255, 255, 255, 0.2);
+    background: var(--ss-surface-md);
+    color: var(--ss-text-3);
+    border-color: var(--ss-border-hi);
 }
 
 .backBtnSmall {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #b3b3b3;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 50%;
+    background: var(--ss-surface-md);
+    border: 1px solid var(--ss-border-md);
+    color: var(--ss-text-3);
+    width: 2rem !important;
+    height: 2rem !important;
+    min-height: unset !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
     cursor: pointer;
     font-size: 0.8rem;
     transition: all 0.2s ease;
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
@@ -131,13 +225,13 @@
 
 .appSubtitle {
     font-size: 1.1rem;
-    color: #b3b3b3;
+    color: var(--ss-text-3);
     margin: 0;
 }
 
 .loginHint {
     font-size: 0.9rem;
-    color: #666;
+    color: var(--ss-text-5);
     max-width: 320px;
     line-height: 1.5;
     margin: 0.5rem 0 1.5rem;
@@ -162,7 +256,7 @@
 }
 
 .reloginBanner p {
-    color: #b3b3b3;
+    color: var(--ss-text-3);
     font-size: 0.82rem;
     line-height: 1.5;
     margin: 0;
@@ -179,7 +273,7 @@
 .scopeDebug {
     margin: 0.3rem 0 0;
     font-size: 0.75rem;
-    color: #666;
+    color: var(--ss-text-5);
     word-break: break-all;
 }
 
@@ -237,7 +331,7 @@
 .disconnectBtn {
     background: transparent;
     border: none;
-    color: #333;
+    color: var(--ss-text-5);
     padding: 0.4rem;
     cursor: pointer;
     font-size: 0.75rem;
@@ -255,8 +349,8 @@
 
 .setupBackBtn {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #555;
+    border: 1px solid var(--ss-border-md);
+    color: var(--ss-text-5);
     padding: 0.7rem 1rem;
     border-radius: 12px;
     cursor: pointer;
@@ -267,22 +361,22 @@
 }
 
 .setupBackBtn:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #b3b3b3;
-    border-color: rgba(255, 255, 255, 0.2);
+    background: var(--ss-surface-md);
+    color: var(--ss-text-3);
+    border-color: var(--ss-border-hi);
 }
 
 .setupHint {
     font-size: 0.82rem;
-    color: #555;
+    color: var(--ss-text-5);
     text-align: center;
     margin: 0;
     line-height: 1.4;
 }
 
 .setupCard {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
     border-radius: 16px;
     padding: 1.4rem;
 }
@@ -290,7 +384,7 @@
 .sectionTitle {
     font-size: 1rem;
     font-weight: 600;
-    color: #e0e0e0;
+    color: var(--ss-text-2);
     margin: 0 0 1rem 0;
     display: flex;
     align-items: center;
@@ -311,49 +405,85 @@
     font-weight: 700;
 }
 
-/* Search Tabs */
-.searchTabs {
+.countPlaceholder {
+    color: var(--ss-text-5);
+    font-style: italic;
+    font-weight: 400;
+}
+
+.sliderUnset {
+    opacity: 0.35;
+}
+
+/* Search Tabs – Folder-Tab Stil */
+.tabBlock {
     display: flex;
-    gap: 0.4rem;
-    margin-bottom: 0.9rem;
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 10px;
-    padding: 0.25rem;
+    flex-direction: column;
+}
+
+.searchTabsWrapper {
+    display: flex;
+    gap: 4px;
+    padding: 0;
+    margin-bottom: -1px;
+    align-items: flex-end;
+    position: relative;
+    z-index: 2;
 }
 
 .searchTab {
     flex: 1;
-    background: transparent;
-    border: none;
-    color: #555;
-    padding: 0.45rem 0.5rem;
-    border-radius: 7px;
+    background: var(--ss-surface-md);
+    border: 1px solid var(--ss-border);
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    color: var(--ss-text-5);
+    opacity: 0.5;
+    padding: 1.2rem 1rem;
     cursor: pointer;
-    font-size: 0.82rem;
+    font-size: 0.9rem;
     font-weight: 600;
-    transition: all 0.18s ease;
+    line-height: 1.4;
+    transition: color 0.18s ease, background 0.18s ease, opacity 0.18s ease;
+    position: relative;
+    z-index: 0;
+    user-select: none;
+    text-align: center;
 }
 
 .searchTab:hover {
-    color: #b3b3b3;
-    background: rgba(255, 255, 255, 0.05);
+    opacity: 0.75;
+    color: var(--ss-text-3);
 }
 
 .searchTabActive {
-    background: rgba(29, 185, 84, 0.15);
+    background: var(--ss-surface);
     color: #1DB954;
-    border: 1px solid rgba(29, 185, 84, 0.25);
+    opacity: 1;
+    border-color: var(--ss-border);
+    border-top: 2px solid #1DB954;
+    padding-top: calc(1.2rem - 1px);
+    z-index: 2;
+}
+
+.tabContent {
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
+    border-radius: 0 0 14px 14px;
+    padding: 1.4rem 1.4rem;
+    position: relative;
+    z-index: 1;
 }
 
 .userSearchHint {
     font-size: 0.78rem;
-    color: #555;
+    color: var(--ss-text-5);
     margin: 0 0 0.75rem;
     line-height: 1.5;
 }
 
 .userSearchHint span {
-    color: #444;
+    color: var(--ss-text-4);
 }
 
 .userSearchHint code {
@@ -407,7 +537,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    color: #aaa;
+    color: var(--ss-text-3);
     font-size: 0.85rem;
     padding: 0.5rem 0;
 }
@@ -435,7 +565,7 @@
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--ss-surface-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -452,7 +582,7 @@
 .userName {
     font-size: 0.9rem;
     font-weight: 700;
-    color: #e0e0e0;
+    color: var(--ss-text-2);
 }
 
 .userMeta {
@@ -468,9 +598,9 @@
 
 .searchInput {
     flex: 1;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #fff;
+    background: var(--ss-surface-md);
+    border: 1px solid var(--ss-border-hi);
+    color: var(--ss-text-1);
     padding: 0.7rem 1rem;
     border-radius: 10px;
     font-size: 0.95rem;
@@ -479,7 +609,7 @@
 }
 
 .searchInput::placeholder {
-    color: #555;
+    color: var(--ss-text-5);
 }
 
 .searchInput:focus {
@@ -527,8 +657,8 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
     border-radius: 10px;
     padding: 0.65rem 0.9rem;
     cursor: pointer;
@@ -561,7 +691,7 @@
     width: 44px;
     height: 44px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--ss-surface-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -580,7 +710,7 @@
 .playlistName {
     font-size: 0.9rem;
     font-weight: 600;
-    color: #e0e0e0;
+    color: var(--ss-text-2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -588,7 +718,7 @@
 
 .playlistMeta {
     font-size: 0.78rem;
-    color: #666;
+    color: var(--ss-text-4);
 }
 
 .addIcon {
@@ -599,6 +729,12 @@
 }
 
 /* Selected playlists */
+.selectedSection {
+    margin-top: 1.2rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--ss-border);
+}
+
 .selectedList {
     display: flex;
     flex-direction: column;
@@ -608,24 +744,32 @@
 .selectedItem {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
     background: rgba(29, 185, 84, 0.06);
     border: 1px solid rgba(29, 185, 84, 0.2);
     border-radius: 10px;
-    padding: 0.6rem 0.9rem;
+    padding: 0.4rem 0.7rem;
+}
+
+.selectedItem .playlistThumb,
+.selectedItem .playlistThumbFallback {
+    width: 30px;
+    height: 30px;
 }
 
 .removeBtn {
     background: rgba(231, 76, 60, 0.12);
     border: 1px solid rgba(231, 76, 60, 0.2);
     color: #e74c3c;
-    width: 1.8rem;
-    height: 1.8rem;
-    border-radius: 50%;
+    width: 1.8rem !important;
+    height: 1.8rem !important;
+    min-height: unset !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
     cursor: pointer;
     font-size: 0.7rem;
     transition: all 0.2s ease;
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
@@ -643,7 +787,7 @@
     appearance: none;
     height: 4px;
     border-radius: 2px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--ss-slider);
     outline: none;
     cursor: pointer;
     margin-bottom: 0.5rem;
@@ -668,7 +812,7 @@
     display: flex;
     justify-content: space-between;
     font-size: 0.75rem;
-    color: #555;
+    color: var(--ss-text-5);
 }
 
 /* Start button */
@@ -737,7 +881,7 @@
 }
 
 .loadingText {
-    color: #b3b3b3;
+    color: var(--ss-text-3);
     font-size: 1rem;
 }
 
@@ -764,13 +908,13 @@
 
 .gameProgress {
     font-size: 0.9rem;
-    color: #b3b3b3;
+    color: var(--ss-text-3);
     flex: 1;
     text-align: center;
 }
 
 .gameProgress strong {
-    color: #fff;
+    color: var(--ss-text-1);
 }
 
 .scoreChip {
@@ -805,7 +949,7 @@
 
 .progressBar {
     height: 3px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--ss-progress);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -819,8 +963,8 @@
 
 /* Song card */
 .songCard {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
     border-radius: 20px;
     padding: 2rem 1.5rem;
     min-height: 220px;
@@ -841,13 +985,13 @@
 .questionMark {
     font-size: 4rem;
     font-weight: 900;
-    color: rgba(255, 255, 255, 0.15);
+    color: var(--ss-qmark);
     line-height: 1;
     user-select: none;
 }
 
 .hiddenHint {
-    color: #555;
+    color: var(--ss-text-5);
     font-size: 0.85rem;
     margin: 0;
 }
@@ -895,7 +1039,7 @@
     width: 100px;
     height: 100px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--ss-surface-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -905,7 +1049,7 @@
 .songName {
     font-size: 1.2rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--ss-text-1);
     text-align: center;
 }
 
@@ -918,7 +1062,7 @@
 
 .songAlbum {
     font-size: 0.8rem;
-    color: #666;
+    color: var(--ss-text-4);
     text-align: center;
 }
 
@@ -926,7 +1070,7 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    color: #555;
+    color: var(--ss-text-5);
     font-size: 0.85rem;
 }
 
@@ -967,7 +1111,7 @@
 
 .playSectionLabel {
     font-size: 0.8rem;
-    color: #555;
+    color: var(--ss-text-5);
     text-align: center;
     margin: 0;
     text-transform: uppercase;
@@ -981,9 +1125,9 @@
 }
 
 .playBtn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #e0e0e0;
+    background: var(--ss-surface-md);
+    border: 1px solid var(--ss-border-md);
+    color: var(--ss-text-2);
     padding: 0.75rem 0.5rem;
     border-radius: 12px;
     font-size: 0.9rem;
@@ -1018,7 +1162,7 @@
 
 .answerLabel {
     font-size: 0.8rem;
-    color: #555;
+    color: var(--ss-text-5);
     text-align: center;
     margin: 0;
     text-transform: uppercase;
@@ -1092,8 +1236,8 @@
 }
 
 .resultsCard {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
     border-radius: 24px;
     padding: 2.5rem 2rem;
     width: 100%;
@@ -1132,33 +1276,33 @@
 
 .scoreSep {
     font-size: 2rem;
-    color: #444;
+    color: var(--ss-text-4);
     line-height: 1;
 }
 
 .scoreTotal {
     font-size: 2.5rem;
     font-weight: 700;
-    color: #666;
+    color: var(--ss-text-4);
     line-height: 1;
 }
 
 .scorePercent {
     font-size: 1.1rem;
     font-weight: 600;
-    color: #b3b3b3;
+    color: var(--ss-text-3);
 }
 
 .resultTitle {
     font-size: 1.4rem;
     font-weight: 800;
-    color: #fff;
+    color: var(--ss-text-1);
     margin-top: 0.5rem;
 }
 
 .resultSub {
     font-size: 0.95rem;
-    color: #777;
+    color: var(--ss-text-4);
     max-width: 280px;
     line-height: 1.5;
 }
@@ -1230,7 +1374,7 @@
 .errorDetail {
     font-size: 0.78rem;
     color: #c0392b;
-    background: rgba(0,0,0,0.2);
+    background: rgba(0, 0, 0, 0.2);
     padding: 0.4rem 0.6rem;
     border-radius: 6px;
     font-family: monospace;
@@ -1239,7 +1383,7 @@
 
 .errorHelp {
     font-size: 0.82rem;
-    color: #b3b3b3;
+    color: var(--ss-text-3);
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -1281,7 +1425,6 @@
         font-size: 2.2rem;
     }
 
-
     .setupContainer {
         padding: 1.2rem 1rem 3rem;
         max-width: 100%;
@@ -1304,6 +1447,58 @@
     }
 }
 
+/* ── Step Labels ─────────────────────────────────────────────────────── */
+.stepLabel {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ss-text-4);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.stepNum {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--ss-border-hi);
+    color: var(--ss-text-3);
+    font-size: 0.65rem;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+
+.stepDone .stepNum {
+    background: #1DB954;
+    color: #000;
+}
+
+.stepSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-bottom: 1.5rem;
+}
+
+.stepCard {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.stepDimmed {
+    opacity: 0.35;
+    pointer-events: none;
+    user-select: none;
+    transition: opacity 0.3s ease;
+}
+
 /* ── Stats Card ──────────────────────────────────────────────────────── */
 .statsCard {
     background: rgba(29, 185, 84, 0.05);
@@ -1319,7 +1514,7 @@
 .statsTitle {
     font-size: 0.85rem;
     font-weight: 700;
-    color: #b3b3b3;
+    color: var(--ss-text-3);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     text-align: center;
@@ -1336,7 +1531,7 @@
     flex-direction: column;
     align-items: center;
     gap: 0.2rem;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--ss-surface);
     border-radius: 12px;
     padding: 0.75rem 0.5rem;
 }
@@ -1350,7 +1545,7 @@
 
 .statLabel {
     font-size: 0.75rem;
-    color: #666;
+    color: var(--ss-text-4);
     text-align: center;
 }
 
@@ -1359,15 +1554,15 @@
     flex-direction: column;
     align-items: center;
     gap: 0.2rem;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--ss-surface);
     border-radius: 12px;
     padding: 0.75rem 0.5rem;
 }
 
 /* ── Song History ─────────────────────────────────────────────────────── */
 .historyCard {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
     border-radius: 20px;
     width: 100%;
     overflow: hidden;
@@ -1377,7 +1572,7 @@
     width: 100%;
     background: none;
     border: none;
-    color: #b3b3b3;
+    color: var(--ss-text-3);
     font-size: 0.9rem;
     font-weight: 700;
     padding: 1rem 1.25rem;
@@ -1389,7 +1584,7 @@
 }
 
 .historyToggle:hover {
-    color: #fff;
+    color: var(--ss-text-1);
 }
 
 .historyChevron {
@@ -1400,7 +1595,7 @@
 .historyList {
     display: flex;
     flex-direction: column;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid var(--ss-history-sep);
 }
 
 .historyItem {
@@ -1408,7 +1603,7 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.6rem 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--ss-history-row);
 }
 
 .historyItem:last-child {
@@ -1435,7 +1630,7 @@
     width: 36px;
     height: 36px;
     border-radius: 6px;
-    background: rgba(255,255,255,0.06);
+    background: var(--ss-surface-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1454,7 +1649,7 @@
 .historyName {
     font-size: 0.85rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--ss-text-1);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1462,7 +1657,7 @@
 
 .historyArtist {
     font-size: 0.75rem;
-    color: #666;
+    color: var(--ss-text-4);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1480,4 +1675,49 @@
 
 .historyWrong .historyIcon {
     color: #e74c3c;
+}
+
+/* ── Light-Mode Overrides ─────────────────────────────────────────────── */
+
+/* Hintergrund-Glow stark reduzieren */
+.light .bg {
+    background:
+        radial-gradient(circle at 15% 20%, rgba(29, 185, 84, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(29, 185, 84, 0.03) 0%, transparent 40%),
+        linear-gradient(160deg, var(--ss-bg-1) 0%, var(--ss-bg-2) 50%, var(--ss-bg-1) 100%);
+}
+
+/* Kein Text-Shadow auf Überschriften */
+.light h1,
+.light h2,
+.light h3 {
+    text-shadow: none;
+    filter: none;
+}
+
+.light .appIcon {
+    filter: none;
+}
+
+/* Kein Glow auf Slider-Thumb */
+.light .slider::-webkit-slider-thumb {
+    box-shadow: none;
+}
+
+/* Toggle-Button im Light Mode */
+.light .themeToggle {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Alle Hover-Schatten im Light Mode komplett entfernen */
+.light *:hover {
+    box-shadow: none !important;
+}
+
+/* Input, Select, Slider – kein Box-Shadow im Light Mode */
+.light .searchInput,
+.light .searchInput:focus,
+.light .slider,
+.light .slider::-webkit-slider-thumb {
+    box-shadow: none;
 }
