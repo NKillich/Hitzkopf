@@ -25,6 +25,9 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_SPOTIFY_CLIENT_ID: ${{ secrets.VITE_SPOTIFY_CLIENT_ID }}
+          VITE_SPOTIFY_CLIENT_SECRET: ${{ secrets.VITE_SPOTIFY_CLIENT_SECRET }}
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
