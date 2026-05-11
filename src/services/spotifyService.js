@@ -804,25 +804,107 @@ class SpotifyService {
     async getPlaylistInfo(playlistId) {
         const token = await this.getStoredUserToken()
         if (!token) throw new Error('Nicht mit Spotify verbunden.')
-        // Kein fields-Parameter: Spotify interpretiert tracks(total) manchmal falsch
-        const res = await fetch(
-            `${SPOTIFY_API_BASE}/playlists/${playlistId}`,
-            { headers: { 'Authorization': `Bearer ${token}` } }
-        )
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}))
-            console.error('[SpotifyService] getPlaylistInfo FEHLER', res.status, errData)
-            throw new Error(`Playlist-Info Fehler (HTTP ${res.status}): ${errData.error?.message || 'Unbekannt'}`)
+
+        console.log(`[SpotifyService] === getPlaylistInfo START für playlistId=${playlistId} ===`)
+
+        // ============ Variante A: /playlists/{id} ohne fields ============
+        const urlA = `${SPOTIFY_API_BASE}/playlists/${playlistId}`
+        console.log(`[SpotifyService] [A] GET ${urlA}`)
+        const resA = await fetch(urlA, { headers: { 'Authorization': `Bearer ${token}` } })
+        console.log(`[SpotifyService] [A] Status: ${resA.status}`)
+        if (!resA.ok) {
+            const errData = await resA.json().catch(() => ({}))
+            console.error('[SpotifyService] [A] FEHLER', resA.status, errData)
+            throw new Error(`Playlist-Info Fehler (HTTP ${resA.status}): ${errData.error?.message || 'Unbekannt'}`)
         }
-        const data = await res.json()
-        const trackCount = data.tracks?.total ?? 0
-        console.log(`[SpotifyService] getPlaylistInfo "${data.name}": tracks.total=${trackCount}, uri=${data.uri}`)
+        const dataA = await resA.json()
+        console.log('[SpotifyService] [A] Response:', {
+            name: dataA.name,
+            uri: dataA.uri,
+            owner: dataA.owner?.display_name,
+            public: dataA.public,
+            collaborative: dataA.collaborative,
+            'tracks.total': dataA.tracks?.total,
+            'tracks.items.length': dataA.tracks?.items?.length,
+            'tracks.href': dataA.tracks?.href,
+            'tracks.next': dataA.tracks?.next,
+            'tracks.limit': dataA.tracks?.limit
+        })
+        let trackCount = dataA.tracks?.total ?? 0
+
+        // ============ Variante B: /playlists/{id}/tracks?limit=1&fields=total ============
+        if (trackCount <= 0 || trackCount === (dataA.tracks?.items?.length ?? -1)) {
+            const urlB = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=1&fields=total`
+            console.log(`[SpotifyService] [B] GET ${urlB}`)
+            try {
+                const resB = await fetch(urlB, { headers: { 'Authorization': `Bearer ${token}` } })
+                console.log(`[SpotifyService] [B] Status: ${resB.status}`)
+                const dataB = await resB.json().catch(() => ({}))
+                console.log('[SpotifyService] [B] Response:', dataB)
+                if (resB.ok && dataB.total > trackCount) {
+                    console.log(`[SpotifyService] [B] korrigiert total ${trackCount} → ${dataB.total}`)
+                    trackCount = dataB.total
+                }
+            } catch (e) {
+                console.warn('[SpotifyService] [B] Exception:', e.message)
+            }
+        }
+
+        // ============ Variante C: /playlists/{id} mit market=from_token ============
+        if (trackCount <= 0) {
+            const urlC = `${SPOTIFY_API_BASE}/playlists/${playlistId}?market=from_token`
+            console.log(`[SpotifyService] [C] GET ${urlC}`)
+            try {
+                const resC = await fetch(urlC, { headers: { 'Authorization': `Bearer ${token}` } })
+                console.log(`[SpotifyService] [C] Status: ${resC.status}`)
+                const dataC = await resC.json().catch(() => ({}))
+                console.log('[SpotifyService] [C] tracks.total:', dataC.tracks?.total)
+                if (resC.ok && dataC.tracks?.total > trackCount) {
+                    console.log(`[SpotifyService] [C] korrigiert total ${trackCount} → ${dataC.tracks.total}`)
+                    trackCount = dataC.tracks.total
+                }
+            } catch (e) {
+                console.warn('[SpotifyService] [C] Exception:', e.message)
+            }
+        }
+
+        // ============ Variante D: /playlists/{id}/tracks?limit=50 (paginieren bis Ende) ============
+        if (trackCount <= 0) {
+            console.log('[SpotifyService] [D] Versuche paginierende Tracks zu zählen...')
+            try {
+                let counted = 0
+                let nextUrl = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=50&fields=items(track(uri)),next,total`
+                let pageNum = 0
+                while (nextUrl && pageNum < 20) {
+                    const resD = await fetch(nextUrl, { headers: { 'Authorization': `Bearer ${token}` } })
+                    console.log(`[SpotifyService] [D] Page ${pageNum} Status: ${resD.status}`)
+                    if (!resD.ok) break
+                    const dataD = await resD.json()
+                    console.log(`[SpotifyService] [D] Page ${pageNum}: items=${dataD.items?.length}, total=${dataD.total}, next=${!!dataD.next}`)
+                    if (dataD.total > 0) {
+                        trackCount = dataD.total
+                        break
+                    }
+                    counted += dataD.items?.length || 0
+                    nextUrl = dataD.next
+                    pageNum++
+                }
+                if (trackCount <= 0 && counted > 0) {
+                    trackCount = counted
+                    console.log(`[SpotifyService] [D] gezählt durch Pagination: ${counted}`)
+                }
+            } catch (e) {
+                console.warn('[SpotifyService] [D] Exception:', e.message)
+            }
+        }
+
+        console.log(`[SpotifyService] === getPlaylistInfo FINAL: "${dataA.name}" trackCount=${trackCount} ===`)
         return {
-            id: data.id,
-            name: data.name,
-            uri: data.uri,
+            id: dataA.id,
+            name: dataA.name,
+            uri: dataA.uri,
             trackCount,
-            imageUrl: data.images?.[0]?.url || null
+            imageUrl: dataA.images?.[0]?.url || null
         }
     }
 

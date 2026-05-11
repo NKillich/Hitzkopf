@@ -86,6 +86,7 @@ export default function SecondSound({ onBack }) {
     const [myPlaylistsError, setMyPlaylistsError] = useState(null)
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
     const [songCount, setSongCount] = useState(null)
+    const [maxUnlockedIndex, setMaxUnlockedIndex] = useState(0)
     const [searchLoading, setSearchLoading] = useState(false)
     const [loadingError, setLoadingError] = useState(null)
     const [loadingStatus, setLoadingStatus] = useState('')
@@ -264,24 +265,45 @@ export default function SecondSound({ onBack }) {
         setLoadingStatus('Playlist wird vorbereitet…')
 
         try {
+            // Echtes Fisher-Yates – Math.random()-0.5 als Sortier-Func ist statistisch
+            // verzerrt und überrepräsentiert die ersten Elemente.
+            const fisherYates = (arr) => {
+                const a = arr.slice()
+                for (let i = a.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1))
+                    ;[a[i], a[j]] = [a[j], a[i]]
+                }
+                return a
+            }
+
             const slots = []
 
             for (const playlist of selectedPlaylists) {
-                // trackCount aus den Suchergebnissen ist die zuverlässigste Quelle –
-                // getPlaylistInfo zählt gelöschte/entfernte Einträge mit und liefert
-                // zu hohe Zahlen, die zu Out-of-bounds-Offsets führen.
-                // Fallback: nur so viele Positionen wie wir maximal brauchen (songCount * 2).
-                const count = playlist.trackCount > 0 ? playlist.trackCount : songCount * 2
+                // trackCount aus Such-/Meine-Playlists-Endpoint ist oft falsch
+                // (gibt nur die ersten geladenen Tracks zurück). Wir holen die echte
+                // Total über getPlaylistInfo, wenn der Wert verdächtig klein ist
+                // im Vergleich zu songCount.
+                let count = playlist.trackCount > 0 ? playlist.trackCount : 0
+                if (count < Math.max(50, songCount * 3)) {
+                    try {
+                        const info = await spotifyService.getPlaylistInfo(playlist.id)
+                        if (info.trackCount > count) {
+                            console.log(`[SS] "${playlist.name}": trackCount korrigiert ${count} → ${info.trackCount}`)
+                            count = info.trackCount
+                        }
+                    } catch (e) {
+                        console.warn(`[SS] getPlaylistInfo für "${playlist.name}" fehlgeschlagen:`, e.message)
+                    }
+                }
+                if (count <= 0) count = songCount * 2
                 const poolSize = Math.min(count, songCount * 2)
 
                 const uri = `spotify:playlist:${playlist.id}`
-                // Positionen NUR aus [0, count-1] – nie out of bounds
-                const positions = Array.from({ length: count }, (_, i) => i)
-                    .sort(() => Math.random() - 0.5)
-                    .slice(0, poolSize)
+                const allPositions = Array.from({ length: count }, (_, i) => i)
+                const positions = fisherYates(allPositions).slice(0, poolSize)
 
                 positions.forEach(offset => slots.push({ playlistUri: uri, offset }))
-                console.log(`[SS] "${playlist.name}": trackCount=${count}, poolSize=${poolSize}, max offset=${Math.max(...positions)}`)
+                console.log(`[SS] "${playlist.name}": trackCount=${count}, poolSize=${poolSize}, offsets=[${positions.join(',')}]`)
             }
 
             if (slots.length === 0) {
@@ -290,7 +312,7 @@ export default function SecondSound({ onBack }) {
                 return
             }
 
-            const shuffled = slots.sort(() => Math.random() - 0.5)
+            const shuffled = fisherYates(slots)
             console.log(`[SS] Spiel gestartet – ${shuffled.length} Slots, Ziel: ${songCount}`)
 
             fetchGenRef.current = 0
@@ -403,6 +425,7 @@ export default function SecondSound({ onBack }) {
         const newPlayed = playedCount + 1
         setPlayedCount(newPlayed)
         setIsRevealed(false)
+        setMaxUnlockedIndex(0)
         const historyEntry = currentTrackInfo
             ? { name: currentTrackInfo.trackName, artist: currentTrackInfo.artist, albumImage: currentTrackInfo.imageUrl }
             : null
@@ -846,16 +869,24 @@ export default function SecondSound({ onBack }) {
                                 { label: '5s', seconds: 5 },
                                 { label: '10s', seconds: 10 },
                                 { label: '30s', seconds: 30 }
-                            ].map(({ label, seconds }) => (
-                                <button
-                                    key={label}
-                                    className={styles.playBtn}
-                                    onClick={() => handlePlayFor(seconds)}
-                                    disabled={!playerReady}
-                                >
-                                    {label}
-                                </button>
-                            ))}
+                            ].map(({ label, seconds }, idx) => {
+                                const unlocked = idx <= maxUnlockedIndex
+                                return (
+                                    <button
+                                        key={label}
+                                        className={`${styles.playBtn} ${!unlocked ? styles.playBtnLocked : ''}`}
+                                        onClick={() => {
+                                            if (!unlocked || !playerReady) return
+                                            handlePlayFor(seconds)
+                                            setMaxUnlockedIndex(prev => Math.max(prev, idx + 1))
+                                        }}
+                                        disabled={!playerReady || !unlocked}
+                                        title={!unlocked ? `Erst ${['1s','5s','10s'][idx-1]} abspielen` : undefined}
+                                    >
+                                        {unlocked ? '▶ ' : ''}{label}
+                                    </button>
+                                )
+                            })}
                         </div>
                     </div>
 
@@ -905,41 +936,35 @@ export default function SecondSound({ onBack }) {
                         <div className={styles.resultSub}>{result.sub}</div>
                     </div>
 
-                    {allTimeStats && (
-                        <div className={styles.statsCard}>
-                            <div className={styles.statsTitle}>📊 Deine Gesamt-Stats</div>
-                            <div className={styles.statsGrid}>
-                                <div className={styles.statItem}>
-                                    <span className={styles.statValue}>{allTimeStats.songsCorrect ?? 0}</span>
-                                    <span className={styles.statLabel}>Songs erraten</span>
-                                </div>
-                                <div className={styles.statItem}>
-                                    <span className={styles.statValue}>
-                                        {allTimeStats.songsTotal > 0
-                                            ? Math.round((allTimeStats.songsCorrect / allTimeStats.songsTotal) * 100)
-                                            : 0}%
-                                    </span>
-                                    <span className={styles.statLabel}>Trefferquote</span>
-                                </div>
-                                <div className={styles.statItem}>
-                                    <span className={styles.statValue}>{allTimeStats.gamesPlayed ?? 0}</span>
-                                    <span className={styles.statLabel}>Spiele</span>
-                                </div>
-                                <div className={styles.statItem}>
-                                    <span className={styles.statValue}>{allTimeStats.bestPercent ?? 0}%</span>
-                                    <span className={styles.statLabel}>Bestes Ergebnis</span>
-                                </div>
+                    <div className={styles.statsCard}>
+                        <div className={styles.statsTitle}>📊 Diese Runde</div>
+                        <div className={styles.statsGrid}>
+                            <div className={styles.statItem}>
+                                <span className={styles.statValue}>{score}</span>
+                                <span className={styles.statLabel}>Songs erraten</span>
                             </div>
-                            {(allTimeStats.correctGuessesWithTime > 0) && (
-                                <div className={styles.statItemWide}>
-                                    <span className={styles.statValue}>
-                                        {(allTimeStats.totalSecondsCorrect / allTimeStats.correctGuessesWithTime).toFixed(1)}s
-                                    </span>
-                                    <span className={styles.statLabel}>Ø Zeit zum Erraten</span>
-                                </div>
-                            )}
+                            <div className={styles.statItem}>
+                                <span className={styles.statValue}>{playedCount - score}</span>
+                                <span className={styles.statLabel}>Nicht erraten</span>
+                            </div>
+                            <div className={styles.statItem}>
+                                <span className={styles.statValue}>{playedCount}</span>
+                                <span className={styles.statLabel}>Songs gespielt</span>
+                            </div>
+                            <div className={styles.statItem}>
+                                <span className={styles.statValue}>{percent}%</span>
+                                <span className={styles.statLabel}>Trefferquote</span>
+                            </div>
                         </div>
-                    )}
+                        {(sessionSecondsCorrectRef.current.length > 0) && (
+                            <div className={styles.statItemWide}>
+                                <span className={styles.statValue}>
+                                    {(sessionSecondsCorrectRef.current.reduce((a, b) => a + b, 0) / sessionSecondsCorrectRef.current.length).toFixed(1)}s
+                                </span>
+                                <span className={styles.statLabel}>Ø Zeit zum Erraten</span>
+                            </div>
+                        )}
+                    </div>
 
                     {songHistory.length > 0 && (
                         <div className={styles.historyCard}>

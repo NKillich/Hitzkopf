@@ -1152,6 +1152,13 @@
     cursor: not-allowed;
 }
 
+.playBtnLocked {
+    opacity: 0.25;
+    cursor: not-allowed;
+    filter: grayscale(1);
+    letter-spacing: 0;
+}
+
 
 /* Answer buttons */
 .answerSection {
