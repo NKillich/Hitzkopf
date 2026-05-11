@@ -28,11 +28,11 @@ class SpotifyService {
     constructor() {
         this.clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
         this.clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
-        // Redirect URI: Immer diese Production-URL für Spotify (muss exakt so im Dashboard stehen).
+        // Redirect URI: Aus .env.local laden (lokal) oder Production-Fallback.
+        // Lokal: VITE_SPOTIFY_REDIRECT_URI=http://localhost:5173/Hitzkopf in .env.local setzen.
         const productionRedirect = 'https://nkillich.github.io/Hitzkopf'
         const fromEnv = import.meta.env.VITE_SPOTIFY_REDIRECT_URI
-        const isLocalhostUri = fromEnv && (/localhost|127\.0\.0\.1/i.test(fromEnv) || fromEnv.startsWith('http://'))
-        this.redirectUri = (fromEnv && !isLocalhostUri ? fromEnv : productionRedirect).replace(/\/$/, '')
+        this.redirectUri = (fromEnv || productionRedirect).replace(/\/$/, '')
         if (typeof console !== 'undefined') {
             console.log('🎵 Spotify Redirect URI:', this.redirectUri)
         }
