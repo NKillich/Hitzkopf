@@ -87,6 +87,11 @@ export default function SecondSound({ onBack }) {
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
     const [songCount, setSongCount] = useState(null)
     const [maxUnlockedIndex, setMaxUnlockedIndex] = useState(0)
+    // True sobald der aktuelle Song mindestens 1× abgespielt wurde – schaltet
+    // Aufdecken- und Antwort-Buttons frei. Verhindert Klick-Spam mit 403/502.
+    const [hasPlayedCurrentSong, setHasPlayedCurrentSong] = useState(false)
+    const [sizeDetectionProgress, setSizeDetectionProgress] = useState(null)
+    const playlistSizeCache = useRef({})
     const [searchLoading, setSearchLoading] = useState(false)
     const [loadingError, setLoadingError] = useState(null)
     const [loadingStatus, setLoadingStatus] = useState('')
@@ -185,11 +190,19 @@ export default function SecondSound({ onBack }) {
         }
     }, [])
 
-    // Web Playback SDK initialisieren wenn Spielphase beginnt
+    // Web Playback SDK: bei GAME verbinden. Nach LOADING kann der Player schon
+    // durch ensurePlaybackPlayerReady() existieren – dann nicht neu erzeugen.
     useEffect(() => {
         if (phase !== PHASES.GAME) return
         setPlayerReady(false)
         setPlayerError(null)
+        if (spotifyService.isPlaybackReady()) {
+            setPlayerReady(true)
+            return () => {
+                spotifyService.disconnectPlayer()
+                setPlayerReady(false)
+            }
+        }
         spotifyService.initPlaybackPlayer(
             () => setPlayerReady(true),
             (msg) => setPlayerError(msg || 'Spotify Player konnte nicht gestartet werden. Spotify Premium erforderlich.')
@@ -276,35 +289,71 @@ export default function SecondSound({ onBack }) {
                 return a
             }
 
+            // Player muss existieren, bevor Live-Detection (mute play tests) läuft –
+            // der Effect mit initPlaybackPlayer greift erst bei PHASES.GAME.
+            setLoadingStatus('Spotify-Player wird bereitgestellt…')
+            await spotifyService.ensurePlaybackPlayerReady()
+
             const slots = []
 
-            for (const playlist of selectedPlaylists) {
-                // trackCount aus Such-/Meine-Playlists-Endpoint ist oft falsch
-                // (gibt nur die ersten geladenen Tracks zurück). Wir holen die echte
-                // Total über getPlaylistInfo, wenn der Wert verdächtig klein ist
-                // im Vergleich zu songCount.
-                let count = playlist.trackCount > 0 ? playlist.trackCount : 0
-                if (count < Math.max(50, songCount * 3)) {
+            for (let pIdx = 0; pIdx < selectedPlaylists.length; pIdx++) {
+                const playlist = selectedPlaylists[pIdx]
+                const uri = `spotify:playlist:${playlist.id}`
+
+                // Größe ermitteln: Cache → getPlaylistInfo (falls > 0) → detectPlaylistSize
+                let count = playlistSizeCache.current[playlist.id] || 0
+
+                if (!count && playlist.trackCount > 0 && playlist.trackCount >= songCount * 2) {
+                    count = playlist.trackCount
+                    console.log(`[SS] "${playlist.name}": nutze gecachte trackCount=${count} aus Auswahl`)
+                }
+
+                if (!count) {
                     try {
                         const info = await spotifyService.getPlaylistInfo(playlist.id)
-                        if (info.trackCount > count) {
-                            console.log(`[SS] "${playlist.name}": trackCount korrigiert ${count} → ${info.trackCount}`)
+                        if (info.trackCount >= songCount * 2) {
                             count = info.trackCount
+                            console.log(`[SS] "${playlist.name}": getPlaylistInfo trackCount=${count}`)
                         }
                     } catch (e) {
                         console.warn(`[SS] getPlaylistInfo für "${playlist.name}" fehlgeschlagen:`, e.message)
                     }
                 }
-                if (count <= 0) count = songCount * 2
-                const poolSize = Math.min(count, songCount * 2)
 
-                const uri = `spotify:playlist:${playlist.id}`
+                // Wenn beide API-Quellen versagen → echte Größe via Player-Test ermitteln
+                if (!count) {
+                    console.log(`[SS] "${playlist.name}": API-Größe nicht verfügbar, starte Live-Detection…`)
+                    setSizeDetectionProgress({
+                        playlistName: playlist.name,
+                        playlistIndex: pIdx + 1,
+                        totalPlaylists: selectedPlaylists.length,
+                        step: 0,
+                        totalSteps: 18,
+                        label: 'Starte Suche…'
+                    })
+                    try {
+                        count = await spotifyService.detectPlaylistSize(uri, {
+                            onProgress: (p) => {
+                                setSizeDetectionProgress(prev => ({ ...prev, ...p }))
+                            }
+                        })
+                        console.log(`[SS] "${playlist.name}": Live-Detection ermittelt ${count} Tracks`)
+                    } catch (e) {
+                        console.error(`[SS] Live-Detection fehlgeschlagen:`, e.message)
+                        count = songCount * 2
+                    }
+                }
+
+                playlistSizeCache.current[playlist.id] = count
+
+                const poolSize = Math.min(count, songCount * 3)
                 const allPositions = Array.from({ length: count }, (_, i) => i)
                 const positions = fisherYates(allPositions).slice(0, poolSize)
-
                 positions.forEach(offset => slots.push({ playlistUri: uri, offset }))
-                console.log(`[SS] "${playlist.name}": trackCount=${count}, poolSize=${poolSize}, offsets=[${positions.join(',')}]`)
+                console.log(`[SS] "${playlist.name}": trackCount=${count}, poolSize=${poolSize}, offsets=[${positions.slice(0, 20).join(',')}${positions.length > 20 ? ',…' : ''}]`)
             }
+
+            setSizeDetectionProgress(null)
 
             if (slots.length === 0) {
                 setLoadingError('Keine Playlists verfügbar. Bitte eine Playlist auswählen.')
@@ -380,6 +429,7 @@ export default function SecondSound({ onBack }) {
             await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
             isPlayingRequestRef.current = false
             setIsPlaying(true)
+            setHasPlayedCurrentSong(true)
             setPlayerError(null)
 
             // Einmalig nach 700ms Track-Info holen – kein Warte-Loop, kein Auto-Skip
@@ -426,6 +476,7 @@ export default function SecondSound({ onBack }) {
         setPlayedCount(newPlayed)
         setIsRevealed(false)
         setMaxUnlockedIndex(0)
+        setHasPlayedCurrentSong(false)
         const historyEntry = currentTrackInfo
             ? { name: currentTrackInfo.trackName, artist: currentTrackInfo.artist, albumImage: currentTrackInfo.imageUrl }
             : null
@@ -469,6 +520,8 @@ export default function SecondSound({ onBack }) {
         setCurrentTrackInfo(null)
         setScore(0)
         setIsPlaying(false)
+        setHasPlayedCurrentSong(false)
+        setMaxUnlockedIndex(0)
         setLoadingError(null)
         lastPlaySecondsRef.current = null
         sessionSecondsCorrectRef.current = []
@@ -775,13 +828,32 @@ export default function SecondSound({ onBack }) {
 
     // ─── Loading ─────────────────────────────────────────────────────────────
     if (phase === PHASES.LOADING) {
+        const detect = sizeDetectionProgress
+        const detectPct = detect ? Math.min(100, Math.round((detect.step / detect.totalSteps) * 100)) : 0
         return (
             <div className={wrapperClass}>
                 <ThemeToggle />
                 <div className={styles.bg} />
                 <div className={styles.loadingContainer}>
                     <div className={styles.loadingSpinner} />
-                    <p className={styles.loadingText}>{loadingStatus || 'Songs werden geladen…'}</p>
+                    {detect ? (
+                        <>
+                            <p className={styles.loadingText}>
+                                🎲 Wähle {songCount} zufällige Songs aus „{detect.playlistName}"…
+                            </p>
+                            <div className={styles.detectProgressBar}>
+                                <div className={styles.detectProgressFill} style={{ width: `${detectPct}%` }} />
+                            </div>
+                            <p className={styles.detectProgressLabel}>{detect.label}</p>
+                            {detect.totalPlaylists > 1 && (
+                                <p className={styles.detectProgressMeta}>
+                                    Playlist {detect.playlistIndex} / {detect.totalPlaylists}
+                                </p>
+                            )}
+                        </>
+                    ) : (
+                        <p className={styles.loadingText}>{loadingStatus || 'Songs werden geladen…'}</p>
+                    )}
                 </div>
             </div>
         )
@@ -844,8 +916,16 @@ export default function SecondSound({ onBack }) {
                         ) : (
                             <div className={styles.hiddenSong}>
                                 <div className={styles.questionMark}>?</div>
-                                <p className={styles.hiddenHint}>Wer kennt diesen Song?</p>
-                                <button className={styles.revealBtn} onClick={() => setIsRevealed(true)}>
+                                <p className={styles.hiddenHint}>
+                                    {hasPlayedCurrentSong
+                                        ? 'Wer kennt diesen Song?'
+                                        : 'Spiele den Song zuerst ab'}
+                                </p>
+                                <button
+                                    className={`${styles.revealBtn} ${!hasPlayedCurrentSong ? styles.revealBtnLocked : ''}`}
+                                    onClick={() => hasPlayedCurrentSong && setIsRevealed(true)}
+                                    disabled={!hasPlayedCurrentSong}
+                                >
                                     Aufdecken
                                 </button>
                             </div>
@@ -891,17 +971,21 @@ export default function SecondSound({ onBack }) {
                     </div>
 
                     <div className={styles.answerSection}>
-                        <p className={styles.answerLabel}>Song erraten?</p>
+                        <p className={styles.answerLabel}>
+                            {hasPlayedCurrentSong ? 'Song erraten?' : 'Erst Song abspielen…'}
+                        </p>
                         <div className={styles.answerButtons}>
                             <button
-                                className={`${styles.answerBtn} ${styles.wrongBtn}`}
-                                onClick={() => handleAnswer(false)}
+                                className={`${styles.answerBtn} ${styles.wrongBtn} ${!hasPlayedCurrentSong ? styles.answerBtnLocked : ''}`}
+                                onClick={() => hasPlayedCurrentSong && handleAnswer(false)}
+                                disabled={!hasPlayedCurrentSong}
                             >
                                 ✕
                             </button>
                             <button
-                                className={`${styles.answerBtn} ${styles.correctBtn}`}
-                                onClick={() => handleAnswer(true)}
+                                className={`${styles.answerBtn} ${styles.correctBtn} ${!hasPlayedCurrentSong ? styles.answerBtnLocked : ''}`}
+                                onClick={() => hasPlayedCurrentSong && handleAnswer(true)}
+                                disabled={!hasPlayedCurrentSong}
                             >
                                 ✓
                             </button>

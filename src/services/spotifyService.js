@@ -618,6 +618,26 @@ class SpotifyService {
         player.connect()
     }
 
+    /** Wahr, wenn Web-Player verbunden und Device-ID bekannt (für Live-Detection vor GAME). */
+    isPlaybackReady() {
+        return !!(this._player && this._deviceId)
+    }
+
+    /**
+     * Stellt sicher, dass der Web Playback Player bereit ist (Promise).
+     * Wird vor detectPlaylistSize während PHASES.LOADING benötigt.
+     */
+    async ensurePlaybackPlayerReady() {
+        if (this.isPlaybackReady()) return
+        return new Promise((resolve, reject) => {
+            if (this._player) this.disconnectPlayer()
+            this.initPlaybackPlayer(
+                () => resolve(),
+                (msg) => reject(new Error(msg || 'Spotify Player konnte nicht gestartet werden.'))
+            )
+        })
+    }
+
     getDeviceId() {
         return this._deviceId
     }
@@ -804,107 +824,27 @@ class SpotifyService {
     async getPlaylistInfo(playlistId) {
         const token = await this.getStoredUserToken()
         if (!token) throw new Error('Nicht mit Spotify verbunden.')
-
-        console.log(`[SpotifyService] === getPlaylistInfo START für playlistId=${playlistId} ===`)
-
-        // ============ Variante A: /playlists/{id} ohne fields ============
-        const urlA = `${SPOTIFY_API_BASE}/playlists/${playlistId}`
-        console.log(`[SpotifyService] [A] GET ${urlA}`)
-        const resA = await fetch(urlA, { headers: { 'Authorization': `Bearer ${token}` } })
-        console.log(`[SpotifyService] [A] Status: ${resA.status}`)
-        if (!resA.ok) {
-            const errData = await resA.json().catch(() => ({}))
-            console.error('[SpotifyService] [A] FEHLER', resA.status, errData)
-            throw new Error(`Playlist-Info Fehler (HTTP ${resA.status}): ${errData.error?.message || 'Unbekannt'}`)
+        // Spotify liefert tracks.total seit Nov 2024 oft 0 für 3rd-Party-Apps.
+        // Wir versuchen nur den Basis-Endpoint. Wenn das nicht klappt, übernimmt
+        // detectPlaylistSize() (Live-Test) die echte Größenermittlung.
+        const res = await fetch(
+            `${SPOTIFY_API_BASE}/playlists/${playlistId}`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+        )
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}))
+            console.error('[SpotifyService] getPlaylistInfo FEHLER', res.status, errData)
+            throw new Error(`Playlist-Info Fehler (HTTP ${res.status}): ${errData.error?.message || 'Unbekannt'}`)
         }
-        const dataA = await resA.json()
-        console.log('[SpotifyService] [A] Response:', {
-            name: dataA.name,
-            uri: dataA.uri,
-            owner: dataA.owner?.display_name,
-            public: dataA.public,
-            collaborative: dataA.collaborative,
-            'tracks.total': dataA.tracks?.total,
-            'tracks.items.length': dataA.tracks?.items?.length,
-            'tracks.href': dataA.tracks?.href,
-            'tracks.next': dataA.tracks?.next,
-            'tracks.limit': dataA.tracks?.limit
-        })
-        let trackCount = dataA.tracks?.total ?? 0
-
-        // ============ Variante B: /playlists/{id}/tracks?limit=1&fields=total ============
-        if (trackCount <= 0 || trackCount === (dataA.tracks?.items?.length ?? -1)) {
-            const urlB = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=1&fields=total`
-            console.log(`[SpotifyService] [B] GET ${urlB}`)
-            try {
-                const resB = await fetch(urlB, { headers: { 'Authorization': `Bearer ${token}` } })
-                console.log(`[SpotifyService] [B] Status: ${resB.status}`)
-                const dataB = await resB.json().catch(() => ({}))
-                console.log('[SpotifyService] [B] Response:', dataB)
-                if (resB.ok && dataB.total > trackCount) {
-                    console.log(`[SpotifyService] [B] korrigiert total ${trackCount} → ${dataB.total}`)
-                    trackCount = dataB.total
-                }
-            } catch (e) {
-                console.warn('[SpotifyService] [B] Exception:', e.message)
-            }
-        }
-
-        // ============ Variante C: /playlists/{id} mit market=from_token ============
-        if (trackCount <= 0) {
-            const urlC = `${SPOTIFY_API_BASE}/playlists/${playlistId}?market=from_token`
-            console.log(`[SpotifyService] [C] GET ${urlC}`)
-            try {
-                const resC = await fetch(urlC, { headers: { 'Authorization': `Bearer ${token}` } })
-                console.log(`[SpotifyService] [C] Status: ${resC.status}`)
-                const dataC = await resC.json().catch(() => ({}))
-                console.log('[SpotifyService] [C] tracks.total:', dataC.tracks?.total)
-                if (resC.ok && dataC.tracks?.total > trackCount) {
-                    console.log(`[SpotifyService] [C] korrigiert total ${trackCount} → ${dataC.tracks.total}`)
-                    trackCount = dataC.tracks.total
-                }
-            } catch (e) {
-                console.warn('[SpotifyService] [C] Exception:', e.message)
-            }
-        }
-
-        // ============ Variante D: /playlists/{id}/tracks?limit=50 (paginieren bis Ende) ============
-        if (trackCount <= 0) {
-            console.log('[SpotifyService] [D] Versuche paginierende Tracks zu zählen...')
-            try {
-                let counted = 0
-                let nextUrl = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=50&fields=items(track(uri)),next,total`
-                let pageNum = 0
-                while (nextUrl && pageNum < 20) {
-                    const resD = await fetch(nextUrl, { headers: { 'Authorization': `Bearer ${token}` } })
-                    console.log(`[SpotifyService] [D] Page ${pageNum} Status: ${resD.status}`)
-                    if (!resD.ok) break
-                    const dataD = await resD.json()
-                    console.log(`[SpotifyService] [D] Page ${pageNum}: items=${dataD.items?.length}, total=${dataD.total}, next=${!!dataD.next}`)
-                    if (dataD.total > 0) {
-                        trackCount = dataD.total
-                        break
-                    }
-                    counted += dataD.items?.length || 0
-                    nextUrl = dataD.next
-                    pageNum++
-                }
-                if (trackCount <= 0 && counted > 0) {
-                    trackCount = counted
-                    console.log(`[SpotifyService] [D] gezählt durch Pagination: ${counted}`)
-                }
-            } catch (e) {
-                console.warn('[SpotifyService] [D] Exception:', e.message)
-            }
-        }
-
-        console.log(`[SpotifyService] === getPlaylistInfo FINAL: "${dataA.name}" trackCount=${trackCount} ===`)
+        const data = await res.json()
+        const trackCount = data.tracks?.total ?? 0
+        console.log(`[SpotifyService] getPlaylistInfo "${data.name}": tracks.total=${trackCount}`)
         return {
-            id: dataA.id,
-            name: dataA.name,
-            uri: dataA.uri,
+            id: data.id,
+            name: data.name,
+            uri: data.uri,
             trackCount,
-            imageUrl: dataA.images?.[0]?.url || null
+            imageUrl: data.images?.[0]?.url || null
         }
     }
 
@@ -927,6 +867,165 @@ class SpotifyService {
             const err = await res.json().catch(() => ({}))
             throw new Error(err.error?.message || 'Wiedergabe fehlgeschlagen')
         }
+    }
+
+    /**
+     * Ermittelt die echte Größe einer Playlist über "lautlose Wiedergabe-Tests".
+     * Spotify gibt tracks.total seit Nov 2024 nicht mehr zuverlässig zurück.
+     *
+     * Ablauf:
+     *  1. Volume auf 0 setzen
+     *  2. Geometrisch wachsende Offsets testen (1, 10, 50, 100, 250, ...)
+     *  3. Sobald ein Offset fehlschlägt (Error ODER Spotify fällt auf Track 0 zurück),
+     *     Binary Search zwischen letztem OK und erstem FAIL
+     *  4. Volume + Pause restaurieren
+     *
+     * Returns: ermittelte Track-Anzahl (Anzahl gültiger Offsets)
+     */
+    async detectPlaylistSize(contextUri, { maxSearch = 5000, onProgress } = {}) {
+        if (!this._player) throw new Error('Player nicht bereit')
+
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+
+        // Volume merken + auf 0 setzen
+        let originalVolume = 0.8
+        try { originalVolume = (await this._player.getVolume()) ?? 0.8 } catch (_) {}
+        await this._player.setVolume(0).catch(() => {})
+
+        // Shuffle deaktivieren – mit aktivem Shuffle springt Spotify ignoriert die
+        // Offset-Position und es lässt sich keine Größe ermitteln.
+        const token = await this.getStoredUserToken()
+        try {
+            const r = await fetch(
+                `${SPOTIFY_API_BASE}/me/player/shuffle?state=false&device_id=${this._deviceId}`,
+                { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } }
+            )
+            console.log(`[detectSize] Shuffle deaktivieren: HTTP ${r.status}`)
+        } catch (e) {
+            console.warn('[detectSize] Shuffle off fehlgeschlagen:', e.message)
+        }
+
+        const cleanup = async () => {
+            await this._player.pause().catch(() => {})
+            await this._player.setVolume(originalVolume).catch(() => {})
+        }
+
+        // Spielt offset, wartet auf State, gibt {uri, contextUri} zurück (oder null).
+        // Bei 429-Rate-Limit: 2s warten, retry. Bei null-State: 400ms warten, retry.
+        const playAndGetState = async (offset) => {
+            const doPlay = async () => {
+                try { await this.playContextAtOffset(contextUri, offset); return null }
+                catch (e) { return e }
+            }
+            let err = await doPlay()
+            if (err && /429|rate|too many/i.test(err.message || '')) {
+                console.warn(`[detectSize] offset=${offset} rate-limit, warte 2s…`)
+                await sleep(2000)
+                err = await doPlay()
+            }
+            if (err) {
+                console.log(`[detectSize] offset=${offset} HTTP-Fehler: ${err.message}`)
+                return null
+            }
+            await sleep(550)
+            let state = null
+            try { state = await this._player.getCurrentState() } catch (_) {}
+            let uri = state?.track_window?.current_track?.uri || null
+            // Retry bei null-State (Player war noch nicht synchron)
+            if (!uri) {
+                await sleep(400)
+                try { state = await this._player.getCurrentState() } catch (_) {}
+                uri = state?.track_window?.current_track?.uri || null
+                if (uri) console.log(`[detectSize] offset=${offset} URI erst beim Retry verfügbar`)
+            }
+            const ctxUri = state?.context?.uri || null
+            return uri ? { uri, ctxUri } : null
+        }
+
+        // VERIFIZIERTE Probe: prüft offset UND offset+1.
+        // Liefert { valid, uri }:
+        //  - valid=true wenn beide einen Track liefern, URIs unterschiedlich sind UND
+        //    der Player-Context der angeforderten Playlist entspricht.
+        //  - valid=false wenn Spotify in Autoplay/Radio fällt (anderer context.uri),
+        //    die Anfrage stillschweigend ignoriert (gleiche URI für beide) oder Fehler.
+        const verifyOffset = async (offset) => {
+            const a = await playAndGetState(offset)
+            if (!a) return { valid: false, reason: 'no-state-A' }
+            if (a.ctxUri && a.ctxUri !== contextUri) {
+                return { valid: false, reason: `autoplay-${a.ctxUri.slice(-12)}` }
+            }
+            await sleep(180)
+            const b = await playAndGetState(offset + 1)
+            if (!b) return { valid: false, reason: 'no-state-B' }
+            if (b.ctxUri && b.ctxUri !== contextUri) {
+                return { valid: false, reason: `autoplay-${b.ctxUri.slice(-12)}` }
+            }
+            if (a.uri === b.uri) return { valid: false, reason: 'stuck' }
+            return { valid: true, uri: a.uri }
+        }
+
+        // Geometric phase: jeder Probe wird mit verifyOffset doppelt getestet.
+        // Wenn offset N valid ist, wissen wir: Playlist hat mind. N+2 Tracks.
+        const probes = [0, 25, 100, 400, 1000, 2500, 5000].filter(p => p <= maxSearch)
+        let validMax = -1   // höchster Offset bewiesen "valid" → Playlist >= validMax + 2
+        let invalidMin = -1 // niedrigster Offset bewiesen "invalid" → Playlist <= invalidMin + 1
+        let stepIdx = 0
+        const totalSteps = probes.length + 12
+
+        for (const p of probes) {
+            stepIdx++
+            onProgress?.({ step: stepIdx, totalSteps, label: `Teste Offset ${p}…` })
+            const r = await verifyOffset(p)
+            console.log(`[detectSize] geo offset=${p} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
+            if (r.valid) {
+                validMax = p
+            } else {
+                invalidMin = p
+                break
+            }
+            await sleep(220)
+        }
+
+        // Spezialfall: nicht einmal offset 0 ist "valid" → Playlist hat 0 oder 1 Track
+        if (validMax < 0) {
+            await cleanup()
+            // Falls offset 0 zumindest etwas geliefert hat, ist mind. 1 Track da
+            const fallback = await playAndGetUri(0)
+            if (fallback) return 1
+            throw new Error('Playlist konnte nicht abgespielt werden.')
+        }
+
+        if (invalidMin < 0) {
+            await cleanup()
+            return validMax + 2 // alle Probes gültig, Playlist mind. so groß
+        }
+
+        // Binary Search auf Offsets [validMax, invalidMin]
+        let iter = 0
+        while (invalidMin - validMax > 1 && iter < 14) {
+            iter++
+            const mid = Math.floor((validMax + invalidMin) / 2)
+            stepIdx++
+            onProgress?.({
+                step: Math.min(stepIdx, totalSteps),
+                totalSteps,
+                label: `Suche zwischen ${validMax + 2} und ${invalidMin + 1} Songs…`
+            })
+
+            const r = await verifyOffset(mid)
+            console.log(`[detectSize] bsearch offset=${mid} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
+            if (r.valid) validMax = mid
+            else invalidMin = mid
+            await sleep(220)
+        }
+
+        await cleanup()
+
+        // validMax ist der höchste Offset, der mit Sicherheit Track ungleich Nachbar hat
+        // → Playlist hat mindestens validMax + 2 Tracks
+        const size = validMax + 2
+        console.log(`[detectSize] FINAL: ${size} Tracks (validMax=${validMax}, invalidMin=${invalidMin})`)
+        return size
     }
 
     async playContextAtOffset(contextUri, offsetPosition, deviceId) {
