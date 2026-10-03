@@ -4,6 +4,7 @@ import { getFirestore, doc, getDoc, setDoc, increment } from 'firebase/firestore
 import { getAuth, signInAnonymously } from 'firebase/auth'
 import '../../firebase.js'
 import spotifyService from '../../services/spotifyService'
+import clip from '../../services/clipPlayer.js'
 import { log, warn } from '../../utils/logger.js'
 import styles from './SecondSound.module.css'
 
@@ -171,6 +172,8 @@ export default function SecondSound({ onBack }) {
     const [confirmClose, setConfirmClose] = useState(false)  // Bottom-Sheet "Spiel beenden?"
     const [loadPct, setLoadPct] = useState(0)                // Fortschritt im Ladescreen (0–100)
     const [tick, setTick] = useState(0)                      // Takt für Animationen (Equalizer, Punkte)
+    const [startingIdx, setStartingIdx] = useState(-1)       // Stufe, die gerade gestartet wird (Player lädt)
+    const [cancelling, setCancelling] = useState(false)
     const [funSteps, setFunSteps] = useState(() => pickFunSteps())
     const [searchHasMore, setSearchHasMore] = useState(false)
     const [searchNextOffset, setSearchNextOffset] = useState(0)
@@ -189,13 +192,12 @@ export default function SecondSound({ onBack }) {
     const [historyOpen, setHistoryOpen] = useState(false)
 
 
-    const timerRef = useRef(null)
-    const fetchGenRef = useRef(0)               // bricht veraltete getPlaybackState-Callbacks ab
     const currentIndexRef = useRef(0)
     const isAnsweringRef = useRef(false)        // verhindert Doppel-Klick auf Antwort-Buttons
     const usedUrisRef = useRef(new Set())        // schon gespielte Titel dieser Runde (Duplikate überspringen)
-    const dupRetriesRef = useRef(0)
-    const pendingStageRef = useRef(null)         // nach Duplikat-Sprung: Stufe automatisch erneut starten
+    const playGenRef = useRef(0)                 // wird bei Song-Wechsel erhöht: ältere Start-Anfragen verfallen
+    const startingGameRef = useRef(false)        // verhindert doppelten Spielstart
+    const cancelLoadRef = useRef(false)          // "Abbrechen" auf dem Ladescreen
     const playStartRef = useRef(0)              // Startzeit der laufenden Wiedergabe (Countdown)
     const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
     const allowPlaybackRef = useRef(false)      // true nur, solange der Spieler einen Play-Button gedrückt hat
@@ -299,12 +301,29 @@ export default function SecondSound({ onBack }) {
         spotifyService.initPlaybackPlayer(
             () => setPlayerReady(true),
             (msg) => setPlayerError(msg || 'Spotify Player konnte nicht gestartet werden. Spotify Premium erforderlich.'),
-            { activate: true }
+            { activate: true, name: 'Song raten' }
         )
         return () => {
             spotifyService.disconnectPlayer()
             setPlayerReady(false)
         }
+    }, [phase])
+
+    // Wiedergabe-Steuerung: Player-Ereignisse auswerten (Ende des Ausschnitts, Titelwechsel, Fehler)
+    useEffect(() => {
+        if (phase !== PHASES.GAME) return
+        clip.reset()
+        clip.attach()
+        clip.setHandlers({
+            onEnd: (reason, info) => {
+                allowPlaybackRef.current = false
+                setIsPlaying(false)
+                if (reason === 'drift') setPlayerError('Spotify hat von selbst den Titel gewechselt. Tippe auf Play, um den Song neu zu starten.')
+                else if (reason === 'error') setPlayerError(`Abspielen unterbrochen: ${info.message || 'Spotify-Fehler'}`)
+            },
+            onAutoplayFailed: () => setPlayerError('Der Browser hat die Wiedergabe blockiert. Tippe nochmal auf Play.')
+        })
+        return () => { clip.detach() }
     }, [phase])
 
     // Wächter: Während des Spiels darf nur nach Klick auf einen Play-Button etwas laufen.
@@ -419,15 +438,23 @@ export default function SecondSound({ onBack }) {
         setSelectedPlaylists(prev => prev.filter(p => p.id !== playlistId))
     }
 
+    const handleCancelLoad = () => {
+        cancelLoadRef.current = true
+        setCancelling(true)
+    }
+
     const handleStartGame = async () => {
-        if (selectedPlaylists.length === 0) return
+        if (selectedPlaylists.length === 0 || startingGameRef.current) return
+        startingGameRef.current = true
+        cancelLoadRef.current = false
+        setCancelling(false)
         setPhase(PHASES.LOADING)
         setLoadingError(null)
         setLoadPct(5)
         setFunSteps(pickFunSteps())
         usedUrisRef.current = new Set()
-        dupRetriesRef.current = 0
-        pendingStageRef.current = null
+        playGenRef.current++
+        clip.reset()
 
         try {
             // Echtes Fisher-Yates – Math.random()-0.5 als Sortier-Func ist statistisch
@@ -443,10 +470,11 @@ export default function SecondSound({ onBack }) {
 
             // Player muss existieren, bevor Live-Detection (mute play tests) läuft –
             // der Effect mit initPlaybackPlayer greift erst bei PHASES.GAME.
-            await spotifyService.ensurePlaybackPlayerReady()
+            await spotifyService.ensurePlaybackPlayerReady({ name: 'Song raten' })
+            if (cancelLoadRef.current) throw new Error('abgebrochen')
             setLoadPct(35)
 
-            const slots = []
+            const candidates = []   // alle (Playlist, Position)-Paare: so zählt jeder Titel gleich viel
 
             for (let pIdx = 0; pIdx < selectedPlaylists.length; pIdx++) {
                 const playlist = selectedPlaylists[pIdx]
@@ -485,6 +513,7 @@ export default function SecondSound({ onBack }) {
                     })
                     try {
                         count = await spotifyService.detectPlaylistSize(uri, {
+                            shouldCancel: () => cancelLoadRef.current,
                             onProgress: (p) => {
                                 setSizeDetectionProgress(prev => ({ ...prev, ...p }))
                             }
@@ -492,6 +521,7 @@ export default function SecondSound({ onBack }) {
                         log(`[SS] "${playlist.name}": Live-Detection ermittelt ${count} Tracks`)
                         saveSize(playlist.id, count)
                     } catch (e) {
+                        if (cancelLoadRef.current) throw new Error('abgebrochen')
                         console.error(`[SS] Live-Detection fehlgeschlagen:`, e.message)
                         // Keine geratene Größe: sonst entstehen Offsets, die es nicht gibt (oder 1 Song)
                         throw new Error(`„${playlist.name}": ${e.message}`)
@@ -501,19 +531,19 @@ export default function SecondSound({ onBack }) {
                 if (count > 1) playlistSizeCache.current[playlist.id] = count
                 setLoadPct(35 + Math.round(55 * (pIdx + 1) / selectedPlaylists.length))
 
-                const poolSize = Math.min(count, songCount * 3)
-                const allPositions = Array.from({ length: count }, (_, i) => i)
-                const positions = fisherYates(allPositions).slice(0, poolSize)
-                positions.forEach(offset => slots.push({ playlistUri: uri, offset }))
-                log(`[SS] "${playlist.name}": trackCount=${count}, poolSize=${poolSize}, offsets=[${positions.slice(0, 20).join(',')}${positions.length > 20 ? ',…' : ''}]`)
+                for (let i = 0; i < count; i++) candidates.push({ playlistUri: uri, offset: i })
+                log(`[SS] "${playlist.name}": trackCount=${count}`)
+                if (cancelLoadRef.current) throw new Error('abgebrochen')
             }
+
+            // Zufällig aus ALLEN Titeln aller Playlists ziehen (3× Reserve für übersprungene/doppelte Titel)
+            const slots = fisherYates(candidates).slice(0, songCount * 3)
 
             setSizeDetectionProgress(null)
 
             // Sicherstellen, dass vor dem ersten Klick nichts mehr läuft
             allowPlaybackRef.current = false
             await spotifyService.pauseLocalPlayer()
-            await spotifyService.pausePlayback().catch(() => {})
 
             if (slots.length === 0) {
                 setLoadingError('Keine Playlists verfügbar. Bitte eine Playlist auswählen.')
@@ -524,7 +554,6 @@ export default function SecondSound({ onBack }) {
             const shuffled = fisherYates(slots)
             log(`[SS] Spiel gestartet – ${shuffled.length} Slots, Ziel: ${songCount}`)
 
-            fetchGenRef.current = 0
             songsRef.current = shuffled
             trackUriRef.current = {}
             sessionSecondsCorrectRef.current = []
@@ -534,7 +563,7 @@ export default function SecondSound({ onBack }) {
             currentIndexRef.current = 0
             setCurrentIndex(0)
             setPlayedCount(0)
-            setTargetCount(songCount)
+            setTargetCount(Math.min(songCount, shuffled.length))
             setIsRevealed(false)
             setCurrentTrackInfo(null)
             setScore(0)
@@ -544,117 +573,135 @@ export default function SecondSound({ onBack }) {
             setLoadPct(100)
             setPhase(PHASES.GAME)
         } catch (e) {
-            console.error('[SS] Fehler beim Starten:', e)
             setSizeDetectionProgress(null)
-            setLoadingError(e.message || 'Fehler beim Starten des Spiels.')
-            setPhase(PHASES.SETUP)
+            if (cancelLoadRef.current) {
+                setPhase(PHASES.SETUP)       // bewusst abgebrochen: keine Fehlermeldung
+            } else {
+                console.error('[SS] Fehler beim Starten:', e)
+                setLoadingError(e.message || 'Fehler beim Starten des Spiels.')
+                setPhase(PHASES.SETUP)
+            }
+        } finally {
+            startingGameRef.current = false
+            setCancelling(false)
         }
     }
 
     const dbg = (...args) => log('[SS]', ...args)
 
-    // Pausiert über das SDK (lokal, ohne zusätzliche Web-API-Anfrage)
+    // Pausiert den laufenden Ausschnitt (lokal über das SDK)
     const stopPlayback = async () => {
         dbg('stopPlayback aufgerufen')
-        if (timerRef.current) {
-            clearTimeout(timerRef.current)
-            timerRef.current = null
-        }
         allowPlaybackRef.current = false
         setIsPlaying(false)
-        await spotifyService.pauseLocalPlayer()
+        await clip.pause()
     }
 
-    const handlePlayFor = async (seconds) => {
-        dbg(`handlePlayFor: ${seconds}s | currentIndex=${currentIndex}`)
-        if (isPlayingRequestRef.current) {
-            dbg('handlePlayFor: ignoriert (Request bereits aktiv)')
-            return
-        }
+    // Spielt Stufe `idx` (1/5/10/30 s) des aktuellen Songs.
+    // Ein Titel gilt erst als gestartet, wenn der Player "spielt" meldet (siehe clipPlayerCore.js).
+    const handlePlayStage = async (idx) => {
+        const seconds = STAGES[idx].seconds
+        if (isPlayingRequestRef.current) { dbg('handlePlayStage: ignoriert (Start läuft)'); return }
+        spotifyService.activateAudio()     // synchron im Klick: Autoplay-Regeln der Browser
         if (!playerReady) {
             setPlayerError('Spotify Player noch nicht bereit. Bitte warte einen Moment.')
             return
         }
+        const gen = playGenRef.current
+        const isStale = () => gen !== playGenRef.current
+        let slot = currentIndexRef.current
+        if (!songsRef.current[slot]) { dbg('handlePlayStage: kein Song an Slot', slot); return }
 
-        const song = songs[currentIndex]
-        if (!song) {
-            dbg('handlePlayFor: kein Song an currentIndex', currentIndex)
-            return
-        }
-
-        if (timerRef.current) {
-            clearTimeout(timerRef.current)
-            timerRef.current = null
-        }
-
-        const slot = currentIndex
-        lastPlaySecondsRef.current = seconds
         isPlayingRequestRef.current = true
+        setStartingIdx(idx)
+        setPlayerError(null)
+        lastPlaySecondsRef.current = seconds
         allowPlaybackRef.current = true
+        dbg(`handlePlayStage: ${seconds}s | slot=${slot}`)
 
         try {
-            // Erstes Abspielen: Playlist+Offset (Shuffle aus). Danach derselbe, schon geladene Titel von vorn
-            // (seek+resume, ohne neuen Track-Load → keine zusätzliche DRM-Lizenz → kein Rate-Limit/Knistern).
             const knownUri = trackUriRef.current[slot]
-            let started = false
-            if (knownUri) started = await spotifyService.replayLocal(knownUri)
-            if (!started) {
-                if (knownUri) {
-                    await spotifyService.playUriOnPlayer(knownUri)
-                } else {
-                    await spotifyService.playContextAtOffset(song.playlistUri, song.offset, undefined, { shuffleOff: true })
-                    // Nicht abwarten: der Auto-Pause-Timer darf dadurch nicht später starten
-                    spotifyService.waitForLocalTrack().then(info => {
-                        if (currentIndexRef.current !== slot) return           // inzwischen weitergeschaltet
-                        if (!info) { warn(`[SS] Kein Titel für Slot ${slot} erhalten`); return }
-                        const hasSpare = slot + 1 < songsRef.current.length
-                        if (usedUrisRef.current.has(info.uri) && hasSpare && dupRetriesRef.current < 5) {
-                            // Titel wurde in dieser Runde schon gespielt → still zum nächsten Slot springen
-                            dupRetriesRef.current++
-                            dbg(`Duplikat erkannt (${info.trackName}) – springe zu Slot ${slot + 1}`)
-                            if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
-                            pendingStageRef.current = seconds
-                            currentIndexRef.current = slot + 1
-                            setCurrentIndex(slot + 1)
-                            return
-                        }
-                        usedUrisRef.current.add(info.uri)
-                        trackUriRef.current[slot] = info.uri
-                        setCurrentTrackInfo(info)
+            let result
+            if (knownUri) {
+                // gleicher Titel von vorn (seek+resume); sonst per URI neu laden
+                result = await clip.replay({ uri: knownUri, seconds, isStale })
+            } else {
+                let tries = 0
+                for (;;) {
+                    const song = songsRef.current[slot]
+                    if (!song) throw new Error('Keine weiteren Songs verfügbar.')
+                    const canSkip = slot + 1 < songsRef.current.length && tries < 5
+                    result = await clip.startNew({
+                        contextUri: song.playlistUri,
+                        offset: song.offset,
+                        seconds,
+                        isStale,
+                        // Duplikate werden stumm verworfen, BEVOR man sie hört (Titel ist hier verifiziert, nicht geraten)
+                        accept: (t) => !(canSkip && usedUrisRef.current.has(t.uri))
                     })
+                    if (!result.rejected) break
+                    tries++
+                    slot++
+                    dbg(`Duplikat verworfen – nächster Slot ${slot}`)
                 }
             }
-            isPlayingRequestRef.current = false
-            playStartRef.current = Date.now()
+            if (result.aborted || isStale()) return
+
+            if (!knownUri) {
+                usedUrisRef.current.add(result.track.uri)
+                trackUriRef.current[slot] = result.track.uri
+                setCurrentTrackInfo(result.track)
+                if (slot !== currentIndexRef.current) {
+                    currentIndexRef.current = slot
+                    setCurrentIndex(slot)
+                }
+            }
+            playStartRef.current = result.startedAt
             setIsPlaying(true)
             setHasPlayedCurrentSong(true)
-            setPlayerError(null)
-
-            if (seconds !== null) {
-                timerRef.current = setTimeout(async () => {
-                    dbg(`Auto-Pause nach ${seconds}s`)
-                    allowPlaybackRef.current = false
-                    await spotifyService.pauseLocalPlayer()
-                    setIsPlaying(false)
-                    timerRef.current = null
-                }, seconds * 1000)
-            }
+            setMaxUnlockedIndex(prev => Math.max(prev, idx + 1))
         } catch (e) {
-            isPlayingRequestRef.current = false
             allowPlaybackRef.current = false
-            dbg('handlePlayFor Fehler:', e.message)
-            setPlayerError(e.message || 'Wiedergabe fehlgeschlagen')
-            setIsPlaying(false)
+            dbg('handlePlayStage Fehler:', e.message)
+            if (!isStale()) {
+                setPlayerError(e.message || 'Wiedergabe fehlgeschlagen')
+                setIsPlaying(false)
+            }
+        } finally {
+            if (!isStale()) {
+                isPlayingRequestRef.current = false
+                setStartingIdx(-1)
+            }
         }
+    }
+
+    // Nicht abspielbaren Song auslassen (zählt nicht als gespielt)
+    const skipSong = async () => {
+        playGenRef.current++
+        isPlayingRequestRef.current = false
+        setStartingIdx(-1)
+        await stopPlayback()
+        const next = currentIndexRef.current + 1
+        if (next >= songsRef.current.length) {
+            setPlayerError('Keine weiteren Songs verfügbar. Du kannst die Runde beenden.')
+            return
+        }
+        currentIndexRef.current = next
+        setCurrentIndex(next)
+        setIsRevealed(false)
+        setMaxUnlockedIndex(0)
+        setHasPlayedCurrentSong(false)
+        setCurrentTrackInfo(null)
+        setPlayerError(null)
     }
 
     // Rückt zum nächsten Song vor – zählt den Song als gespielt
     const advanceAfterAnswer = (correct) => {
         dbg(`advanceAfterAnswer: correct=${correct} | currentIndex=${currentIndex} | playedCount=${playedCount} | targetCount=${targetCount}`)
         dbg(`  aktueller Track: "${currentTrackInfo?.trackName}" von "${currentTrackInfo?.artist}"`)
-        fetchGenRef.current++       // veraltete Polls abbrechen
-        dupRetriesRef.current = 0
-        pendingStageRef.current = null
+        playGenRef.current++        // laufende Start-Anfragen des alten Songs verwerfen
+        setStartingIdx(-1)
+        setPlayerError(null)
         allowPlaybackRef.current = false
         isAnsweringRef.current = false
         isPlayingRequestRef.current = false
@@ -704,6 +751,11 @@ export default function SecondSound({ onBack }) {
     }
 
     const handleNewRound = () => {
+        playGenRef.current++
+        clip.reset()
+        isPlayingRequestRef.current = false
+        setStartingIdx(-1)
+        setPlayerError(null)
         setSongs([])
         setCurrentIndex(0)
         setPlayedCount(0)
@@ -735,15 +787,6 @@ export default function SecondSound({ onBack }) {
         await stopPlayback()
         handleNewRound()
     }
-
-    // Nach einem Duplikat-Sprung die zuletzt gewählte Stufe automatisch auf dem neuen Song starten
-    useEffect(() => {
-        if (pendingStageRef.current == null) return
-        const sec = pendingStageRef.current
-        pendingStageRef.current = null
-        handlePlayFor(sec)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentIndex])
 
     // Takt für Animationen (Equalizer, Countdown, Verbindungs-Punkte)
     useEffect(() => {
@@ -1079,6 +1122,9 @@ export default function SecondSound({ onBack }) {
                             )
                         })}
                     </ul>
+                    <button type="button" className={`${styles.srBtn} ${styles.srLinkBtn}`} onClick={handleCancelLoad} disabled={cancelling}>
+                        {cancelling ? 'Wird abgebrochen …' : 'Abbrechen'}
+                    </button>
                 </div>
             </main>
         )
@@ -1095,16 +1141,17 @@ export default function SecondSound({ onBack }) {
         const remaining = isPlaying && playingSecs ? Math.max(1, Math.ceil(playingSecs - elapsed)) : 0
 
         // Kachel: läuft sie gerade → pausieren; läuft nichts → abspielen; läuft etwas anderes → ignorieren
+        const starting = startingIdx >= 0
         const onTile = (idx) => {
-            if (!playerReady || idx > playedN) return
+            if (!playerReady || idx > playedN || starting) return
             if (playingIdx === idx) { stopPlayback(); return }
             if (isPlaying) return
-            handlePlayFor(STAGES[idx].seconds)
-            setMaxUnlockedIndex(prev => Math.max(prev, idx + 1))
+            handlePlayStage(idx)
         }
 
         let hint
         if (connecting) hint = 'Spotify-Player verbindet …'
+        else if (starting) hint = 'Song wird geladen …'
         else if (isRevealed) hint = 'Wurde der Song erraten?'
         else if (isPlaying) hint = 'Hört genau hin …'
         else if (playedN === 0) hint = 'Drück Play – zuerst nur 1 Sekunde'
@@ -1116,7 +1163,7 @@ export default function SecondSound({ onBack }) {
             ? { title: 'Der Player ist noch nicht bereit', text: 'Kurz warten und nochmal tippen.' }
             : { title: 'Abspielen hat nicht geklappt', text: playerError })
         const bars = Array.from({ length: 11 }, (_, j) => (isPlaying ? Math.round(8 + (Math.sin(tick * 1.3 + j * 1.9) + 1) / 2 * 30) : 4))
-        const caption = connecting ? 'VERBINDET' : (isPlaying ? `LÄUFT · ${playingSecs} S` : 'GEHEIMER SONG')
+        const caption = connecting ? 'VERBINDET' : (starting ? 'LÄDT' : (isPlaying ? `LÄUFT · ${playingSecs} S` : 'GEHEIMER SONG'))
         const discSize = isPlaying ? (tick % 2 ? 112 : 106) : 104
         const songNo = `Song ${playedCount + 1} von ${targetCount}`
 
@@ -1149,10 +1196,10 @@ export default function SecondSound({ onBack }) {
                         <>
                             <Rings size={246} radii={[47, 41, 35, 29, 23.5]} sw={1} />
                             <span className={styles.srCardCaption}>{caption}</span>
-                            <div className={`${styles.srDisc} ${connecting ? styles.srDiscConn : ''}`} style={{ width: discSize, height: discSize }}>
+                            <div className={`${styles.srDisc} ${(connecting || starting) ? styles.srDiscConn : ''}`} style={{ width: discSize, height: discSize }}>
                                 {isPlaying
                                     ? <span className={styles.srDiscCount}>0:{remaining < 10 ? '0' : ''}{remaining}</span>
-                                    : connecting
+                                    : (connecting || starting)
                                         ? <span className={styles.srDots}>{[0, 1, 2].map(d => <span key={d} style={{ opacity: tick % 3 === d ? 1 : 0.3 }} />)}</span>
                                         : <span className={styles.srDiscQ} aria-hidden="true">?</span>}
                             </div>
@@ -1180,15 +1227,16 @@ export default function SecondSound({ onBack }) {
                     {STAGES.map((s, i) => {
                         const locked = i > playedN
                         const playing = playingIdx === i
-                        const otherPlaying = isPlaying && !playing
+                        const loadingTile = startingIdx === i
+                        const otherPlaying = (isPlaying && !playing) || (starting && !loadingTile)
                         const aria = locked ? `${s.long} – noch gesperrt` : (playing ? `${s.long} pausieren` : `${s.long} abspielen`)
                         return (
-                            <button key={s.label} type="button" onClick={() => onTile(i)} disabled={locked || connecting || otherPlaying} aria-label={aria}
-                                className={`${styles.srBtn} ${styles.srTile} ${locked ? styles.srTile_locked : (playing ? styles.srTile_playing : (i === playedN ? styles.srTile_next : styles.srTile_played))} ${(connecting && !locked) || otherPlaying ? styles.srTileConn : ''}`}>
+                            <button key={s.label} type="button" onClick={() => onTile(i)} disabled={locked || connecting || otherPlaying || loadingTile} aria-label={aria}
+                                className={`${styles.srBtn} ${styles.srTile} ${locked ? styles.srTile_locked : ((playing || loadingTile) ? styles.srTile_playing : (i === playedN ? styles.srTile_next : styles.srTile_played))} ${(connecting && !locked) || otherPlaying ? styles.srTileConn : ''}`}>
                                 {playing && <span className={styles.srTileFill} style={{ width: `${Math.round(progress * 100)}%` }} />}
                                 <span className={styles.srTileLabel}>{s.label}</span>
                                 <span className={styles.srTileStatus}>
-                                    {locked ? <><IconLock size={14} w={2.6} />gesperrt</> : (playing ? <IconPause size={20} /> : <IconPlay size={18} />)}
+                                    {locked ? <><IconLock size={14} w={2.6} />gesperrt</> : (loadingTile ? <IconWave size={16} /> : (playing ? <IconPause size={20} /> : <IconPlay size={18} />))}
                                 </span>
                             </button>
                         )
@@ -1205,6 +1253,9 @@ export default function SecondSound({ onBack }) {
                                 <p className={styles.srAlertTitle}>{friendlyError.title}</p>
                                 <p className={styles.srAlertText}>{friendlyError.text}</p>
                             </div>
+                            <button type="button" className={`${styles.srBtn} ${styles.srSkipBtn}`} onClick={skipSong}>
+                                Anderer Song
+                            </button>
                         </div>
                     </div>
                 )}
