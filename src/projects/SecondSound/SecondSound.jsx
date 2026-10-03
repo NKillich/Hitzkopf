@@ -41,7 +41,7 @@ const STAGES = [
     { label: '30 s', seconds: 30, long: '30 Sekunden' }
 ]
 
-const COUNT_OPTIONS = [5, 10, 15, 20, 30]
+const COUNT_OPTIONS = [5, 10, 15, 20, 25, 30]
 
 // Größen-Cache über Sitzungen hinweg (spart die teure Live-Erkennung)
 const SIZE_CACHE_KEY = 'ss_plsizes_v1'
@@ -115,15 +115,6 @@ const IconWave = ({ size = 13 }) => <Svg size={size} w={3}><path d="M5 10v4M10 6
 const IconShuffle = () => <Svg size={30}><path d="M3 7h3.5c2 0 3.2 1 4.3 2.7l2.4 4.6c1.1 1.7 2.3 2.7 4.3 2.7H21" /><path d="M3 17h3.5c1.5 0 2.6-.6 3.5-1.6M14 8.6c.9-1 2-1.6 3.5-1.6H21" /><path d="M18 4l3 3-3 3M18 14l3 3-3 3" /></Svg>
 const IconPhone = () => <Svg size={18} w={2}><rect x="6" y="3" width="12" height="18" rx="2" /><circle cx="12" cy="14" r="3" /><path d="M12 7.5v.01" /></Svg>
 const IconInfo = () => <Svg size={18} w={2}><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5M12 7.5v.01" /></Svg>
-
-function Rings({ size, radii, sw = 1.5, children }) {
-    return (
-        <svg className={styles.srRings} width={size} height={size} viewBox="0 0 100 100" fill="none" aria-hidden="true">
-            {radii.map(r => <circle key={r} cx="50" cy="50" r={r} strokeWidth={sw} />)}
-            {children}
-        </svg>
-    )
-}
 
 export default function SecondSound({ onBack }) {
     const [phase, setPhase] = useState(PHASES.HOME)
@@ -847,24 +838,12 @@ export default function SecondSound({ onBack }) {
                     {themeBtn}
                 </div>
 
-                <div className={styles.srLoginHero}>
-                    <div className={styles.srLoginArt} aria-hidden="true">
-                        <div className={styles.srCardSm}>
-                            <Rings size={130} radii={[46, 39, 32, 25.5]} />
-                            <div className={styles.srCardDiscSm}>?</div>
-                        </div>
-                        <div className={styles.srChipGrid}>
-                            {STAGES.map((s, i) => (
-                                <span key={s.label} className={`${styles.srChip} ${i === 0 ? styles.srChipOn : ''}`}>{s.label}</span>
-                            ))}
-                        </div>
-                    </div>
-                    <div>
-                        <h1 className={styles.srHeroTitle}>Song raten</h1>
-                        <p className={styles.srLead}>
-                            Hör kurze Ausschnitte aus deinen Spotify-Playlists: erst 1 Sekunde, dann 5, 10 und 30. Erkennst du den Song, bevor er aufgedeckt wird?
-                        </p>
-                    </div>
+                <div className={styles.srHomeHero}>
+                    <span className={styles.srEmoji} aria-hidden="true">🎧</span>
+                    <h1 className={styles.srHeroTitle}>Song raten</h1>
+                    <p className={styles.srLead}>
+                        Hör kurze Ausschnitte aus deinen Spotify-Playlists: erst 1 Sekunde, dann 5, 10 und 30. Erkennst du den Song, bevor er aufgedeckt wird?
+                    </p>
                 </div>
 
                 <div className={styles.srStack}>
@@ -878,12 +857,7 @@ export default function SecondSound({ onBack }) {
                         </div>
                     )}
 
-                    {connected ? (
-                        <>
-                            <div className={styles.srConnected} role="status"><IconCheck size={20} />Spotify ist verbunden</div>
-                            <button type="button" className={`${styles.srBtn} ${styles.srLinkBtn} ${styles.srUnlink}`} onClick={handleDisconnect}>Verbindung trennen</button>
-                        </>
-                    ) : (
+                    {!connected && (
                         <button type="button" className={`${styles.srBtn} ${styles.srPrimary}`} onClick={handleSpotifyLogin} disabled={checking}>
                             <IconNote />{checking ? 'Verbindung wird geprüft …' : 'Spotify verbinden'}
                         </button>
@@ -897,7 +871,15 @@ export default function SecondSound({ onBack }) {
 
                     <button type="button" className={`${styles.srBtn} ${styles.srSecondary}`}>Einstellungen</button>
 
-                    {!connected && !checking && <p className={styles.srFineRow}><IconInfo />Du brauchst Spotify Premium.</p>}
+                    {connected ? (
+                        <p className={styles.srStatus} role="status">
+                            <span className={styles.srStatusDot} aria-hidden="true" />Spotify verbunden
+                            <span aria-hidden="true">·</span>
+                            <button type="button" className={`${styles.srBtn} ${styles.srStatusLink}`} onClick={handleDisconnect}>Verbindung trennen</button>
+                        </p>
+                    ) : (
+                        !checking && <p className={styles.srFineRow}><IconInfo />Du brauchst Spotify Premium.</p>
+                    )}
                 </div>
             </main>
         )
@@ -1071,13 +1053,25 @@ export default function SecondSound({ onBack }) {
 
                 <div className={styles.srCountPage}>
                     <p id="sr-count-label" className={styles.srInfoBig}>Wie viele Songs möchtest du erraten?</p>
-                    <div role="group" aria-labelledby="sr-count-label" className={styles.srCountGrid}>
-                        {COUNT_OPTIONS.map(n => (
-                            <button key={n} type="button" aria-pressed={songCount === n} onClick={() => setSongCount(n)}
-                                className={`${styles.srBtn} ${styles.srCountBig} ${songCount === n ? styles.srCountBigOn : ''}`}>
-                                {n}
-                            </button>
-                        ))}
+                    <div className={styles.srSliderBox}>
+                        <p className={styles.srSliderValue} aria-hidden="true"><span className={styles.srSliderNum}>{songCount}</span>Songs</p>
+                        <input
+                            type="range"
+                            className={styles.srSlider}
+                            min={COUNT_OPTIONS[0]}
+                            max={COUNT_OPTIONS[COUNT_OPTIONS.length - 1]}
+                            step={5}
+                            value={songCount}
+                            onChange={e => setSongCount(Number(e.target.value))}
+                            aria-labelledby="sr-count-label"
+                            aria-valuetext={`${songCount} Songs`}
+                            style={{ '--pct': `${((songCount - COUNT_OPTIONS[0]) / (COUNT_OPTIONS[COUNT_OPTIONS.length - 1] - COUNT_OPTIONS[0])) * 100}%` }}
+                        />
+                        <div className={styles.srTicks} aria-hidden="true">
+                            {COUNT_OPTIONS.map((n, i) => (
+                                <span key={n} className={n === songCount ? styles.srTickOn : ''} style={{ left: `calc(14px + (100% - 28px) * ${i / (COUNT_OPTIONS.length - 1)})` }}>{n}</span>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
@@ -1142,7 +1136,6 @@ export default function SecondSound({ onBack }) {
         const playingIdx = isPlaying ? STAGES.findIndex(s => s.seconds === playingSecs) : -1
         const elapsed = isPlaying && playStartRef.current ? (Date.now() - playStartRef.current) / 1000 : 0
         const progress = isPlaying && playingSecs ? Math.min(1, elapsed / playingSecs) : 0
-        const remaining = isPlaying && playingSecs ? Math.max(1, Math.ceil(playingSecs - elapsed)) : 0
 
         // Kachel: läuft sie gerade → pausieren; läuft nichts → abspielen; läuft etwas anderes → ignorieren
         const starting = startingIdx >= 0
@@ -1165,9 +1158,6 @@ export default function SecondSound({ onBack }) {
         const friendlyError = playerError && (/device not found/i.test(playerError)
             ? { title: 'Der Player ist noch nicht bereit', text: 'Kurz warten und nochmal tippen.' }
             : { title: 'Abspielen hat nicht geklappt', text: playerError })
-        const bars = Array.from({ length: 11 }, (_, j) => (isPlaying ? Math.round(8 + (Math.sin(tick * 1.3 + j * 1.9) + 1) / 2 * 30) : 4))
-        const caption = connecting ? 'VERBINDET' : (starting ? 'LÄDT' : (isPlaying ? `LÄUFT · ${playingSecs} S` : 'GEHEIMER SONG'))
-        const discPct = isPlaying ? (tick % 2 ? 45 : 43) : 42
         const songNo = `Song ${playedCount + 1} von ${targetCount}`
 
         return shell(
@@ -1190,26 +1180,16 @@ export default function SecondSound({ onBack }) {
                     {hint}
                 </p>
 
-                <div className={styles.srCardGame}>
+                <div
+                    className={`${styles.srCardGame} ${!isRevealed ? styles.srSkelGame : ''} ${(!isRevealed && (isPlaying || starting || connecting)) ? styles.srPulse : ''} ${(!isRevealed && canAct) ? styles.srCardTap : ''}`}
+                    onClick={() => { if (!isRevealed && canAct) setIsRevealed(true) }}
+                >
                     {isRevealed ? (
                         <div role="img" aria-label={`Albumcover: ${currentTrackInfo?.trackName || 'Song'}`} className={styles.srCoverFill}>
                             <CoverArt src={currentTrackInfo?.imageUrl} seed={currentTrackInfo?.trackId || currentTrackInfo?.trackName || currentIndex} size={248} radius={0} />
                         </div>
                     ) : (
-                        <>
-                            <Rings size={246} radii={[47, 41, 35, 29, 23.5]} sw={1} />
-                            <span className={styles.srCardCaption}>{caption}</span>
-                            <div className={`${styles.srDisc} ${(connecting || starting) ? styles.srDiscConn : ''}`} style={{ width: `${discPct}%` }}>
-                                {isPlaying
-                                    ? <span className={styles.srDiscCount}>0:{remaining < 10 ? '0' : ''}{remaining}</span>
-                                    : (connecting || starting)
-                                        ? <span className={styles.srDots}>{[0, 1, 2].map(d => <span key={d} style={{ opacity: tick % 3 === d ? 1 : 0.3 }} />)}</span>
-                                        : <span className={styles.srDiscQ} aria-hidden="true">?</span>}
-                            </div>
-                            <div className={styles.srBars} aria-hidden="true">
-                                {bars.map((h, j) => <span key={j} className={isPlaying ? styles.srBarOn : ''} style={{ height: h }} />)}
-                            </div>
-                        </>
+                        <span className={styles.srSkelQ} role="img" aria-label="Verdecktes Albumcover">?</span>
                     )}
                 </div>
 

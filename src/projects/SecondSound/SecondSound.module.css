@@ -280,3 +280,35 @@
 @keyframes srSpin { to { transform: rotate(360deg); } }
 .srRoot .srCardGame .srRings { width: 100%; height: 100%; }
 .srRoot .srScroll .srResultCard { flex: none; }
+
+/* Startseite */
+.srRoot .srHomeHero { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: clamp(10px, 2dvh, 18px); }
+.srRoot .srEmoji { font-size: clamp(72px, 15dvh, 120px); line-height: 1; }
+.srRoot .srHomeHero .srLead { margin: 0 auto; }
+.srRoot .srStatus { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--sr-muted); margin-top: 2px; }
+.srRoot .srStatusDot { width: 8px; height: 8px; border-radius: 50%; background: var(--sr-ok); }
+.srRoot .srStatusLink { height: 32px; padding: 0 2px; color: var(--sr-muted); font-size: 13px; font-weight: 600; text-decoration: underline; }
+
+/* Songanzahl: Slider mit festen Stufen */
+.srRoot .srSliderBox { display: flex; flex-direction: column; gap: 6px; }
+.srRoot .srSliderValue { display: flex; align-items: baseline; justify-content: center; gap: 8px; font-size: 20px; font-weight: 700; color: var(--sr-muted); }
+.srRoot .srSliderNum { font-family: var(--sr-display); font-size: clamp(64px, 11dvh, 96px); font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: var(--sr-ink); }
+.srRoot .srSlider { -webkit-appearance: none; appearance: none; width: 100%; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; transform: none; transition: none; cursor: pointer; }
+.srRoot .srSlider:focus { outline: none; background: transparent; border: 0; box-shadow: none; transform: none; }
+.srRoot .srSlider::-webkit-slider-runnable-track { height: 10px; border-radius: 5px; background: linear-gradient(to right, var(--sr-accent) 0, var(--sr-accent) var(--pct, 20%), var(--sr-surface2) var(--pct, 20%), var(--sr-surface2) 100%); }
+.srRoot .srSlider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; margin-top: -9px; border-radius: 50%; background: var(--sr-bg); border: 4px solid var(--sr-accent); box-sizing: border-box; }
+.srRoot .srSlider::-moz-range-track { height: 10px; border-radius: 5px; background: var(--sr-surface2); }
+.srRoot .srSlider::-moz-range-progress { height: 10px; border-radius: 5px; background: var(--sr-accent); }
+.srRoot .srSlider::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: var(--sr-bg); border: 4px solid var(--sr-accent); box-sizing: border-box; }
+.srRoot .srSlider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 5px var(--sr-accent-soft); }
+.srRoot .srSlider:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 5px var(--sr-accent-soft); }
+.srRoot .srTicks { position: relative; height: 22px; }
+.srRoot .srTicks span { position: absolute; top: 0; transform: translateX(-50%); font-size: 14px; font-weight: 700; color: var(--sr-muted); }
+.srRoot .srTicks .srTickOn { color: var(--sr-ink); }
+
+/* Spiel: verdecktes Cover als grauer Skeleton */
+.srRoot .srSkelGame { background: var(--sr-mask); border-color: transparent; }
+.srRoot .srSkelQ { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--sr-display); font-size: clamp(64px, 12dvh, 110px); font-weight: 800; color: var(--sr-muted); opacity: 0.5; }
+.srRoot .srPulse { animation: srPulse 1.3s ease-in-out infinite; }
+.srRoot .srCardTap { cursor: pointer; }
+@keyframes srPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
