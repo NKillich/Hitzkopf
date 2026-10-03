@@ -216,7 +216,8 @@ export default function SecondSound({ onBack }) {
         }
         spotifyService.initPlaybackPlayer(
             () => setPlayerReady(true),
-            (msg) => setPlayerError(msg || 'Spotify Player konnte nicht gestartet werden. Spotify Premium erforderlich.')
+            (msg) => setPlayerError(msg || 'Spotify Player konnte nicht gestartet werden. Spotify Premium erforderlich.'),
+            { activate: true }
         )
         return () => {
             spotifyService.disconnectPlayer()
@@ -351,11 +352,12 @@ export default function SecondSound({ onBack }) {
                         log(`[SS] "${playlist.name}": Live-Detection ermittelt ${count} Tracks`)
                     } catch (e) {
                         console.error(`[SS] Live-Detection fehlgeschlagen:`, e.message)
-                        count = songCount * 2
+                        // Keine geratene Größe: sonst entstehen Offsets, die es nicht gibt (oder 1 Song)
+                        throw new Error(`„${playlist.name}": ${e.message}`)
                     }
                 }
 
-                playlistSizeCache.current[playlist.id] = count
+                if (count > 1) playlistSizeCache.current[playlist.id] = count
 
                 const poolSize = Math.min(count, songCount * 3)
                 const allPositions = Array.from({ length: count }, (_, i) => i)
@@ -365,6 +367,9 @@ export default function SecondSound({ onBack }) {
             }
 
             setSizeDetectionProgress(null)
+
+            // Sicherstellen, dass vor dem ersten Klick nichts mehr läuft
+            await spotifyService.pausePlayback().catch(() => {})
 
             if (slots.length === 0) {
                 setLoadingError('Keine Playlists verfügbar. Bitte eine Playlist auswählen.')
@@ -394,6 +399,7 @@ export default function SecondSound({ onBack }) {
             setPhase(PHASES.GAME)
         } catch (e) {
             console.error('[SS] Fehler beim Starten:', e)
+            setSizeDetectionProgress(null)
             setLoadingError(e.message || 'Fehler beim Starten des Spiels.')
             setPhase(PHASES.SETUP)
         }
