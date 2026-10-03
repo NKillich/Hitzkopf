@@ -159,8 +159,8 @@
 .srRoot .srMuted { font-size: 16px; color: var(--sr-muted); }
 /* ── Spiel ─────────────────────────────────────────────────────────────── */
 .srRoot .srGame { padding-bottom: clamp(12px, 2.4dvh, 24px); }
-.srRoot .srGameHead { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 12px; height: 56px; flex: none; }
-.srRoot .srProgressBox { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.srRoot .srGameHead { display: flex; align-items: center; justify-content: space-between; height: 52px; flex: none; }
+.srRoot .srProgressBox { flex: none; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: clamp(4px, 1dvh, 10px); }
 .srRoot .srSongNo { font-size: 15px; font-weight: 700; }
 .srRoot .srSegs { display: flex; gap: 3px; width: 100%; }
 .srRoot .srSeg { flex: 1; height: 6px; border-radius: 3px; background: var(--sr-line); }
@@ -170,7 +170,7 @@
 .srRoot .srHintDot { width: 8px; height: 8px; flex: none; border-radius: 4px; background: var(--sr-accent); }
 .srRoot .srHintDotIdle { background: var(--sr-muted); }
 .srRoot .srHintDotOk { background: var(--sr-ok); }
-.srRoot .srCardGame { position: relative; width: clamp(150px, 31dvh, 248px); aspect-ratio: 1 / 1; margin: clamp(18px, 4.5dvh, 40px) auto 0; border-radius: 34px; background: var(--sr-card); border: 1px solid var(--sr-card-line); box-sizing: border-box; overflow: hidden; flex: none; }
+.srRoot .srCardGame { position: relative; width: clamp(150px, 29dvh, 248px); aspect-ratio: 1 / 1; margin: clamp(14px, 3.4dvh, 32px) auto 0; border-radius: 34px; background: var(--sr-card); border: 1px solid var(--sr-card-line); box-sizing: border-box; overflow: hidden; flex: none; }
 .srRoot .srCoverFill { position: absolute; inset: 0; }
 .srRoot .srCardCaption { position: absolute; left: 18px; top: 16px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; color: var(--sr-card-ink); opacity: 0.75; }
 .srRoot .srDisc { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); aspect-ratio: 1 / 1; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--sr-accent); color: var(--sr-on-accent); transition: width 0.15s; }
@@ -315,3 +315,4 @@
 .srRoot .srRateNo svg { color: var(--sr-bad); }
 .srRoot .srRateOk svg { color: var(--sr-ok); }
 .srRoot .srRateOff svg { color: inherit; }
+.srRoot .srEmojiPulse { animation: srPulse 1.6s ease-in-out infinite; }

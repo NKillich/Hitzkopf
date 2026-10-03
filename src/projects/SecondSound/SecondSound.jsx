@@ -1109,13 +1109,7 @@ export default function SecondSound({ onBack }) {
             <main className={`${styles.srMain} ${styles.srPad}`}>
                 <div className={`${styles.srHeader} ${styles.srHeaderEnd}`}>{themeBtn}</div>
                 <div className={styles.srLoadBody}>
-                    <div className={styles.srCardLg} aria-hidden="true">
-                        <svg className={`${styles.srRings} ${styles.srSpin}`} width="174" height="174" viewBox="0 0 100 100" fill="none">
-                            <circle cx="50" cy="50" r="46" strokeWidth="1.5" /><circle cx="50" cy="50" r="39" strokeWidth="1.5" /><circle cx="50" cy="50" r="32" strokeWidth="1.5" />
-                            <circle cx="50" cy="11" r="3" className={styles.srDotAccent} /><circle cx="82" cy="50" r="2" className={styles.srDotInk} />
-                        </svg>
-                        <div className={styles.srCardDiscLg}><IconShuffle /></div>
-                    </div>
+                    <span className={`${styles.srEmoji} ${styles.srEmojiPulse}`} aria-hidden="true">🎧</span>
                     <div aria-live="polite" className={styles.srLoadText}>
                         <h1 className={styles.srLoadTitle}>Songs werden geladen</h1>
                         <p className={styles.srFineSm}>Das Spiel startet in wenigen Sekunden</p>
@@ -1155,16 +1149,17 @@ export default function SecondSound({ onBack }) {
             <main className={`${styles.srMain} ${styles.srPad} ${styles.srGame}`}>
                 <header className={styles.srGameHead}>
                     {themeBtn}
-                    <div className={styles.srProgressBox}>
-                        <span className={styles.srSongNo}>{songNo}</span>
-                        <div role="progressbar" aria-label={songNo} aria-valuemin="1" aria-valuemax={targetCount} aria-valuenow={playedCount + 1} className={styles.srSegs}>
-                            {Array.from({ length: targetCount }, (_, i) => (
-                                <span key={i} className={`${styles.srSeg} ${i < playedCount ? styles.srSegDone : (i === playedCount ? styles.srSegNow : '')}`} />
-                            ))}
-                        </div>
-                    </div>
                     <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setConfirmClose(true)} aria-label="Spiel beenden" title="Spiel beenden"><IconX /></button>
                 </header>
+
+                <div className={styles.srProgressBox}>
+                    <span className={styles.srSongNo}>{songNo}</span>
+                    <div role="progressbar" aria-label={songNo} aria-valuemin="1" aria-valuemax={targetCount} aria-valuenow={playedCount + 1} className={styles.srSegs}>
+                        {Array.from({ length: targetCount }, (_, i) => (
+                            <span key={i} className={`${styles.srSeg} ${i < playedCount ? styles.srSegDone : (i === playedCount ? styles.srSegNow : '')}`} />
+                        ))}
+                    </div>
+                </div>
 
                 <div
                     className={`${styles.srCardGame} ${!isRevealed ? styles.srSkelGame : ''} ${(!isRevealed && (isPlaying || starting || connecting)) ? styles.srPulse : ''} ${(!isRevealed && canAct) ? styles.srCardTap : ''}`}
