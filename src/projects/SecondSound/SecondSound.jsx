@@ -120,6 +120,7 @@ export default function SecondSound({ onBack }) {
     const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
     const allowPlaybackRef = useRef(false)      // true nur, solange der Spieler einen Play-Button gedrückt hat
     const songsRef = useRef([])
+    const trackUriRef = useRef({})              // Slot-Index → Track-URI (beim ersten Abspielen gemerkt)
     const searchInputRef = useRef(null)
     const lastPlaySecondsRef = useRef(null)
     const sessionSecondsCorrectRef = useRef([])
@@ -404,6 +405,7 @@ export default function SecondSound({ onBack }) {
 
             fetchGenRef.current = 0
             songsRef.current = shuffled
+            trackUriRef.current = {}
             sessionSecondsCorrectRef.current = []
             lastPlaySecondsRef.current = null
 
@@ -468,7 +470,20 @@ export default function SecondSound({ onBack }) {
         allowPlaybackRef.current = true
 
         try {
-            await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
+            // Erstes Abspielen: Playlist+Offset (Shuffle aus). Danach immer genau derselbe Titel per URI,
+            // sonst wählt Spotify bei aktivem Shuffle bei jedem Klick einen neuen Song.
+            const knownUri = trackUriRef.current[currentIndex]
+            if (knownUri) {
+                await spotifyService.playUriOnPlayer(knownUri)
+            } else {
+                await spotifyService.playContextAtOffset(song.playlistUri, song.offset, undefined, { shuffleOff: true })
+                // Nicht abwarten: der Auto-Pause-Timer darf dadurch nicht später starten
+                const slot = currentIndex
+                spotifyService.waitForLocalTrackUri().then(uri => {
+                    if (uri) trackUriRef.current[slot] = uri
+                    else warn(`[SS] Keine Track-URI für Slot ${slot} erhalten`)
+                })
+            }
             isPlayingRequestRef.current = false
             setIsPlaying(true)
             setHasPlayedCurrentSong(true)
@@ -572,6 +587,7 @@ export default function SecondSound({ onBack }) {
         lastPlaySecondsRef.current = null
         sessionSecondsCorrectRef.current = []
         songsRef.current = []
+        trackUriRef.current = {}
         setSongHistory([])
         setHistoryOpen(false)
         setPhase(PHASES.SETUP)
