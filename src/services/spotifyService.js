@@ -12,6 +12,8 @@
  * VITE_SPOTIFY_REDIRECT_URI=http://localhost:5173/callback
  */
 
+import { log, warn } from '../utils/logger.js'
+
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1'
 const SPOTIFY_AUTH_BASE = 'https://accounts.spotify.com'
 
@@ -35,7 +37,7 @@ class SpotifyService {
         const fromEnv = import.meta.env.VITE_SPOTIFY_REDIRECT_URI
         this.redirectUri = fromEnv || productionRedirect
         if (typeof console !== 'undefined') {
-            console.log('🎵 Spotify Redirect URI:', this.redirectUri)
+            log('🎵 Spotify Redirect URI:', this.redirectUri)
         }
         this.accessToken = null
         this.tokenExpiry = null
@@ -46,11 +48,11 @@ class SpotifyService {
 
         // Debug: Prüfe ob Credentials geladen wurden
         if (!this.clientId || !this.clientSecret) {
-            console.warn('⚠️ Spotify Credentials fehlen! Überprüfe .env.local')
-            console.log('Client ID vorhanden:', !!this.clientId)
-            console.log('Client Secret vorhanden:', !!this.clientSecret)
+            warn('⚠️ Spotify Credentials fehlen! Überprüfe .env.local')
+            log('Client ID vorhanden:', !!this.clientId)
+            log('Client Secret vorhanden:', !!this.clientSecret)
         } else {
-            console.log('✅ Spotify Credentials geladen')
+            log('✅ Spotify Credentials geladen')
         }
     }
 
@@ -143,7 +145,7 @@ class SpotifyService {
 
         const data = await response.json()
         this._storeUserTokens(data.access_token, data.refresh_token, data.expires_in, data.scope)
-        console.log('✅ Spotify Token erhalten. Scopes:', data.scope)
+        log('✅ Spotify Token erhalten. Scopes:', data.scope)
         if (typeof sessionStorage !== 'undefined') {
             sessionStorage.removeItem(STORAGE_KEYS.PKCE_VERIFIER)
         }
@@ -322,7 +324,7 @@ class SpotifyService {
             this.accessToken = data.access_token
             this.tokenExpiry = Date.now() + (data.expires_in * 1000)
             
-            console.log('✅ Spotify Token erfolgreich abgerufen')
+            log('✅ Spotify Token erfolgreich abgerufen')
             return data
         } catch (error) {
             if (error.code === 'MISSING_CREDENTIALS' || error.code === 'SPOTIFY_API_ERROR') {
@@ -493,7 +495,7 @@ class SpotifyService {
             }))
 
             const results = [...tracks, ...albums]
-            console.log(`✅ Spotify Suche erfolgreich: ${results.length} Ergebnisse für "${query}"`)
+            log(`✅ Spotify Suche erfolgreich: ${results.length} Ergebnisse für "${query}"`)
             
             return results
         } catch (error) {
@@ -597,12 +599,12 @@ class SpotifyService {
         player.addListener('ready', ({ device_id }) => {
             this._deviceId = device_id
             this._player = player
-            console.log('✅ Spotify Web Playback bereit, Device ID:', device_id)
+            log('✅ Spotify Web Playback bereit, Device ID:', device_id)
             onReady({ deviceId: device_id })
         })
 
         player.addListener('not_ready', ({ device_id }) => {
-            console.log('Spotify Device offline:', device_id)
+            log('Spotify Device offline:', device_id)
         })
 
         player.addListener('authentication_error', ({ message }) => {
@@ -812,8 +814,8 @@ class SpotifyService {
         if (!token) return false
         const scopes = this.getGrantedScopes()
         const hasScope = scopes.includes('playlist-read-private')
-        console.log('[SpotifyService] Gespeicherte Scopes:', scopes || '(keine)')
-        console.log('[SpotifyService] playlist-read-private vorhanden:', hasScope)
+        log('[SpotifyService] Gespeicherte Scopes:', scopes || '(keine)')
+        log('[SpotifyService] playlist-read-private vorhanden:', hasScope)
         return hasScope
     }
 
@@ -838,7 +840,7 @@ class SpotifyService {
         }
         const data = await res.json()
         const trackCount = data.tracks?.total ?? 0
-        console.log(`[SpotifyService] getPlaylistInfo "${data.name}": tracks.total=${trackCount}`)
+        log(`[SpotifyService] getPlaylistInfo "${data.name}": tracks.total=${trackCount}`)
         return {
             id: data.id,
             name: data.name,
@@ -900,9 +902,9 @@ class SpotifyService {
                 `${SPOTIFY_API_BASE}/me/player/shuffle?state=false&device_id=${this._deviceId}`,
                 { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } }
             )
-            console.log(`[detectSize] Shuffle deaktivieren: HTTP ${r.status}`)
+            log(`[detectSize] Shuffle deaktivieren: HTTP ${r.status}`)
         } catch (e) {
-            console.warn('[detectSize] Shuffle off fehlgeschlagen:', e.message)
+            warn('[detectSize] Shuffle off fehlgeschlagen:', e.message)
         }
 
         const cleanup = async () => {
@@ -919,12 +921,12 @@ class SpotifyService {
             }
             let err = await doPlay()
             if (err && /429|rate|too many/i.test(err.message || '')) {
-                console.warn(`[detectSize] offset=${offset} rate-limit, warte 2s…`)
+                warn(`[detectSize] offset=${offset} rate-limit, warte 2s…`)
                 await sleep(2000)
                 err = await doPlay()
             }
             if (err) {
-                console.log(`[detectSize] offset=${offset} HTTP-Fehler: ${err.message}`)
+                log(`[detectSize] offset=${offset} HTTP-Fehler: ${err.message}`)
                 return null
             }
             await sleep(550)
@@ -936,7 +938,7 @@ class SpotifyService {
                 await sleep(400)
                 try { state = await this._player.getCurrentState() } catch (_) {}
                 uri = state?.track_window?.current_track?.uri || null
-                if (uri) console.log(`[detectSize] offset=${offset} URI erst beim Retry verfügbar`)
+                if (uri) log(`[detectSize] offset=${offset} URI erst beim Retry verfügbar`)
             }
             const ctxUri = state?.context?.uri || null
             return uri ? { uri, ctxUri } : null
@@ -976,7 +978,7 @@ class SpotifyService {
             stepIdx++
             onProgress?.({ step: stepIdx, totalSteps, label: `Teste Offset ${p}…` })
             const r = await verifyOffset(p)
-            console.log(`[detectSize] geo offset=${p} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
+            log(`[detectSize] geo offset=${p} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
             if (r.valid) {
                 validMax = p
             } else {
@@ -990,7 +992,7 @@ class SpotifyService {
         if (validMax < 0) {
             await cleanup()
             // Falls offset 0 zumindest etwas geliefert hat, ist mind. 1 Track da
-            const fallback = await playAndGetUri(0)
+            const fallback = await playAndGetState(0)
             if (fallback) return 1
             throw new Error('Playlist konnte nicht abgespielt werden.')
         }
@@ -1013,7 +1015,7 @@ class SpotifyService {
             })
 
             const r = await verifyOffset(mid)
-            console.log(`[detectSize] bsearch offset=${mid} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
+            log(`[detectSize] bsearch offset=${mid} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
             if (r.valid) validMax = mid
             else invalidMin = mid
             await sleep(220)
@@ -1024,7 +1026,7 @@ class SpotifyService {
         // validMax ist der höchste Offset, der mit Sicherheit Track ungleich Nachbar hat
         // → Playlist hat mindestens validMax + 2 Tracks
         const size = validMax + 2
-        console.log(`[detectSize] FINAL: ${size} Tracks (validMax=${validMax}, invalidMin=${invalidMin})`)
+        log(`[detectSize] FINAL: ${size} Tracks (validMax=${validMax}, invalidMin=${invalidMin})`)
         return size
     }
 
@@ -1106,7 +1108,7 @@ class SpotifyService {
         const data = await response.json()
         const items = (data.playlists?.items || []).filter(Boolean)
         if (items.length > 0) {
-            console.log('[SpotifyService] Search Playlist Sample:', {
+            log('[SpotifyService] Search Playlist Sample:', {
                 id: items[0].id,
                 name: items[0].name,
                 uri: items[0].uri,
@@ -1143,10 +1145,10 @@ class SpotifyService {
         if (!activeToken) throw new Error('Nicht mit Spotify verbunden.')
 
         const tokenType = activeToken === userToken ? 'User-Token' : 'Client-Credentials'
-        console.log(`[SpotifyService] getPlaylistTracks "${playlistId}" | Token-Typ: ${tokenType} | Token: ${activeToken?.slice(0,8)}…`)
+        log(`[SpotifyService] getPlaylistTracks "${playlistId}" | Token-Typ: ${tokenType}`)
 
         const fetchPage = async (url, token) => {
-            console.log(`[SpotifyService] GET ${url.replace(SPOTIFY_API_BASE, '')} | Token: ${token?.slice(0,8)}…`)
+            log(`[SpotifyService] GET ${url.replace(SPOTIFY_API_BASE, '')}`)
             return fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
         }
 
@@ -1156,7 +1158,7 @@ class SpotifyService {
 
         while (url) {
             let res = await fetchPage(url, activeToken)
-            console.log(`[SpotifyService] Response: ${res.status} ${res.statusText}`)
+            log(`[SpotifyService] Response: ${res.status} ${res.statusText}`)
 
             if (!res.ok) {
                 const errText = await res.text().catch(() => '')
@@ -1178,12 +1180,12 @@ class SpotifyService {
                     uri: item.track.uri
                 }))
 
-            console.log(`[SpotifyService] Seite geladen: ${pageTracks.length} Tracks (gesamt: ${tracks.length + pageTracks.length})`)
+            log(`[SpotifyService] Seite geladen: ${pageTracks.length} Tracks (gesamt: ${tracks.length + pageTracks.length})`)
             tracks = [...tracks, ...pageTracks]
             url = data.next || null
         }
 
-        console.log(`[SpotifyService] ✓ getPlaylistTracks fertig: ${tracks.length} Tracks total`)
+        log(`[SpotifyService] ✓ getPlaylistTracks fertig: ${tracks.length} Tracks total`)
         return tracks
     }
 

@@ -3,6 +3,7 @@ import { getApp } from 'firebase/app'
 import { getFirestore, doc, getDoc, setDoc, increment } from 'firebase/firestore'
 import '../../firebase.js'
 import spotifyService from '../../services/spotifyService'
+import { log, warn } from '../../utils/logger.js'
 import styles from './SecondSound.module.css'
 
 const getDeviceId = () => {
@@ -177,7 +178,7 @@ export default function SecondSound({ onBack }) {
                 if (!loggedIn) return
                 // Prüfen ob Token Playlist-Zugriff hat
                 const hasScope = await spotifyService.testPlaylistAccess()
-                console.log('[SecondSound] Playlist-Scope beim Start:', hasScope)
+                log('[SecondSound] Playlist-Scope beim Start:', hasScope)
                 if (hasScope) {
                     setNeedsRelogin(false)
                     setPhase(PHASES.SETUP)
@@ -305,7 +306,7 @@ export default function SecondSound({ onBack }) {
 
                 if (!count && playlist.trackCount > 0 && playlist.trackCount >= songCount * 2) {
                     count = playlist.trackCount
-                    console.log(`[SS] "${playlist.name}": nutze gecachte trackCount=${count} aus Auswahl`)
+                    log(`[SS] "${playlist.name}": nutze gecachte trackCount=${count} aus Auswahl`)
                 }
 
                 if (!count) {
@@ -313,16 +314,16 @@ export default function SecondSound({ onBack }) {
                         const info = await spotifyService.getPlaylistInfo(playlist.id)
                         if (info.trackCount >= songCount * 2) {
                             count = info.trackCount
-                            console.log(`[SS] "${playlist.name}": getPlaylistInfo trackCount=${count}`)
+                            log(`[SS] "${playlist.name}": getPlaylistInfo trackCount=${count}`)
                         }
                     } catch (e) {
-                        console.warn(`[SS] getPlaylistInfo für "${playlist.name}" fehlgeschlagen:`, e.message)
+                        warn(`[SS] getPlaylistInfo für "${playlist.name}" fehlgeschlagen:`, e.message)
                     }
                 }
 
                 // Wenn beide API-Quellen versagen → echte Größe via Player-Test ermitteln
                 if (!count) {
-                    console.log(`[SS] "${playlist.name}": API-Größe nicht verfügbar, starte Live-Detection…`)
+                    log(`[SS] "${playlist.name}": API-Größe nicht verfügbar, starte Live-Detection…`)
                     setSizeDetectionProgress({
                         playlistName: playlist.name,
                         playlistIndex: pIdx + 1,
@@ -337,7 +338,7 @@ export default function SecondSound({ onBack }) {
                                 setSizeDetectionProgress(prev => ({ ...prev, ...p }))
                             }
                         })
-                        console.log(`[SS] "${playlist.name}": Live-Detection ermittelt ${count} Tracks`)
+                        log(`[SS] "${playlist.name}": Live-Detection ermittelt ${count} Tracks`)
                     } catch (e) {
                         console.error(`[SS] Live-Detection fehlgeschlagen:`, e.message)
                         count = songCount * 2
@@ -350,7 +351,7 @@ export default function SecondSound({ onBack }) {
                 const allPositions = Array.from({ length: count }, (_, i) => i)
                 const positions = fisherYates(allPositions).slice(0, poolSize)
                 positions.forEach(offset => slots.push({ playlistUri: uri, offset }))
-                console.log(`[SS] "${playlist.name}": trackCount=${count}, poolSize=${poolSize}, offsets=[${positions.slice(0, 20).join(',')}${positions.length > 20 ? ',…' : ''}]`)
+                log(`[SS] "${playlist.name}": trackCount=${count}, poolSize=${poolSize}, offsets=[${positions.slice(0, 20).join(',')}${positions.length > 20 ? ',…' : ''}]`)
             }
 
             setSizeDetectionProgress(null)
@@ -362,7 +363,7 @@ export default function SecondSound({ onBack }) {
             }
 
             const shuffled = fisherYates(slots)
-            console.log(`[SS] Spiel gestartet – ${shuffled.length} Slots, Ziel: ${songCount}`)
+            log(`[SS] Spiel gestartet – ${shuffled.length} Slots, Ziel: ${songCount}`)
 
             fetchGenRef.current = 0
             songsRef.current = shuffled
@@ -388,7 +389,7 @@ export default function SecondSound({ onBack }) {
         }
     }
 
-    const dbg = (...args) => console.log('[SS]', ...args)
+    const dbg = (...args) => log('[SS]', ...args)
 
     const stopPlayback = async () => {
         dbg('stopPlayback aufgerufen')
