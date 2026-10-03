@@ -18,8 +18,9 @@ const getDeviceId = () => {
 }
 
 const PHASES = {
-    LOGIN: 'login',
-    SETUP: 'setup',
+    HOME: 'home',            // Startseite: Spotify verbinden, Spiel starten
+    PLAYLISTS: 'playlists',  // Schritt 1: Playlists wählen
+    COUNT: 'count',          // Schritt 2: Songanzahl wählen
     LOADING: 'loading',
     GAME: 'game',
     RESULTS: 'results'
@@ -41,15 +42,6 @@ const STAGES = [
 ]
 
 const COUNT_OPTIONS = [5, 10, 15, 20, 30]
-
-// Lustige Lade-Schritte (pro Spielstart werden drei zufällige gezeigt)
-const FUN_STEPS = [
-    'Gitarren werden gestimmt', 'Stimmbänder werden geölt', 'Noten liegen bereit', 'Schlagzeug wird aufgewärmt',
-    'Verstärker werden aufgedreht', 'Mikrofon-Check: eins, zwei …', 'Plattenspieler wird abgestaubt',
-    'Tanzfläche wird gewischt', 'Kopfhörer werden entknotet', 'Zugabe-Rufe werden geübt',
-    'Discokugel wird poliert', 'Die Band macht Soundcheck', 'Der DJ sucht seine Lieblingsplatte'
-]
-const pickFunSteps = () => [...FUN_STEPS].sort(() => Math.random() - 0.5).slice(0, 3)
 
 // Größen-Cache über Sitzungen hinweg (spart die teure Live-Erkennung)
 const SIZE_CACHE_KEY = 'ss_plsizes_v1'
@@ -134,7 +126,8 @@ function Rings({ size, radii, sw = 1.5, children }) {
 }
 
 export default function SecondSound({ onBack }) {
-    const [phase, setPhase] = useState(PHASES.LOGIN)
+    const [phase, setPhase] = useState(PHASES.HOME)
+    const [connected, setConnected] = useState(null)   // null = wird geprüft
     const [playerReady, setPlayerReady] = useState(false)
     const [playerError, setPlayerError] = useState(null)
     const [allTimeStats, setAllTimeStats] = useState(null)
@@ -163,18 +156,15 @@ export default function SecondSound({ onBack }) {
     // True sobald der aktuelle Song mindestens 1× abgespielt wurde – schaltet
     // Aufdecken- und Antwort-Buttons frei. Verhindert Klick-Spam mit 403/502.
     const [hasPlayedCurrentSong, setHasPlayedCurrentSong] = useState(false)
-    const [sizeDetectionProgress, setSizeDetectionProgress] = useState(null)
     const playlistSizeCache = useRef(loadSizeCache())
     const [searchLoading, setSearchLoading] = useState(false)
     const [loadingError, setLoadingError] = useState(null)
     const [needsRelogin, setNeedsRelogin] = useState(false)
     const [searchedQuery, setSearchedQuery] = useState('')   // zuletzt abgeschlossene Playlist-Suche
     const [confirmClose, setConfirmClose] = useState(false)  // Bottom-Sheet "Spiel beenden?"
-    const [loadPct, setLoadPct] = useState(0)                // Fortschritt im Ladescreen (0–100)
     const [tick, setTick] = useState(0)                      // Takt für Animationen (Equalizer, Punkte)
     const [startingIdx, setStartingIdx] = useState(-1)       // Stufe, die gerade gestartet wird (Player lädt)
     const [cancelling, setCancelling] = useState(false)
-    const [funSteps, setFunSteps] = useState(() => pickFunSteps())
     const [searchHasMore, setSearchHasMore] = useState(false)
     const [searchNextOffset, setSearchNextOffset] = useState(0)
     const [searchMoreLoading, setSearchMoreLoading] = useState(false)
@@ -247,7 +237,7 @@ export default function SecondSound({ onBack }) {
         }
     }
 
-    // OAuth callback + initial login check
+    // OAuth-Rückkehr + Prüfung, ob Spotify schon verbunden ist
     useEffect(() => {
         const params = new URLSearchParams(window.location.search)
         const code = params.get('code')
@@ -260,53 +250,46 @@ export default function SecondSound({ onBack }) {
                 try {
                     await spotifyService.exchangeCodeForToken(code)
                     setNeedsRelogin(false)
-                    setPhase(PHASES.SETUP)
+                    setConnected(true)
                 } catch (e) {
                     console.error('Spotify Callback Fehler:', e)
-                    setPhase(PHASES.LOGIN)
+                    setConnected(false)
                 }
             })()
         } else {
             ;(async () => {
                 const loggedIn = await spotifyService.isUserLoggedIn()
-                if (!loggedIn) return
+                if (!loggedIn) { setConnected(false); return }
                 // Prüfen ob Token Playlist-Zugriff hat
                 const hasScope = await spotifyService.testPlaylistAccess()
                 log('[SecondSound] Playlist-Scope beim Start:', hasScope)
-                if (hasScope) {
-                    setNeedsRelogin(false)
-                    setPhase(PHASES.SETUP)
-                } else {
-                    // Token vorhanden aber ohne Playlist-Scope → Neu-Login nötig
-                    setNeedsRelogin(true)
-                    setPhase(PHASES.LOGIN)
-                }
+                setNeedsRelogin(!hasScope)
+                setConnected(!!hasScope)
             })()
         }
     }, [])
 
-    // Web Playback SDK: bei GAME verbinden. Nach LOADING kann der Player schon
-    // durch ensurePlaybackPlayerReady() existieren – dann nicht neu erzeugen.
+    // Beim Verlassen der App den Player sauber trennen (er bleibt zwischen den Spielen verbunden)
+    useEffect(() => () => {
+        clip.detach()
+        spotifyService.disconnectPlayer()
+    }, [])
+
+    // Web Playback SDK: Der Player wird beim Spielstart (LOADING) erzeugt und bleibt über mehrere Spiele
+    // verbunden. Hier nur sicherstellen, dass er bereit ist (z. B. falls er unterwegs verloren ging).
     useEffect(() => {
         if (phase !== PHASES.GAME) return
-        setPlayerReady(false)
         setPlayerError(null)
         if (spotifyService.isPlaybackReady()) {
             setPlayerReady(true)
-            return () => {
-                spotifyService.disconnectPlayer()
-                setPlayerReady(false)
-            }
+            return
         }
+        setPlayerReady(false)
         spotifyService.initPlaybackPlayer(
             () => setPlayerReady(true),
             (msg) => setPlayerError(msg || 'Spotify Player konnte nicht gestartet werden. Spotify Premium erforderlich.'),
             { activate: true, name: 'Song raten' }
         )
-        return () => {
-            spotifyService.disconnectPlayer()
-            setPlayerReady(false)
-        }
     }, [phase])
 
     // Wiedergabe-Steuerung: Player-Ereignisse auswerten (Ende des Ausschnitts, Titelwechsel, Fehler)
@@ -450,8 +433,6 @@ export default function SecondSound({ onBack }) {
         setCancelling(false)
         setPhase(PHASES.LOADING)
         setLoadingError(null)
-        setLoadPct(5)
-        setFunSteps(pickFunSteps())
         usedUrisRef.current = new Set()
         playGenRef.current++
         clip.reset()
@@ -472,7 +453,6 @@ export default function SecondSound({ onBack }) {
             // der Effect mit initPlaybackPlayer greift erst bei PHASES.GAME.
             await spotifyService.ensurePlaybackPlayerReady({ name: 'Song raten' })
             if (cancelLoadRef.current) throw new Error('abgebrochen')
-            setLoadPct(35)
 
             const candidates = []   // alle (Playlist, Position)-Paare: so zählt jeder Titel gleich viel
 
@@ -503,20 +483,9 @@ export default function SecondSound({ onBack }) {
                 // Wenn beide API-Quellen versagen → echte Größe via Player-Test ermitteln
                 if (!count) {
                     log(`[SS] "${playlist.name}": API-Größe nicht verfügbar, starte Live-Detection…`)
-                    setSizeDetectionProgress({
-                        playlistName: playlist.name,
-                        playlistIndex: pIdx + 1,
-                        totalPlaylists: selectedPlaylists.length,
-                        step: 0,
-                        totalSteps: 18,
-                        label: 'Starte Suche…'
-                    })
                     try {
                         count = await spotifyService.detectPlaylistSize(uri, {
-                            shouldCancel: () => cancelLoadRef.current,
-                            onProgress: (p) => {
-                                setSizeDetectionProgress(prev => ({ ...prev, ...p }))
-                            }
+                            shouldCancel: () => cancelLoadRef.current
                         })
                         log(`[SS] "${playlist.name}": Live-Detection ermittelt ${count} Tracks`)
                         saveSize(playlist.id, count)
@@ -529,7 +498,6 @@ export default function SecondSound({ onBack }) {
                 }
 
                 if (count > 1) playlistSizeCache.current[playlist.id] = count
-                setLoadPct(35 + Math.round(55 * (pIdx + 1) / selectedPlaylists.length))
 
                 for (let i = 0; i < count; i++) candidates.push({ playlistUri: uri, offset: i })
                 log(`[SS] "${playlist.name}": trackCount=${count}`)
@@ -539,15 +507,13 @@ export default function SecondSound({ onBack }) {
             // Zufällig aus ALLEN Titeln aller Playlists ziehen (3× Reserve für übersprungene/doppelte Titel)
             const slots = fisherYates(candidates).slice(0, songCount * 3)
 
-            setSizeDetectionProgress(null)
-
             // Sicherstellen, dass vor dem ersten Klick nichts mehr läuft
             allowPlaybackRef.current = false
             await spotifyService.pauseLocalPlayer()
 
             if (slots.length === 0) {
                 setLoadingError('Keine Playlists verfügbar. Bitte eine Playlist auswählen.')
-                setPhase(PHASES.SETUP)
+                setPhase(PHASES.COUNT)
                 return
             }
 
@@ -570,16 +536,14 @@ export default function SecondSound({ onBack }) {
             setIsPlaying(false)
             setSongHistory([])
             setHistoryOpen(false)
-            setLoadPct(100)
             setPhase(PHASES.GAME)
         } catch (e) {
-            setSizeDetectionProgress(null)
             if (cancelLoadRef.current) {
-                setPhase(PHASES.SETUP)       // bewusst abgebrochen: keine Fehlermeldung
+                setPhase(PHASES.COUNT)       // bewusst abgebrochen: keine Fehlermeldung
             } else {
                 console.error('[SS] Fehler beim Starten:', e)
                 setLoadingError(e.message || 'Fehler beim Starten des Spiels.')
-                setPhase(PHASES.SETUP)
+                setPhase(PHASES.COUNT)
             }
         } finally {
             startingGameRef.current = false
@@ -613,6 +577,7 @@ export default function SecondSound({ onBack }) {
         if (!songsRef.current[slot]) { dbg('handlePlayStage: kein Song an Slot', slot); return }
 
         isPlayingRequestRef.current = true
+        setIsPlaying(false)         // eine laufende Stufe wird ersetzt
         setStartingIdx(idx)
         setPlayerError(null)
         lastPlaySecondsRef.current = seconds
@@ -750,14 +715,17 @@ export default function SecondSound({ onBack }) {
         // das neue Lied setzt es zurück
     }
 
-    const handleNewRound = () => {
+    // Alles rund um eine Runde zurücksetzen
+    const resetGameState = () => {
         playGenRef.current++
         clip.reset()
         isPlayingRequestRef.current = false
+        allowPlaybackRef.current = false
         setStartingIdx(-1)
         setPlayerError(null)
         setSongs([])
         setCurrentIndex(0)
+        currentIndexRef.current = 0
         setPlayedCount(0)
         setIsRevealed(false)
         setCurrentTrackInfo(null)
@@ -770,9 +738,49 @@ export default function SecondSound({ onBack }) {
         sessionSecondsCorrectRef.current = []
         songsRef.current = []
         trackUriRef.current = {}
+        usedUrisRef.current = new Set()
         setSongHistory([])
         setHistoryOpen(false)
-        setPhase(PHASES.SETUP)
+    }
+
+    // Auswahl vergessen: Playlists, Suche, Songanzahl
+    const resetSelection = () => {
+        setSelectedPlaylists([])
+        setSongCount(10)
+        setSearchMode('mine')
+        setPlaylistQuery('')
+        setPlaylistResults([])
+        setSearchedQuery('')
+        setSearchHasMore(false)
+        setSearchNextOffset(0)
+    }
+
+    // "Nochmal spielen": alles frisch, wieder bei der Playlist-Auswahl
+    const handleNewRound = () => {
+        resetGameState()
+        resetSelection()
+        setPhase(PHASES.PLAYLISTS)
+    }
+
+    // Startseite → Playlist-Auswahl (immer mit leerer Auswahl)
+    const handleOpenPlaylists = () => {
+        resetSelection()
+        setLoadingError(null)
+        setPhase(PHASES.PLAYLISTS)
+    }
+
+    // Spotify-Verbindung trennen (Token löschen, Player abbauen)
+    const handleDisconnect = () => {
+        spotifyService.disconnectPlayer()
+        spotifyService.clearUserTokens()
+        resetSelection()
+        setMyPlaylists([])
+        setMyPlaylistsLoaded(false)
+        setMyPlaylistsError(null)
+        setLoadingError(null)
+        setConnected(false)
+        setNeedsRelogin(false)
+        setPhase(PHASES.HOME)
     }
 
     const handleBack = async () => {
@@ -781,11 +789,13 @@ export default function SecondSound({ onBack }) {
         onBack()
     }
 
-    // Runde abbrechen (ohne Wertung) und zurück zur Auswahl
+    // Runde abbrechen (ohne Wertung) und zurück zur Startseite
     const endGame = async () => {
         setConfirmClose(false)
         await stopPlayback()
-        handleNewRound()
+        resetGameState()
+        resetSelection()
+        setPhase(PHASES.HOME)
     }
 
     // Takt für Animationen (Equalizer, Countdown, Verbindungs-Punkte)
@@ -797,13 +807,13 @@ export default function SecondSound({ onBack }) {
 
     // Setup: eigene Playlists direkt beim Öffnen laden (häufigster Fall)
     useEffect(() => {
-        if (phase === PHASES.SETUP && searchMode === 'mine') handleLoadMyPlaylists()
+        if (phase === PHASES.PLAYLISTS && searchMode === 'mine') handleLoadMyPlaylists()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase, searchMode])
 
     // Setup: Playlist-Suche startet automatisch kurz nach dem Tippen
     useEffect(() => {
-        if (phase !== PHASES.SETUP || searchMode !== 'playlist') return
+        if (phase !== PHASES.PLAYLISTS || searchMode !== 'playlist') return
         if (playlistQuery.trim().length < 2) { setPlaylistResults([]); return }
         const id = setTimeout(() => handleSearchPlaylists(), 500)
         return () => clearTimeout(id)
@@ -825,8 +835,9 @@ export default function SecondSound({ onBack }) {
         </div>
     )
 
-    // ─── Login ───────────────────────────────────────────────────────────────
-    if (phase === PHASES.LOGIN) {
+    // ─── Start ───────────────────────────────────────────────────────────────
+    if (phase === PHASES.HOME) {
+        const checking = connected === null
         return shell(
             <main className={`${styles.srMain} ${styles.srPad}`}>
                 <div className={styles.srHeader}>
@@ -862,21 +873,38 @@ export default function SecondSound({ onBack }) {
                             <span className={styles.srNoticeIcon}><IconRetry size={22} /></span>
                             <div>
                                 <p className={styles.srNoticeTitle}>Neue Freigabe nötig</p>
-                                <p className={styles.srNoticeText}>Spotify möchte kurz bestätigen, dass Song raten deine Playlists lesen darf. Melde dich einfach nochmal an.</p>
+                                <p className={styles.srNoticeText}>Spotify möchte kurz bestätigen, dass Song raten deine Playlists lesen darf. Tippe auf „Spotify verbinden“.</p>
                             </div>
                         </div>
                     )}
-                    <button type="button" className={`${styles.srBtn} ${styles.srPrimary}`} onClick={handleSpotifyLogin}>
-                        <IconNote />Mit Spotify anmelden
-                    </button>
-                    <p className={styles.srFineRow}><IconInfo />Du brauchst Spotify Premium.</p>
+
+                    {connected ? (
+                        <>
+                            <div className={styles.srConnected} role="status"><IconCheck size={20} />Spotify ist verbunden</div>
+                            <button type="button" className={`${styles.srBtn} ${styles.srLinkBtn} ${styles.srUnlink}`} onClick={handleDisconnect}>Verbindung trennen</button>
+                        </>
+                    ) : (
+                        <button type="button" className={`${styles.srBtn} ${styles.srPrimary}`} onClick={handleSpotifyLogin} disabled={checking}>
+                            <IconNote />{checking ? 'Verbindung wird geprüft …' : 'Spotify verbinden'}
+                        </button>
+                    )}
+
+                    {connected ? (
+                        <button type="button" className={`${styles.srBtn} ${styles.srPrimary}`} onClick={handleOpenPlaylists}>Spiel starten</button>
+                    ) : (
+                        <button type="button" disabled aria-disabled="true" className={`${styles.srBtn} ${styles.srStartOff}`}><IconLock />Spiel starten</button>
+                    )}
+
+                    <button type="button" className={`${styles.srBtn} ${styles.srSecondary}`}>Einstellungen</button>
+
+                    {!connected && !checking && <p className={styles.srFineRow}><IconInfo />Du brauchst Spotify Premium.</p>}
                 </div>
             </main>
         )
     }
 
-    // ─── Setup ───────────────────────────────────────────────────────────────
-    if (phase === PHASES.SETUP) {
+    // ─── Playlists wählen ────────────────────────────────────────────────────
+    if (phase === PHASES.PLAYLISTS) {
         const isMine = searchMode === 'mine'
         const q = playlistQuery.trim()
         const k = selectedPlaylists.length
@@ -897,17 +925,14 @@ export default function SecondSound({ onBack }) {
 
         return shell(
             <main className={styles.srMain}>
-                <header className={`${styles.srHeader} ${styles.srPad}`}>
-                    <h1 className={styles.srScreenTitle}>Song raten</h1>
+                <header className={`${styles.srSubHeader} ${styles.srPad}`}>
+                    <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setPhase(PHASES.HOME)} aria-label="Zurück"><IconBack /></button>
+                    <h1 className={styles.srSubTitle}>Playlists</h1>
                     {themeBtn}
                 </header>
 
                 <div className={`${styles.srScroll} ${styles.srScrollFix}`}>
-                    <ol className={styles.srHow} aria-label="So funktioniert’s">
-                        <li><span className={`${styles.srStep} ${k === 0 ? styles.srStepOn : styles.srStepDone}`}>{k === 0 ? '1' : <IconCheck size={13} w={3.4} />}</span>Playlist(s) auswählen</li>
-                        <li><span className={`${styles.srStep} ${k > 0 ? styles.srStepOn : ''}`}>2</span>Anzahl der zu erratenden Songs auswählen</li>
-                        <li><span className={styles.srStep}>3</span>Los raten!</li>
-                    </ol>
+                    <p className={styles.srInfo}>Wähle eine oder mehrere Playlists aus denen du zufällige Songs erraten willst</p>
 
                     <div className={styles.srTabs} role="tablist" aria-label="Playlist-Quelle">
                         <button type="button" role="tab" aria-selected={isMine} className={`${styles.srBtn} ${styles.srTab} ${isMine ? styles.srTabOn : ''}`}
@@ -1020,13 +1045,39 @@ export default function SecondSound({ onBack }) {
                             </div>
                         )}
                     </div>
+                </div>
 
-                    <div className={styles.srAccountRow}>
-                        <span>Mit Spotify verbunden</span>
-                        <span>
-                            <button type="button" className={`${styles.srBtn} ${styles.srLinkBtn}`} onClick={() => { spotifyService.clearUserTokens(); setLoadingError(null); setPhase(PHASES.LOGIN) }}>Konto wechseln</button>
-                            <button type="button" className={`${styles.srBtn} ${styles.srLinkBtn}`} onClick={handleBack}>Zum Menü</button>
-                        </span>
+                <div className={styles.srFooter}>
+                    {k > 0 ? (
+                        <button type="button" className={`${styles.srBtn} ${styles.srPrimary}`} onClick={() => setPhase(PHASES.COUNT)}>Weiter</button>
+                    ) : (
+                        <button type="button" disabled aria-disabled="true" className={`${styles.srBtn} ${styles.srStartOff}`}><IconLock />Weiter</button>
+                    )}
+                </div>
+            </main>
+        )
+    }
+
+    // ─── Songanzahl wählen ───────────────────────────────────────────────────
+    if (phase === PHASES.COUNT) {
+        const k = selectedPlaylists.length
+        return shell(
+            <main className={styles.srMain}>
+                <header className={`${styles.srSubHeader} ${styles.srPad}`}>
+                    <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => { setLoadingError(null); setPhase(PHASES.PLAYLISTS) }} aria-label="Zurück"><IconBack /></button>
+                    <h1 className={styles.srSubTitle}>Songanzahl</h1>
+                    {themeBtn}
+                </header>
+
+                <div className={styles.srCountPage}>
+                    <p id="sr-count-label" className={styles.srInfoBig}>Wie viele Songs möchtest du erraten?</p>
+                    <div role="group" aria-labelledby="sr-count-label" className={styles.srCountGrid}>
+                        {COUNT_OPTIONS.map(n => (
+                            <button key={n} type="button" aria-pressed={songCount === n} onClick={() => setSongCount(n)}
+                                className={`${styles.srBtn} ${styles.srCountBig} ${songCount === n ? styles.srCountBigOn : ''}`}>
+                                {n}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
@@ -1041,40 +1092,18 @@ export default function SecondSound({ onBack }) {
                                 </div>
                                 <button type="button" className={`${styles.srBtn} ${styles.srCloseSm}`} onClick={() => setLoadingError(null)} aria-label="Hinweis schließen"><IconX size={18} w={2.4} /></button>
                             </div>
-                            <button type="button" className={`${styles.srBtn} ${styles.srOutline} ${styles.srOutlineSm}`}
-                                onClick={() => { spotifyService.clearUserTokens(); setLoadingError(null); setPhase(PHASES.LOGIN) }}>
-                                Neu bei Spotify anmelden
+                            <button type="button" className={`${styles.srBtn} ${styles.srOutline} ${styles.srOutlineSm}`} onClick={handleDisconnect}>
+                                Spotify neu verbinden
                             </button>
                         </div>
                     )}
-
-                    <div className={`${styles.srCountBox} ${k === 0 ? styles.srCountLocked : ''}`}>
-                        <p id="sr-count-label" className={styles.srCountLabel}>
-                            {k === 0 && <IconLock size={14} w={2.6} />}Wie viele Songs möchtest du erraten?
-                        </p>
-                        <div role="group" aria-labelledby="sr-count-label" className={styles.srCounts}>
-                            {COUNT_OPTIONS.map(n => (
-                                <button key={n} type="button" aria-pressed={songCount === n} disabled={k === 0} onClick={() => setSongCount(n)}
-                                    className={`${styles.srBtn} ${styles.srCount} ${songCount === n && k > 0 ? styles.srCountOn : ''}`}>
-                                    {n}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {k > 0 ? (
-                        <button type="button" className={`${styles.srBtn} ${styles.srStart}`} onClick={handleStartGame}>
-                            <span className={styles.srStartText}>
-                                <span className={styles.srStartTitle}>Los raten!</span>
-                                <span className={styles.srStartSub}>{k} {k === 1 ? 'Playlist' : 'Playlists'} · {songCount} Songs</span>
-                            </span>
-                            <span className={styles.srStartIcon}><IconPlay size={20} /></span>
-                        </button>
-                    ) : (
-                        <button type="button" disabled aria-disabled="true" className={`${styles.srBtn} ${styles.srStartOff}`}>
-                            <IconLock />Wähl zuerst eine Playlist
-                        </button>
-                    )}
+                    <button type="button" className={`${styles.srBtn} ${styles.srStart}`} onClick={handleStartGame}>
+                        <span className={styles.srStartText}>
+                            <span className={styles.srStartTitle}>Spiel starten</span>
+                            <span className={styles.srStartSub}>{k} {k === 1 ? 'Playlist' : 'Playlists'} - {songCount} Songs</span>
+                        </span>
+                        <span className={styles.srStartIcon}><IconPlay size={20} /></span>
+                    </button>
                 </div>
             </main>
         )
@@ -1082,46 +1111,21 @@ export default function SecondSound({ onBack }) {
 
     // ─── Laden ───────────────────────────────────────────────────────────────
     if (phase === PHASES.LOADING) {
-        const detect = sizeDetectionProgress
-        const detectPct = detect ? Math.min(100, Math.round((detect.step / detect.totalSteps) * 100)) : 0
-        const pct = Math.min(100, detect ? Math.max(loadPct, 35 + Math.round(detectPct * 0.6)) : loadPct)
-        const k = selectedPlaylists.length
-        const title = pct >= 100 ? 'Los geht’s!' : (pct >= 35 ? 'Songs werden gemischt …' : 'Mit Spotify verbinden …')
-        const steps = ['Mit Spotify verbinden', ...funSteps]
-        const thresholds = [35, 60, 80, 100]
-        const firstOpen = thresholds.findIndex(t => pct < t)
         return shell(
             <main className={`${styles.srMain} ${styles.srPad}`}>
                 <div className={`${styles.srHeader} ${styles.srHeaderEnd}`}>{themeBtn}</div>
                 <div className={styles.srLoadBody}>
                     <div className={styles.srCardLg} aria-hidden="true">
-                        <svg className={styles.srRings} style={{ transform: `rotate(${Math.round(pct * 7.2)}deg)` }} width="174" height="174" viewBox="0 0 100 100" fill="none">
+                        <svg className={`${styles.srRings} ${styles.srSpin}`} width="174" height="174" viewBox="0 0 100 100" fill="none">
                             <circle cx="50" cy="50" r="46" strokeWidth="1.5" /><circle cx="50" cy="50" r="39" strokeWidth="1.5" /><circle cx="50" cy="50" r="32" strokeWidth="1.5" />
                             <circle cx="50" cy="11" r="3" className={styles.srDotAccent} /><circle cx="82" cy="50" r="2" className={styles.srDotInk} />
                         </svg>
                         <div className={styles.srCardDiscLg}><IconShuffle /></div>
                     </div>
                     <div aria-live="polite" className={styles.srLoadText}>
-                        <h1 className={styles.srLoadTitle}>{title}</h1>
-                        <p className={styles.srMuted}>{songCount} Songs aus {Math.max(1, k)} {k === 1 ? 'Playlist' : 'Playlists'}</p>
+                        <h1 className={styles.srLoadTitle}>Songs werden geladen</h1>
+                        <p className={styles.srFineSm}>Das Spiel startet in wenigen Sekunden</p>
                     </div>
-                    <div role="progressbar" aria-label="Spiel wird vorbereitet" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct} className={styles.srLoadBar}>
-                        <div className={styles.srLoadBarFill} style={{ width: `${pct}%` }} />
-                    </div>
-                    <ul className={styles.srLoadSteps}>
-                        {steps.map((label, i) => {
-                            const done = pct >= thresholds[i]
-                            const active = i === firstOpen
-                            return (
-                                <li key={label} className={!done && !active ? styles.srDim : ''}>
-                                    <span className={`${styles.srLoadIcon} ${done ? styles.srLoadIconDone : (active ? styles.srLoadIconActive : styles.srLoadIconPending)}`}>
-                                        {done && <IconCheck size={14} w={3.4} />}
-                                    </span>
-                                    {label}
-                                </li>
-                            )
-                        })}
-                    </ul>
                     <button type="button" className={`${styles.srBtn} ${styles.srLinkBtn}`} onClick={handleCancelLoad} disabled={cancelling}>
                         {cancelling ? 'Wird abgebrochen …' : 'Abbrechen'}
                     </button>
@@ -1145,8 +1149,7 @@ export default function SecondSound({ onBack }) {
         const onTile = (idx) => {
             if (!playerReady || idx > playedN || starting) return
             if (playingIdx === idx) { stopPlayback(); return }
-            if (isPlaying) return
-            handlePlayStage(idx)
+            handlePlayStage(idx)      // läuft gerade etwas anderes, wird es durch diese Stufe ersetzt
         }
 
         let hint
@@ -1164,7 +1167,7 @@ export default function SecondSound({ onBack }) {
             : { title: 'Abspielen hat nicht geklappt', text: playerError })
         const bars = Array.from({ length: 11 }, (_, j) => (isPlaying ? Math.round(8 + (Math.sin(tick * 1.3 + j * 1.9) + 1) / 2 * 30) : 4))
         const caption = connecting ? 'VERBINDET' : (starting ? 'LÄDT' : (isPlaying ? `LÄUFT · ${playingSecs} S` : 'GEHEIMER SONG'))
-        const discSize = isPlaying ? (tick % 2 ? 112 : 106) : 104
+        const discPct = isPlaying ? (tick % 2 ? 45 : 43) : 42
         const songNo = `Song ${playedCount + 1} von ${targetCount}`
 
         return shell(
@@ -1196,7 +1199,7 @@ export default function SecondSound({ onBack }) {
                         <>
                             <Rings size={246} radii={[47, 41, 35, 29, 23.5]} sw={1} />
                             <span className={styles.srCardCaption}>{caption}</span>
-                            <div className={`${styles.srDisc} ${(connecting || starting) ? styles.srDiscConn : ''}`} style={{ width: discSize, height: discSize }}>
+                            <div className={`${styles.srDisc} ${(connecting || starting) ? styles.srDiscConn : ''}`} style={{ width: `${discPct}%` }}>
                                 {isPlaying
                                     ? <span className={styles.srDiscCount}>0:{remaining < 10 ? '0' : ''}{remaining}</span>
                                     : (connecting || starting)
@@ -1228,7 +1231,7 @@ export default function SecondSound({ onBack }) {
                         const locked = i > playedN
                         const playing = playingIdx === i
                         const loadingTile = startingIdx === i
-                        const otherPlaying = (isPlaying && !playing) || (starting && !loadingTile)
+                        const otherPlaying = starting && !loadingTile
                         const aria = locked ? `${s.long} – noch gesperrt` : (playing ? `${s.long} pausieren` : `${s.long} abspielen`)
                         return (
                             <button key={s.label} type="button" onClick={() => onTile(i)} disabled={locked || connecting || otherPlaying || loadingTile} aria-label={aria}
