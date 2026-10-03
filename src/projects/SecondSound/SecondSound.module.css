@@ -274,3 +274,6 @@
 .srRoot .srRateOff { background: var(--sr-surface2); border-color: var(--sr-line); color: var(--sr-muted); cursor: default; }
 
 .srRoot .srTile_locked .srTileStatus { font-size: 11px; gap: 4px; letter-spacing: -0.02em; }
+.srRoot .srSkipBtn { align-self: center; flex: none; height: 38px; padding: 0 14px; border-radius: 19px; border: 2px solid var(--sr-ink); color: var(--sr-ink); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.srRoot .srGame .srAlert { gap: 6px; padding: 10px 10px 10px 14px; margin-bottom: 10px; }
+.srRoot .srGame .srAlertText { font-size: 13px; }

@@ -1253,10 +1253,10 @@ export default function SecondSound({ onBack }) {
                                 <p className={styles.srAlertTitle}>{friendlyError.title}</p>
                                 <p className={styles.srAlertText}>{friendlyError.text}</p>
                             </div>
+                            <button type="button" className={`${styles.srBtn} ${styles.srSkipBtn}`} onClick={skipSong}>
+                                Anderer Song
+                            </button>
                         </div>
-                        <button type="button" className={`${styles.srBtn} ${styles.srOutline} ${styles.srOutlineSm}`} onClick={skipSong}>
-                            Anderen Song nehmen
-                        </button>
                     </div>
                 )}
 
