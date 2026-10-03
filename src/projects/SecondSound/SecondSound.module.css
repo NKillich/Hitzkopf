@@ -273,3 +273,4 @@
 .srRoot .srCountLocked { opacity: 0.5; }
 .srRoot .srRateOff { background: var(--sr-surface2); border-color: var(--sr-line); color: var(--sr-muted); cursor: default; }
 
+.srRoot .srTile_locked .srTileStatus { font-size: 11px; gap: 4px; letter-spacing: -0.02em; }
