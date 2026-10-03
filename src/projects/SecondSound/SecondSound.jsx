@@ -41,6 +41,33 @@ const STAGES = [
 
 const COUNT_OPTIONS = [5, 10, 15, 20, 30]
 
+// Lustige Lade-Schritte (pro Spielstart werden drei zufällige gezeigt)
+const FUN_STEPS = [
+    'Gitarren werden gestimmt', 'Stimmbänder werden geölt', 'Noten liegen bereit', 'Schlagzeug wird aufgewärmt',
+    'Verstärker werden aufgedreht', 'Mikrofon-Check: eins, zwei …', 'Plattenspieler wird abgestaubt',
+    'Tanzfläche wird gewischt', 'Kopfhörer werden entknotet', 'Zugabe-Rufe werden geübt',
+    'Discokugel wird poliert', 'Die Band macht Soundcheck', 'Der DJ sucht seine Lieblingsplatte'
+]
+const pickFunSteps = () => [...FUN_STEPS].sort(() => Math.random() - 0.5).slice(0, 3)
+
+// Größen-Cache über Sitzungen hinweg (spart die teure Live-Erkennung)
+const SIZE_CACHE_KEY = 'ss_plsizes_v1'
+const SIZE_CACHE_TTL = 7 * 24 * 3600 * 1000
+const loadSizeCache = () => {
+    try {
+        const raw = JSON.parse(localStorage.getItem(SIZE_CACHE_KEY) || '{}')
+        const now = Date.now()
+        return Object.fromEntries(Object.entries(raw).filter(([, v]) => v && now - v.t < SIZE_CACHE_TTL).map(([k, v]) => [k, v.n]))
+    } catch { return {} }
+}
+const saveSize = (id, n) => {
+    try {
+        const raw = JSON.parse(localStorage.getItem(SIZE_CACHE_KEY) || '{}')
+        raw[id] = { n, t: Date.now() }
+        localStorage.setItem(SIZE_CACHE_KEY, JSON.stringify(raw))
+    } catch { /* Cache ist optional */ }
+}
+
 // Platzhalter-Cover (wenn Spotify kein Bild liefert): zwei Farben + eine Form, stabil pro Schlüssel
 const COVER_COLORS = [
     ['#FF5A1F', '#FFD23F'], ['#2F6BFF', '#A9C8FF'], ['#12A57A', '#C8F4E4'], ['#E83F6F', '#FFC2D4'],
@@ -86,6 +113,8 @@ const IconSearch = ({ size = 20 }) => <Svg size={size}><circle cx="11" cy="11" r
 const IconRetry = ({ size = 18 }) => <Svg size={size}><path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 4v5h-5" /></Svg>
 const IconReplay = ({ size = 18 }) => <Svg size={size}><path d="M4 12a8 8 0 1 0 2.3-5.6" /><path d="M4 4v5h5" /></Svg>
 const IconEye = ({ size = 22 }) => <Svg size={size}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></Svg>
+const IconPause = ({ size = 18 }) => <Svg size={size} w={0}><rect x="6" y="4" width="4.5" height="16" rx="1.2" fill="currentColor" /><rect x="13.5" y="4" width="4.5" height="16" rx="1.2" fill="currentColor" /></Svg>
+const IconEyeOff = ({ size = 22 }) => <Svg size={size}><path d="M17.9 17.9A10.9 10.9 0 0 1 12 19c-6.5 0-10-7-10-7a18 18 0 0 1 5.1-5.9" /><path d="M9.9 4.2A9.8 9.8 0 0 1 12 4c6.5 0 10 7 10 7a18 18 0 0 1-2.2 3.2" /><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2" /><path d="M2 2l20 20" /></Svg>
 const IconAlert = ({ size = 22 }) => <Svg size={size}><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.5v.01" /></Svg>
 const IconClock = ({ size = 24 }) => <Svg size={size}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Svg>
 const IconChevron = ({ open }) => <span style={{ display: 'flex', transform: `rotate(${open ? 180 : 0}deg)`, transition: 'transform .2s' }}><Svg size={22} w={2.4}><path d="M6 9l6 6 6-6" /></Svg></span>
@@ -134,7 +163,7 @@ export default function SecondSound({ onBack }) {
     // Aufdecken- und Antwort-Buttons frei. Verhindert Klick-Spam mit 403/502.
     const [hasPlayedCurrentSong, setHasPlayedCurrentSong] = useState(false)
     const [sizeDetectionProgress, setSizeDetectionProgress] = useState(null)
-    const playlistSizeCache = useRef({})
+    const playlistSizeCache = useRef(loadSizeCache())
     const [searchLoading, setSearchLoading] = useState(false)
     const [loadingError, setLoadingError] = useState(null)
     const [needsRelogin, setNeedsRelogin] = useState(false)
@@ -142,6 +171,10 @@ export default function SecondSound({ onBack }) {
     const [confirmClose, setConfirmClose] = useState(false)  // Bottom-Sheet "Spiel beenden?"
     const [loadPct, setLoadPct] = useState(0)                // Fortschritt im Ladescreen (0–100)
     const [tick, setTick] = useState(0)                      // Takt für Animationen (Equalizer, Punkte)
+    const [funSteps, setFunSteps] = useState(() => pickFunSteps())
+    const [searchHasMore, setSearchHasMore] = useState(false)
+    const [searchNextOffset, setSearchNextOffset] = useState(0)
+    const [searchMoreLoading, setSearchMoreLoading] = useState(false)
 
     // Game state – songs sind jetzt {playlistUri, offset, playlistName, playlistImage}
     const [songs, setSongs] = useState([])          // kompletter Slot-Pool (3x Ziel)
@@ -160,6 +193,9 @@ export default function SecondSound({ onBack }) {
     const fetchGenRef = useRef(0)               // bricht veraltete getPlaybackState-Callbacks ab
     const currentIndexRef = useRef(0)
     const isAnsweringRef = useRef(false)        // verhindert Doppel-Klick auf Antwort-Buttons
+    const usedUrisRef = useRef(new Set())        // schon gespielte Titel dieser Runde (Duplikate überspringen)
+    const dupRetriesRef = useRef(0)
+    const pendingStageRef = useRef(null)         // nach Duplikat-Sprung: Stufe automatisch erneut starten
     const playStartRef = useRef(0)              // Startzeit der laufenden Wiedergabe (Countdown)
     const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
     const allowPlaybackRef = useRef(false)      // true nur, solange der Spieler einen Play-Button gedrückt hat
@@ -300,19 +336,52 @@ export default function SecondSound({ onBack }) {
         }
     }
 
+    const mergeById = (a, b) => {
+        const seen = new Set(a.map(p => p.id))
+        return [...a, ...b.filter(p => !seen.has(p.id))]
+    }
+
+    // Erste Suche: gleich zwei Seiten (bis zu 20 Treffer); weitere per "Mehr anzeigen"
     const handleSearchPlaylists = async () => {
         const query = playlistQuery.trim()
         if (!query) return
         setSearchLoading(true)
         setPlaylistResults([])
+        setSearchHasMore(false)
         try {
-            const results = await spotifyService.searchPlaylists(query, 10)
-            setPlaylistResults(results)
+            let all = []
+            let offset = 0
+            let more = true
+            for (let i = 0; i < 2 && more; i++) {
+                const r = await spotifyService.searchPlaylists(query, 10, offset)
+                all = mergeById(all, r.items)
+                offset = r.nextOffset
+                more = r.hasMore
+            }
+            setPlaylistResults(all)
+            setSearchNextOffset(offset)
+            setSearchHasMore(more)
         } catch (e) {
             console.error('Playlist-Suche fehlgeschlagen:', e)
         } finally {
             setSearchedQuery(query)
             setSearchLoading(false)
+        }
+    }
+
+    const handleMoreResults = async () => {
+        const query = playlistQuery.trim()
+        if (!query || searchMoreLoading) return
+        setSearchMoreLoading(true)
+        try {
+            const r = await spotifyService.searchPlaylists(query, 10, searchNextOffset)
+            setPlaylistResults(prev => mergeById(prev, r.items))
+            setSearchNextOffset(r.nextOffset)
+            setSearchHasMore(r.hasMore)
+        } catch (e) {
+            console.error('Weitere Playlists laden fehlgeschlagen:', e)
+        } finally {
+            setSearchMoreLoading(false)
         }
     }
 
@@ -355,6 +424,10 @@ export default function SecondSound({ onBack }) {
         setPhase(PHASES.LOADING)
         setLoadingError(null)
         setLoadPct(5)
+        setFunSteps(pickFunSteps())
+        usedUrisRef.current = new Set()
+        dupRetriesRef.current = 0
+        pendingStageRef.current = null
 
         try {
             // Echtes Fisher-Yates – Math.random()-0.5 als Sortier-Func ist statistisch
@@ -382,7 +455,7 @@ export default function SecondSound({ onBack }) {
                 // Größe ermitteln: Cache → getPlaylistInfo (falls > 0) → detectPlaylistSize
                 let count = playlistSizeCache.current[playlist.id] || 0
 
-                if (!count && playlist.trackCount > 0 && playlist.trackCount >= songCount * 2) {
+                if (!count && playlist.trackCount > 1) {
                     count = playlist.trackCount
                     log(`[SS] "${playlist.name}": nutze gecachte trackCount=${count} aus Auswahl`)
                 }
@@ -390,7 +463,7 @@ export default function SecondSound({ onBack }) {
                 if (!count) {
                     try {
                         const info = await spotifyService.getPlaylistInfo(playlist.id)
-                        if (info.trackCount >= songCount * 2) {
+                        if (info.trackCount > 1) {
                             count = info.trackCount
                             log(`[SS] "${playlist.name}": getPlaylistInfo trackCount=${count}`)
                         }
@@ -417,6 +490,7 @@ export default function SecondSound({ onBack }) {
                             }
                         })
                         log(`[SS] "${playlist.name}": Live-Detection ermittelt ${count} Tracks`)
+                        saveSize(playlist.id, count)
                     } catch (e) {
                         console.error(`[SS] Live-Detection fehlgeschlagen:`, e.message)
                         // Keine geratene Größe: sonst entstehen Offsets, die es nicht gibt (oder 1 Song)
@@ -479,6 +553,7 @@ export default function SecondSound({ onBack }) {
 
     const dbg = (...args) => log('[SS]', ...args)
 
+    // Pausiert über das SDK (lokal, ohne zusätzliche Web-API-Anfrage)
     const stopPlayback = async () => {
         dbg('stopPlayback aufgerufen')
         if (timerRef.current) {
@@ -488,7 +563,6 @@ export default function SecondSound({ onBack }) {
         allowPlaybackRef.current = false
         setIsPlaying(false)
         await spotifyService.pauseLocalPlayer()
-        await spotifyService.pausePlayback().catch(() => {})
     }
 
     const handlePlayFor = async (seconds) => {
@@ -513,24 +587,42 @@ export default function SecondSound({ onBack }) {
             timerRef.current = null
         }
 
+        const slot = currentIndex
         lastPlaySecondsRef.current = seconds
         isPlayingRequestRef.current = true
         allowPlaybackRef.current = true
 
         try {
-            // Erstes Abspielen: Playlist+Offset (Shuffle aus). Danach immer genau derselbe Titel per URI,
-            // sonst wählt Spotify bei aktivem Shuffle bei jedem Klick einen neuen Song.
-            const knownUri = trackUriRef.current[currentIndex]
-            if (knownUri) {
-                await spotifyService.playUriOnPlayer(knownUri)
-            } else {
-                await spotifyService.playContextAtOffset(song.playlistUri, song.offset, undefined, { shuffleOff: true })
-                // Nicht abwarten: der Auto-Pause-Timer darf dadurch nicht später starten
-                const slot = currentIndex
-                spotifyService.waitForLocalTrackUri().then(uri => {
-                    if (uri) trackUriRef.current[slot] = uri
-                    else warn(`[SS] Keine Track-URI für Slot ${slot} erhalten`)
-                })
+            // Erstes Abspielen: Playlist+Offset (Shuffle aus). Danach derselbe, schon geladene Titel von vorn
+            // (seek+resume, ohne neuen Track-Load → keine zusätzliche DRM-Lizenz → kein Rate-Limit/Knistern).
+            const knownUri = trackUriRef.current[slot]
+            let started = false
+            if (knownUri) started = await spotifyService.replayLocal(knownUri)
+            if (!started) {
+                if (knownUri) {
+                    await spotifyService.playUriOnPlayer(knownUri)
+                } else {
+                    await spotifyService.playContextAtOffset(song.playlistUri, song.offset, undefined, { shuffleOff: true })
+                    // Nicht abwarten: der Auto-Pause-Timer darf dadurch nicht später starten
+                    spotifyService.waitForLocalTrack().then(info => {
+                        if (currentIndexRef.current !== slot) return           // inzwischen weitergeschaltet
+                        if (!info) { warn(`[SS] Kein Titel für Slot ${slot} erhalten`); return }
+                        const hasSpare = slot + 1 < songsRef.current.length
+                        if (usedUrisRef.current.has(info.uri) && hasSpare && dupRetriesRef.current < 5) {
+                            // Titel wurde in dieser Runde schon gespielt → still zum nächsten Slot springen
+                            dupRetriesRef.current++
+                            dbg(`Duplikat erkannt (${info.trackName}) – springe zu Slot ${slot + 1}`)
+                            if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+                            pendingStageRef.current = seconds
+                            currentIndexRef.current = slot + 1
+                            setCurrentIndex(slot + 1)
+                            return
+                        }
+                        usedUrisRef.current.add(info.uri)
+                        trackUriRef.current[slot] = info.uri
+                        setCurrentTrackInfo(info)
+                    })
+                }
             }
             isPlayingRequestRef.current = false
             playStartRef.current = Date.now()
@@ -538,22 +630,11 @@ export default function SecondSound({ onBack }) {
             setHasPlayedCurrentSong(true)
             setPlayerError(null)
 
-            // Einmalig nach 700ms Track-Info holen – kein Warte-Loop, kein Auto-Skip
-            const gen = ++fetchGenRef.current
-            setTimeout(async () => {
-                if (fetchGenRef.current !== gen) return
-                const state = await spotifyService.getPlaybackState().catch(() => null)
-                if (fetchGenRef.current !== gen || !state) return
-                dbg(`Track erkannt: "${state.trackName}" von "${state.artist}" (id=${state.trackId})`)
-                setCurrentTrackInfo(state)
-            }, 700)
-
             if (seconds !== null) {
                 timerRef.current = setTimeout(async () => {
                     dbg(`Auto-Pause nach ${seconds}s`)
                     allowPlaybackRef.current = false
                     await spotifyService.pauseLocalPlayer()
-                    await spotifyService.pausePlayback().catch(() => {})
                     setIsPlaying(false)
                     timerRef.current = null
                 }, seconds * 1000)
@@ -572,6 +653,8 @@ export default function SecondSound({ onBack }) {
         dbg(`advanceAfterAnswer: correct=${correct} | currentIndex=${currentIndex} | playedCount=${playedCount} | targetCount=${targetCount}`)
         dbg(`  aktueller Track: "${currentTrackInfo?.trackName}" von "${currentTrackInfo?.artist}"`)
         fetchGenRef.current++       // veraltete Polls abbrechen
+        dupRetriesRef.current = 0
+        pendingStageRef.current = null
         allowPlaybackRef.current = false
         isAnsweringRef.current = false
         isPlayingRequestRef.current = false
@@ -652,6 +735,15 @@ export default function SecondSound({ onBack }) {
         await stopPlayback()
         handleNewRound()
     }
+
+    // Nach einem Duplikat-Sprung die zuletzt gewählte Stufe automatisch auf dem neuen Song starten
+    useEffect(() => {
+        if (pendingStageRef.current == null) return
+        const sec = pendingStageRef.current
+        pendingStageRef.current = null
+        handlePlayFor(sec)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentIndex])
 
     // Takt für Animationen (Equalizer, Countdown, Verbindungs-Punkte)
     useEffect(() => {
@@ -763,15 +855,15 @@ export default function SecondSound({ onBack }) {
         return shell(
             <main className={styles.srMain}>
                 <header className={`${styles.srHeader} ${styles.srPad}`}>
-                    <h1 className={styles.srScreenTitle}>Neues Spiel</h1>
+                    <h1 className={styles.srScreenTitle}>Song raten</h1>
                     {themeBtn}
                 </header>
 
-                <div className={styles.srScroll}>
+                <div className={`${styles.srScroll} ${styles.srScrollFix}`}>
                     <ol className={styles.srHow} aria-label="So funktioniert’s">
-                        <li><span className={`${styles.srStep} ${styles.srStepOn}`}>1</span>Playlist wählen</li>
-                        <li><span className={styles.srStep}>2</span>Anhören: 1 · 5 · 10 · 30 s</li>
-                        <li><span className={styles.srStep}>3</span>Aufdecken &amp; werten</li>
+                        <li><span className={`${styles.srStep} ${k === 0 ? styles.srStepOn : styles.srStepDone}`}>{k === 0 ? '1' : <IconCheck size={13} w={3.4} />}</span>Playlist(s) auswählen</li>
+                        <li><span className={`${styles.srStep} ${k > 0 ? styles.srStepOn : ''}`}>2</span>Anzahl der zu erratenden Songs auswählen</li>
+                        <li><span className={styles.srStep}>3</span>Los raten!</li>
                     </ol>
 
                     <div className={styles.srTabs} role="tablist" aria-label="Playlist-Quelle">
@@ -810,71 +902,81 @@ export default function SecondSound({ onBack }) {
                         {k > 0 && <span className={styles.srListCount}>{k} ausgewählt</span>}
                     </div>
 
-                    {view === 'ok' && (
-                        <ul className={styles.srList}>
-                            {list.map(p => {
-                                const sel = isSel(p.id)
-                                return (
-                                    <li key={p.id}>
-                                        <button type="button" aria-pressed={sel} onClick={() => toggle(p)} className={`${styles.srBtn} ${styles.srRow} ${sel ? styles.srRowOn : ''}`}>
-                                            <CoverArt src={p.imageUrl} seed={p.id} size={52} radius={12} />
-                                            <span className={styles.srRowText}>
-                                                <span className={styles.srRowName}>{p.name}</span>
-                                                <span className={styles.srRowMeta}>
-                                                    {[!isMine ? p.owner : '', p.trackCount ? `${p.trackCount} Songs` : ''].filter(Boolean).join(' · ')}
-                                                </span>
-                                            </span>
-                                            <span className={`${styles.srCheck} ${sel ? styles.srCheckOn : ''}`}>{sel && <IconCheck />}</span>
-                                        </button>
-                                    </li>
-                                )
-                            })}
-                        </ul>
-                    )}
+                    <div className={styles.srListBox}>
+                        {view === 'ok' && (
+                            <>
+                                <ul className={styles.srList}>
+                                    {list.map(p => {
+                                        const sel = isSel(p.id)
+                                        return (
+                                            <li key={p.id}>
+                                                <button type="button" aria-pressed={sel} onClick={() => toggle(p)} className={`${styles.srBtn} ${styles.srRow} ${sel ? styles.srRowOn : ''}`}>
+                                                    <CoverArt src={p.imageUrl} seed={p.id} size={46} radius={11} />
+                                                    <span className={styles.srRowText}>
+                                                        <span className={styles.srRowName}>{p.name}</span>
+                                                        {(!isMine && p.owner) || p.trackCount ? (
+                                                            <span className={styles.srRowMeta}>
+                                                                {[!isMine ? p.owner : '', p.trackCount ? `${p.trackCount} Songs` : ''].filter(Boolean).join(' · ')}
+                                                            </span>
+                                                        ) : null}
+                                                    </span>
+                                                    <span className={`${styles.srCheck} ${sel ? styles.srCheckOn : ''}`}>{sel && <IconCheck />}</span>
+                                                </button>
+                                            </li>
+                                        )
+                                    })}
+                                </ul>
+                                {!isMine && searchHasMore && (
+                                    <button type="button" className={`${styles.srBtn} ${styles.srOutline} ${styles.srMore}`} onClick={handleMoreResults} disabled={searchMoreLoading}>
+                                        {searchMoreLoading ? 'Lädt …' : 'Mehr anzeigen'}
+                                    </button>
+                                )}
+                            </>
+                        )}
 
-                    {view === 'loading' && (
-                        <div className={styles.srSkeletons} role="status" aria-label="Playlists werden geladen">
-                            {[150, 120, 170, 110].map((w, i) => (
-                                <div key={w} className={styles.srSkelRow} style={{ opacity: 1 - i * 0.2 }}>
-                                    <span className={styles.srSkelCover} />
-                                    <span className={styles.srSkelLines}><span style={{ width: w }} /><span style={{ width: w / 2 }} /></span>
-                                </div>
-                            ))}
-                            <p className={styles.srMutedCenter}>{isMine ? 'Deine Playlists werden geladen …' : 'Suche läuft …'}</p>
-                        </div>
-                    )}
+                        {view === 'loading' && (
+                            <div className={styles.srSkeletons} role="status" aria-label="Playlists werden geladen">
+                                {[150, 120, 170].map((w, i) => (
+                                    <div key={w} className={styles.srSkelRow} style={{ opacity: 1 - i * 0.25 }}>
+                                        <span className={styles.srSkelCover} />
+                                        <span className={styles.srSkelLines}><span style={{ width: w }} /><span style={{ width: w / 2 }} /></span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
-                    {view === 'empty' && (
-                        <div className={styles.srEmpty}>
-                            <span className={styles.srEmptyIcon}>{isMine ? <IconNote size={28} /> : <IconSearch size={28} />}</span>
-                            <p className={styles.srEmptyTitle}>{isMine ? 'Noch keine Playlists' : 'Nichts gefunden'}</p>
-                            <p className={styles.srEmptyText}>
-                                {isMine ? 'In deinem Spotify-Konto gibt es noch keine Playlists. Such einfach nach anderen.' : `Zu „${q}“ gibt es keine Playlists. Versuch einen anderen Begriff.`}
-                            </p>
-                            {isMine && (
-                                <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={() => setSearchMode('playlist')}>Playlists suchen</button>
-                            )}
-                        </div>
-                    )}
+                        {view === 'empty' && (
+                            <div className={styles.srEmpty}>
+                                <span className={styles.srEmptyIcon}>{isMine ? <IconNote size={24} /> : <IconSearch size={24} />}</span>
+                                <p className={styles.srEmptyTitle}>{isMine ? 'Noch keine Playlists' : 'Nichts gefunden'}</p>
+                                <p className={styles.srEmptyText}>
+                                    {isMine ? 'In deinem Spotify-Konto gibt es noch keine Playlists. Such einfach nach anderen.' : `Zu „${q}“ gibt es keine Playlists. Versuch einen anderen Begriff.`}
+                                </p>
+                                {isMine && (
+                                    <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={() => setSearchMode('playlist')}>Playlists suchen</button>
+                                )}
+                            </div>
+                        )}
 
-                    {view === 'prompt' && (
-                        <div className={styles.srEmpty}>
-                            <span className={styles.srEmptyIcon}><IconSearch size={28} /></span>
-                            <p className={styles.srEmptyTitle}>Andere Playlists finden</p>
-                            <p className={styles.srEmptyText}>Gib einen Namen, ein Genre oder ein Jahrzehnt ein.</p>
-                        </div>
-                    )}
+                        {view === 'prompt' && (
+                            <div className={styles.srEmpty}>
+                                <span className={styles.srEmptyIcon}><IconSearch size={24} /></span>
+                                <p className={styles.srEmptyTitle}>Andere Playlists finden</p>
+                                <p className={styles.srEmptyText}>Gib einen Namen, ein Genre oder ein Jahrzehnt ein.</p>
+                            </div>
+                        )}
 
-                    {view === 'error' && (
-                        <div className={styles.srEmpty} role="alert">
-                            <span className={`${styles.srEmptyIcon} ${styles.srEmptyIconBad}`}><IconAlert size={28} /></span>
-                            <p className={styles.srEmptyTitle}>Playlists konnten nicht geladen werden</p>
-                            <p className={styles.srEmptyText}>Prüf deine Internetverbindung und versuch es gleich nochmal.</p>
-                            <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={() => handleLoadMyPlaylists(true)}>
-                                <IconRetry />Erneut versuchen
-                            </button>
-                        </div>
-                    )}
+                        {view === 'error' && (
+                            <div className={styles.srEmpty} role="alert">
+                                <span className={`${styles.srEmptyIcon} ${styles.srEmptyIconBad}`}><IconAlert size={24} /></span>
+                                <p className={styles.srEmptyTitle}>Playlists konnten nicht geladen werden</p>
+                                <p className={styles.srEmptyText}>Prüf deine Internetverbindung und versuch es gleich nochmal.</p>
+                                <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={() => handleLoadMyPlaylists(true)}>
+                                    <IconRetry />Erneut versuchen
+                                </button>
+                            </div>
+                        )}
+                    </div>
 
                     <div className={styles.srAccountRow}>
                         <span>Mit Spotify verbunden</span>
@@ -903,12 +1005,14 @@ export default function SecondSound({ onBack }) {
                         </div>
                     )}
 
-                    <div className={styles.srCountRow}>
-                        <span id="sr-count-label" className={styles.srCountLabel}>Songs</span>
+                    <div className={`${styles.srCountBox} ${k === 0 ? styles.srCountLocked : ''}`}>
+                        <p id="sr-count-label" className={styles.srCountLabel}>
+                            {k === 0 && <IconLock size={14} w={2.6} />}Wie viele Songs möchtest du erraten?
+                        </p>
                         <div role="group" aria-labelledby="sr-count-label" className={styles.srCounts}>
                             {COUNT_OPTIONS.map(n => (
-                                <button key={n} type="button" aria-pressed={songCount === n} onClick={() => setSongCount(n)}
-                                    className={`${styles.srBtn} ${styles.srCount} ${songCount === n ? styles.srCountOn : ''}`}>
+                                <button key={n} type="button" aria-pressed={songCount === n} disabled={k === 0} onClick={() => setSongCount(n)}
+                                    className={`${styles.srBtn} ${styles.srCount} ${songCount === n && k > 0 ? styles.srCountOn : ''}`}>
                                     {n}
                                 </button>
                             ))}
@@ -918,7 +1022,7 @@ export default function SecondSound({ onBack }) {
                     {k > 0 ? (
                         <button type="button" className={`${styles.srBtn} ${styles.srStart}`} onClick={handleStartGame}>
                             <span className={styles.srStartText}>
-                                <span className={styles.srStartTitle}>Spiel starten</span>
+                                <span className={styles.srStartTitle}>Los raten!</span>
                                 <span className={styles.srStartSub}>{k} {k === 1 ? 'Playlist' : 'Playlists'} · {songCount} Songs</span>
                             </span>
                             <span className={styles.srStartIcon}><IconPlay size={20} /></span>
@@ -939,15 +1043,16 @@ export default function SecondSound({ onBack }) {
         const detectPct = detect ? Math.min(100, Math.round((detect.step / detect.totalSteps) * 100)) : 0
         const pct = Math.min(100, detect ? Math.max(loadPct, 35 + Math.round(detectPct * 0.6)) : loadPct)
         const k = selectedPlaylists.length
-        const title = pct >= 100 ? 'Los geht’s!' : (pct >= 35 ? 'Songs werden gemischt …' : 'Player wird verbunden …')
-        const doneBox = pct >= 35
-        const doneSongs = pct >= 100
+        const title = pct >= 100 ? 'Los geht’s!' : (pct >= 35 ? 'Songs werden gemischt …' : 'Mit Spotify verbinden …')
+        const steps = ['Mit Spotify verbinden', ...funSteps]
+        const thresholds = [35, 60, 80, 100]
+        const firstOpen = thresholds.findIndex(t => pct < t)
         return shell(
             <main className={`${styles.srMain} ${styles.srPad}`}>
                 <div className={`${styles.srHeader} ${styles.srHeaderEnd}`}>{themeBtn}</div>
                 <div className={styles.srLoadBody}>
                     <div className={styles.srCardLg} aria-hidden="true">
-                        <svg className={styles.srRings} style={{ position: 'absolute', left: 0, top: 0, transform: `rotate(${Math.round(pct * 7.2)}deg)` }} width="174" height="174" viewBox="0 0 100 100" fill="none">
+                        <svg className={styles.srRings} style={{ transform: `rotate(${Math.round(pct * 7.2)}deg)` }} width="174" height="174" viewBox="0 0 100 100" fill="none">
                             <circle cx="50" cy="50" r="46" strokeWidth="1.5" /><circle cx="50" cy="50" r="39" strokeWidth="1.5" /><circle cx="50" cy="50" r="32" strokeWidth="1.5" />
                             <circle cx="50" cy="11" r="3" className={styles.srDotAccent} /><circle cx="82" cy="50" r="2" className={styles.srDotInk} />
                         </svg>
@@ -961,11 +1066,20 @@ export default function SecondSound({ onBack }) {
                         <div className={styles.srLoadBarFill} style={{ width: `${pct}%` }} />
                     </div>
                     <ul className={styles.srLoadSteps}>
-                        <li><span className={`${styles.srLoadIcon} ${doneBox ? styles.srLoadIconDone : styles.srLoadIconActive}`}>{doneBox && <IconCheck size={14} w={3.4} />}</span>Mit deiner Box verbinden</li>
-                        <li className={doneBox ? '' : styles.srDim}><span className={`${styles.srLoadIcon} ${doneSongs ? styles.srLoadIconDone : (doneBox ? styles.srLoadIconActive : styles.srLoadIconPending)}`}>{doneSongs && <IconCheck size={14} w={3.4} />}</span>Songs zufällig auswählen</li>
+                        {steps.map((label, i) => {
+                            const done = pct >= thresholds[i]
+                            const active = i === firstOpen
+                            return (
+                                <li key={label} className={!done && !active ? styles.srDim : ''}>
+                                    <span className={`${styles.srLoadIcon} ${done ? styles.srLoadIconDone : (active ? styles.srLoadIconActive : styles.srLoadIconPending)}`}>
+                                        {done && <IconCheck size={14} w={3.4} />}
+                                    </span>
+                                    {label}
+                                </li>
+                            )
+                        })}
                     </ul>
                 </div>
-                <p className={styles.srFineRow}><IconPhone />Tipp: Spotify sollte auf deiner Box aktiv sein.</p>
             </main>
         )
     }
@@ -973,43 +1087,42 @@ export default function SecondSound({ onBack }) {
     // ─── Spiel ───────────────────────────────────────────────────────────────
     if (phase === PHASES.GAME) {
         const connecting = !playerReady && !playerError
-        const playedN = Math.min(maxUnlockedIndex, STAGES.length)       // so viele Stufen wurden schon gespielt
-        const nextIdx = Math.min(playedN, STAGES.length - 1)
+        const playedN = Math.min(maxUnlockedIndex, STAGES.length)       // so viele Stufen sind freigeschaltet
         const playingSecs = isPlaying ? lastPlaySecondsRef.current : null
         const playingIdx = isPlaying ? STAGES.findIndex(s => s.seconds === playingSecs) : -1
         const elapsed = isPlaying && playStartRef.current ? (Date.now() - playStartRef.current) / 1000 : 0
         const progress = isPlaying && playingSecs ? Math.min(1, elapsed / playingSecs) : 0
         const remaining = isPlaying && playingSecs ? Math.max(1, Math.ceil(playingSecs - elapsed)) : 0
-        const playStep = (idx) => {
+
+        // Kachel: läuft sie gerade → pausieren; läuft nichts → abspielen; läuft etwas anderes → ignorieren
+        const onTile = (idx) => {
             if (!playerReady || idx > playedN) return
+            if (playingIdx === idx) { stopPlayback(); return }
+            if (isPlaying) return
             handlePlayFor(STAGES[idx].seconds)
             setMaxUnlockedIndex(prev => Math.max(prev, idx + 1))
         }
 
         let hint
         if (connecting) hint = 'Spotify-Player verbindet …'
-        else if (isRevealed) hint = 'Wurde der Song erkannt?'
+        else if (isRevealed) hint = 'Wurde der Song erraten?'
         else if (isPlaying) hint = 'Hört genau hin …'
         else if (playedN === 0) hint = 'Drück Play – zuerst nur 1 Sekunde'
-        else if (playedN >= STAGES.length) hint = 'Alles gehört – jetzt aufdecken'
-        else hint = 'Erkannt? Dann aufdecken.'
+        else if (playedN >= STAGES.length) hint = 'Alles gehört – jetzt aufdecken oder werten'
+        else hint = 'Erraten? Dann aufdecken oder werten.'
 
-        const canReveal = hasPlayedCurrentSong && !connecting
-        const revealPrimary = playedN >= STAGES.length && !isPlaying
-        const showPlayBtn = playedN < STAGES.length || isPlaying
+        const canAct = hasPlayedCurrentSong && !connecting
         const friendlyError = playerError && (/device not found/i.test(playerError)
             ? { title: 'Der Player ist noch nicht bereit', text: 'Kurz warten und nochmal tippen.' }
             : { title: 'Abspielen hat nicht geklappt', text: playerError })
         const bars = Array.from({ length: 11 }, (_, j) => (isPlaying ? Math.round(8 + (Math.sin(tick * 1.3 + j * 1.9) + 1) / 2 * 30) : 4))
         const caption = connecting ? 'VERBINDET' : (isPlaying ? `LÄUFT · ${playingSecs} S` : 'GEHEIMER SONG')
         const discSize = isPlaying ? (tick % 2 ? 112 : 106) : 104
-        const replayIdx = Math.max(0, playedN - 1)
         const songNo = `Song ${playedCount + 1} von ${targetCount}`
 
         return shell(
             <main className={`${styles.srMain} ${styles.srPad} ${styles.srGame}`}>
                 <header className={styles.srGameHead}>
-                    <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setConfirmClose(true)} aria-label="Spiel beenden" title="Spiel beenden"><IconX /></button>
                     <div className={styles.srProgressBox}>
                         <span className={styles.srSongNo}>{songNo}</span>
                         <div role="progressbar" aria-label={songNo} aria-valuemin="1" aria-valuemax={targetCount} aria-valuenow={playedCount + 1} className={styles.srSegs}>
@@ -1019,6 +1132,7 @@ export default function SecondSound({ onBack }) {
                         </div>
                     </div>
                     {themeBtn}
+                    <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setConfirmClose(true)} aria-label="Spiel beenden" title="Spiel beenden"><IconX /></button>
                 </header>
 
                 <p role="status" aria-live="polite" className={styles.srHint}>
@@ -1064,20 +1178,17 @@ export default function SecondSound({ onBack }) {
 
                 <div role="group" aria-label="Ausschnitte" className={styles.srTiles}>
                     {STAGES.map((s, i) => {
-                        const st = playingIdx === i ? 'playing' : (i < playedN ? 'played' : (i === playedN ? 'next' : 'locked'))
-                        const status = { playing: 'läuft', played: 'gehört', next: 'nächste', locked: 'gesperrt' }[st]
-                        const aria = `${s.long} – ${{ playing: 'läuft gerade', played: 'erneut abspielen', next: 'jetzt abspielen', locked: 'noch gesperrt' }[st]}`
+                        const locked = i > playedN
+                        const playing = playingIdx === i
+                        const otherPlaying = isPlaying && !playing
+                        const aria = locked ? `${s.long} – noch gesperrt` : (playing ? `${s.long} pausieren` : `${s.long} abspielen`)
                         return (
-                            <button key={s.label} type="button" onClick={() => playStep(i)} disabled={st === 'locked' || connecting} aria-label={aria}
-                                className={`${styles.srBtn} ${styles.srTile} ${styles[`srTile_${st}`]} ${connecting && st !== 'locked' ? styles.srTileConn : ''}`}>
-                                {st === 'playing' && <span className={styles.srTileFill} style={{ width: `${Math.round(progress * 100)}%` }} />}
+                            <button key={s.label} type="button" onClick={() => onTile(i)} disabled={locked || connecting || otherPlaying} aria-label={aria}
+                                className={`${styles.srBtn} ${styles.srTile} ${locked ? styles.srTile_locked : (playing ? styles.srTile_playing : (i === playedN ? styles.srTile_next : styles.srTile_played))} ${(connecting && !locked) || otherPlaying ? styles.srTileConn : ''}`}>
+                                {playing && <span className={styles.srTileFill} style={{ width: `${Math.round(progress * 100)}%` }} />}
                                 <span className={styles.srTileLabel}>{s.label}</span>
                                 <span className={styles.srTileStatus}>
-                                    {st === 'played' && <IconCheck size={13} w={3.4} />}
-                                    {st === 'next' && <IconPlay size={11} />}
-                                    {st === 'locked' && <IconLock size={12} w={2.6} />}
-                                    {st === 'playing' && <IconWave />}
-                                    {status}
+                                    {locked ? <><IconLock size={14} w={2.6} />gesperrt</> : (playing ? <IconPause size={20} /> : <IconPlay size={18} />)}
                                 </span>
                             </button>
                         )
@@ -1098,35 +1209,17 @@ export default function SecondSound({ onBack }) {
                     </div>
                 )}
 
-                {!isRevealed ? (
-                    <div className={styles.srActions}>
-                        <button type="button" onClick={() => canReveal && setIsRevealed(true)} disabled={!canReveal}
-                            className={`${styles.srBtn} ${styles.srReveal} ${!canReveal ? styles.srRevealOff : (revealPrimary ? styles.srRevealPrimary : styles.srRevealOpen)}`}>
-                            {canReveal ? <IconEye /> : <IconLock />}
-                            {canReveal ? 'Aufdecken' : 'Aufdecken – erst anhören'}
-                        </button>
-                        {showPlayBtn && (
-                            <button type="button" onClick={() => playStep(nextIdx)} disabled={connecting || isPlaying}
-                                className={`${styles.srBtn} ${styles.srPlay} ${connecting ? styles.srPlayOff : ''}`}>
-                                {isPlaying && <span className={styles.srPlayFill} style={{ width: `${Math.round(progress * 100)}%` }} />}
-                                <span className={styles.srPlayInner}>
-                                    {!connecting && !isPlaying && <span className={styles.srPlayIcon}><IconPlay /></span>}
-                                    {connecting ? 'Player verbindet …' : (isPlaying ? `Läuft … noch ${remaining} s` : `${STAGES[nextIdx].long} abspielen`)}
-                                </span>
-                            </button>
-                        )}
+                <div className={styles.srActions}>
+                    <button type="button" onClick={() => canAct && setIsRevealed(r => !r)} disabled={!canAct}
+                        className={`${styles.srBtn} ${styles.srReveal} ${!canAct ? styles.srRevealOff : styles.srRevealOpen}`}>
+                        {!canAct ? <IconLock /> : (isRevealed ? <IconEyeOff /> : <IconEye />)}
+                        {!canAct ? 'Aufdecken – erst anhören' : (isRevealed ? 'Verdecken' : 'Aufdecken')}
+                    </button>
+                    <div className={styles.srRate}>
+                        <button type="button" onClick={() => canAct && handleAnswer(false)} disabled={!canAct} className={`${styles.srBtn} ${styles.srRateNo} ${!canAct ? styles.srRateOff : ''}`}><IconX size={20} w={2.8} />Nicht erraten</button>
+                        <button type="button" onClick={() => canAct && handleAnswer(true)} disabled={!canAct} className={`${styles.srBtn} ${styles.srRateOk} ${!canAct ? styles.srRateOff : ''}`}><IconCheck size={22} />Erraten</button>
                     </div>
-                ) : (
-                    <div className={styles.srActions}>
-                        <button type="button" onClick={() => playStep(replayIdx)} disabled={isPlaying || !playerReady} className={`${styles.srBtn} ${styles.srReplay}`}>
-                            <IconReplay />{isPlaying ? `Läuft … noch ${remaining} s` : 'Nochmal anhören'}
-                        </button>
-                        <div className={styles.srRate}>
-                            <button type="button" onClick={() => handleAnswer(false)} className={`${styles.srBtn} ${styles.srRateNo}`}><IconX size={20} w={2.8} />Nicht erkannt</button>
-                            <button type="button" onClick={() => handleAnswer(true)} className={`${styles.srBtn} ${styles.srRateOk}`}><IconCheck size={22} />Erkannt</button>
-                        </div>
-                    </div>
-                )}
+                </div>
 
                 {confirmClose && (
                     <div className={styles.srScrim}>
@@ -1173,7 +1266,7 @@ export default function SecondSound({ onBack }) {
                             </div>
                         </div>
                         <div className={styles.srScoreRow}>
-                            <p className={styles.srScore}><span className={styles.srScoreNum}>{score}</span><span className={styles.srScoreOf}>von {total}<br />erkannt</span></p>
+                            <p className={styles.srScore}><span className={styles.srScoreNum}>{score}</span><span className={styles.srScoreOf}>von {total}<br />erraten</span></p>
                             <span className={styles.srPct}>{pct} %</span>
                         </div>
                         {segs.length > 0 && (
@@ -1187,7 +1280,7 @@ export default function SecondSound({ onBack }) {
                         <section className={styles.srAvg}>
                             <span className={styles.srAvgIcon}><IconClock /></span>
                             <p className={styles.srAvgText}>
-                                <span className={styles.srMuted}>Im Schnitt erkannt nach</span>
+                                <span className={styles.srMuted}>Im Schnitt erraten nach</span>
                                 <span className={styles.srAvgNum}>{avg.toFixed(1).replace('.', ',')} Sekunden</span>
                             </p>
                         </section>
@@ -1208,7 +1301,7 @@ export default function SecondSound({ onBack }) {
                                                 <span className={styles.srRowName}>{entry.song.name}</span>
                                                 <span className={styles.srRowMeta}>{entry.song.artist}</span>
                                             </span>
-                                            <span role="img" aria-label={entry.correct ? 'erkannt' : 'nicht erkannt'} className={`${styles.srMark} ${entry.correct ? styles.srMarkOk : ''}`}>
+                                            <span role="img" aria-label={entry.correct ? 'erraten' : 'nicht erraten'} className={`${styles.srMark} ${entry.correct ? styles.srMarkOk : ''}`}>
                                                 {entry.correct ? <IconCheck size={16} w={3.4} /> : <IconX size={14} w={3.4} />}
                                             </span>
                                         </li>

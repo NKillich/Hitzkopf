@@ -853,8 +853,8 @@ class SpotifyService {
             throw new Error(`Playlist-Info Fehler (HTTP ${res.status}): ${errData.error?.message || 'Unbekannt'}`)
         }
         const data = await res.json()
-        const trackCount = data.tracks?.total ?? 0
-        log(`[SpotifyService] getPlaylistInfo "${data.name}": tracks.total=${trackCount}`)
+        const trackCount = data.items?.total ?? data.tracks?.total ?? 0
+        log(`[SpotifyService] getPlaylistInfo "${data.name}": items.total=${trackCount}`)
         return {
             id: data.id,
             name: data.name,
@@ -926,6 +926,7 @@ class SpotifyService {
             await this._player.setVolume(originalVolume).catch(() => {})
         }
 
+        let rateLimited = false
         try {
             // Spielt offset, wartet auf State, gibt {uri, contextUri} zurück (oder null).
             // Bei 429-Rate-Limit: 2s warten, retry. Bei null-State: 400ms warten, retry.
@@ -936,8 +937,9 @@ class SpotifyService {
                 }
                 let err = await doPlay()
                 if (err && /429|rate|too many/i.test(err.message || '')) {
-                    warn(`[detectSize] offset=${offset} rate-limit, warte 2s…`)
-                    await sleep(2000)
+                    rateLimited = true
+                    warn(`[detectSize] offset=${offset} rate-limit, warte 4s…`)
+                    await sleep(4000)
                     err = await doPlay()
                 }
                 if (err) {
@@ -971,7 +973,7 @@ class SpotifyService {
                 if (a.ctxUri && a.ctxUri !== contextUri) {
                     return { valid: false, reason: `autoplay-${a.ctxUri.slice(-12)}` }
                 }
-                await sleep(180)
+                await sleep(450)
                 const b = await playAndGetState(offset + 1)
                 if (!b) return { valid: false, reason: 'no-state-B' }
                 if (b.ctxUri && b.ctxUri !== contextUri) {
@@ -983,7 +985,7 @@ class SpotifyService {
 
             // Geometric phase: jeder Probe wird mit verifyOffset doppelt getestet.
             // Wenn offset N valid ist, wissen wir: Playlist hat mind. N+2 Tracks.
-            const probes = [0, 25, 100, 400, 1000, 2500, 5000].filter(p => p <= maxSearch)
+            const probes = [0, 30, 120, 500, 2000].filter(p => p <= maxSearch)
             let validMax = -1   // höchster Offset bewiesen "valid" → Playlist >= validMax + 2
             let invalidMin = -1 // niedrigster Offset bewiesen "invalid" → Playlist <= invalidMin + 1
             let stepIdx = 0
@@ -1005,12 +1007,13 @@ class SpotifyService {
                     invalidMin = p
                     break
                 }
-                await sleep(220)
+                await sleep(700)
             }
 
             // Nicht einmal offset 0 ist "valid": NICHT raten (früher: Größe 1 → Spiel mit nur einem Song
             // und hörbarer Wiedergabe), sondern Fehler melden – der Aufrufer zeigt ihn an.
             if (validMax < 0) {
+                if (rateLimited) throw new Error('Spotify bremst gerade die Anfragen aus. Bitte 1–2 Minuten warten und dann nochmal starten.')
                 throw new Error('Playlist-Größe konnte nicht ermittelt werden (Wiedergabe-Test fehlgeschlagen). Bitte erneut versuchen.')
             }
 
@@ -1020,7 +1023,7 @@ class SpotifyService {
 
             // Binary Search auf Offsets [validMax, invalidMin]
             let iter = 0
-            while (invalidMin - validMax > 1 && iter < 14) {
+            while (invalidMin - validMax > 1 && iter < 4) {   // grobe Schätzung reicht (untere Schranke)
                 iter++
                 const mid = Math.floor((validMax + invalidMin) / 2)
                 stepIdx++
@@ -1034,7 +1037,7 @@ class SpotifyService {
                 log(`[detectSize] bsearch offset=${mid} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
                 if (r.valid) validMax = mid
                 else invalidMin = mid
-                await sleep(220)
+                await sleep(700)
             }
 
             // validMax ist der höchste Offset, der mit Sicherheit Track ungleich Nachbar hat
@@ -1100,19 +1103,48 @@ class SpotifyService {
         throw lastError
     }
 
-    /** Wartet bis der lokale Player einen Titel meldet und gibt dessen URI zurück (oder null). */
-    async waitForLocalTrackUri(timeoutMs = 2500) {
+    /** Wartet bis der lokale Player einen Titel meldet; liefert {uri, trackId, trackName, artist, imageUrl} oder null. */
+    async waitForLocalTrack(timeoutMs = 2500) {
         const sleep = (ms) => new Promise(r => setTimeout(r, ms))
         const until = Date.now() + timeoutMs
         while (Date.now() < until) {
             try {
                 const state = await this._player?.getCurrentState()
-                const uri = state?.track_window?.current_track?.uri
-                if (uri) return uri
+                const t = state?.track_window?.current_track
+                if (t?.uri) {
+                    return {
+                        uri: t.uri,
+                        trackId: t.id,
+                        trackName: t.name,
+                        artist: (t.artists || []).map(a => a.name).join(', '),
+                        imageUrl: t.album?.images?.[0]?.url || null
+                    }
+                }
             } catch (_) { /* weiter versuchen */ }
             await sleep(200)
         }
         return null
+    }
+
+    async waitForLocalTrackUri(timeoutMs = 2500) {
+        return (await this.waitForLocalTrack(timeoutMs))?.uri || null
+    }
+
+    /**
+     * Denselben, bereits geladenen Titel von vorn abspielen (seek + resume).
+     * Kein neuer Track-Load → keine neue DRM-Lizenzanfrage (Spotify limitiert die, sonst 429/Knistern).
+     * Gibt false zurück, wenn gerade ein anderer Titel geladen ist (dann per URI abspielen).
+     */
+    async replayLocal(trackUri) {
+        try {
+            const state = await this._player?.getCurrentState()
+            if (state?.track_window?.current_track?.uri !== trackUri) return false
+            await this._player.seek(0)
+            await this._player.resume()
+            return true
+        } catch (_) {
+            return false
+        }
     }
 
     /**
@@ -1136,7 +1168,8 @@ class SpotifyService {
                 name: pl.name,
                 owner: pl.owner?.display_name || pl.owner?.id || '',
                 imageUrl: pl.images?.[0]?.url || null,
-                trackCount: pl.tracks?.total ?? 0,
+                // Seit Feb 2026: items statt tracks, und nur für eigene/gemeinsame Playlists vorhanden
+                trackCount: pl.items?.total ?? pl.tracks?.total ?? 0,
                 uri: pl.uri || `spotify:playlist:${pl.id}`
             }))
             playlists = [...playlists, ...page]
@@ -1150,17 +1183,19 @@ class SpotifyService {
      * Sucht nach Playlists auf Spotify.
      * Nutzt den User-Token (falls vorhanden), sonst Client Credentials.
      */
-    async searchPlaylists(query, limit = 8) {
+    async searchPlaylists(query, limit = 10, offset = 0) {
         let token = await this.getStoredUserToken()
         if (!token) {
             await this.ensureValidToken()
             token = this.accessToken
         }
 
+        // Seit Feb 2026 liefert die Suche höchstens 10 Treffer pro Anfrage → per offset blättern
         const params = new URLSearchParams({
             q: query,
             type: 'playlist',
-            limit: String(Math.min(limit, 50))
+            limit: String(Math.min(limit, 10)),
+            offset: String(offset)
         })
 
         const response = await fetch(`${SPOTIFY_API_BASE}/search?${params}`, {
@@ -1173,27 +1208,20 @@ class SpotifyService {
         }
 
         const data = await response.json()
-        const items = (data.playlists?.items || []).filter(Boolean)
-        if (items.length > 0) {
-            log('[SpotifyService] Search Playlist Sample:', {
-                id: items[0].id,
-                name: items[0].name,
-                uri: items[0].uri,
-                public: items[0].public,
-                collaborative: items[0].collaborative,
-                tracks: items[0].tracks,
-                tracksTotal: items[0].tracks?.total,
-                tracksHref: items[0].tracks?.href
-            })
-        }
-        return items.map(pl => ({
+        const raw = data.playlists?.items || []
+        const items = raw.filter(Boolean).map(pl => ({
             id: pl.id,
             name: pl.name,
             owner: pl.owner?.display_name || pl.owner?.id || '',
             imageUrl: pl.images?.[0]?.url || null,
-            trackCount: pl.tracks?.total ?? 0,
+            trackCount: pl.items?.total ?? pl.tracks?.total ?? 0,
             uri: pl.uri || `spotify:playlist:${pl.id}`
         }))
+        return {
+            items,
+            hasMore: !!data.playlists?.next,
+            nextOffset: offset + raw.length
+        }
     }
 
     /**
