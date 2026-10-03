@@ -516,7 +516,7 @@ class SpotifyService {
      * Initialisiert den Web Playback Player (Host). Erzeugt ein Gerät im Browser.
      * onReady({ deviceId }) wird aufgerufen, wenn das Gerät bereit ist.
      */
-    async initPlaybackPlayer(onReady, onError) {
+    async initPlaybackPlayer(onReady, onError, { activate = false } = {}) {
         const token = await this.getStoredUserToken()
         if (!token) {
             onError?.('Nicht mit Spotify angemeldet.')
@@ -536,10 +536,13 @@ class SpotifyService {
             volume: 0.8
         })
 
-        player.addListener('ready', ({ device_id }) => {
+        player.addListener('ready', async ({ device_id }) => {
             this._deviceId = device_id
             this._player = player
             log('✅ Spotify Web Playback bereit, Device ID:', device_id)
+            // Spotify kennt das neue Gerät serverseitig oft erst verzögert → erst aktivieren,
+            // sonst kommt beim ersten Abspielen "Device not found".
+            if (activate) await this.activateDevice(device_id)
             onReady({ deviceId: device_id })
         })
 
@@ -557,6 +560,15 @@ class SpotifyService {
             onError?.(message)
         })
 
+        player.addListener('account_error', ({ message }) => {
+            console.error('Spotify Account-Fehler:', message)
+            onError?.(message || 'Spotify Premium erforderlich.')
+        })
+
+        player.addListener('playback_error', ({ message }) => {
+            warn('Spotify Playback-Fehler:', message)
+        })
+
         player.connect()
     }
 
@@ -571,13 +583,63 @@ class SpotifyService {
      */
     async ensurePlaybackPlayerReady() {
         if (this.isPlaybackReady()) return
+
+        // Nach disconnectPlayer() kennt Spotify das alte Gerät noch kurz → Neustart-Race vermeiden
+        const sinceDisconnect = Date.now() - (this._lastDisconnect || 0)
+        if (sinceDisconnect < 1200) await new Promise(r => setTimeout(r, 1200 - sinceDisconnect))
+
         return new Promise((resolve, reject) => {
+            let settled = false
+            const done = (fn, arg) => {
+                if (settled) return
+                settled = true
+                clearTimeout(timeout)
+                fn(arg)
+            }
+            const timeout = setTimeout(() => {
+                this.disconnectPlayer()
+                done(reject, new Error('Spotify Player antwortet nicht. Bitte Seite neu laden und erneut versuchen.'))
+            }, 20000)
+
             if (this._player) this.disconnectPlayer()
             this.initPlaybackPlayer(
-                () => resolve(),
-                (msg) => reject(new Error(msg || 'Spotify Player konnte nicht gestartet werden.'))
+                () => done(resolve),
+                (msg) => done(reject, new Error(msg || 'Spotify Player konnte nicht gestartet werden.')),
+                { activate: true }
             )
         })
+    }
+
+    /**
+     * Aktiviert das Web-Player-Gerät (Wiedergabe dorthin übertragen, ohne zu starten) und
+     * schaltet Shuffle aus. Wiederholt bei 404, bis Spotify das Gerät kennt.
+     */
+    async activateDevice(deviceId) {
+        const token = await this.getStoredUserToken()
+        if (!token || !deviceId) return false
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+        for (let attempt = 1; attempt <= 6; attempt++) {
+            try {
+                const res = await fetch(`${SPOTIFY_API_BASE}/me/player`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_ids: [deviceId], play: false })
+                })
+                if (res.ok || res.status === 204) {
+                    log(`[SpotifyService] Gerät aktiviert (Versuch ${attempt})`)
+                    await fetch(`${SPOTIFY_API_BASE}/me/player/shuffle?state=false&device_id=${deviceId}`, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }).catch(() => {})
+                    return true
+                }
+                warn(`[SpotifyService] Gerät aktivieren: HTTP ${res.status} (Versuch ${attempt})`)
+            } catch (e) {
+                warn('[SpotifyService] Gerät aktivieren fehlgeschlagen:', e.message)
+            }
+            await sleep(500 * attempt)
+        }
+        return false
     }
 
     getDeviceId() {
@@ -852,140 +914,156 @@ class SpotifyService {
             await this._player.setVolume(originalVolume).catch(() => {})
         }
 
-        // Spielt offset, wartet auf State, gibt {uri, contextUri} zurück (oder null).
-        // Bei 429-Rate-Limit: 2s warten, retry. Bei null-State: 400ms warten, retry.
-        const playAndGetState = async (offset) => {
-            const doPlay = async () => {
-                try { await this.playContextAtOffset(contextUri, offset); return null }
-                catch (e) { return e }
-            }
-            let err = await doPlay()
-            if (err && /429|rate|too many/i.test(err.message || '')) {
-                warn(`[detectSize] offset=${offset} rate-limit, warte 2s…`)
-                await sleep(2000)
-                err = await doPlay()
-            }
-            if (err) {
-                log(`[detectSize] offset=${offset} HTTP-Fehler: ${err.message}`)
-                return null
-            }
-            await sleep(550)
-            let state = null
-            try { state = await this._player.getCurrentState() } catch (_) {}
-            let uri = state?.track_window?.current_track?.uri || null
-            // Retry bei null-State (Player war noch nicht synchron)
-            if (!uri) {
-                await sleep(400)
+        try {
+            // Spielt offset, wartet auf State, gibt {uri, contextUri} zurück (oder null).
+            // Bei 429-Rate-Limit: 2s warten, retry. Bei null-State: 400ms warten, retry.
+            const playAndGetState = async (offset) => {
+                const doPlay = async () => {
+                    try { await this.playContextAtOffset(contextUri, offset); return null }
+                    catch (e) { return e }
+                }
+                let err = await doPlay()
+                if (err && /429|rate|too many/i.test(err.message || '')) {
+                    warn(`[detectSize] offset=${offset} rate-limit, warte 2s…`)
+                    await sleep(2000)
+                    err = await doPlay()
+                }
+                if (err) {
+                    log(`[detectSize] offset=${offset} HTTP-Fehler: ${err.message}`)
+                    return null
+                }
+                await sleep(550)
+                let state = null
                 try { state = await this._player.getCurrentState() } catch (_) {}
-                uri = state?.track_window?.current_track?.uri || null
-                if (uri) log(`[detectSize] offset=${offset} URI erst beim Retry verfügbar`)
+                let uri = state?.track_window?.current_track?.uri || null
+                // Retry bei null-State (Player war noch nicht synchron)
+                if (!uri) {
+                    await sleep(400)
+                    try { state = await this._player.getCurrentState() } catch (_) {}
+                    uri = state?.track_window?.current_track?.uri || null
+                    if (uri) log(`[detectSize] offset=${offset} URI erst beim Retry verfügbar`)
+                }
+                const ctxUri = state?.context?.uri || null
+                return uri ? { uri, ctxUri } : null
             }
-            const ctxUri = state?.context?.uri || null
-            return uri ? { uri, ctxUri } : null
-        }
 
-        // VERIFIZIERTE Probe: prüft offset UND offset+1.
-        // Liefert { valid, uri }:
-        //  - valid=true wenn beide einen Track liefern, URIs unterschiedlich sind UND
-        //    der Player-Context der angeforderten Playlist entspricht.
-        //  - valid=false wenn Spotify in Autoplay/Radio fällt (anderer context.uri),
-        //    die Anfrage stillschweigend ignoriert (gleiche URI für beide) oder Fehler.
-        const verifyOffset = async (offset) => {
-            const a = await playAndGetState(offset)
-            if (!a) return { valid: false, reason: 'no-state-A' }
-            if (a.ctxUri && a.ctxUri !== contextUri) {
-                return { valid: false, reason: `autoplay-${a.ctxUri.slice(-12)}` }
+            // VERIFIZIERTE Probe: prüft offset UND offset+1.
+            // Liefert { valid, uri }:
+            //  - valid=true wenn beide einen Track liefern, URIs unterschiedlich sind UND
+            //    der Player-Context der angeforderten Playlist entspricht.
+            //  - valid=false wenn Spotify in Autoplay/Radio fällt (anderer context.uri),
+            //    die Anfrage stillschweigend ignoriert (gleiche URI für beide) oder Fehler.
+            const verifyOffset = async (offset) => {
+                const a = await playAndGetState(offset)
+                if (!a) return { valid: false, reason: 'no-state-A' }
+                if (a.ctxUri && a.ctxUri !== contextUri) {
+                    return { valid: false, reason: `autoplay-${a.ctxUri.slice(-12)}` }
+                }
+                await sleep(180)
+                const b = await playAndGetState(offset + 1)
+                if (!b) return { valid: false, reason: 'no-state-B' }
+                if (b.ctxUri && b.ctxUri !== contextUri) {
+                    return { valid: false, reason: `autoplay-${b.ctxUri.slice(-12)}` }
+                }
+                if (a.uri === b.uri) return { valid: false, reason: 'stuck' }
+                return { valid: true, uri: a.uri }
             }
-            await sleep(180)
-            const b = await playAndGetState(offset + 1)
-            if (!b) return { valid: false, reason: 'no-state-B' }
-            if (b.ctxUri && b.ctxUri !== contextUri) {
-                return { valid: false, reason: `autoplay-${b.ctxUri.slice(-12)}` }
+
+            // Geometric phase: jeder Probe wird mit verifyOffset doppelt getestet.
+            // Wenn offset N valid ist, wissen wir: Playlist hat mind. N+2 Tracks.
+            const probes = [0, 25, 100, 400, 1000, 2500, 5000].filter(p => p <= maxSearch)
+            let validMax = -1   // höchster Offset bewiesen "valid" → Playlist >= validMax + 2
+            let invalidMin = -1 // niedrigster Offset bewiesen "invalid" → Playlist <= invalidMin + 1
+            let stepIdx = 0
+            const totalSteps = probes.length + 12
+
+            for (const p of probes) {
+                stepIdx++
+                onProgress?.({ step: stepIdx, totalSteps, label: `Teste Offset ${p}…` })
+                let r = await verifyOffset(p)
+                for (let retry = 0; p === 0 && !r.valid && retry < 2; retry++) {
+                    warn(`[detectSize] offset 0 ungültig (${r.reason}) – Wiederholung ${retry + 1}`)
+                    await sleep(1000)
+                    r = await verifyOffset(p)
+                }
+                log(`[detectSize] geo offset=${p} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
+                if (r.valid) {
+                    validMax = p
+                } else {
+                    invalidMin = p
+                    break
+                }
+                await sleep(220)
             }
-            if (a.uri === b.uri) return { valid: false, reason: 'stuck' }
-            return { valid: true, uri: a.uri }
-        }
 
-        // Geometric phase: jeder Probe wird mit verifyOffset doppelt getestet.
-        // Wenn offset N valid ist, wissen wir: Playlist hat mind. N+2 Tracks.
-        const probes = [0, 25, 100, 400, 1000, 2500, 5000].filter(p => p <= maxSearch)
-        let validMax = -1   // höchster Offset bewiesen "valid" → Playlist >= validMax + 2
-        let invalidMin = -1 // niedrigster Offset bewiesen "invalid" → Playlist <= invalidMin + 1
-        let stepIdx = 0
-        const totalSteps = probes.length + 12
-
-        for (const p of probes) {
-            stepIdx++
-            onProgress?.({ step: stepIdx, totalSteps, label: `Teste Offset ${p}…` })
-            const r = await verifyOffset(p)
-            log(`[detectSize] geo offset=${p} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
-            if (r.valid) {
-                validMax = p
-            } else {
-                invalidMin = p
-                break
+            // Nicht einmal offset 0 ist "valid": NICHT raten (früher: Größe 1 → Spiel mit nur einem Song
+            // und hörbarer Wiedergabe), sondern Fehler melden – der Aufrufer zeigt ihn an.
+            if (validMax < 0) {
+                throw new Error('Playlist-Größe konnte nicht ermittelt werden (Wiedergabe-Test fehlgeschlagen). Bitte erneut versuchen.')
             }
-            await sleep(220)
-        }
 
-        // Spezialfall: nicht einmal offset 0 ist "valid" → Playlist hat 0 oder 1 Track
-        if (validMax < 0) {
+            if (invalidMin < 0) {
+                return validMax + 2 // alle Probes gültig, Playlist mind. so groß
+            }
+
+            // Binary Search auf Offsets [validMax, invalidMin]
+            let iter = 0
+            while (invalidMin - validMax > 1 && iter < 14) {
+                iter++
+                const mid = Math.floor((validMax + invalidMin) / 2)
+                stepIdx++
+                onProgress?.({
+                    step: Math.min(stepIdx, totalSteps),
+                    totalSteps,
+                    label: `Suche zwischen ${validMax + 2} und ${invalidMin + 1} Songs…`
+                })
+
+                const r = await verifyOffset(mid)
+                log(`[detectSize] bsearch offset=${mid} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
+                if (r.valid) validMax = mid
+                else invalidMin = mid
+                await sleep(220)
+            }
+
+            // validMax ist der höchste Offset, der mit Sicherheit Track ungleich Nachbar hat
+            // → Playlist hat mindestens validMax + 2 Tracks
+            const size = validMax + 2
+            log(`[detectSize] FINAL: ${size} Tracks (validMax=${validMax}, invalidMin=${invalidMin})`)
+            return size
+        } finally {
+            // Immer pausieren + Lautstärke zurücksetzen – auch bei Fehlern
             await cleanup()
-            // Falls offset 0 zumindest etwas geliefert hat, ist mind. 1 Track da
-            const fallback = await playAndGetState(0)
-            if (fallback) return 1
-            throw new Error('Playlist konnte nicht abgespielt werden.')
         }
-
-        if (invalidMin < 0) {
-            await cleanup()
-            return validMax + 2 // alle Probes gültig, Playlist mind. so groß
-        }
-
-        // Binary Search auf Offsets [validMax, invalidMin]
-        let iter = 0
-        while (invalidMin - validMax > 1 && iter < 14) {
-            iter++
-            const mid = Math.floor((validMax + invalidMin) / 2)
-            stepIdx++
-            onProgress?.({
-                step: Math.min(stepIdx, totalSteps),
-                totalSteps,
-                label: `Suche zwischen ${validMax + 2} und ${invalidMin + 1} Songs…`
-            })
-
-            const r = await verifyOffset(mid)
-            log(`[detectSize] bsearch offset=${mid} → ${r.valid ? 'VALID' : `INVALID (${r.reason})`}`)
-            if (r.valid) validMax = mid
-            else invalidMin = mid
-            await sleep(220)
-        }
-
-        await cleanup()
-
-        // validMax ist der höchste Offset, der mit Sicherheit Track ungleich Nachbar hat
-        // → Playlist hat mindestens validMax + 2 Tracks
-        const size = validMax + 2
-        log(`[detectSize] FINAL: ${size} Tracks (validMax=${validMax}, invalidMin=${invalidMin})`)
-        return size
     }
 
     async playContextAtOffset(contextUri, offsetPosition, deviceId) {
         const token = await this.getStoredUserToken()
         if (!token) throw new Error('Nicht mit Spotify verbunden.')
-        const targetId = deviceId || this._deviceId
-        if (!targetId) throw new Error('Kein Spotify-Gerät verfügbar. Warte bis der Player bereit ist.')
-        const url = `${SPOTIFY_API_BASE}/me/player/play?device_id=${targetId}`
-        const body = { context_uri: contextUri, offset: { position: offsetPosition } }
-        const res = await fetch(url, {
-            method: 'PUT',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        })
-        if (!res.ok) {
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+        const body = JSON.stringify({ context_uri: contextUri, offset: { position: offsetPosition } })
+
+        let lastError = null
+        for (let attempt = 1; attempt <= 4; attempt++) {
+            const targetId = deviceId || this._deviceId
+            if (!targetId) throw new Error('Kein Spotify-Gerät verfügbar. Warte bis der Player bereit ist.')
+            const res = await fetch(`${SPOTIFY_API_BASE}/me/player/play?device_id=${targetId}`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body
+            })
+            if (res.ok) return
             const err = await res.json().catch(() => ({}))
-            throw new Error(err.error?.message || 'Wiedergabe fehlgeschlagen')
+            lastError = new Error(err.error?.message || 'Wiedergabe fehlgeschlagen')
+            // 404 / "Device not found": Gerät noch nicht registriert → erneut aktivieren und wiederholen
+            if (res.status === 404 && attempt < 4) {
+                warn(`[SpotifyService] play 404 (Versuch ${attempt}) – aktiviere Gerät neu`)
+                await this.activateDevice(targetId)
+                await sleep(400 * attempt)
+                continue
+            }
+            throw lastError
         }
+        throw lastError
     }
 
     /**
@@ -1138,6 +1216,7 @@ class SpotifyService {
             this._player = null
         }
         this._deviceId = null
+        this._lastDisconnect = Date.now()
     }
 }
 
