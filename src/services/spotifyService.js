@@ -50,6 +50,11 @@ class SpotifyService {
         this._deviceId = null
         this._player = null
         this._sdkReady = false
+        this._pendingPlayer = null          // Player, der noch nicht 'ready' gemeldet hat (sonst ginge er beim Trennen verloren)
+        this._lastState = null              // letzter Zustand aus player_state_changed
+        this._lastStateAt = 0
+        this._stateSubs = new Set()
+        this._errorSubs = new Set()
 
         if (!this.clientId) {
             warn('⚠️ VITE_SPOTIFY_CLIENT_ID fehlt! Überprüfe .env.local')
@@ -516,7 +521,7 @@ class SpotifyService {
      * Initialisiert den Web Playback Player (Host). Erzeugt ein Gerät im Browser.
      * onReady({ deviceId }) wird aufgerufen, wenn das Gerät bereit ist.
      */
-    async initPlaybackPlayer(onReady, onError, { activate = false } = {}) {
+    async initPlaybackPlayer(onReady, onError, { activate = false, name = 'Amplify Host' } = {}) {
         const token = await this.getStoredUserToken()
         if (!token) {
             onError?.('Nicht mit Spotify angemeldet.')
@@ -529,16 +534,19 @@ class SpotifyService {
         }
 
         const player = new window.Spotify.Player({
-            name: 'Amplify Host',
+            name,
             getOAuthToken: (cb) => {
                 this.getStoredUserToken().then((t) => cb(t || ''))
             },
             volume: 0.8
         })
 
+        this._pendingPlayer = player
+
         player.addListener('ready', async ({ device_id }) => {
             this._deviceId = device_id
             this._player = player
+            this._pendingPlayer = null
             log('✅ Spotify Web Playback bereit, Device ID:', device_id)
             // Spotify kennt das neue Gerät serverseitig oft erst verzögert → erst aktivieren,
             // sonst kommt beim ersten Abspielen "Device not found".
@@ -567,6 +575,20 @@ class SpotifyService {
 
         player.addListener('playback_error', ({ message }) => {
             warn('Spotify Playback-Fehler:', message)
+            this._errorSubs.forEach((cb) => { try { cb(new Error(message || 'Playback-Fehler')) } catch (e) { console.error(e) } })
+        })
+
+        // Browser blockiert Audio ohne Nutzergeste → Hinweis an die Oberfläche
+        player.addListener('autoplay_failed', () => {
+            this._errorSubs.forEach((cb) => { try { cb('autoplay_failed') } catch (e) { console.error(e) } })
+        })
+
+        // Echter Wiedergabezustand: Grundlage, um zu wissen, WELCHER Titel WIRKLICH läuft
+        player.addListener('player_state_changed', (state) => {
+            const at = Date.now()
+            this._lastState = state || null
+            this._lastStateAt = at
+            this._stateSubs.forEach((cb) => { try { cb(state || null, at) } catch (e) { console.error(e) } })
         })
 
         player.connect()
@@ -581,7 +603,7 @@ class SpotifyService {
      * Stellt sicher, dass der Web Playback Player bereit ist (Promise).
      * Wird vor detectPlaylistSize während PHASES.LOADING benötigt.
      */
-    async ensurePlaybackPlayerReady() {
+    async ensurePlaybackPlayerReady({ name = 'Amplify Host' } = {}) {
         if (this.isPlaybackReady()) return
 
         // Nach disconnectPlayer() kennt Spotify das alte Gerät noch kurz → Neustart-Race vermeiden
@@ -605,7 +627,7 @@ class SpotifyService {
             this.initPlaybackPlayer(
                 () => done(resolve),
                 (msg) => done(reject, new Error(msg || 'Spotify Player konnte nicht gestartet werden.')),
-                { activate: true }
+                { activate: true, name }
             )
         })
     }
@@ -656,6 +678,68 @@ class SpotifyService {
 
     getDeviceId() {
         return this._deviceId
+    }
+
+    // ── Wiedergabezustand des lokalen Players ────────────────────────────────
+    subscribeState(cb) {
+        this._stateSubs.add(cb)
+        return () => this._stateSubs.delete(cb)
+    }
+
+    subscribeErrors(cb) {
+        this._errorSubs.add(cb)
+        return () => this._errorSubs.delete(cb)
+    }
+
+    getLastState() {
+        return this._lastState ? { state: this._lastState, at: this._lastStateAt } : null
+    }
+
+    /** Muss synchron in einem Klick aufgerufen werden (Autoplay-Regeln von Safari/iOS/Chrome). */
+    activateAudio() {
+        try { return this._player?.activateElement?.() } catch (_) { return undefined }
+    }
+
+    async getPlayerState() {
+        try { return (await this._player?.getCurrentState()) || null } catch (_) { return null }
+    }
+
+    async seekLocal(ms) { await this._player?.seek(ms) }
+    async resumeLocal() { await this._player?.resume() }
+
+    async getVolumeLocal() {
+        try { return await this._player?.getVolume() } catch (_) { return null }
+    }
+
+    async setVolumeLocal(v) {
+        try { await this._player?.setVolume(v) } catch (_) { /* iOS: Lautstärke nicht setzbar */ }
+    }
+
+    /**
+     * Stellt sicher, dass Shuffle und Wiederholen AUS sind – und prüft es am echten Zustand.
+     * Mit Shuffle ignoriert Spotify die gewünschte Position, mit "Titel wiederholen" bleibt der Player hängen.
+     */
+    async ensureLinearPlayback() {
+        const ok = (st) => st && st.shuffle === false && st.repeat_mode === 0
+        let st = await this.getPlayerState()
+        if (ok(st)) return true
+        const token = await this.getStoredUserToken()
+        const targetId = this._deviceId
+        if (!token || !targetId) return false
+        const put = (path) => fetch(`${SPOTIFY_API_BASE}/me/player/${path}&device_id=${targetId}`, {
+            method: 'PUT', headers: { 'Authorization': `Bearer ${token}` }
+        }).catch(() => null)
+        if (!st || st.shuffle) await put('shuffle?state=false')
+        if (!st || st.repeat_mode !== 0) await put('repeat?state=off')
+        if (!st) return false   // noch nichts geladen: nicht prüfbar (wird nach dem Start am echten Zustand kontrolliert)
+        // Nachprüfen (der Zustand kommt asynchron zurück)
+        for (let i = 0; i < 6; i++) {
+            await new Promise(r => setTimeout(r, 250))
+            st = await this.getPlayerState()
+            if (ok(st)) return true
+        }
+        warn('[SpotifyService] Shuffle/Wiederholen ließ sich nicht verlässlich ausschalten', st && { shuffle: st.shuffle, repeat: st.repeat_mode })
+        return !!ok(st)
     }
 
     /**
@@ -898,7 +982,7 @@ class SpotifyService {
      *
      * Returns: ermittelte Track-Anzahl (Anzahl gültiger Offsets)
      */
-    async detectPlaylistSize(contextUri, { maxSearch = 5000, onProgress } = {}) {
+    async detectPlaylistSize(contextUri, { maxSearch = 5000, onProgress, shouldCancel } = {}) {
         if (!this._player) throw new Error('Player nicht bereit')
 
         const sleep = (ms) => new Promise(r => setTimeout(r, ms))
@@ -968,6 +1052,7 @@ class SpotifyService {
             //  - valid=false wenn Spotify in Autoplay/Radio fällt (anderer context.uri),
             //    die Anfrage stillschweigend ignoriert (gleiche URI für beide) oder Fehler.
             const verifyOffset = async (offset) => {
+                if (shouldCancel?.()) throw new Error('abgebrochen')
                 const a = await playAndGetState(offset)
                 if (!a) return { valid: false, reason: 'no-state-A' }
                 if (a.ctxUri && a.ctxUri !== contextUri) {
@@ -1051,26 +1136,13 @@ class SpotifyService {
         }
     }
 
-    async playContextAtOffset(contextUri, offsetPosition, deviceId, { shuffleOff = false } = {}) {
-        if (shuffleOff) await this._setShuffleOff(deviceId)
+    async playContextAtOffset(contextUri, offsetPosition, deviceId) {
         return this._playRequest({ context_uri: contextUri, offset: { position: offsetPosition } }, deviceId)
     }
 
     /** Spielt genau einen Titel (URI) auf dem Web-Player – unabhängig von Shuffle/Context. */
     async playUriOnPlayer(trackUri, deviceId) {
         return this._playRequest({ uris: [trackUri] }, deviceId)
-    }
-
-    async _setShuffleOff(deviceId) {
-        try {
-            const token = await this.getStoredUserToken()
-            const targetId = deviceId || this._deviceId
-            if (!token || !targetId) return
-            await fetch(`${SPOTIFY_API_BASE}/me/player/shuffle?state=false&device_id=${targetId}`, {
-                method: 'PUT',
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-        } catch (_) { /* Shuffle-Aus ist Best-Effort */ }
     }
 
     async _playRequest(payload, deviceId) {
@@ -1080,7 +1152,7 @@ class SpotifyService {
         const body = JSON.stringify(payload)
 
         let lastError = null
-        for (let attempt = 1; attempt <= 4; attempt++) {
+        for (let attempt = 1; attempt <= 5; attempt++) {
             const targetId = deviceId || this._deviceId
             if (!targetId) throw new Error('Kein Spotify-Gerät verfügbar. Warte bis der Player bereit ist.')
             const res = await fetch(`${SPOTIFY_API_BASE}/me/player/play?device_id=${targetId}`, {
@@ -1091,60 +1163,34 @@ class SpotifyService {
             if (res.ok) return
             const err = await res.json().catch(() => ({}))
             lastError = new Error(err.error?.message || 'Wiedergabe fehlgeschlagen')
-            // 404 / "Device not found": Gerät noch nicht registriert → warten und wiederholen
+            lastError.status = res.status
+
             if (res.status === 404 && attempt < 4) {
+                // Gerät noch nicht registriert → warten und wiederholen
                 warn(`[SpotifyService] play 404 (Versuch ${attempt}) – warte auf Gerät`)
                 await this.activateDevice(targetId)
                 await sleep(400 * attempt)
                 continue
             }
+            if (res.status === 429) {
+                // Rate-Limit: Wartezeit beachten (Retry-After, falls lesbar), sonst kurz warten
+                const wait = Number(res.headers.get('Retry-After')) || 2
+                if (wait > 10 || attempt >= 3) {
+                    throw new Error('Spotify bremst gerade die Anfragen aus. Bitte kurz warten und nochmal tippen.')
+                }
+                warn(`[SpotifyService] play 429 – warte ${wait}s`)
+                await sleep(wait * 1000 + 200)
+                continue
+            }
+            if (res.status >= 500 && attempt < 4) {
+                // Serverfehler (z. B. 502): Play ist idempotent → erneut versuchen
+                warn(`[SpotifyService] play ${res.status} (Versuch ${attempt}) – wiederhole`)
+                await sleep(500 * attempt)
+                continue
+            }
             throw lastError
         }
         throw lastError
-    }
-
-    /** Wartet bis der lokale Player einen Titel meldet; liefert {uri, trackId, trackName, artist, imageUrl} oder null. */
-    async waitForLocalTrack(timeoutMs = 2500) {
-        const sleep = (ms) => new Promise(r => setTimeout(r, ms))
-        const until = Date.now() + timeoutMs
-        while (Date.now() < until) {
-            try {
-                const state = await this._player?.getCurrentState()
-                const t = state?.track_window?.current_track
-                if (t?.uri) {
-                    return {
-                        uri: t.uri,
-                        trackId: t.id,
-                        trackName: t.name,
-                        artist: (t.artists || []).map(a => a.name).join(', '),
-                        imageUrl: t.album?.images?.[0]?.url || null
-                    }
-                }
-            } catch (_) { /* weiter versuchen */ }
-            await sleep(200)
-        }
-        return null
-    }
-
-    async waitForLocalTrackUri(timeoutMs = 2500) {
-        return (await this.waitForLocalTrack(timeoutMs))?.uri || null
-    }
-
-    /**
-     * Denselben, bereits geladenen Titel von vorn abspielen (seek + resume).
-     * Kein neuer Track-Load → keine neue DRM-Lizenzanfrage (Spotify limitiert die, sonst 429/Knistern).
-     * Gibt false zurück, wenn gerade ein anderer Titel geladen ist (dann per URI abspielen).
-     */
-    async replayLocal(trackUri) {
-        try {
-            const state = await this._player?.getCurrentState()
-            if (state?.track_window?.current_track?.uri !== trackUri) return false
-            await this._player.seek(0)
-            await this._player.resume()
-            return true
-        } catch (_) {
-            return false
-        }
     }
 
     /**
@@ -1292,7 +1338,12 @@ class SpotifyService {
             this._player.disconnect()
             this._player = null
         }
+        if (this._pendingPlayer) {
+            try { this._pendingPlayer.disconnect() } catch (_) { /* egal */ }
+            this._pendingPlayer = null
+        }
         this._deviceId = null
+        this._lastState = null
         this._lastDisconnect = Date.now()
     }
 }
