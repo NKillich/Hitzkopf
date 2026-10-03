@@ -611,35 +611,47 @@ class SpotifyService {
     }
 
     /**
-     * Aktiviert das Web-Player-Gerät (Wiedergabe dorthin übertragen, ohne zu starten) und
-     * schaltet Shuffle aus. Wiederholt bei 404, bis Spotify das Gerät kennt.
+     * Wartet, bis Spotify das Web-Player-Gerät in der Geräteliste führt, und schaltet Shuffle aus.
+     * Bewusst KEIN Playback-Transfer: der würde (play:false = "Zustand beibehalten") eine
+     * laufende Wiedergabe auf dem Konto auf diesen Player mitnehmen und sofort abspielen.
      */
     async activateDevice(deviceId) {
-        const token = await this.getStoredUserToken()
-        if (!token || !deviceId) return false
+        if (!deviceId) return false
         const sleep = (ms) => new Promise(r => setTimeout(r, ms))
-        for (let attempt = 1; attempt <= 6; attempt++) {
+        for (let attempt = 1; attempt <= 10; attempt++) {
             try {
-                const res = await fetch(`${SPOTIFY_API_BASE}/me/player`, {
-                    method: 'PUT',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ device_ids: [deviceId], play: false })
-                })
-                if (res.ok || res.status === 204) {
-                    log(`[SpotifyService] Gerät aktiviert (Versuch ${attempt})`)
+                const devices = await this.getDevices()
+                if (devices.some(d => d.id === deviceId)) {
+                    log(`[SpotifyService] Gerät bekannt (Versuch ${attempt})`)
+                    const token = await this.getStoredUserToken()
                     await fetch(`${SPOTIFY_API_BASE}/me/player/shuffle?state=false&device_id=${deviceId}`, {
                         method: 'PUT',
                         headers: { 'Authorization': `Bearer ${token}` }
                     }).catch(() => {})
                     return true
                 }
-                warn(`[SpotifyService] Gerät aktivieren: HTTP ${res.status} (Versuch ${attempt})`)
             } catch (e) {
-                warn('[SpotifyService] Gerät aktivieren fehlgeschlagen:', e.message)
+                warn('[SpotifyService] Geräteliste fehlgeschlagen:', e.message)
             }
-            await sleep(500 * attempt)
+            await sleep(500)
         }
+        warn('[SpotifyService] Gerät in der Geräteliste nicht gefunden')
         return false
+    }
+
+    /** Pausiert direkt den lokalen Web-Player (SDK), unabhängig von der Web-API. */
+    async pauseLocalPlayer() {
+        try { await this._player?.pause() } catch (_) { /* ignorieren */ }
+    }
+
+    /** true/false = lokaler Player pausiert/spielt, null = unbekannt (kein Player/State). */
+    async isLocalPaused() {
+        try {
+            const state = await this._player?.getCurrentState()
+            return state ? !!state.paused : null
+        } catch (_) {
+            return null
+        }
     }
 
     getDeviceId() {

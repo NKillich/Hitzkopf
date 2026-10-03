@@ -118,6 +118,7 @@ export default function SecondSound({ onBack }) {
     const currentIndexRef = useRef(0)
     const isAnsweringRef = useRef(false)        // verhindert Doppel-Klick auf Antwort-Buttons
     const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
+    const allowPlaybackRef = useRef(false)      // true nur, solange der Spieler einen Play-Button gedrückt hat
     const songsRef = useRef([])
     const searchInputRef = useRef(null)
     const lastPlaySecondsRef = useRef(null)
@@ -224,6 +225,25 @@ export default function SecondSound({ onBack }) {
             setPlayerReady(false)
         }
     }, [phase])
+
+    // Wächter: Während des Spiels darf nur nach Klick auf einen Play-Button etwas laufen.
+    // Fängt alles ab, was Spotify von sich aus startet (Resume nach Gerätewechsel,
+    // fremde Wiedergabe auf dem Konto, fehlgeschlagene Pause usw.).
+    useEffect(() => {
+        if (phase !== PHASES.GAME || !playerReady) return
+        let stopped = false
+        const tick = async () => {
+            if (stopped || allowPlaybackRef.current) return
+            const paused = await spotifyService.isLocalPaused()
+            if (!stopped && !allowPlaybackRef.current && paused === false) {
+                log('[SS] Wächter: unerwartete Wiedergabe → pausiere')
+                await spotifyService.pauseLocalPlayer()
+            }
+        }
+        tick()
+        const id = setInterval(tick, 500)
+        return () => { stopped = true; clearInterval(id) }
+    }, [phase, playerReady])
 
     const handleSpotifyLogin = async () => {
         try {
@@ -369,6 +389,8 @@ export default function SecondSound({ onBack }) {
             setSizeDetectionProgress(null)
 
             // Sicherstellen, dass vor dem ersten Klick nichts mehr läuft
+            allowPlaybackRef.current = false
+            await spotifyService.pauseLocalPlayer()
             await spotifyService.pausePlayback().catch(() => {})
 
             if (slots.length === 0) {
@@ -413,7 +435,9 @@ export default function SecondSound({ onBack }) {
             clearTimeout(timerRef.current)
             timerRef.current = null
         }
+        allowPlaybackRef.current = false
         setIsPlaying(false)
+        await spotifyService.pauseLocalPlayer()
         await spotifyService.pausePlayback().catch(() => {})
     }
 
@@ -441,6 +465,7 @@ export default function SecondSound({ onBack }) {
 
         lastPlaySecondsRef.current = seconds
         isPlayingRequestRef.current = true
+        allowPlaybackRef.current = true
 
         try {
             await spotifyService.playContextAtOffset(song.playlistUri, song.offset)
@@ -462,6 +487,8 @@ export default function SecondSound({ onBack }) {
             if (seconds !== null) {
                 timerRef.current = setTimeout(async () => {
                     dbg(`Auto-Pause nach ${seconds}s`)
+                    allowPlaybackRef.current = false
+                    await spotifyService.pauseLocalPlayer()
                     await spotifyService.pausePlayback().catch(() => {})
                     setIsPlaying(false)
                     timerRef.current = null
@@ -469,6 +496,7 @@ export default function SecondSound({ onBack }) {
             }
         } catch (e) {
             isPlayingRequestRef.current = false
+            allowPlaybackRef.current = false
             dbg('handlePlayFor Fehler:', e.message)
             setPlayerError(e.message || 'Wiedergabe fehlgeschlagen')
             setIsPlaying(false)
@@ -480,6 +508,7 @@ export default function SecondSound({ onBack }) {
         dbg(`advanceAfterAnswer: correct=${correct} | currentIndex=${currentIndex} | playedCount=${playedCount} | targetCount=${targetCount}`)
         dbg(`  aktueller Track: "${currentTrackInfo?.trackName}" von "${currentTrackInfo?.artist}"`)
         fetchGenRef.current++       // veraltete Polls abbrechen
+        allowPlaybackRef.current = false
         isAnsweringRef.current = false
         isPlayingRequestRef.current = false
         if (correct) {
