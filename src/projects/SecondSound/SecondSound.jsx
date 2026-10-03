@@ -80,14 +80,14 @@ export default function SecondSound({ onBack }) {
     )
 
     // Setup state
-    const [searchMode, setSearchMode] = useState('playlist') // 'playlist' | 'mine'
+    const [searchMode, setSearchMode] = useState('mine') // 'playlist' | 'mine'
     const [playlistQuery, setPlaylistQuery] = useState('')
     const [playlistResults, setPlaylistResults] = useState([])
     const [myPlaylists, setMyPlaylists] = useState([])
     const [myPlaylistsLoaded, setMyPlaylistsLoaded] = useState(false)
     const [myPlaylistsError, setMyPlaylistsError] = useState(null)
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
-    const [songCount, setSongCount] = useState(null)
+    const [songCount, setSongCount] = useState(10)
     const [maxUnlockedIndex, setMaxUnlockedIndex] = useState(0)
     // True sobald der aktuelle Song mindestens 1× abgespielt wurde – schaltet
     // Aufdecken- und Antwort-Buttons frei. Verhindert Klick-Spam mit 403/502.
@@ -604,6 +604,12 @@ export default function SecondSound({ onBack }) {
         return RESULT_MESSAGES.find(m => percent >= m.minPercent) || RESULT_MESSAGES[RESULT_MESSAGES.length - 1]
     }
 
+    // Setup: eigene Playlists direkt beim Öffnen laden (häufigster Fall)
+    useEffect(() => {
+        if (phase === PHASES.SETUP && searchMode === 'mine') handleLoadMyPlaylists()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase])
+
     const currentSong = songs[currentIndex] // {playlistUri, offset, playlistName, playlistImage}
 
     // ─── Login ───────────────────────────────────────────────────────────────
@@ -612,35 +618,25 @@ export default function SecondSound({ onBack }) {
             <div className={wrapperClass}>
                 <ThemeToggle />
                 <div className={styles.bg} />
-                <div className={styles.loginContainer}>
-                    <div className={styles.appIcon}>🎧</div>
-                    <h1 className={styles.appTitle}>Song raten</h1>
-                    <p className={styles.appSubtitle}>Das Spotify Musik-Quiz</p>
+                <div className={`${styles.uxPage} ${styles.uxCenterPage}`}>
+                    <div className={styles.uxLogo}>🎧</div>
+                    <h1 className={styles.uxTitle}>Song raten</h1>
+                    <p className={styles.uxLead}>
+                        Hör einen Song nur 1, 5, 10 oder 30 Sekunden lang – und rate, welcher es ist.
+                    </p>
 
-                    {needsRelogin ? (
-                        <div className={styles.reloginBanner}>
-                            <strong>Neu anmelden erforderlich</strong>
-                            <p>Dein Token hat kein <code>playlist-read-private</code>. Klicke auf den Button — Spotify zeigt jetzt den Berechtigungsdialog und gewährt alle Scopes.</p>
-                            <p className={styles.scopeDebug}>
-                                Aktuelle Scopes: <code>{spotifyService.getGrantedScopes() || '(keine gespeichert)'}</code>
-                            </p>
+                    {needsRelogin && (
+                        <div className={styles.uxNotice}>
+                            Wir brauchen eine neue Freigabe von Spotify, um deine Playlists zu lesen. Tippe unten auf „Mit Spotify anmelden“.
                         </div>
-                    ) : (
-                        <p className={styles.loginHint}>
-                            Melde dich an und errate Songs aus deinen eigenen Playlists.
-                        </p>
                     )}
 
-                    <button className={styles.spotifyBtn} onClick={handleSpotifyLogin}>
-                        <svg className={styles.spotifyIcon} viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                        </svg>
+                    <button className={styles.uxPrimary} onClick={handleSpotifyLogin}>
                         Mit Spotify anmelden
                     </button>
+                    <p className={styles.uxFine}>Du brauchst Spotify Premium.</p>
 
-                    <button className={styles.loginBackBtnInline} onClick={handleBack}>
-                        ← Zurück zum Menü
-                    </button>
+                    <button className={styles.uxLink} onClick={handleBack}>← Zurück zum Menü</button>
                 </div>
             </div>
         )
@@ -648,241 +644,166 @@ export default function SecondSound({ onBack }) {
 
     // ─── Setup ───────────────────────────────────────────────────────────────
     if (phase === PHASES.SETUP) {
+        const countOptions = [5, 10, 15, 20]
+        const isSelected = (id) => selectedPlaylists.some(p => p.id === id)
+        const togglePlaylist = (p) => (isSelected(p.id) ? handleRemovePlaylist(p.id) : handleAddPlaylist(p))
+        const visibleList = searchMode === 'mine' ? myPlaylists : playlistResults
+        const playlistRow = (p) => (
+            <button
+                key={p.id}
+                className={`${styles.uxItem} ${isSelected(p.id) ? styles.uxItemOn : ''}`}
+                onClick={() => togglePlaylist(p)}
+                aria-pressed={isSelected(p.id)}
+            >
+                {p.imageUrl
+                    ? <img src={p.imageUrl} alt="" className={styles.uxThumb} />
+                    : <div className={styles.uxThumb}>🎵</div>}
+                <span className={styles.uxItemText}>
+                    <span className={styles.uxItemName}>{p.name}</span>
+                    <span className={styles.uxItemMeta}>
+                        {[searchMode === 'playlist' ? p.owner : '', p.trackCount ? `${p.trackCount} Songs` : ''].filter(Boolean).join(' · ')}
+                    </span>
+                </span>
+                <span className={styles.uxCheck}>{isSelected(p.id) ? '✓' : '+'}</span>
+            </button>
+        )
+        const startLabel = selectedPlaylists.length === 0
+            ? 'Spiel starten'
+            : `${songCount} Songs starten`
+
         return (
             <div className={wrapperClass}>
                 <ThemeToggle />
                 <div className={styles.bg} />
-                <div className={styles.setupContainer}>
-                    <h1 className={styles.appTitleSmall}>🎧 Song raten</h1>
-                    <p className={styles.setupHint}>Wähle Playlists aus, stelle die Song-Anzahl ein und starte das Quiz.</p>
+                <div className={styles.uxPage}>
+                    <button className={styles.uxBack} onClick={handleBack}>← Menü</button>
+                    <h1 className={styles.uxTitle}>Song raten</h1>
+                    <p className={styles.uxLead}>
+                        Ein Song läuft nur kurz an. Wer erkennt ihn zuerst? Der Titel bleibt geheim, bis du aufdeckst.
+                    </p>
+
+                    <ol className={styles.uxHow}>
+                        <li><span>1</span>Playlist wählen</li>
+                        <li><span>2</span>Anhören: 1 → 5 → 10 → 30 s</li>
+                        <li><span>3</span>Aufdecken &amp; werten</li>
+                    </ol>
 
                     {loadingError && (
-                        <div className={styles.errorBlock}>
-                            <div className={styles.errorTitle}>⚠ Fehler beim Laden</div>
-                            <div className={styles.errorDetail}>{loadingError}</div>
+                        <div className={styles.uxError}>
+                            <strong>Das hat nicht geklappt.</strong>
+                            <span>{loadingError}</span>
                             {isAuthError && (
-                                <div className={styles.errorHelp}>
-                                    <strong>Mögliche Ursachen:</strong>
-                                    <ul>
-                                        <li>Die Playlist ist <strong>privat</strong> → Spotify neu anmelden (Knopf unten) um Playlist-Zugriff zu erlauben</li>
-                                        <li>Oder die Playlist in Spotify auf <strong>öffentlich</strong> stellen</li>
-                                    </ul>
-                                    <button
-                                        className={styles.reloginBtn}
-                                        onClick={() => {
-                                            spotifyService.clearUserTokens()
-                                            setLoadingError(null)
-                                            setPhase(PHASES.LOGIN)
-                                        }}
-                                    >
-                                        🔑 Neu bei Spotify anmelden
-                                    </button>
-                                </div>
+                                <button
+                                    className={styles.uxLink}
+                                    onClick={() => {
+                                        spotifyService.clearUserTokens()
+                                        setLoadingError(null)
+                                        setPhase(PHASES.LOGIN)
+                                    }}
+                                >
+                                    Neu bei Spotify anmelden
+                                </button>
                             )}
                         </div>
                     )}
 
-                    <div className={`${styles.stepSection} ${selectedPlaylists.length > 0 ? styles.stepDone : ''}`}>
-                        <div className={styles.stepLabel}>
-                            <span className={styles.stepNum}>1</span>
-                            Playlist(en) auswählen
-                        </div>
-                    <div className={styles.stepCard}>
-                        {/* Tab-Block: Reiter + Inhalt ohne Lücke */}
-                        <div className={styles.tabBlock}>
-                        <div className={styles.searchTabsWrapper}>
-                            <div
-                                role="tab"
-                                tabIndex={0}
-                                className={`${styles.searchTab} ${searchMode === 'playlist' ? styles.searchTabActive : ''}`}
-                                onClick={() => { setSearchMode('playlist'); setPlaylistResults([]) }}
-                                onKeyDown={e => e.key === 'Enter' && (setSearchMode('playlist'), setPlaylistResults([]))}
-                            >
-                                🔍 Playlist
-                            </div>
-                            <div
-                                role="tab"
-                                tabIndex={0}
-                                className={`${styles.searchTab} ${searchMode === 'mine' ? styles.searchTabActive : ''}`}
-                                onClick={() => { setSearchMode('mine'); handleLoadMyPlaylists() }}
-                                onKeyDown={e => e.key === 'Enter' && (setSearchMode('mine'), handleLoadMyPlaylists())}
-                            >
-                                🎧 Meine Playlists
-                            </div>
-                        </div>
-
-                        {/* Tab-Inhalt */}
-                        <div className={styles.tabContent}>
-                        {/* Playlist-Suche */}
-                        {searchMode === 'playlist' && (
-                            <>
-                                <div className={styles.searchRow}>
-                                    <input
-                                        ref={searchInputRef}
-                                        className={styles.searchInput}
-                                        placeholder="Playlist suchen..."
-                                        value={playlistQuery}
-                                        onChange={e => setPlaylistQuery(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && handleSearchPlaylists()}
-                                    />
-                                    <button
-                                        className={styles.searchBtn}
-                                        onClick={handleSearchPlaylists}
-                                        disabled={searchLoading || !playlistQuery.trim()}
-                                    >
-                                        {searchLoading ? <span className={styles.spinnerSmall} /> : 'Suchen'}
-                                    </button>
-                                </div>
-                                {playlistResults.length > 0 && (
-                                    <div className={styles.playlistResults}>
-                                        {playlistResults.map(p => {
-                                            const isAdded = !!selectedPlaylists.find(s => s.id === p.id)
-                                            return (
-                                                <button key={p.id}
-                                                    className={`${styles.playlistItem} ${isAdded ? styles.playlistItemAdded : ''}`}
-                                                    onClick={() => handleAddPlaylist(p)} disabled={isAdded}
-                                                >
-                                                    {p.imageUrl ? <img src={p.imageUrl} alt="" className={styles.playlistThumb} /> : <div className={styles.playlistThumbFallback}>🎵</div>}
-                                                    <div className={styles.playlistInfo}>
-                                                        <span className={styles.playlistName}>{p.name}</span>
-                                                        <span className={styles.playlistMeta}>{p.owner}{p.trackCount ? ` · ${p.trackCount} Songs` : ''}</span>
-                                                    </div>
-                                                    <span className={styles.addIcon}>{isAdded ? '✓' : '+'}</span>
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </>
-                        )}
-
-                        {/* Meine Playlists */}
-                        {searchMode === 'mine' && (
-                            <>
-                                {searchLoading && (
-                                    <div className={styles.loadingRow}>
-                                        <span className={styles.spinnerSmall} /> Playlists werden geladen…
-                                    </div>
-                                )}
-                                {!searchLoading && myPlaylistsError && (
-                                    <div className={styles.myPlaylistsError}>
-                                        <span>{myPlaylistsError}</span>
-                                        <button className={styles.retryBtn} onClick={() => handleLoadMyPlaylists(true)}>
-                                            Erneut versuchen
-                                        </button>
-                                    </div>
-                                )}
-                                {!searchLoading && myPlaylistsLoaded && myPlaylists.length === 0 && (
-                                    <div className={styles.userNotFound}>Keine Playlists gefunden.</div>
-                                )}
-                                {myPlaylists.length > 0 && (
-                                    <div className={styles.playlistResults}>
-                                        {myPlaylists.map(p => {
-                                            const isAdded = !!selectedPlaylists.find(s => s.id === p.id)
-                                            return (
-                                                <button key={p.id}
-                                                    className={`${styles.playlistItem} ${isAdded ? styles.playlistItemAdded : ''}`}
-                                                    onClick={() => handleAddPlaylist(p)} disabled={isAdded}
-                                                >
-                                                    {p.imageUrl ? <img src={p.imageUrl} alt="" className={styles.playlistThumb} /> : <div className={styles.playlistThumbFallback}>🎵</div>}
-                                                    <div className={styles.playlistInfo}>
-                                                        <span className={styles.playlistName}>{p.name}</span>
-                                                        <span className={styles.playlistMeta}>{p.trackCount ? `${p.trackCount} Songs` : ''}</span>
-                                                    </div>
-                                                    <span className={styles.addIcon}>{isAdded ? '✓' : '+'}</span>
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </>
-                        )}
-                        {selectedPlaylists.length > 0 && (
-                            <div className={styles.selectedSection}>
-                                <h2 className={styles.sectionTitle}>
-                                    Ausgewählt <span className={styles.badge}>{selectedPlaylists.length}</span>
-                                </h2>
-                                <div className={styles.selectedList}>
-                                    {selectedPlaylists.map(p => (
-                                        <div key={p.id} className={styles.selectedItem}>
-                                            {p.imageUrl
-                                                ? <img src={p.imageUrl} alt="" className={styles.playlistThumb} />
-                                                : <div className={styles.playlistThumbFallback}>🎵</div>
-                                            }
-                                            <div className={styles.playlistInfo}>
-                                                <span className={styles.playlistName}>{p.name}</span>
-                                                {p.trackCount > 0 && <span className={styles.playlistMeta}>{p.trackCount} Songs</span>}
-                                            </div>
-                                            <button className={styles.removeBtn} onClick={() => handleRemovePlaylist(p.id)}>✕</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        </div>{/* end tabContent */}
-                        </div>{/* end tabBlock */}
-                    </div>{/* end stepCard */}
-                    </div>{/* end stepSection 1 */}
-
-                    <div className={`${styles.stepSection} ${selectedPlaylists.length === 0 ? styles.stepDimmed : ''}`}>
-                        <div className={styles.stepLabel}>
-                            <span className={styles.stepNum}>2</span>
-                            Anzahl der zu erratenden Songs wählen
-                        </div>
-                        <div className={styles.setupCard}>
-                            <h2 className={styles.sectionTitle}>
-                                Anzahl Songs:{' '}
-                                {songCount === null
-                                    ? <span className={styles.countPlaceholder}>noch nicht gewählt</span>
-                                    : <span className={styles.countHighlight}>{songCount}</span>
-                                }
-                            </h2>
-                            <input
-                                type="range"
-                                min={3}
-                                max={30}
-                                step={1}
-                                value={songCount ?? 3}
-                                onChange={e => setSongCount(Number(e.target.value))}
-                                onMouseDown={() => { if (songCount === null) setSongCount(3) }}
-                                onTouchStart={() => { if (songCount === null) setSongCount(3) }}
-                                className={`${styles.slider} ${songCount === null ? styles.sliderUnset : ''}`}
-                            />
-                            <div className={styles.sliderLabels}>
-                                <span>3</span>
-                                <span>30</span>
-                            </div>
-                        </div>
-                    </div>{/* end stepSection 2 */}
-
-                    <div className={`${styles.stepSection} ${(selectedPlaylists.length === 0 || songCount === null) ? styles.stepDimmed : ''}`}>
-                        <div className={styles.stepLabel}>
-                            <span className={styles.stepNum}>3</span>
-                            Spiel starten
-                        </div>
+                    <h2 className={styles.uxSection}>Welche Playlist?</h2>
+                    <div className={styles.uxSeg} role="tablist">
                         <button
-                            className={styles.startBtn}
-                            onClick={handleStartGame}
-                            disabled={selectedPlaylists.length === 0}
+                            role="tab"
+                            aria-selected={searchMode === 'mine'}
+                            className={`${styles.uxSegBtn} ${searchMode === 'mine' ? styles.uxSegBtnOn : ''}`}
+                            onClick={() => { setSearchMode('mine'); handleLoadMyPlaylists() }}
                         >
-                            Spiel starten →
+                            Meine Playlists
                         </button>
-                    </div>{/* end stepSection 3 */}
+                        <button
+                            role="tab"
+                            aria-selected={searchMode === 'playlist'}
+                            className={`${styles.uxSegBtn} ${searchMode === 'playlist' ? styles.uxSegBtnOn : ''}`}
+                            onClick={() => setSearchMode('playlist')}
+                        >
+                            Suchen
+                        </button>
+                    </div>
 
-                    <button className={styles.setupBackBtn} onClick={handleBack}>
-                        ← Zurück zum Menü
-                    </button>
+                    {searchMode === 'playlist' && (
+                        <div className={styles.uxSearchRow}>
+                            <input
+                                ref={searchInputRef}
+                                className={styles.uxInput}
+                                placeholder="Playlist suchen …"
+                                value={playlistQuery}
+                                onChange={e => setPlaylistQuery(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleSearchPlaylists()}
+                            />
+                            <button
+                                className={styles.uxSearchBtn}
+                                onClick={handleSearchPlaylists}
+                                disabled={searchLoading || !playlistQuery.trim()}
+                            >
+                                {searchLoading ? '…' : 'Suchen'}
+                            </button>
+                        </div>
+                    )}
+
+                    {searchMode === 'mine' && searchLoading && (
+                        <p className={styles.uxFine}>Deine Playlists werden geladen …</p>
+                    )}
+                    {searchMode === 'mine' && !searchLoading && myPlaylistsError && (
+                        <div className={styles.uxError}>
+                            <span>{myPlaylistsError}</span>
+                            <button className={styles.uxLink} onClick={() => handleLoadMyPlaylists(true)}>Erneut versuchen</button>
+                        </div>
+                    )}
+                    {searchMode === 'mine' && !searchLoading && myPlaylistsLoaded && myPlaylists.length === 0 && (
+                        <p className={styles.uxFine}>Keine Playlists gefunden.</p>
+                    )}
+                    {visibleList.length > 0 && (
+                        <div className={styles.uxList}>{visibleList.map(playlistRow)}</div>
+                    )}
+
+                    <h2 className={styles.uxSection}>Wie viele Songs?</h2>
+                    <div className={styles.uxChips}>
+                        {countOptions.map(n => (
+                            <button
+                                key={n}
+                                className={`${styles.uxChip} ${songCount === n ? styles.uxChipOn : ''}`}
+                                onClick={() => setSongCount(n)}
+                                aria-pressed={songCount === n}
+                            >
+                                {n}
+                            </button>
+                        ))}
+                    </div>
 
                     <button
-                        className={styles.disconnectBtn}
+                        className={styles.uxLink}
                         onClick={() => {
                             spotifyService.clearUserTokens()
                             setLoadingError(null)
                             setPhase(PHASES.LOGIN)
                         }}
                     >
-                        Spotify abmelden & neu anmelden
+                        Spotify-Konto wechseln
                     </button>
+                </div>
+
+                <div className={styles.uxBottomBar}>
+                    <div className={styles.uxBottomInner}>
+                        <button
+                            className={styles.uxPrimary}
+                            onClick={handleStartGame}
+                            disabled={selectedPlaylists.length === 0}
+                        >
+                            {startLabel}
+                        </button>
+                        <p className={styles.uxBottomHint}>
+                            {selectedPlaylists.length === 0
+                                ? 'Wähle mindestens eine Playlist.'
+                                : `${selectedPlaylists.length} ${selectedPlaylists.length === 1 ? 'Playlist' : 'Playlists'} ausgewählt`}
+                        </p>
+                    </div>
                 </div>
             </div>
         )
@@ -896,25 +817,16 @@ export default function SecondSound({ onBack }) {
             <div className={wrapperClass}>
                 <ThemeToggle />
                 <div className={styles.bg} />
-                <div className={styles.loadingContainer}>
+                <div className={`${styles.uxPage} ${styles.uxCenterPage}`}>
                     <div className={styles.loadingSpinner} />
-                    {detect ? (
-                        <>
-                            <p className={styles.loadingText}>
-                                🎲 Wähle {songCount} zufällige Songs aus „{detect.playlistName}"…
-                            </p>
-                            <div className={styles.detectProgressBar}>
-                                <div className={styles.detectProgressFill} style={{ width: `${detectPct}%` }} />
-                            </div>
-                            <p className={styles.detectProgressLabel}>{detect.label}</p>
-                            {detect.totalPlaylists > 1 && (
-                                <p className={styles.detectProgressMeta}>
-                                    Playlist {detect.playlistIndex} / {detect.totalPlaylists}
-                                </p>
-                            )}
-                        </>
-                    ) : (
-                        <p className={styles.loadingText}>{loadingStatus || 'Songs werden geladen…'}</p>
+                    <h1 className={styles.uxTitleSm}>Dein Quiz wird vorbereitet …</h1>
+                    <p className={styles.uxFine}>
+                        {detect ? 'Songs werden zufällig ausgewählt. Das dauert einen Moment.' : (loadingStatus || 'Einen Moment bitte.')}
+                    </p>
+                    {detect && (
+                        <div className={styles.uxBar} aria-hidden="true">
+                            <div className={styles.uxBarFill} style={{ width: `${detectPct}%` }} />
+                        </div>
                     )}
                 </div>
             </div>
@@ -923,136 +835,120 @@ export default function SecondSound({ onBack }) {
 
     // ─── Game ─────────────────────────────────────────────────────────────────
     if (phase === PHASES.GAME) {
+        const steps = [
+            { label: '1 s', seconds: 1, long: '1 Sekunde' },
+            { label: '5 s', seconds: 5, long: '5 Sekunden' },
+            { label: '10 s', seconds: 10, long: '10 Sekunden' },
+            { label: '30 s', seconds: 30, long: '30 Sekunden' }
+        ]
+        const nextIdx = Math.min(maxUnlockedIndex, steps.length - 1)
         const progressPct = (playedCount / targetCount) * 100
+        const connecting = !playerReady && !playerError
+        const playStep = (idx) => {
+            if (!playerReady) return
+            handlePlayFor(steps[idx].seconds)
+            setMaxUnlockedIndex(prev => Math.max(prev, idx + 1))
+        }
+
+        let hint
+        if (isRevealed) hint = 'Wurde der Song erkannt?'
+        else if (isPlaying) hint = 'Hört genau hin …'
+        else if (hasPlayedCurrentSong) hint = 'Erkannt? Dann aufdecken – sonst länger anhören.'
+        else hint = 'Drück Play. Der Titel bleibt geheim, bis du aufdeckst.'
+
+        const friendlyError = playerError && /device not found/i.test(playerError)
+            ? 'Der Spotify-Player ist noch nicht bereit. Kurz warten und nochmal tippen.'
+            : playerError
 
         return (
             <div className={wrapperClass}>
                 <ThemeToggle />
                 <div className={styles.bg} />
-                <div className={styles.gameContainer}>
-
-                    <div className={styles.gameTopBar}>
-                        <button className={styles.backBtnSmall} onClick={handleBack}>✕</button>
-                        <div className={styles.gameProgress}>
-                            Song <strong>{playedCount + 1}</strong> / {targetCount}
-                        </div>
-                        <div className={styles.scoreChip}>
-                            {score} ✓
+                <div className={`${styles.uxPage} ${styles.uxGame}`}>
+                    <div className={styles.uxTop}>
+                        <button
+                            className={styles.uxClose}
+                            aria-label="Spiel beenden"
+                            onClick={() => { if (window.confirm('Spiel beenden? Der Spielstand geht verloren.')) handleBack() }}
+                        >
+                            ✕
+                        </button>
+                        <div className={styles.uxCounter}>
+                            Song <strong>{playedCount + 1}</strong> von {targetCount}
                         </div>
                     </div>
-
-
-                    <div className={styles.progressBar}>
-                        <div className={styles.progressFill} style={{ width: `${progressPct}%` }} />
+                    <div className={styles.uxBar} aria-hidden="true">
+                        <div className={styles.uxBarFill} style={{ width: `${progressPct}%` }} />
                     </div>
 
-                    {playerError && (
-                        <div className={styles.errorMsg}>{playerError}</div>
-                    )}
+                    <p className={styles.uxHint} aria-live="polite">{hint}</p>
 
-                    <div className={styles.songCard}>
-                        {!playerReady && !playerError && (
-                            <div className={styles.playerConnecting}>
-                                <div className={styles.spinnerSmall} />
-                                <span>Verbinde Spotify Player...</span>
+                    {friendlyError && <div className={styles.uxError}>{friendlyError}</div>}
+
+                    {!isRevealed ? (
+                        <div className={styles.uxHero}>
+                            <button
+                                className={`${styles.uxPlayBig} ${isPlaying ? styles.uxPlayBigOn : ''}`}
+                                onClick={() => playStep(nextIdx)}
+                                disabled={!playerReady}
+                                aria-label={`Song ${steps[nextIdx].long} abspielen`}
+                            >
+                                <span className={styles.uxPlayIcon}>{isPlaying ? '♪' : '▶'}</span>
+                            </button>
+                            <div className={styles.uxPlayLabel}>
+                                {connecting ? 'Verbinde mit Spotify …' : `${steps[nextIdx].long} abspielen`}
                             </div>
-                        )}
 
-                        {isRevealed ? (
-                            currentTrackInfo ? (
-                                <div className={styles.revealedInfo}>
-                                    {currentTrackInfo.imageUrl
-                                        ? <img src={currentTrackInfo.imageUrl} alt="" className={styles.albumArt} />
-                                        : <div className={styles.albumArtFallback}>🎵</div>
-                                    }
-                                    <div className={styles.songName}>{currentTrackInfo.trackName}</div>
-                                    <div className={styles.songArtist}>{currentTrackInfo.artist}</div>
-                                </div>
-                            ) : (
-                                <div className={styles.revealedInfo}>
-                                    <div className={styles.albumArtFallback}>🎵</div>
-                                    <div className={styles.songName}>Erst abspielen!</div>
-                                    <div className={styles.songArtist}>Drücke einen Play-Button um den Song zu laden</div>
-                                </div>
-                            )
-                        ) : (
-                            <div className={styles.hiddenSong}>
-                                <div className={styles.questionMark}>?</div>
-                                <p className={styles.hiddenHint}>
-                                    {hasPlayedCurrentSong
-                                        ? 'Wer kennt diesen Song?'
-                                        : 'Spiele den Song zuerst ab'}
-                                </p>
-                                <button
-                                    className={`${styles.revealBtn} ${!hasPlayedCurrentSong ? styles.revealBtnLocked : ''}`}
-                                    onClick={() => hasPlayedCurrentSong && setIsRevealed(true)}
-                                    disabled={!hasPlayedCurrentSong}
-                                >
-                                    Aufdecken
+                            <div className={styles.uxLadder} role="group" aria-label="Abspiellänge">
+                                {steps.map((s, idx) => {
+                                    const locked = idx > maxUnlockedIndex
+                                    const done = idx < maxUnlockedIndex
+                                    return (
+                                        <button
+                                            key={s.label}
+                                            className={`${styles.uxLadderChip} ${done ? styles.uxLadderDone : ''} ${idx === nextIdx ? styles.uxLadderNext : ''}`}
+                                            onClick={() => playStep(idx)}
+                                            disabled={locked || !playerReady}
+                                            title={locked ? 'Wird nach der vorherigen Stufe freigeschaltet' : `${s.long} abspielen`}
+                                        >
+                                            {done ? '✓ ' : ''}{s.label}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+
+                            {hasPlayedCurrentSong && (
+                                <button className={styles.uxReveal} onClick={() => setIsRevealed(true)}>
+                                    Song aufdecken
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className={styles.uxHero}>
+                            <div className={styles.uxRevealCard}>
+                                {currentTrackInfo?.imageUrl
+                                    ? <img src={currentTrackInfo.imageUrl} alt="" className={styles.uxArt} />
+                                    : <div className={styles.uxArt}>🎵</div>}
+                                <div className={styles.uxSongName}>{currentTrackInfo?.trackName || 'Titel wird geladen …'}</div>
+                                <div className={styles.uxSongArtist}>{currentTrackInfo?.artist || ''}</div>
+                            </div>
+                            <button
+                                className={styles.uxLink}
+                                onClick={() => playStep(steps.length - 1)}
+                                disabled={!playerReady}
+                            >
+                                ▶ Nochmal anhören (30 s)
+                            </button>
+                            <div className={styles.uxAnswers}>
+                                <button className={styles.uxAnswerNo} onClick={() => handleAnswer(false)}>
+                                    ✕ Nicht erkannt
+                                </button>
+                                <button className={styles.uxAnswerYes} onClick={() => handleAnswer(true)}>
+                                    ✓ Erkannt
                                 </button>
                             </div>
-                        )}
-                    </div>
-
-                    {isPlaying && (
-                        <div className={styles.nowPlaying}>
-                            <span className={styles.dot} />
-                            <span className={styles.dot} />
-                            <span className={styles.dot} />
-                            <span>Wird abgespielt</span>
                         </div>
                     )}
-
-                    <div className={styles.playSection}>
-                        <p className={styles.playSectionLabel}>Song abspielen für:</p>
-                        <div className={styles.playButtons}>
-                            {[
-                                { label: '1s', seconds: 1 },
-                                { label: '5s', seconds: 5 },
-                                { label: '10s', seconds: 10 },
-                                { label: '30s', seconds: 30 }
-                            ].map(({ label, seconds }, idx) => {
-                                const unlocked = idx <= maxUnlockedIndex
-                                return (
-                                    <button
-                                        key={label}
-                                        className={`${styles.playBtn} ${!unlocked ? styles.playBtnLocked : ''}`}
-                                        onClick={() => {
-                                            if (!unlocked || !playerReady) return
-                                            handlePlayFor(seconds)
-                                            setMaxUnlockedIndex(prev => Math.max(prev, idx + 1))
-                                        }}
-                                        disabled={!playerReady || !unlocked}
-                                        title={!unlocked ? `Erst ${['1s','5s','10s'][idx-1]} abspielen` : undefined}
-                                    >
-                                        {unlocked ? '▶ ' : ''}{label}
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    </div>
-
-                    <div className={styles.answerSection}>
-                        <p className={styles.answerLabel}>
-                            {hasPlayedCurrentSong ? 'Song erraten?' : 'Erst Song abspielen…'}
-                        </p>
-                        <div className={styles.answerButtons}>
-                            <button
-                                className={`${styles.answerBtn} ${styles.wrongBtn} ${!hasPlayedCurrentSong ? styles.answerBtnLocked : ''}`}
-                                onClick={() => hasPlayedCurrentSong && handleAnswer(false)}
-                                disabled={!hasPlayedCurrentSong}
-                            >
-                                ✕
-                            </button>
-                            <button
-                                className={`${styles.answerBtn} ${styles.correctBtn} ${!hasPlayedCurrentSong ? styles.answerBtnLocked : ''}`}
-                                onClick={() => hasPlayedCurrentSong && handleAnswer(true)}
-                                disabled={!hasPlayedCurrentSong}
-                            >
-                                ✓
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
         )
@@ -1061,94 +957,53 @@ export default function SecondSound({ onBack }) {
     // ─── Results ─────────────────────────────────────────────────────────────
     if (phase === PHASES.RESULTS) {
         const result = getResultMessage()
-        const percent = playedCount > 0 ? Math.round((score / playedCount) * 100) : 0
+        const secondsArr = sessionSecondsCorrectRef.current
+        const avgSeconds = secondsArr.length > 0
+            ? (secondsArr.reduce((a, b) => a + b, 0) / secondsArr.length).toFixed(1)
+            : null
 
         return (
             <div className={wrapperClass}>
                 <ThemeToggle />
                 <div className={styles.bg} />
-                <div className={styles.resultsContainer}>
-                    <h1 className={styles.appTitleSmall}>🎧 Song raten</h1>
-
-                    <div className={styles.resultsCard}>
-                        <div className={styles.resultEmoji}>{result.emoji}</div>
-                        <div className={styles.scoreDisplay}>
-                            <span className={styles.scoreNum}>{score}</span>
-                            <span className={styles.scoreSep}>/</span>
-                            <span className={styles.scoreTotal}>{playedCount}</span>
-                        </div>
-                        <div className={styles.scorePercent}>{percent}%</div>
-                        <div className={styles.resultTitle}>{result.title}</div>
-                        <div className={styles.resultSub}>{result.sub}</div>
+                <div className={`${styles.uxPage} ${styles.uxCenterPage}`}>
+                    <div className={styles.uxLogo}>{result.emoji}</div>
+                    <div className={styles.uxScore}>
+                        {score} <span>von {playedCount}</span>
                     </div>
+                    <p className={styles.uxScoreCaption}>Songs erkannt</p>
+                    <h1 className={styles.uxTitleSm}>{result.title}</h1>
+                    <p className={styles.uxLead}>{result.sub}</p>
+                    {avgSeconds && (
+                        <p className={styles.uxFine}>Im Schnitt erkannt nach {avgSeconds} Sekunden.</p>
+                    )}
 
-                    <div className={styles.statsCard}>
-                        <div className={styles.statsTitle}>📊 Diese Runde</div>
-                        <div className={styles.statsGrid}>
-                            <div className={styles.statItem}>
-                                <span className={styles.statValue}>{score}</span>
-                                <span className={styles.statLabel}>Songs erraten</span>
-                            </div>
-                            <div className={styles.statItem}>
-                                <span className={styles.statValue}>{playedCount - score}</span>
-                                <span className={styles.statLabel}>Nicht erraten</span>
-                            </div>
-                            <div className={styles.statItem}>
-                                <span className={styles.statValue}>{playedCount}</span>
-                                <span className={styles.statLabel}>Songs gespielt</span>
-                            </div>
-                            <div className={styles.statItem}>
-                                <span className={styles.statValue}>{percent}%</span>
-                                <span className={styles.statLabel}>Trefferquote</span>
-                            </div>
-                        </div>
-                        {(sessionSecondsCorrectRef.current.length > 0) && (
-                            <div className={styles.statItemWide}>
-                                <span className={styles.statValue}>
-                                    {(sessionSecondsCorrectRef.current.reduce((a, b) => a + b, 0) / sessionSecondsCorrectRef.current.length).toFixed(1)}s
-                                </span>
-                                <span className={styles.statLabel}>Ø Zeit zum Erraten</span>
-                            </div>
-                        )}
-                    </div>
+                    <button className={styles.uxPrimary} onClick={handleNewRound}>Nochmal spielen</button>
+                    <button className={styles.uxLink} onClick={handleBack}>Zurück zum Menü</button>
 
                     {songHistory.length > 0 && (
-                        <div className={styles.historyCard}>
-                            <button
-                                className={styles.historyToggle}
-                                onClick={() => setHistoryOpen(o => !o)}
-                            >
-                                <span>🎵 Gespielte Songs</span>
-                                <span className={styles.historyChevron}>{historyOpen ? '▲' : '▼'}</span>
+                        <div className={styles.uxHistory}>
+                            <button className={styles.uxLink} onClick={() => setHistoryOpen(o => !o)}>
+                                {historyOpen ? 'Songs ausblenden ▲' : 'Alle Songs anzeigen ▼'}
                             </button>
                             {historyOpen && (
-                                <div className={styles.historyList}>
+                                <div className={styles.uxList}>
                                     {songHistory.map((entry, i) => (
-                                        <div key={i} className={`${styles.historyItem} ${entry.correct ? styles.historyCorrect : styles.historyWrong}`}>
+                                        <div key={i} className={styles.uxItem}>
                                             {entry.song.albumImage
-                                                ? <img src={entry.song.albumImage} alt="" className={styles.historyThumb} />
-                                                : <div className={styles.historyThumbFallback}>🎵</div>
-                                            }
-                                            <div className={styles.historyInfo}>
-                                                <span className={styles.historyName}>{entry.song.name}</span>
-                                                <span className={styles.historyArtist}>{entry.song.artist}</span>
-                                            </div>
-                                            <span className={styles.historyIcon}>{entry.correct ? '✓' : '✕'}</span>
+                                                ? <img src={entry.song.albumImage} alt="" className={styles.uxThumb} />
+                                                : <div className={styles.uxThumb}>🎵</div>}
+                                            <span className={styles.uxItemText}>
+                                                <span className={styles.uxItemName}>{entry.song.name}</span>
+                                                <span className={styles.uxItemMeta}>{entry.song.artist}</span>
+                                            </span>
+                                            <span className={entry.correct ? styles.uxOk : styles.uxMiss}>{entry.correct ? '✓' : '✕'}</span>
                                         </div>
                                     ))}
                                 </div>
                             )}
                         </div>
                     )}
-
-                    <div className={styles.resultsActions}>
-                        <button className={styles.newRoundBtn} onClick={handleNewRound}>
-                            Neue Runde
-                        </button>
-                        <button className={styles.backBtn} onClick={handleBack}>
-                            ← Zurück zum Menü
-                        </button>
-                    </div>
                 </div>
             </div>
         )
