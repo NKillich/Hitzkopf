@@ -1,24 +1,62 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Hitzkopf Lobbies
+    // Hitzkopf Lobbies (pausiert, unveraendert)
     match /lobbies/{lobbyId} {
       allow read, write: if request.auth != null;
     }
-    
-    // Music Voter Lobbies
+
+    // Amplify (Music Voter) Lobbies
+    // Lobbies haben keine Host-UID (host = Anzeigename), daher kann nur die Struktur
+    // eingeschraenkt werden: Raumcode-Format und Typ beim Anlegen.
     match /musicVoterLobbies/{lobbyId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && lobbyId.matches('[A-Za-z0-9]{4,10}')
+                    && request.resource.data is map
+                    && request.resource.data.host is string;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
     }
 
     // Quiz Royale Lobbies
     match /quizLobbies/{lobbyId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && lobbyId.matches('[A-Za-z0-9]{4,10}')
+                    && request.resource.data.hostId == request.auth.uid;
+      // Beitreten/Spielen = Update durch jeden angemeldeten Spieler
+      allow update: if request.auth != null;
+      // Loeschen nur durch Host oder Mitspieler der Lobby (nicht durch Fremde)
+      allow delete: if request.auth != null
+                    && (resource.data.hostId == request.auth.uid
+                        || request.auth.uid in resource.data.players.keys());
     }
 
-    // Song-Raten User-Stats (gerätgebunden, kein Login nötig)
+    // Song raten: Statistiken pro Geraet (anonymer Login, Geraete-ID "ss_...")
     match /userStats/{deviceId} {
-      allow read, write: if true;
+      function validId() {
+        return deviceId.matches('ss_[a-z0-9]{3,40}');
+      }
+      function validNum(d, k, max) {
+        return !(k in d) || (d[k] is number && d[k] >= 0 && d[k] <= max);
+      }
+      function validStats(d) {
+        return d.keys().hasOnly([
+                 'songsCorrect', 'songsTotal', 'gamesPlayed', 'bestPercent',
+                 'totalSecondsCorrect', 'correctGuessesWithTime'
+               ])
+               && validNum(d, 'songsCorrect', 10000000)
+               && validNum(d, 'songsTotal', 10000000)
+               && validNum(d, 'gamesPlayed', 10000000)
+               && validNum(d, 'bestPercent', 100)
+               && validNum(d, 'totalSecondsCorrect', 100000000)
+               && validNum(d, 'correctGuessesWithTime', 10000000);
+      }
+
+      allow read: if request.auth != null && validId();
+      allow create, update: if request.auth != null && validId() && validStats(request.resource.data);
+      allow delete: if false;
     }
   }
 }

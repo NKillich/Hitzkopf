@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getApp } from 'firebase/app'
 import { getFirestore, doc, getDoc, setDoc, increment } from 'firebase/firestore'
+import { getAuth, signInAnonymously } from 'firebase/auth'
 import '../../firebase.js'
 import spotifyService from '../../services/spotifyService'
 import { log, warn } from '../../utils/logger.js'
@@ -130,6 +131,15 @@ export default function SecondSound({ onBack }) {
     const saveAndLoadStats = async (finalScore, finalPlayed, totalSeconds, countWithTime) => {
         const db = dbRef.current
         if (!db) return
+        // Firestore-Regeln verlangen einen (anonymen) Login
+        const auth = getAuth(getApp())
+        await auth.authStateReady()
+        if (!auth.currentUser) {
+            try { await signInAnonymously(auth) } catch (e) {
+                console.error('Anonymer Login fehlgeschlagen:', e)
+                return
+            }
+        }
         const ref = doc(db, 'userStats', deviceId.current)
         const percent = finalPlayed > 0 ? Math.round((finalScore / finalPlayed) * 100) : 0
         try {
