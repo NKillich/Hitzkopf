@@ -81,7 +81,7 @@ h1,
 .srRoot .srScreenTitle { font-family: var(--sr-display); font-size: 30px; font-weight: 800; letter-spacing: -0.025em; }
 .srRoot .srIconBtn { width: 44px; height: 44px; flex: none; border-radius: 22px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); }
 .srRoot .srTextBtn { height: 44px; padding: 0 14px 0 4px; border-radius: 22px; color: var(--sr-muted); font-size: 16px; font-weight: 600; gap: 2px; }
-.srRoot .srLinkBtn { height: 44px; padding: 0 4px; color: var(--sr-muted); font-size: 14px; font-weight: 600; text-decoration: underline; }
+.srRoot .srLinkBtn { white-space: nowrap; height: 44px; padding: 0 4px; color: var(--sr-muted); font-size: 14px; font-weight: 600; text-decoration: underline; }
 .srRoot /* ── Login ─────────────────────────────────────────────────────────────── */
 .srLoginHero { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 32px; padding-bottom: 12px; }
 .srRoot .srLoginArt { display: flex; align-items: center; gap: 16px; }
@@ -144,7 +144,7 @@ h1,
 .srRoot .srEmptyText { font-size: 15px; line-height: 1.45; color: var(--sr-muted); max-width: 280px; }
 .srRoot .srOutline { margin-top: 8px; height: 48px; padding: 0 22px; border-radius: 24px; border: 2px solid var(--sr-ink); color: var(--sr-ink); font-size: 16px; font-weight: 700; gap: 8px; }
 .srRoot .srOutlineSm { height: 44px; margin: 0 8px 0 0; padding: 0 16px; border-radius: 22px; font-size: 15px; }
-.srRoot .srAccountRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--sr-line); font-size: 14px; color: var(--sr-muted); }
+.srRoot .srAccountRow { flex-wrap: wrap; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--sr-line); font-size: 14px; color: var(--sr-muted); }
 .srRoot .srAccountRow > span:last-child { display: flex; gap: 8px; }
 .srRoot .srFooter { position: sticky; bottom: 0; z-index: 2; flex: none; padding: 14px 20px 24px; background: var(--sr-bg); border-top: 1px solid var(--sr-line); display: flex; flex-direction: column; gap: 12px; }
 .srRoot .srFooterTight { gap: 4px; padding: 12px 20px 22px; }
@@ -213,7 +213,7 @@ h1,
 .srRoot .srMasks { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .srRoot .srMasks span { display: block; border-radius: 8px; background: var(--sr-mask); }
 .srRoot .srTiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; flex: none; }
-.srRoot .srTile { position: relative; overflow: hidden; height: 76px; box-sizing: border-box; border-radius: 20px; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 11px 12px 10px; text-align: left; }
+.srRoot .srTile { position: relative; overflow: hidden; height: 76px; box-sizing: border-box; border-radius: 20px; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 11px 10px 10px; text-align: left; }
 .srRoot .srTile_playing { background: var(--sr-accent); color: var(--sr-on-accent); border: 2px solid var(--sr-accent); }
 .srRoot .srTile_played { background: var(--sr-surface); color: var(--sr-ink); border: 2px solid var(--sr-line); }
 .srRoot .srTile_next { background: var(--sr-accent-soft); color: var(--sr-ink); border: 2px solid var(--sr-accent); }
@@ -221,7 +221,7 @@ h1,
 .srRoot .srTileConn { opacity: 0.45; }
 .srRoot .srTileFill { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(0, 0, 0, 0.16); }
 .srRoot .srTileLabel { position: relative; font-family: var(--sr-display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
-.srRoot .srTileStatus { position: relative; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; }
+.srRoot .srTileStatus { white-space: nowrap; letter-spacing: -0.01em; position: relative; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; }
 .srRoot .srSpacer { flex: 1; min-height: 8px; }
 .srRoot .srGame .srAlert { margin-bottom: 12px; padding-right: 16px; flex: none; }
 .srRoot .srActions { display: flex; flex-direction: column; gap: 10px; flex: none; }
