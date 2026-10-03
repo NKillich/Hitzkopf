@@ -153,7 +153,6 @@ export default function SecondSound({ onBack }) {
     const [needsRelogin, setNeedsRelogin] = useState(false)
     const [searchedQuery, setSearchedQuery] = useState('')   // zuletzt abgeschlossene Playlist-Suche
     const [confirmClose, setConfirmClose] = useState(false)  // Bottom-Sheet "Spiel beenden?"
-    const [tick, setTick] = useState(0)                      // Takt für Animationen (Equalizer, Punkte)
     const [startingIdx, setStartingIdx] = useState(-1)       // Stufe, die gerade gestartet wird (Player lädt)
     const [cancelling, setCancelling] = useState(false)
     const [searchHasMore, setSearchHasMore] = useState(false)
@@ -789,12 +788,13 @@ export default function SecondSound({ onBack }) {
         setPhase(PHASES.HOME)
     }
 
-    // Takt für Animationen (Equalizer, Countdown, Verbindungs-Punkte)
+    // Während ein Ausschnitt läuft: regelmäßig neu zeichnen (Fortschritt in der Kachel)
+    const [, setFrame] = useState(0)
     useEffect(() => {
-        if (phase !== PHASES.GAME || (playerReady && !isPlaying)) return
-        const id = setInterval(() => setTick(t => t + 1), 150)
+        if (phase !== PHASES.GAME || !isPlaying) return
+        const id = setInterval(() => setFrame(f => f + 1), 150)
         return () => clearInterval(id)
-    }, [phase, playerReady, isPlaying])
+    }, [phase, isPlaying])
 
     // Setup: eigene Playlists direkt beim Öffnen laden (häufigster Fall)
     useEffect(() => {
@@ -1109,13 +1109,7 @@ export default function SecondSound({ onBack }) {
             <main className={`${styles.srMain} ${styles.srPad}`}>
                 <div className={`${styles.srHeader} ${styles.srHeaderEnd}`}>{themeBtn}</div>
                 <div className={styles.srLoadBody}>
-                    <div className={styles.srCardLg} aria-hidden="true">
-                        <svg className={`${styles.srRings} ${styles.srSpin}`} width="174" height="174" viewBox="0 0 100 100" fill="none">
-                            <circle cx="50" cy="50" r="46" strokeWidth="1.5" /><circle cx="50" cy="50" r="39" strokeWidth="1.5" /><circle cx="50" cy="50" r="32" strokeWidth="1.5" />
-                            <circle cx="50" cy="11" r="3" className={styles.srDotAccent} /><circle cx="82" cy="50" r="2" className={styles.srDotInk} />
-                        </svg>
-                        <div className={styles.srCardDiscLg}><IconShuffle /></div>
-                    </div>
+                    <span className={`${styles.srEmoji} ${styles.srEmojiPulse}`} aria-hidden="true">🎧</span>
                     <div aria-live="polite" className={styles.srLoadText}>
                         <h1 className={styles.srLoadTitle}>Songs werden geladen</h1>
                         <p className={styles.srFineSm}>Das Spiel startet in wenigen Sekunden</p>
@@ -1145,15 +1139,6 @@ export default function SecondSound({ onBack }) {
             handlePlayStage(idx)      // läuft gerade etwas anderes, wird es durch diese Stufe ersetzt
         }
 
-        let hint
-        if (connecting) hint = 'Spotify-Player verbindet …'
-        else if (starting) hint = 'Song wird geladen …'
-        else if (isRevealed) hint = 'Wurde der Song erraten?'
-        else if (isPlaying) hint = 'Hört genau hin …'
-        else if (playedN === 0) hint = 'Drück Play – zuerst nur 1 Sekunde'
-        else if (playedN >= STAGES.length) hint = 'Alles gehört – jetzt aufdecken oder werten'
-        else hint = 'Erraten? Dann aufdecken oder werten.'
-
         const canAct = hasPlayedCurrentSong && !connecting
         const friendlyError = playerError && (/device not found/i.test(playerError)
             ? { title: 'Der Player ist noch nicht bereit', text: 'Kurz warten und nochmal tippen.' }
@@ -1163,22 +1148,18 @@ export default function SecondSound({ onBack }) {
         return shell(
             <main className={`${styles.srMain} ${styles.srPad} ${styles.srGame}`}>
                 <header className={styles.srGameHead}>
-                    <div className={styles.srProgressBox}>
-                        <span className={styles.srSongNo}>{songNo}</span>
-                        <div role="progressbar" aria-label={songNo} aria-valuemin="1" aria-valuemax={targetCount} aria-valuenow={playedCount + 1} className={styles.srSegs}>
-                            {Array.from({ length: targetCount }, (_, i) => (
-                                <span key={i} className={`${styles.srSeg} ${i < playedCount ? styles.srSegDone : (i === playedCount ? styles.srSegNow : '')}`} />
-                            ))}
-                        </div>
-                    </div>
                     {themeBtn}
                     <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setConfirmClose(true)} aria-label="Spiel beenden" title="Spiel beenden"><IconX /></button>
                 </header>
 
-                <p role="status" aria-live="polite" className={styles.srHint}>
-                    <span className={`${styles.srHintDot} ${connecting ? styles.srHintDotIdle : (isRevealed ? styles.srHintDotOk : '')}`} style={isPlaying && tick % 2 ? { opacity: 0.35 } : undefined} />
-                    {hint}
-                </p>
+                <div className={styles.srProgressBox}>
+                    <span className={styles.srSongNo}>{songNo}</span>
+                    <div role="progressbar" aria-label={songNo} aria-valuemin="1" aria-valuemax={targetCount} aria-valuenow={playedCount + 1} className={styles.srSegs}>
+                        {Array.from({ length: targetCount }, (_, i) => (
+                            <span key={i} className={`${styles.srSeg} ${i < playedCount ? styles.srSegDone : (i === playedCount ? styles.srSegNow : '')}`} />
+                        ))}
+                    </div>
+                </div>
 
                 <div
                     className={`${styles.srCardGame} ${!isRevealed ? styles.srSkelGame : ''} ${(!isRevealed && (isPlaying || starting || connecting)) ? styles.srPulse : ''} ${(!isRevealed && canAct) ? styles.srCardTap : ''}`}
@@ -1247,7 +1228,7 @@ export default function SecondSound({ onBack }) {
                     <button type="button" onClick={() => canAct && setIsRevealed(r => !r)} disabled={!canAct}
                         className={`${styles.srBtn} ${styles.srReveal} ${!canAct ? styles.srRevealOff : styles.srRevealOpen}`}>
                         {!canAct ? <IconLock /> : (isRevealed ? <IconEyeOff /> : <IconEye />)}
-                        {!canAct ? 'Aufdecken – erst anhören' : (isRevealed ? 'Verdecken' : 'Aufdecken')}
+                        {!canAct ? 'Song aufdecken' : (isRevealed ? 'Song verdecken' : 'Song aufdecken')}
                     </button>
                     <div className={styles.srRate}>
                         <button type="button" onClick={() => canAct && handleAnswer(false)} disabled={!canAct} className={`${styles.srBtn} ${styles.srRateNo} ${!canAct ? styles.srRateOff : ''}`}><IconX size={20} w={2.8} />Nicht erraten</button>

@@ -159,8 +159,8 @@
 .srRoot .srMuted { font-size: 16px; color: var(--sr-muted); }
 /* ── Spiel ─────────────────────────────────────────────────────────────── */
 .srRoot .srGame { padding-bottom: clamp(12px, 2.4dvh, 24px); }
-.srRoot .srGameHead { display: flex; align-items: center; gap: 8px; height: 52px; flex: none; }
-.srRoot .srProgressBox { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.srRoot .srGameHead { display: flex; align-items: center; justify-content: space-between; height: 52px; flex: none; }
+.srRoot .srProgressBox { flex: none; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: clamp(4px, 1dvh, 10px); }
 .srRoot .srSongNo { font-size: 15px; font-weight: 700; }
 .srRoot .srSegs { display: flex; gap: 3px; width: 100%; }
 .srRoot .srSeg { flex: 1; height: 6px; border-radius: 3px; background: var(--sr-line); }
@@ -170,7 +170,7 @@
 .srRoot .srHintDot { width: 8px; height: 8px; flex: none; border-radius: 4px; background: var(--sr-accent); }
 .srRoot .srHintDotIdle { background: var(--sr-muted); }
 .srRoot .srHintDotOk { background: var(--sr-ok); }
-.srRoot .srCardGame { position: relative; width: clamp(150px, 31dvh, 248px); aspect-ratio: 1 / 1; margin: clamp(8px, 1.8dvh, 16px) auto 0; border-radius: 34px; background: var(--sr-card); border: 1px solid var(--sr-card-line); box-sizing: border-box; overflow: hidden; flex: none; }
+.srRoot .srCardGame { position: relative; width: clamp(150px, 29dvh, 248px); aspect-ratio: 1 / 1; margin: clamp(14px, 3.4dvh, 32px) auto 0; border-radius: 34px; background: var(--sr-card); border: 1px solid var(--sr-card-line); box-sizing: border-box; overflow: hidden; flex: none; }
 .srRoot .srCoverFill { position: absolute; inset: 0; }
 .srRoot .srCardCaption { position: absolute; left: 18px; top: 16px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; color: var(--sr-card-ink); opacity: 0.75; }
 .srRoot .srDisc { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); aspect-ratio: 1 / 1; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--sr-accent); color: var(--sr-on-accent); transition: width 0.15s; }
@@ -187,8 +187,8 @@
 .srRoot .srSongArtist { font-size: 17px; font-weight: 600; color: var(--sr-muted); }
 .srRoot .srMasks { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .srRoot .srMasks span { display: block; border-radius: 8px; background: var(--sr-mask); }
-.srRoot .srTiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: clamp(8px, 1.4dvh, 12px); flex: none; }
-.srRoot .srTile { position: relative; overflow: hidden; height: clamp(60px, 9dvh, 76px); box-sizing: border-box; border-radius: 20px; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 9px 10px 8px; text-align: left; }
+.srRoot .srTiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: clamp(10px, 2dvh, 16px); flex: none; }
+.srRoot .srTile { position: relative; overflow: hidden; height: clamp(54px, 8dvh, 68px); box-sizing: border-box; border-radius: 20px; flex-direction: row; align-items: center; justify-content: space-between; padding: 0 16px; text-align: left; }
 .srRoot .srTile_playing { background: var(--sr-accent); color: var(--sr-on-accent); border: 2px solid var(--sr-accent); }
 .srRoot .srTile_played { background: var(--sr-surface); color: var(--sr-ink); border: 2px solid var(--sr-line); }
 .srRoot .srTile_next { background: var(--sr-accent-soft); color: var(--sr-ink); border: 2px solid var(--sr-accent); }
@@ -196,7 +196,7 @@
 .srRoot .srTileConn { opacity: 0.45; }
 .srRoot .srTileFill { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(0, 0, 0, 0.16); }
 .srRoot .srTileLabel { position: relative; font-family: var(--sr-display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
-.srRoot .srTileStatus { position: relative; display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; white-space: nowrap; letter-spacing: -0.01em; }
+.srRoot .srTileStatus { position: relative; display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .srRoot .srSpacer { flex: 1; min-height: 8px; }
 .srRoot .srGame .srAlert { margin-bottom: 12px; padding-right: 16px; flex: none; }
 .srRoot .srActions { display: flex; flex-direction: column; gap: clamp(6px, 1.2dvh, 10px); flex: none; }
@@ -211,8 +211,8 @@
 .srRoot .srPlayIcon { width: 36px; height: 36px; border-radius: 18px; background: var(--sr-on-accent); color: var(--sr-accent); display: flex; align-items: center; justify-content: center; }
 .srRoot .srReplay { height: 48px; align-self: center; padding: 0 20px; border-radius: 24px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-size: 16px; font-weight: 600; gap: 8px; }
 .srRoot .srRate { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.srRoot .srRateNo { height: clamp(54px, 8.4dvh, 72px); border-radius: 26px; border: 2px solid var(--sr-bad); background: var(--sr-bad); color: var(--sr-on-bad); font-size: 17px; font-weight: 700; gap: 8px; }
-.srRoot .srRateOk { height: clamp(54px, 8.4dvh, 72px); border-radius: 26px; border: 2px solid var(--sr-ok); background: var(--sr-ok); color: var(--sr-on-ok); font-size: 18px; font-weight: 800; gap: 8px; }
+.srRoot .srRateNo { height: clamp(54px, 8.4dvh, 72px); border-radius: 26px; border: 2px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-size: 17px; font-weight: 700; gap: 8px; }
+.srRoot .srRateOk { height: clamp(54px, 8.4dvh, 72px); border-radius: 26px; border: 2px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-size: 17px; font-weight: 700; gap: 8px; }
 .srRoot .srScrim { position: absolute; inset: 0; z-index: 50; background: var(--sr-scrim); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
 .srRoot .srSheet { width: 100%; max-width: 440px; box-sizing: border-box; background: var(--sr-surface); border-radius: 30px 30px 0 0; padding: 12px 20px 28px; display: flex; flex-direction: column; gap: 10px; }
 .srRoot .srGrab { width: 40px; height: 5px; border-radius: 3px; background: var(--sr-line); align-self: center; margin-bottom: 10px; }
@@ -312,3 +312,7 @@
 .srRoot .srPulse { animation: srPulse 1.3s ease-in-out infinite; }
 .srRoot .srCardTap { cursor: pointer; }
 @keyframes srPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.srRoot .srRateNo svg { color: var(--sr-bad); }
+.srRoot .srRateOk svg { color: var(--sr-ok); }
+.srRoot .srRateOff svg { color: inherit; }
+.srRoot .srEmojiPulse { animation: srPulse 1.6s ease-in-out infinite; }
