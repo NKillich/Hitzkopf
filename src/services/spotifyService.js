@@ -3,15 +3,21 @@
  * 
  * Hinweis: Um die Spotify API zu nutzen, benötigst du:
  * 1. Einen Spotify Developer Account (https://developer.spotify.com/)
- * 2. Eine registrierte App mit Client ID und Client Secret
+ * 2. Eine registrierte App mit Client ID
  * 3. Redirect URI in deiner Spotify App konfiguriert
- * 
+ *
  * Umgebungsvariablen (in .env.local):
  * VITE_SPOTIFY_CLIENT_ID=deine_client_id
- * VITE_SPOTIFY_CLIENT_SECRET=dein_client_secret
- * VITE_SPOTIFY_REDIRECT_URI=http://localhost:5173/callback
+ * VITE_SPOTIFY_REDIRECT_URI=http://127.0.0.1:5173/Hitzkopf/
+ *
+ * Das Client Secret gehoert NICHT in den Browser: App-Tokens (Suche ohne User-Login)
+ * holt die Cloud Function "spotifyToken" (functions/spotifyToken.js).
  */
 
+import { getApp } from 'firebase/app'
+import { getAuth, signInAnonymously } from 'firebase/auth'
+import { getFunctions, httpsCallable } from 'firebase/functions'
+import '../firebase.js'
 import { log, warn } from '../utils/logger.js'
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1'
@@ -29,7 +35,6 @@ const STORAGE_KEYS = {
 class SpotifyService {
     constructor() {
         this.clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
-        this.clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
         // Redirect URI: Aus .env.local laden (lokal) oder Production-Fallback.
         // Lokal: VITE_SPOTIFY_REDIRECT_URI=http://127.0.0.1:5173/Hitzkopf in .env.local setzen.
         // Spotify erlaubt kein "localhost" – explizite IP 127.0.0.1 verwenden!
@@ -46,13 +51,8 @@ class SpotifyService {
         this._player = null
         this._sdkReady = false
 
-        // Debug: Prüfe ob Credentials geladen wurden
-        if (!this.clientId || !this.clientSecret) {
-            warn('⚠️ Spotify Credentials fehlen! Überprüfe .env.local')
-            log('Client ID vorhanden:', !!this.clientId)
-            log('Client Secret vorhanden:', !!this.clientSecret)
-        } else {
-            log('✅ Spotify Credentials geladen')
+        if (!this.clientId) {
+            warn('⚠️ VITE_SPOTIFY_CLIENT_ID fehlt! Überprüfe .env.local')
         }
     }
 
@@ -254,87 +254,27 @@ class SpotifyService {
     }
 
     /**
-     * Tauscht den Authorization Code gegen einen Access Token
-     */
-    async getAccessToken(code) {
-        const params = new URLSearchParams({
-            grant_type: 'authorization_code',
-            code: code,
-            redirect_uri: this.redirectUri
-        })
-
-        const response = await fetch(`${SPOTIFY_AUTH_BASE}/api/token`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': 'Basic ' + btoa(`${this.clientId}:${this.clientSecret}`)
-            },
-            body: params.toString()
-        })
-
-        if (!response.ok) {
-            throw new Error('Failed to get access token')
-        }
-
-        const data = await response.json()
-        this.accessToken = data.access_token
-        this.tokenExpiry = Date.now() + (data.expires_in * 1000)
-        
-        return data
-    }
-
-    /**
-     * Client Credentials Flow für App-only Zugriff (ohne User Auth)
+     * App-only Token (ohne User-Login) von der Cloud Function "spotifyToken" holen.
+     * Das Client Secret bleibt serverseitig.
      */
     async getClientCredentialsToken() {
-        // Prüfe ob Credentials vorhanden sind
-        if (!this.clientId || !this.clientSecret) {
-            const error = new Error('Spotify Credentials fehlen! Überprüfe .env.local und starte Dev-Server neu.')
-            error.code = 'MISSING_CREDENTIALS'
-            throw error
-        }
-
-        const params = new URLSearchParams({
-            grant_type: 'client_credentials'
-        })
-
         try {
-            const response = await fetch(`${SPOTIFY_AUTH_BASE}/api/token`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Authorization': 'Basic ' + btoa(`${this.clientId}:${this.clientSecret}`)
-                },
-                body: params.toString()
-            })
+            const auth = getAuth(getApp())
+            await auth.authStateReady()
+            if (!auth.currentUser) await signInAnonymously(auth)
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}))
-                console.error('Spotify API Fehler:', errorData)
-                
-                const error = new Error(
-                    `Spotify API Fehler (${response.status}): ${errorData.error_description || errorData.error || 'Unbekannter Fehler'}`
-                )
-                error.code = 'SPOTIFY_API_ERROR'
-                error.status = response.status
-                throw error
-            }
+            const callable = httpsCallable(getFunctions(getApp()), 'spotifyToken')
+            const { data } = await callable()
 
-            const data = await response.json()
             this.accessToken = data.access_token
             this.tokenExpiry = Date.now() + (data.expires_in * 1000)
-            
-            log('✅ Spotify Token erfolgreich abgerufen')
+            log('✅ Spotify App-Token erhalten')
             return data
         } catch (error) {
-            if (error.code === 'MISSING_CREDENTIALS' || error.code === 'SPOTIFY_API_ERROR') {
-                throw error
-            }
-            
-            // Netzwerkfehler
-            const networkError = new Error('Netzwerkfehler beim Abrufen des Spotify Tokens: ' + error.message)
-            networkError.code = 'NETWORK_ERROR'
-            throw networkError
+            console.error('Spotify App-Token fehlgeschlagen:', error)
+            const err = new Error(`Spotify-Token konnte nicht geholt werden: ${error.message || 'Unbekannter Fehler'}`)
+            err.code = 'SPOTIFY_API_ERROR'
+            throw err
         }
     }
 

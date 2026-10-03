@@ -13,7 +13,7 @@ Music Voter ist eine kollaborative Musik-Abstimmungs-App, bei der Spieler gemein
 
 ### Musik hinzufügen (Fertig)
 - **Manuell:** Songs/Alben mit Titel und Künstler eingeben (funktioniert ohne Spotify)
-- **Spotify:** Songs/Alben über Spotify API suchen (Setup erforderlich, siehe MUSIC_VOTER_SPOTIFY.md)
+- **Spotify:** Songs/Alben über Spotify API suchen (Setup erforderlich, siehe SPOTIFY_SETUP.md)
 
 ### Voting-System (Fertig)
 - **+1 Vote:** Song gefällt mir
@@ -140,7 +140,7 @@ src/
 
 Music Voter funktioniert **ohne Spotify** durch manuelle Eingabe.
 
-Für Spotify-Integration siehe: **MUSIC_VOTER_SPOTIFY.md**
+Für Spotify-Integration siehe: **SPOTIFY_SETUP.md**
 
 Kurzfassung:
 1. Spotify Developer Account erstellen
