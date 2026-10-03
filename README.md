@@ -1,207 +1,74 @@
 # Party Games Hub 🎮
 
-Eine zentrale Plattform für verschiedene Partyspiele mit gemeinsamer Lobby-Infrastruktur.
+Eine Sammlung von Partyspielen für Freunde, mit gemeinsamer Echtzeit-Infrastruktur (Firebase) und Spotify-Anbindung.
+Live: [nkillich.github.io/Hitzkopf](https://nkillich.github.io/Hitzkopf)
 
-## 🎯 Projekte
+## 🎯 Apps
 
-### 1. 🔥 Hitzkopf
-Das explosive Partyspiel - Errate die Antworten deiner Freunde!
-
-**Features:**
-- Multiplayer Lobby-System
-- Kategoriebasierte Fragen
-- Temperatur-System
-- Echtzeit-Voting
-- Sound-Effekte
-
-[Mehr über Hitzkopf →](./docs/HITZKOPF.md)
-
-### 2. 🎵 Music Voter (NEU!)
-Gemeinsam die perfekte Playlist erstellen!
-
-**Features:**
-- Lobby-System (Name + Emoji)
-- Songs/Alben hinzufügen (manuell oder Spotify)
-- +1/-1 Voting-System
-- Automatische Sortierung nach Votes
-- Echtzeit-Synchronisation
-
-📖 **Dokumentation:**
-- [Music Voter Übersicht](./MUSIC_VOTER.md)
-- [Spotify Integration Setup](./MUSIC_VOTER_SPOTIFY.md)
+| App | Link | Beschreibung |
+|---|---|---|
+| 🎵 **Amplify** | `#amplify` | Gemeinsam eine Playlist erstellen: Songs/Alben per Spotify-Suche oder manuell hinzufügen, per +1/-1 abstimmen, der Host spielt sie ab. |
+| 🧠 **Quiz Royale** | `#quizroyale` | Rundenbasiertes Quiz mit Charakteren und Upgrades. |
+| 🎧 **Song raten** | `#songraten` | Songs aus eigenen Spotify-Playlists erraten, mit Statistiken pro Gerät. Spotify Premium nötig. |
+| 🔥 **Hitzkopf** | `#hitzkopf` | Partyspiel mit Temperatur-System, Fragen und Attacken. *Aktuell pausiert.* |
 
 ## 🚀 Quick Start
 
-### Installation
-
 ```bash
 npm install
+cp .env.local.example .env.local   # Spotify Client ID eintragen
+npm run dev                        # http://127.0.0.1:5173/Hitzkopf/
 ```
 
-### Development Server
+Weitere Scripts: `npm run build`, `npm run preview`, `npm run lint`.
 
-```bash
-npm run dev
-```
+## 🔧 Technologie
 
-Die App läuft dann auf `http://localhost:5173`
-
-### Build für Production
-
-```bash
-npm run build
-```
-
-### Deploy
-
-```bash
-npm run deploy
-```
+- **Frontend:** React 19, Vite, CSS Modules
+- **Backend:** Firebase (Firestore, anonyme Auth, Cloud Functions, Analytics)
+- **APIs:** Spotify Web API + Web Playback SDK
+- **Hosting:** GitHub Pages (`gh-pages`-Branch)
 
 ## 🗂️ Projektstruktur
 
 ```
 src/
-├── App.jsx                      # Haupt-Router
-├── components/
-│   └── ProjectHub.jsx          # Projekt-Auswahlseite
-├── shared/
-│   └── LobbySystem.jsx         # Gemeinsame Lobby-Komponente
+├── App.jsx                    # Router (Hash-basiert)
+├── components/ProjectHub.jsx  # Startseite
+├── shared/LobbySystem.jsx     # Gemeinsame Lobby (Name + Emoji)
 ├── projects/
-│   ├── Hitzkopf/              # Hitzkopf-Spiel
-│   │   ├── HitzkopfGame.jsx
-│   │   └── HitzkopfGame.module.css
-│   └── MusicVoter/            # Music Voter
-│       ├── MusicVoter.jsx
-│       └── MusicVoter.module.css
-├── services/
-│   └── spotifyService.js      # Spotify API Integration
-├── data/                       # Spieldaten (Fragen, etc.)
-├── utils/                      # Hilfsfunktionen
-└── assets/                     # Bilder, Sounds, etc.
+│   ├── MusicVoter/            # Amplify
+│   ├── QuizGame/              # Quiz Royale
+│   ├── SecondSound/           # Song raten
+│   └── Hitzkopf/              # Hitzkopf (pausiert)
+├── services/spotifyService.js # Spotify-Anbindung (PKCE + Token-Proxy)
+├── utils/                     # audioManager, logger (Debug-Logs nur im Dev-Modus)
+└── data/                      # Fragen, Charaktere, Upgrades
+functions/                     # Cloud Functions (spotifyToken, Hitzkopf-Trigger)
+firestore.rules                # Sicherheitsregeln
 ```
 
-## 🔧 Technologie-Stack
+## 🎵 Spotify
 
-- **Frontend:** React 19 + Vite
-- **Styling:** CSS Modules
-- **Backend:** Firebase (Firestore + Auth)
-- **Hosting:** GitHub Pages
-- **APIs:** Spotify Web API (optional)
+Das Client Secret liegt **nicht** im Frontend, sondern im Firebase Secret Manager. Eine Cloud Function (`spotifyToken`)
+liefert App-Tokens für die Suche, der Nutzer-Login läuft per PKCE.
+Setup und Deployment: [SPOTIFY_SETUP.md](./SPOTIFY_SETUP.md). Details zu Amplify: [MUSIC_VOTER.md](./MUSIC_VOTER.md).
 
-## 🎨 Features
+## 🔐 Deployment
 
-### Gemeinsame Komponenten
+- **Website:** Push/Merge auf `main` → GitHub Action baut (`npm run build`) und deployt nach `gh-pages`.
+  Benötigtes GitHub-Secret: `VITE_SPOTIFY_CLIENT_ID`.
+- **Firestore-Regeln:** `npm run deploy:rules`
+- **Cloud Function:** `npx firebase deploy --only functions:spotifyToken`
+- `dist/` wird nicht eingecheckt.
 
-- **LobbySystem:** Wiederverwendbare Lobby mit Namen + Emoji-Auswahl
-- **Firebase Integration:** Zentrale Echtzeit-Datenbank
-- **Design-System:** Konsistente UI über alle Projekte
-- **Responsive:** Funktioniert auf Desktop und Mobile
-
-### Project Hub
-
-Die Startseite zeigt alle verfügbaren Projekte:
-- Animierte Projekt-Karten
-- Hover-Effekte
-- Gradient-Animationen
-- Responsive Grid-Layout
-
-## 🔥 Firebase Setup
-
-Die App nutzt Firebase für:
-- **Authentication:** Anonyme Anmeldung
-- **Firestore:** Echtzeit-Datenbank für Lobbies
-- **Hosting:** Optional für Production
-
-Collections:
-- `lobbies/` - Hitzkopf-Lobbies
-- `musicVoterLobbies/` - Music Voter Lobbies
-
-## 🎵 Spotify Integration (Optional)
-
-Music Voter kann optional mit der Spotify API verbunden werden:
-
-1. Erstelle eine App auf [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-2. Kopiere `.env.local.example` zu `.env.local`
-3. Füge deine Spotify Credentials ein
-
-**Wichtig:** Music Voter funktioniert auch **ohne Spotify** durch manuelle Song-Eingabe!
-
-Detaillierte Anleitung: [MUSIC_VOTER_SPOTIFY.md](./MUSIC_VOTER_SPOTIFY.md)
-
-## 📱 Verwendung
-
-1. **Öffne die App** - Du siehst den Project Hub
-2. **Wähle ein Projekt** - Hitzkopf oder Music Voter
-3. **Erstelle eine Lobby** - Gib deinen Namen ein und wähle ein Emoji
-4. **Teile den Code** - Andere können mit dem 6-stelligen Code beitreten
-5. **Spiele!** - Viel Spaß!
-
-## 🎯 Geplante Erweiterungen
-
-### Neue Projekte
-- 🎲 Würfel-Spiele
-- 🃏 Karten-Spiele
-- 🎨 Draw & Guess
-- 📝 Trivia Quiz
-
-### Allgemeine Features
-- User Accounts (optional)
-- Lobby-Browser
-- Private/Public Lobbies
-- Chat-Funktion
-- Voice Chat Integration
+Entwickelt wird auf `dev`, Änderungen gehen per Pull Request nach `main`.
 
 ## 🐛 Bekannte Probleme
 
-### Windows/OneDrive esbuild EPERM Fehler
-
-Falls der Dev-Server mit einem `spawn EPERM` Fehler fehlschlägt:
-
-**Lösungen:**
-1. Projekt außerhalb von OneDrive verschieben
-2. Windows Defender Ausnahme hinzufügen
-3. Terminal als Administrator ausführen
-4. `node_modules` neu installieren:
-   ```bash
-   rm -rf node_modules
-   npm install
-   ```
-
-Der Code selbst ist fehlerfrei - dies ist ein bekanntes Windows-Problem mit esbuild.
-
-## 📝 Scripts
-
-```bash
-npm run dev          # Development Server
-npm run build        # Production Build
-npm run preview      # Preview Production Build
-npm run lint         # ESLint
-npm run deploy       # Deploy zu GitHub Pages
-```
-
-## 🤝 Mitwirken
-
-Ideen für neue Spiele? Verbesserungsvorschläge?
-
-1. Fork das Repository
-2. Erstelle einen Feature-Branch
-3. Committe deine Änderungen
-4. Erstelle einen Pull Request
+**Windows/OneDrive: `spawn EPERM` (esbuild):** Projekt außerhalb von OneDrive verschieben, Defender-Ausnahme hinzufügen
+oder `node_modules` neu installieren.
 
 ## 📄 Lizenz
 
-MIT License - siehe [LICENSE](LICENSE)
-
-## 🎉 Credits
-
-- Firebase für Echtzeit-Datenbank
-- Spotify Web API (optional)
-- React + Vite für das Framework
-- Community für Feedback und Ideen
-
----
-
-Made with ❤️ by Niklas
-
-**Viel Spaß beim Spielen! 🎮🎵**
+MIT

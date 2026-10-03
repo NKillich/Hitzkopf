@@ -8,9 +8,12 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-# dist (needed for GitHub Pages)
+# Build-Output (wird von der CI gebaut und nach gh-pages deployt)
+dist
 dist-ssr
 *.local
+.env*
+!.env.local.example
 
 # Editor directories and files
 .vscode/*

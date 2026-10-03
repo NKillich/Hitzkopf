@@ -5,6 +5,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, deleteDoc, deleteField, collection, query, where, getDocs } from 'firebase/firestore'
 import LobbySystem, { generateRandomName } from '../../shared/LobbySystem'
 import spotifyService from '../../services/spotifyService'
+import { log } from '../../utils/logger.js'
 import styles from './MusicVoter.module.css'
 
 const baseEmojis = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵']
@@ -243,7 +244,7 @@ const MusicVoter = ({ onBack }) => {
             })
             
             setAvailableLobbies(lobbies)
-            console.log(`✅ ${lobbies.length} offene Lobbies geladen`)
+            log(`✅ ${lobbies.length} offene Lobbies geladen`)
         } catch (error) {
             console.error('Fehler beim Laden der Lobbies:', error)
             setAvailableLobbies([])
@@ -269,7 +270,7 @@ const MusicVoter = ({ onBack }) => {
         
         try {
             await deleteDoc(lobbyRef)
-            console.log(`✅ Playlist ${lobbyId} gelöscht`)
+            log(`✅ Playlist ${lobbyId} gelöscht`)
             
             // Aktualisiere die Lobby-Liste
             setAvailableLobbies(prev => prev.filter(l => l.id !== lobbyId))
@@ -304,7 +305,7 @@ const MusicVoter = ({ onBack }) => {
             
             await Promise.all(deletePromises)
             
-            console.log(`✅ Alle ${availableLobbies.length} Playlists gelöscht`)
+            log(`✅ Alle ${availableLobbies.length} Playlists gelöscht`)
             setAvailableLobbies([])
             alert('Alle Playlists wurden gelöscht!')
         } catch (error) {
@@ -332,7 +333,7 @@ const MusicVoter = ({ onBack }) => {
         
         try {
             await deleteDoc(lobbyRef)
-            console.log('✅ Playlist geschlossen')
+            log('✅ Playlist geschlossen')
             
             // Cleanup
             if (unsubscribeRef.current) {
@@ -623,7 +624,7 @@ const MusicVoter = ({ onBack }) => {
             setSearchResults(results)
             
             if (results.length === 0) {
-                console.log('Keine Ergebnisse für:', searchQuery)
+                log('Keine Ergebnisse für:', searchQuery)
             }
         } catch (error) {
             console.error('Spotify Suche fehlgeschlagen:', error)
@@ -847,7 +848,7 @@ const MusicVoter = ({ onBack }) => {
     useEffect(() => {
         if (!isHost) return
         spotifyService.isUserLoggedIn().then(setSpotifyConnected)
-    }, [isHost, spotifyCallbackDone])
+    }, [isHost, spotifyReadyForLobby])
 
     // Spotify: Nach Verbindung den Spotify-Displaynamen als Spielernamen übernehmen
     useEffect(() => {

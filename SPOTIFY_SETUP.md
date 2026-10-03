@@ -1,201 +1,44 @@
-# Spotify API - Schnellstart-Anleitung
+# Spotify einrichten (Amplify & Song raten)
 
-## ✅ Was wurde implementiert
+Es gibt zwei Arten von Spotify-Zugriff:
 
-Die Spotify API ist jetzt vollständig in Music Voter integriert!
+| Zweck | Wer | Wie |
+|---|---|---|
+| Suche nach Songs/Alben ohne Login (Amplify-Gäste) | alle Spieler | App-Token von der Cloud Function `spotifyToken` |
+| Playlists lesen, Wiedergabe (Host, Song raten) | eingeloggter Nutzer | OAuth mit **PKCE** direkt im Browser, Spotify Premium nötig |
 
-## 📋 Setup-Schritte
+Das **Client Secret kommt nie ins Frontend** (kein `VITE_`-Prefix, nicht in der CI). Es liegt nur im Firebase Secret Manager.
 
-### 1. Spotify Developer App erstellen
+## 1. Spotify-App anlegen
+1. [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) → *Create app*.
+2. **Redirect URIs** eintragen (exakt, mit/ohne Slash wie in der Env-Variable):
+   - Production: `https://nkillich.github.io/Hitzkopf`
+   - Lokal: `http://127.0.0.1:5173/Hitzkopf/` (`localhost` erlaubt Spotify nicht, immer `127.0.0.1`)
+3. **Client ID** und **Client Secret** notieren.
 
-1. Gehe zu: **https://developer.spotify.com/dashboard**
-2. Melde dich an (oder erstelle einen kostenlosen Account)
-3. Klicke **"Create app"**
-4. Fülle aus:
-   - **App name:** `Music Voter`
-   - **App description:** `Collaborative music voting app`
-   - **Redirect URIs:** `http://localhost:5173/callback`
-   - **API/SDKs:** `Web API`
-5. Akzeptiere die Terms und klicke **"Save"**
-6. Auf der App-Seite:
-   - Kopiere die **Client ID**
-   - Klicke **"Show Client Secret"** und kopiere das Secret
+## 2. Frontend (lokal)
+`.env.local.example` nach `.env.local` kopieren:
 
-### 2. .env.local konfigurieren
+```env
+VITE_SPOTIFY_CLIENT_ID=deine_client_id
+VITE_SPOTIFY_REDIRECT_URI=http://127.0.0.1:5173/Hitzkopf/
+```
 
-Die Datei `.env.local` wurde bereits erstellt. Du musst nur deine Credentials einfügen:
+Für die Production-CI wird nur `VITE_SPOTIFY_CLIENT_ID` als GitHub-Secret benötigt
+(*Settings → Secrets and variables → Actions*).
+
+## 3. Cloud Function `spotifyToken` (Secret serverseitig)
+Voraussetzung: Firebase-Projekt auf dem Blaze-Plan, `firebase login`.
 
 ```bash
-# Öffne die Datei .env.local im Projekt-Root
-# Ersetze die Platzhalter mit deinen echten Werten:
-
-VITE_SPOTIFY_CLIENT_ID=deine_echte_client_id_hier
-VITE_SPOTIFY_CLIENT_SECRET=dein_echtes_client_secret_hier
-VITE_SPOTIFY_REDIRECT_URI=http://localhost:5173/callback
+npx firebase functions:secrets:set SPOTIFY_CLIENT_ID
+npx firebase functions:secrets:set SPOTIFY_CLIENT_SECRET
+npx firebase deploy --only functions:spotifyToken
 ```
 
-**Wichtig:** 
-- Keine Anführungszeichen um die Werte
-- Keine Leerzeichen vor/nach dem `=`
-- Die Datei ist in `.gitignore` und wird nicht committet
+Die Function verlangt einen Firebase-Login (anonym reicht), cached den Token und gibt ihn an den Client weiter.
 
-### 3. Dev-Server neu starten
-
-**Wichtig:** Du musst den Dev-Server neu starten, damit die Umgebungsvariablen geladen werden!
-
-```bash
-# Terminal stoppen (Ctrl+C falls läuft)
-npm run dev
-```
-
-### 4. Testen
-
-1. Öffne die App: `http://localhost:5173`
-2. Wähle **"Music Voter"**
-3. Erstelle eine Lobby
-4. Klicke **"+ Song/Album hinzufügen"**
-5. Wähle **"Spotify"**
-6. Suche nach einem Song (z.B. "Bohemian Rhapsody")
-7. Die Ergebnisse sollten erscheinen!
-
-## 🎵 Features
-
-### Was funktioniert:
-- ✅ **Suche nach Songs**
-- ✅ **Suche nach Alben**
-- ✅ **Kombinierte Suche** (Songs + Alben)
-- ✅ **Cover-Bilder** werden angezeigt
-- ✅ **Klicken zum Hinzufügen**
-- ✅ **Automatische Token-Verwaltung**
-
-### Suchergebnis enthält:
-- Titel
-- Künstler
-- Album (bei Songs)
-- Cover-Bild
-- Spotify-Link
-- Preview-URL (für spätere Audio-Playback)
-
-## 🔍 So suchst du:
-
-1. **Nach Song:** Gib Songtitel oder Künstler ein
-   - Beispiel: "Bohemian Rhapsody"
-   - Beispiel: "Queen"
-
-2. **Nach Album:** Gib Albumtitel ein
-   - Beispiel: "A Night at the Opera"
-   - Beispiel: "Abbey Road"
-
-3. **Kombiniert:** Künstler + Song/Album
-   - Beispiel: "Queen Bohemian"
-   - Beispiel: "Beatles Abbey"
-
-## 🐛 Troubleshooting
-
-### "Spotify Suche fehlgeschlagen. Überprüfe deine Credentials"
-
-**Lösung:**
-1. Prüfe ob `.env.local` die richtigen Werte enthält
-2. Stelle sicher, dass keine Anführungszeichen um die Werte sind
-3. **Dev-Server neu starten!** (Umgebungsvariablen werden nur beim Start geladen)
-
-### "CORS Error"
-
-**Lösung:**
-- Das ist normal bei Client Credentials Flow
-- Der Service nutzt automatisch den richtigen Flow
-- Bei Problemen: Prüfe ob Client Secret korrekt ist
-
-### "Token expired"
-
-**Lösung:**
-- Der Service erneuert Token automatisch
-- Sollte nicht passieren
-- Falls doch: Seite neu laden
-
-### Keine Ergebnisse
-
-**Lösung:**
-1. Prüfe Suchbegriff (Tippfehler?)
-2. Versuche allgemeineren Begriff
-3. Prüfe Spotify Dashboard (ist App aktiv?)
-
-## 📊 API Limits
-
-- **Rate Limit:** 180 Requests/Minute (mehr als genug!)
-- **Token Gültigkeit:** 1 Stunde (automatische Erneuerung)
-- **Suchergebnisse:** Max. 20 pro Suche (konfigurierbar)
-
-## 🎨 UI Features
-
-### Suchergebnisse zeigen:
-- **Cover-Bild** (50x50px) links
-- **Titel** (fett)
-- **Künstler** (grau)
-- **Album** (bei Songs, kleinere Schrift)
-- **+ Button** rechts zum Hinzufügen
-
-### Interaktion:
-- **Hover:** Item hebt sich hervor
-- **Klick:** Song/Album wird zur Playlist hinzugefügt
-- **Enter:** Startet Suche
-
-### Loading State:
-- Spinner während der Suche
-- "Durchsuche Spotify..." Text
-- Button wird disabled
-
-## 🚀 Erweiterte Features (optional)
-
-### Preview Playback (später hinzufügen)
-
-Viele Songs haben eine `previewUrl` (30 Sekunden):
-
-```javascript
-// Im Suchergebnis-Item:
-{item.previewUrl && (
-    <audio controls>
-        <source src={item.previewUrl} type="audio/mpeg" />
-    </audio>
-)}
-```
-
-### Externe Links
-
-```javascript
-// Spotify-Link öffnen:
-<a href={item.spotifyUrl} target="_blank" rel="noopener noreferrer">
-    🎵 In Spotify öffnen
-</a>
-```
-
-### Größere Cover-Bilder
-
-In der Playlist (nicht Suche):
-
-```javascript
-// In MusicVoter.jsx bei playlistItem:
-{item.imageUrl && (
-    <img 
-        src={item.imageUrl} 
-        alt={item.title}
-        className={styles.itemCover}
-    />
-)}
-```
-
-```css
-/* In MusicVoter.module.css: */
-.itemCover {
-    width: 60px;
-    height: 60px;
-    border-radius: 8px;
-    object-fit: cover;
-}
-```
-
-## 🎉 Das war's!
-
-Spotify ist jetzt vollständig integriert und einsatzbereit!
-
-**Tipp:** Wenn du keine Spotify-API nutzen möchtest, funktioniert die manuelle Eingabe weiterhin perfekt. Die App ist hybrid! 🎵
+## Fehlersuche
+- **Suche schlägt fehl:** Ist die Function deployt (`firebase functions:log`)? Sind beide Secrets gesetzt?
+- **Login-Redirect schlägt fehl:** Redirect URI im Dashboard stimmt nicht exakt mit `VITE_SPOTIFY_REDIRECT_URI` überein.
+- **Wiedergabe geht nicht:** Spotify Premium und ein aktives Gerät nötig.
