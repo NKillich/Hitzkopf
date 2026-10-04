@@ -33,10 +33,11 @@ service cloud.firestore {
                         || request.auth.uid in resource.data.players.keys());
     }
 
-    // Song raten: Statistiken pro Geraet (anonymer Login, Geraete-ID "ss_...")
+    // Song raten: Statistiken (anonymer Login; Dokument pro Spotify-Konto "sp_...")
     match /userStats/{deviceId} {
       function validId() {
-        return deviceId.matches('ss_[a-z0-9]{3,40}');
+        // ss_… = alte Geräte-Statistik, sp_… = Statistik pro Spotify-Konto
+        return deviceId.matches('(ss|sp)_[a-z0-9_]{1,64}');
       }
       function validNum(d, k, max) {
         return !(k in d) || (d[k] is number && d[k] >= 0 && d[k] <= max);

@@ -1219,8 +1219,8 @@ class SpotifyService {
                 uri: pl.uri || `spotify:playlist:${pl.id}`
             }))
             playlists = [...playlists, ...page]
-            // Nur erste Seite laden wenn limit ≤ 50
-            url = limit > 50 ? (data.next || null) : null
+            // Alle Seiten laden (Spotify liefert max. 50 pro Seite); Sicherheitsgrenze 1000 Playlists
+            url = playlists.length < 1000 ? (data.next || null) : null
         }
         return playlists
     }
