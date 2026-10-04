@@ -8,19 +8,11 @@ import clip from '../../services/clipPlayer.js'
 import { log, warn } from '../../utils/logger.js'
 import styles from './SecondSound.module.css'
 
-const getDeviceId = () => {
-    let id = localStorage.getItem('ss_deviceId')
-    if (!id) {
-        id = 'ss_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36)
-        localStorage.setItem('ss_deviceId', id)
-    }
-    return id
-}
-
 const PHASES = {
     HOME: 'home',            // Startseite: Spotify verbinden, Spiel starten
     PLAYLISTS: 'playlists',  // Schritt 1: Playlists wählen
     COUNT: 'count',          // Schritt 2: Songanzahl wählen
+    SETTINGS: 'settings',    // Einstellungen + Statistik
     LOADING: 'loading',
     GAME: 'game',
     RESULTS: 'results'
@@ -29,7 +21,7 @@ const PHASES = {
 const TIERS = [
     { min: 90, title: 'Absoluter Musikprofi!', sub: 'Kaum ein Song hatte eine Chance.', mouth: 'M19 37 Q32 55 45 37 Z', filled: true },
     { min: 70, title: 'Richtig stark!', sub: 'Da kennt sich jemand aus.', mouth: 'M20 39 Q32 51 44 39' },
-    { min: 50, title: 'Gar nicht schlecht!', sub: 'Mehr als die Hälfte erkannt – solide Runde.', mouth: 'M22 41 Q32 47 42 41' },
+    { min: 50, title: 'Gar nicht schlecht!', sub: 'Mindestens die Hälfte erraten – solide Runde.', mouth: 'M22 41 Q32 47 42 41' },
     { min: 30, title: 'Ausbaufähig', sub: 'Ein paar Songs saßen schon. Da geht noch mehr.', mouth: 'M22 43 L42 41' },
     { min: 0, title: 'Oje …', sub: 'Das war nicht eure Runde. Nächstes Mal klappt’s besser.', mouth: 'M21 46 Q32 36 43 46' }
 ]
@@ -124,7 +116,6 @@ export default function SecondSound({ onBack }) {
     const [allTimeStats, setAllTimeStats] = useState(null)
     const [isDark, setIsDark] = useState(() => localStorage.getItem('ss_theme') !== 'light')
     const dbRef = useRef(null)
-    const deviceId = useRef(getDeviceId())
 
     const toggleTheme = () => {
         setIsDark(prev => {
@@ -170,10 +161,19 @@ export default function SecondSound({ onBack }) {
     const [isPlaying, setIsPlaying] = useState(false)
     const [songHistory, setSongHistory] = useState([])
     const [historyOpen, setHistoryOpen] = useState(false)
+    const [verdict, setVerdict] = useState(null)          // 'ok' | 'no' während der kurzen Auflösung
+    const [startNotice, setStartNotice] = useState(null)  // z. B. "Deine Auswahl hat nur 20 Songs"
+    const [statsState, setStatsState] = useState('idle')  // idle | loading | ready | error
+    const [statsSaveFailed, setStatsSaveFailed] = useState(false)
 
 
     const currentIndexRef = useRef(0)
     const isAnsweringRef = useRef(false)        // verhindert Doppel-Klick auf Antwort-Buttons
+    const maxHeardRef = useRef(0)               // längste gehörte Stufe des aktuellen Songs (für Ø-Zeit)
+    const revealDoneRef = useRef(null)          // beendet die kurze Auflösung nach dem Werten vorzeitig
+    const statsKeyRef = useRef(null)            // Statistik-Dokument pro Spotify-Konto (sp_…)
+    const closeBtnRef = useRef(null)
+    const keepPlayingRef = useRef(null)
     const usedUrisRef = useRef(new Set())        // schon gespielte Titel dieser Runde (Duplikate überspringen)
     const playGenRef = useRef(0)                 // wird bei Song-Wechsel erhöht: ältere Start-Anfragen verfallen
     const startingGameRef = useRef(false)        // verhindert doppelten Spielstart
@@ -192,25 +192,37 @@ export default function SecondSound({ onBack }) {
         dbRef.current = getFirestore(getApp())
     }, [])
 
-    const saveAndLoadStats = async (finalScore, finalPlayed, totalSeconds, countWithTime) => {
-        const db = dbRef.current
-        if (!db) return
-        // Firestore-Regeln verlangen einen (anonymen) Login
+    // Firestore-Regeln verlangen einen (anonymen) Firebase-Login
+    const ensureFirebaseAuth = async () => {
         const auth = getAuth(getApp())
         await auth.authStateReady()
-        if (!auth.currentUser) {
-            try { await signInAnonymously(auth) } catch (e) {
-                console.error('Anonymer Login fehlgeschlagen:', e)
-                return
-            }
-        }
-        const ref = doc(db, 'userStats', deviceId.current)
-        const percent = finalPlayed > 0 ? Math.round((finalScore / finalPlayed) * 100) : 0
+        if (!auth.currentUser) await signInAnonymously(auth)
+    }
+
+    // Statistik-Dokument des verbundenen Spotify-Kontos ermitteln
+    const getStatsKey = async () => {
+        if (statsKeyRef.current) return statsKeyRef.current
+        const profile = await spotifyService.getUserProfile()
+        if (!profile?.id) return null
+        statsKeyRef.current = 'sp_' + String(profile.id).toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 64)
+        return statsKeyRef.current
+    }
+
+    const saveAndLoadStats = async (finalScore, finalPlayed, totalSeconds, countWithTime) => {
+        const db = dbRef.current
+        if (!db || finalPlayed <= 0) return
+        setStatsSaveFailed(false)
         try {
+            await ensureFirebaseAuth()
+            const key = await getStatsKey()
+            if (!key) throw new Error('Spotify-Konto nicht ermittelbar')
+            const ref = doc(db, 'userStats', key)
+            const correct = Math.min(finalScore, finalPlayed)
+            const percent = Math.min(100, Math.round((correct / finalPlayed) * 100))
             const snap = await getDoc(ref)
-            const currentBest = snap.exists() ? (snap.data().bestPercent || 0) : 0
+            const currentBest = snap.exists() ? Math.min(100, snap.data().bestPercent || 0) : 0
             const update = {
-                songsCorrect: increment(finalScore),
+                songsCorrect: increment(correct),
                 songsTotal: increment(finalPlayed),
                 gamesPlayed: increment(1),
                 bestPercent: Math.max(currentBest, percent),
@@ -224,6 +236,24 @@ export default function SecondSound({ onBack }) {
             if (updated.exists()) setAllTimeStats(updated.data())
         } catch (e) {
             console.error('Stats speichern fehlgeschlagen:', e)
+            setStatsSaveFailed(true)
+        }
+    }
+
+    const loadStats = async () => {
+        const db = dbRef.current
+        if (!db) return
+        setStatsState('loading')
+        try {
+            await ensureFirebaseAuth()
+            const key = await getStatsKey()
+            if (!key) throw new Error('Spotify-Konto nicht ermittelbar')
+            const snap = await getDoc(doc(db, 'userStats', key))
+            setAllTimeStats(snap.exists() ? snap.data() : null)
+            setStatsState('ready')
+        } catch (e) {
+            console.error('Statistik laden fehlgeschlagen:', e)
+            setStatsState('error')
         }
     }
 
@@ -496,6 +526,9 @@ export default function SecondSound({ onBack }) {
 
             // Zufällig aus ALLEN Titeln aller Playlists ziehen (3× Reserve für übersprungene/doppelte Titel)
             const slots = fisherYates(candidates).slice(0, songCount * 3)
+            setStartNotice(candidates.length < songCount
+                ? `Deine Auswahl hat nur ${candidates.length} Songs – die Runde hat deshalb ${candidates.length} Songs.`
+                : null)
 
             // Sicherstellen, dass vor dem ersten Klick nichts mehr läuft
             allowPlaybackRef.current = false
@@ -614,6 +647,8 @@ export default function SecondSound({ onBack }) {
             playStartRef.current = result.startedAt
             setIsPlaying(true)
             setHasPlayedCurrentSong(true)
+            setStartNotice(null)
+            maxHeardRef.current = Math.max(maxHeardRef.current, seconds)
             setMaxUnlockedIndex(prev => Math.max(prev, idx + 1))
         } catch (e) {
             allowPlaybackRef.current = false
@@ -642,6 +677,7 @@ export default function SecondSound({ onBack }) {
             return
         }
         currentIndexRef.current = next
+        maxHeardRef.current = 0
         setCurrentIndex(next)
         setIsRevealed(false)
         setMaxUnlockedIndex(0)
@@ -662,11 +698,12 @@ export default function SecondSound({ onBack }) {
         isPlayingRequestRef.current = false
         if (correct) {
             setScore(prev => prev + 1)
-            if (lastPlaySecondsRef.current != null) {
-                sessionSecondsCorrectRef.current.push(lastPlaySecondsRef.current)
+            if (maxHeardRef.current > 0) {
+                sessionSecondsCorrectRef.current.push(maxHeardRef.current)
             }
         }
         lastPlaySecondsRef.current = null
+        maxHeardRef.current = 0
         const newPlayed = playedCount + 1
         setPlayedCount(newPlayed)
         setIsRevealed(false)
@@ -699,7 +736,20 @@ export default function SecondSound({ onBack }) {
         }
         isAnsweringRef.current = true
         dbg(`handleAnswer: ${correct ? '✓ RICHTIG' : '✕ FALSCH'}`)
+        const gen = playGenRef.current
         await stopPlayback()
+        if (!isRevealed) {
+            // Lösung kurz zeigen; Tipp auf das Cover überspringt die Wartezeit
+            setVerdict(correct ? 'ok' : 'no')
+            setIsRevealed(true)
+            await new Promise((resolve) => {
+                const t = setTimeout(resolve, 1500)
+                revealDoneRef.current = () => { clearTimeout(t); resolve() }
+            })
+            revealDoneRef.current = null
+        }
+        setVerdict(null)
+        if (gen !== playGenRef.current) { isAnsweringRef.current = false; return }   // Runde wurde inzwischen beendet
         advanceAfterAnswer(correct)
         // wird in advanceAfterAnswer nach dem State-Update nicht zurückgesetzt –
         // das neue Lied setzt es zurück
@@ -725,6 +775,10 @@ export default function SecondSound({ onBack }) {
         setMaxUnlockedIndex(0)
         setLoadingError(null)
         lastPlaySecondsRef.current = null
+        maxHeardRef.current = 0
+        setVerdict(null)
+        setStartNotice(null)
+        setStatsSaveFailed(false)
         sessionSecondsCorrectRef.current = []
         songsRef.current = []
         trackUriRef.current = {}
@@ -752,6 +806,24 @@ export default function SecondSound({ onBack }) {
         setPhase(PHASES.PLAYLISTS)
     }
 
+    // Bekannte Gesamtzahl der gewählten Playlists (nur eigene Playlists liefern eine Anzahl)
+    const knownTotal = selectedPlaylists.length > 0 && selectedPlaylists.every(p => p.trackCount > 1)
+        ? selectedPlaylists.reduce((sum, p) => sum + p.trackCount, 0)
+        : null
+    const maxCount = knownTotal
+        ? Math.max(COUNT_OPTIONS[0], Math.min(COUNT_OPTIONS[COUNT_OPTIONS.length - 1], Math.ceil(knownTotal / 5) * 5))
+        : COUNT_OPTIONS[COUNT_OPTIONS.length - 1]
+
+    const goToCount = () => {
+        if (songCount > maxCount) setSongCount(maxCount)
+        setPhase(PHASES.COUNT)
+    }
+
+    const handleOpenSettings = () => {
+        setPhase(PHASES.SETTINGS)
+        if (connected) loadStats()
+    }
+
     // Startseite → Playlist-Auswahl (immer mit leerer Auswahl)
     const handleOpenPlaylists = () => {
         resetSelection()
@@ -763,6 +835,8 @@ export default function SecondSound({ onBack }) {
     const handleDisconnect = () => {
         spotifyService.disconnectPlayer()
         spotifyService.clearUserTokens()
+        statsKeyRef.current = null
+        setAllTimeStats(null)
         resetSelection()
         setMyPlaylists([])
         setMyPlaylistsLoaded(false)
@@ -778,6 +852,12 @@ export default function SecondSound({ onBack }) {
         spotifyService.disconnectPlayer()
         onBack()
     }
+
+    // Nach einer Runde den Hilfseintrag für die Zurück-Taste wieder entfernen
+    useEffect(() => {
+        if (phase === PHASES.GAME || !window.history.state?.ssGame) return
+        window.history.back()
+    }, [phase])
 
     // Runde abbrechen (ohne Wertung) und zurück zur Startseite
     const endGame = async () => {
@@ -795,6 +875,33 @@ export default function SecondSound({ onBack }) {
         const id = setInterval(() => setFrame(f => f + 1), 150)
         return () => clearInterval(id)
     }, [phase, isPlaying])
+
+    // Browser-Zurück während einer Runde: nicht abbrechen, sondern nachfragen
+    useEffect(() => {
+        if (phase !== PHASES.GAME) return
+        // Hilfseintrag nur einmal anlegen (React führt Effekte im Dev-Modus doppelt aus)
+        if (!window.history.state?.ssGame) window.history.pushState({ ssGame: true }, '')
+        const onPop = () => {
+            if (window.history.state?.ssGame) return      // landet noch auf dem Hilfseintrag: nichts zu tun
+            window.history.pushState({ ssGame: true }, '')
+            setConfirmClose(true)
+        }
+        window.addEventListener('popstate', onPop)
+        return () => window.removeEventListener('popstate', onPop)
+    }, [phase])
+
+    // Beenden-Dialog: Fokus hinein, Escape schließt, Fokus danach zurück auf das X
+    useEffect(() => {
+        if (!confirmClose) return
+        const closeBtn = closeBtnRef.current
+        keepPlayingRef.current?.focus()
+        const onKey = (e) => { if (e.key === 'Escape') setConfirmClose(false) }
+        window.addEventListener('keydown', onKey)
+        return () => {
+            window.removeEventListener('keydown', onKey)
+            closeBtn?.focus()
+        }
+    }, [confirmClose])
 
     // Setup: eigene Playlists direkt beim Öffnen laden (häufigster Fall)
     useEffect(() => {
@@ -869,7 +976,7 @@ export default function SecondSound({ onBack }) {
                         <button type="button" disabled aria-disabled="true" className={`${styles.srBtn} ${styles.srStartOff}`}><IconLock />Spiel starten</button>
                     )}
 
-                    <button type="button" className={`${styles.srBtn} ${styles.srSecondary}`}>Einstellungen</button>
+                    <button type="button" className={`${styles.srBtn} ${styles.srSecondary}`} onClick={handleOpenSettings}>Einstellungen</button>
 
                     {connected ? (
                         <p className={styles.srStatus} role="status">
@@ -914,7 +1021,7 @@ export default function SecondSound({ onBack }) {
                 </header>
 
                 <div className={`${styles.srScroll} ${styles.srScrollFix}`}>
-                    <p className={styles.srInfo}>Wähle eine oder mehrere Playlists aus denen du zufällige Songs erraten willst</p>
+                    <p className={styles.srInfo}>Wähle eine oder mehrere Playlists, aus denen du zufällige Songs erraten willst</p>
 
                     <div className={styles.srTabs} role="tablist" aria-label="Playlist-Quelle">
                         <button type="button" role="tab" aria-selected={isMine} className={`${styles.srBtn} ${styles.srTab} ${isMine ? styles.srTabOn : ''}`}
@@ -943,6 +1050,12 @@ export default function SecondSound({ onBack }) {
                                     placeholder="z. B. Rock, 80er, Party"
                                     autoComplete="off"
                                 />
+                                {playlistQuery && (
+                                    <button type="button" className={`${styles.srBtn} ${styles.srInputClear}`} aria-label="Suche löschen"
+                                        onClick={() => { setPlaylistQuery(''); searchInputRef.current?.focus() }}>
+                                        <IconX size={16} w={2.6} />
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -1031,7 +1144,7 @@ export default function SecondSound({ onBack }) {
 
                 <div className={styles.srFooter}>
                     {k > 0 ? (
-                        <button type="button" className={`${styles.srBtn} ${styles.srPrimary}`} onClick={() => setPhase(PHASES.COUNT)}>Weiter</button>
+                        <button type="button" className={`${styles.srBtn} ${styles.srPrimary}`} onClick={goToCount}>Weiter</button>
                     ) : (
                         <button type="button" disabled aria-disabled="true" className={`${styles.srBtn} ${styles.srStartOff}`}><IconLock />Weiter</button>
                     )}
@@ -1059,19 +1172,22 @@ export default function SecondSound({ onBack }) {
                             type="range"
                             className={styles.srSlider}
                             min={COUNT_OPTIONS[0]}
-                            max={COUNT_OPTIONS[COUNT_OPTIONS.length - 1]}
+                            max={maxCount}
                             step={5}
-                            value={songCount}
+                            value={Math.min(songCount, maxCount)}
                             onChange={e => setSongCount(Number(e.target.value))}
-                            aria-labelledby="sr-count-label"
+                            aria-label="Anzahl der Songs"
                             aria-valuetext={`${songCount} Songs`}
-                            style={{ '--pct': `${((songCount - COUNT_OPTIONS[0]) / (COUNT_OPTIONS[COUNT_OPTIONS.length - 1] - COUNT_OPTIONS[0])) * 100}%` }}
+                            style={{ '--pct': `${maxCount > COUNT_OPTIONS[0] ? ((Math.min(songCount, maxCount) - COUNT_OPTIONS[0]) / (maxCount - COUNT_OPTIONS[0])) * 100 : 100}%` }}
                         />
                         <div className={styles.srTicks} aria-hidden="true">
-                            {COUNT_OPTIONS.map((n, i) => (
-                                <span key={n} className={n === songCount ? styles.srTickOn : ''} style={{ left: `calc(14px + (100% - 28px) * ${i / (COUNT_OPTIONS.length - 1)})` }}>{n}</span>
+                            {COUNT_OPTIONS.filter(n => n <= maxCount).map((n, i, arr) => (
+                                <span key={n} className={n === songCount ? styles.srTickOn : ''} style={{ left: `calc(14px + (100% - 28px) * ${arr.length > 1 ? i / (arr.length - 1) : 1})` }}>{n}</span>
                             ))}
                         </div>
+                        {knownTotal && knownTotal < songCount && (
+                            <p className={styles.srCountHint}>Deine Auswahl hat nur {knownTotal} Songs – die Runde hat deshalb {knownTotal} Songs.</p>
+                        )}
                     </div>
                 </div>
 
@@ -1098,6 +1214,58 @@ export default function SecondSound({ onBack }) {
                         </span>
                         <span className={styles.srStartIcon}><IconPlay size={20} /></span>
                     </button>
+                </div>
+            </main>
+        )
+    }
+
+    // ─── Einstellungen ───────────────────────────────────────────────────────
+    if (phase === PHASES.SETTINGS) {
+        const st = allTimeStats || {}
+        const games = st.gamesPlayed || 0
+        const total = st.songsTotal || 0
+        const correct = Math.min(st.songsCorrect || 0, total)
+        const rate = total > 0 ? Math.round((correct / total) * 100) : null
+        const avgSec = st.correctGuessesWithTime > 0 ? (st.totalSecondsCorrect / st.correctGuessesWithTime) : null
+        const tiles = [
+            { label: 'Spiele', value: games },
+            { label: 'Songs gespielt', value: total },
+            { label: 'Songs erraten', value: correct },
+            { label: 'Trefferquote', value: rate !== null ? `${rate} %` : '–' },
+            { label: 'Bestes Spiel', value: games > 0 ? `${Math.min(100, st.bestPercent || 0)} %` : '–' },
+            { label: 'Ø erraten nach', value: avgSec !== null ? `${avgSec.toFixed(1).replace('.', ',')} s` : '–' }
+        ]
+        return shell(
+            <main className={styles.srMain}>
+                <header className={`${styles.srSubHeader} ${styles.srPad}`}>
+                    <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setPhase(PHASES.HOME)} aria-label="Zurück"><IconBack /></button>
+                    <h1 className={styles.srSubTitle}>Einstellungen</h1>
+                    {themeBtn}
+                </header>
+                <div className={styles.srScroll}>
+                    <h2 className={styles.srListTitle}>Deine Statistik</h2>
+                    {!connected && <p className={styles.srFineSm}>Verbinde Spotify auf der Startseite, um deine Statistik zu sehen.</p>}
+                    {connected && statsState === 'loading' && <p className={styles.srFineSm}>Statistik wird geladen …</p>}
+                    {connected && statsState === 'error' && (
+                        <div className={styles.srEmpty} role="alert">
+                            <p className={styles.srEmptyText}>Die Statistik konnte nicht geladen werden.</p>
+                            <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={loadStats}><IconRetry />Erneut versuchen</button>
+                        </div>
+                    )}
+                    {connected && statsState === 'ready' && (
+                        games > 0 ? (
+                            <div className={styles.srStatsGrid}>
+                                {tiles.map(t => (
+                                    <div key={t.label} className={styles.srStat}>
+                                        <span className={styles.srStatNum}>{t.value}</span>
+                                        <span className={styles.srStatLabel}>{t.label}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className={styles.srFineSm}>Noch keine Spiele. Nach deiner ersten Runde erscheint hier deine Statistik.</p>
+                        )
+                    )}
                 </div>
             </main>
         )
@@ -1139,7 +1307,7 @@ export default function SecondSound({ onBack }) {
             handlePlayStage(idx)      // läuft gerade etwas anderes, wird es durch diese Stufe ersetzt
         }
 
-        const canAct = hasPlayedCurrentSong && !connecting
+        const canAct = hasPlayedCurrentSong && !connecting && !verdict
         const friendlyError = playerError && (/device not found/i.test(playerError)
             ? { title: 'Der Player ist noch nicht bereit', text: 'Kurz warten und nochmal tippen.' }
             : { title: 'Abspielen hat nicht geklappt', text: playerError })
@@ -1149,7 +1317,7 @@ export default function SecondSound({ onBack }) {
             <main className={`${styles.srMain} ${styles.srPad} ${styles.srGame}`}>
                 <header className={styles.srGameHead}>
                     {themeBtn}
-                    <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setConfirmClose(true)} aria-label="Spiel beenden" title="Spiel beenden"><IconX /></button>
+                    <button ref={closeBtnRef} type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setConfirmClose(true)} aria-label="Spiel beenden" title="Spiel beenden"><IconX /></button>
                 </header>
 
                 <div className={styles.srProgressBox}>
@@ -1161,10 +1329,20 @@ export default function SecondSound({ onBack }) {
                     </div>
                 </div>
 
+                {startNotice && <p className={styles.srToast} role="status">{startNotice}</p>}
+
                 <div
-                    className={`${styles.srCardGame} ${!isRevealed ? styles.srSkelGame : ''} ${(!isRevealed && (isPlaying || starting || connecting)) ? styles.srPulse : ''} ${(!isRevealed && canAct) ? styles.srCardTap : ''}`}
-                    onClick={() => { if (!isRevealed && canAct) setIsRevealed(true) }}
+                    className={`${styles.srCardGame} ${!isRevealed ? styles.srSkelGame : ''} ${(!isRevealed && (isPlaying || starting || connecting)) ? styles.srPulse : ''} ${((!isRevealed && canAct) || verdict) ? styles.srCardTap : ''} ${verdict === 'ok' ? styles.srVerdictOk : ''} ${verdict === 'no' ? styles.srVerdictNo : ''}`}
+                    onClick={() => {
+                        if (verdict) { revealDoneRef.current?.(); return }
+                        if (!isRevealed && canAct) setIsRevealed(true)
+                    }}
                 >
+                    {verdict && (
+                        <span className={`${styles.srVerdictBadge} ${verdict === 'ok' ? styles.srVerdictBadgeOk : styles.srVerdictBadgeNo}`} aria-hidden="true">
+                            {verdict === 'ok' ? <IconCheck size={22} w={3.2} /> : <IconX size={20} w={3.2} />}
+                        </span>
+                    )}
                     {isRevealed ? (
                         <div role="img" aria-label={`Albumcover: ${currentTrackInfo?.trackName || 'Song'}`} className={styles.srCoverFill}>
                             <CoverArt src={currentTrackInfo?.imageUrl} seed={currentTrackInfo?.trackId || currentTrackInfo?.trackName || currentIndex} size={248} radius={0} />
@@ -1177,7 +1355,7 @@ export default function SecondSound({ onBack }) {
                 <div className={styles.srTitleArea}>
                     {isRevealed ? (
                         <>
-                            <h2 className={styles.srSongTitle}>{currentTrackInfo?.trackName || 'Titel wird geladen …'}</h2>
+                            <h2 className={styles.srSongTitle} title={currentTrackInfo?.trackName || ''}>{currentTrackInfo?.trackName || 'Titel wird geladen …'}</h2>
                             <p className={styles.srSongArtist}>{currentTrackInfo?.artist || ''}</p>
                         </>
                     ) : (
@@ -1237,12 +1415,20 @@ export default function SecondSound({ onBack }) {
                 </div>
 
                 {confirmClose && (
-                    <div className={styles.srScrim}>
-                        <div role="dialog" aria-modal="true" aria-labelledby="sr-end-title" className={styles.srSheet}>
+                    <div className={styles.srScrim} onClick={(e) => { if (e.target === e.currentTarget) setConfirmClose(false) }}>
+                        <div role="dialog" aria-modal="true" aria-labelledby="sr-end-title" className={styles.srSheet}
+                            onKeyDown={(e) => {
+                                // Tab bleibt im Dialog
+                                if (e.key !== 'Tab') return
+                                const items = e.currentTarget.querySelectorAll('button')
+                                const first = items[0], last = items[items.length - 1]
+                                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+                                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+                            }}>
                             <span className={styles.srGrab} aria-hidden="true" />
                             <h2 id="sr-end-title" className={styles.srSheetTitle}>Spiel beenden?</h2>
                             <p className={styles.srSheetText}>Die laufende Runde wird abgebrochen und nicht gewertet.</p>
-                            <button type="button" className={`${styles.srBtn} ${styles.srPrimary} ${styles.srPrimarySm}`} onClick={() => setConfirmClose(false)}>Weiterspielen</button>
+                            <button ref={keepPlayingRef} type="button" className={`${styles.srBtn} ${styles.srPrimary} ${styles.srPrimarySm}`} onClick={() => setConfirmClose(false)}>Weiterspielen</button>
                             <button type="button" className={`${styles.srBtn} ${styles.srDanger}`} onClick={endGame}>Spiel beenden</button>
                         </div>
                     </div>
@@ -1290,6 +1476,10 @@ export default function SecondSound({ onBack }) {
                             </div>
                         )}
                     </section>
+
+                    {statsSaveFailed && (
+                        <p className={styles.srToast} role="status">Deine Statistik konnte diesmal nicht gespeichert werden.</p>
+                    )}
 
                     {avg !== null && (
                         <section className={styles.srAvg}>
