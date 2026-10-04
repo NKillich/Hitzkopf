@@ -853,6 +853,12 @@ export default function SecondSound({ onBack }) {
         onBack()
     }
 
+    // Nach einer Runde den Hilfseintrag für die Zurück-Taste wieder entfernen
+    useEffect(() => {
+        if (phase === PHASES.GAME || !window.history.state?.ssGame) return
+        window.history.back()
+    }, [phase])
+
     // Runde abbrechen (ohne Wertung) und zurück zur Startseite
     const endGame = async () => {
         setConfirmClose(false)
@@ -873,16 +879,15 @@ export default function SecondSound({ onBack }) {
     // Browser-Zurück während einer Runde: nicht abbrechen, sondern nachfragen
     useEffect(() => {
         if (phase !== PHASES.GAME) return
-        window.history.pushState({ ssGame: true }, '')
+        // Hilfseintrag nur einmal anlegen (React führt Effekte im Dev-Modus doppelt aus)
+        if (!window.history.state?.ssGame) window.history.pushState({ ssGame: true }, '')
         const onPop = () => {
+            if (window.history.state?.ssGame) return      // landet noch auf dem Hilfseintrag: nichts zu tun
             window.history.pushState({ ssGame: true }, '')
             setConfirmClose(true)
         }
         window.addEventListener('popstate', onPop)
-        return () => {
-            window.removeEventListener('popstate', onPop)
-            if (window.history.state?.ssGame) window.history.back()   // Hilfseintrag wieder entfernen
-        }
+        return () => window.removeEventListener('popstate', onPop)
     }, [phase])
 
     // Beenden-Dialog: Fokus hinein, Escape schließt, Fokus danach zurück auf das X
