@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { getApp } from 'firebase/app'
 import { getFirestore, doc, getDoc, setDoc, increment } from 'firebase/firestore'
 import { getAuth, signInAnonymously } from 'firebase/auth'
@@ -12,7 +12,8 @@ const PHASES = {
     HOME: 'home',            // Startseite: Spotify verbinden, Spiel starten
     PLAYLISTS: 'playlists',  // Schritt 1: Playlists wählen
     COUNT: 'count',          // Schritt 2: Songanzahl wählen
-    SETTINGS: 'settings',    // Einstellungen + Statistik
+    SETTINGS: 'settings',    // Einstellungen (Menü)
+    STATS: 'stats',          // Einstellungen → Statistik
     LOADING: 'loading',
     GAME: 'game',
     RESULTS: 'results'
@@ -108,6 +109,46 @@ const IconShuffle = () => <Svg size={30}><path d="M3 7h3.5c2 0 3.2 1 4.3 2.7l2.4
 const IconPhone = () => <Svg size={18} w={2}><rect x="6" y="3" width="12" height="18" rx="2" /><circle cx="12" cy="14" r="3" /><path d="M12 7.5v.01" /></Svg>
 const IconInfo = () => <Svg size={18} w={2}><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5M12 7.5v.01" /></Svg>
 
+const IconNext = () => <Svg size={20} w={2.4}><path d="M9 6l6 6-6 6" /></Svg>
+
+/**
+ * Sicherheitsabfrage als Bottom-Sheet (Spiel beenden, Statistik zurücksetzen).
+ * Fokus wandert hinein, Tab bleibt im Dialog, Escape/Tipp daneben bricht ab, danach Fokus zurück.
+ */
+function ConfirmSheet({ open, title, text, cancelLabel, confirmLabel, onCancel, onConfirm, returnFocusRef, busy }) {
+    const cancelRef = useRef(null)
+    useEffect(() => {
+        if (!open) return
+        const back = returnFocusRef?.current
+        cancelRef.current?.focus()
+        const onKey = (e) => { if (e.key === 'Escape') onCancel() }
+        window.addEventListener('keydown', onKey)
+        return () => {
+            window.removeEventListener('keydown', onKey)
+            back?.focus()
+        }
+    }, [open, onCancel, returnFocusRef])
+    if (!open) return null
+    return (
+        <div className={styles.srScrim} onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel() }}>
+            <div role="dialog" aria-modal="true" aria-labelledby="sr-sheet-title" className={styles.srSheet}
+                onKeyDown={(e) => {
+                    if (e.key !== 'Tab') return
+                    const items = e.currentTarget.querySelectorAll('button')
+                    const first = items[0], last = items[items.length - 1]
+                    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+                    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+                }}>
+                <span className={styles.srGrab} aria-hidden="true" />
+                <h2 id="sr-sheet-title" className={styles.srSheetTitle}>{title}</h2>
+                <p className={styles.srSheetText}>{text}</p>
+                <button ref={cancelRef} type="button" className={`${styles.srBtn} ${styles.srPrimary} ${styles.srPrimarySm}`} onClick={onCancel} disabled={busy}>{cancelLabel}</button>
+                <button type="button" className={`${styles.srBtn} ${styles.srDanger}`} onClick={onConfirm} disabled={busy}>{busy ? 'Einen Moment …' : confirmLabel}</button>
+            </div>
+        </div>
+    )
+}
+
 export default function SecondSound({ onBack }) {
     const [phase, setPhase] = useState(PHASES.HOME)
     const [connected, setConnected] = useState(null)   // null = wird geprüft
@@ -144,6 +185,9 @@ export default function SecondSound({ onBack }) {
     const [needsRelogin, setNeedsRelogin] = useState(false)
     const [searchedQuery, setSearchedQuery] = useState('')   // zuletzt abgeschlossene Playlist-Suche
     const [confirmClose, setConfirmClose] = useState(false)  // Bottom-Sheet "Spiel beenden?"
+    const [confirmReset, setConfirmReset] = useState(false)  // Bottom-Sheet "Statistiken zurücksetzen?"
+    const [resetState, setResetState] = useState('idle')     // idle | busy | error | done
+    const [showAllPlaylists, setShowAllPlaylists] = useState(false)
     const [startingIdx, setStartingIdx] = useState(-1)       // Stufe, die gerade gestartet wird (Player lädt)
     const [cancelling, setCancelling] = useState(false)
     const [searchHasMore, setSearchHasMore] = useState(false)
@@ -173,7 +217,7 @@ export default function SecondSound({ onBack }) {
     const revealDoneRef = useRef(null)          // beendet die kurze Auflösung nach dem Werten vorzeitig
     const statsKeyRef = useRef(null)            // Statistik-Dokument pro Spotify-Konto (sp_…)
     const closeBtnRef = useRef(null)
-    const keepPlayingRef = useRef(null)
+    const resetBtnRef = useRef(null)
     const usedUrisRef = useRef(new Set())        // schon gespielte Titel dieser Runde (Duplikate überspringen)
     const playGenRef = useRef(0)                 // wird bei Song-Wechsel erhöht: ältere Start-Anfragen verfallen
     const startingGameRef = useRef(false)        // verhindert doppelten Spielstart
@@ -254,6 +298,27 @@ export default function SecondSound({ onBack }) {
         } catch (e) {
             console.error('Statistik laden fehlgeschlagen:', e)
             setStatsState('error')
+        }
+    }
+
+    // Alle Werte auf 0 setzen (Löschen verbieten die Firestore-Regeln bewusst)
+    const resetStats = async () => {
+        const db = dbRef.current
+        if (!db) return
+        setResetState('busy')
+        try {
+            await ensureFirebaseAuth()
+            const key = await getStatsKey()
+            if (!key) throw new Error('Spotify-Konto nicht ermittelbar')
+            const zeros = { songsCorrect: 0, songsTotal: 0, gamesPlayed: 0, bestPercent: 0, totalSecondsCorrect: 0, correctGuessesWithTime: 0 }
+            await setDoc(doc(db, 'userStats', key), zeros)
+            setAllTimeStats(zeros)
+            setResetState('done')
+        } catch (e) {
+            console.error('Statistik zurücksetzen fehlgeschlagen:', e)
+            setResetState('error')
+        } finally {
+            setConfirmReset(false)
         }
     }
 
@@ -819,8 +884,13 @@ export default function SecondSound({ onBack }) {
         setPhase(PHASES.COUNT)
     }
 
-    const handleOpenSettings = () => {
-        setPhase(PHASES.SETTINGS)
+    const handleOpenSettings = () => setPhase(PHASES.SETTINGS)
+    const closeEndSheet = useCallback(() => setConfirmClose(false), [])
+    const closeResetSheet = useCallback(() => setConfirmReset(false), [])
+
+    const handleOpenStats = () => {
+        setResetState('idle')
+        setPhase(PHASES.STATS)
         if (connected) loadStats()
     }
 
@@ -889,19 +959,6 @@ export default function SecondSound({ onBack }) {
         window.addEventListener('popstate', onPop)
         return () => window.removeEventListener('popstate', onPop)
     }, [phase])
-
-    // Beenden-Dialog: Fokus hinein, Escape schließt, Fokus danach zurück auf das X
-    useEffect(() => {
-        if (!confirmClose) return
-        const closeBtn = closeBtnRef.current
-        keepPlayingRef.current?.focus()
-        const onKey = (e) => { if (e.key === 'Escape') setConfirmClose(false) }
-        window.addEventListener('keydown', onKey)
-        return () => {
-            window.removeEventListener('keydown', onKey)
-            closeBtn?.focus()
-        }
-    }, [confirmClose])
 
     // Setup: eigene Playlists direkt beim Öffnen laden (häufigster Fall)
     useEffect(() => {
@@ -1219,8 +1276,35 @@ export default function SecondSound({ onBack }) {
         )
     }
 
-    // ─── Einstellungen ───────────────────────────────────────────────────────
+    // ─── Einstellungen (Menü) ────────────────────────────────────────────────
     if (phase === PHASES.SETTINGS) {
+        return shell(
+            <main className={styles.srMain}>
+                <header className={`${styles.srSubHeader} ${styles.srPad}`}>
+                    <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setPhase(PHASES.HOME)} aria-label="Zurück"><IconBack /></button>
+                    <h1 className={styles.srSubTitle}>Einstellungen</h1>
+                    {themeBtn}
+                </header>
+                <div className={styles.srScroll}>
+                    <ul className={styles.srMenu}>
+                        <li>
+                            <button type="button" className={`${styles.srBtn} ${styles.srMenuItem}`} onClick={handleOpenStats}>
+                                <span className={styles.srMenuIcon}><IconClock size={22} /></span>
+                                <span className={styles.srMenuText}>
+                                    <span className={styles.srMenuTitle}>Statistik</span>
+                                    <span className={styles.srMenuSub}>Deine Spiele, Trefferquote und Bestwerte</span>
+                                </span>
+                                <IconNext />
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </main>
+        )
+    }
+
+    // ─── Statistik ───────────────────────────────────────────────────────────
+    if (phase === PHASES.STATS) {
         const st = allTimeStats || {}
         const games = st.gamesPlayed || 0
         const total = st.songsTotal || 0
@@ -1238,12 +1322,11 @@ export default function SecondSound({ onBack }) {
         return shell(
             <main className={styles.srMain}>
                 <header className={`${styles.srSubHeader} ${styles.srPad}`}>
-                    <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setPhase(PHASES.HOME)} aria-label="Zurück"><IconBack /></button>
-                    <h1 className={styles.srSubTitle}>Einstellungen</h1>
+                    <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setPhase(PHASES.SETTINGS)} aria-label="Zurück"><IconBack /></button>
+                    <h1 className={styles.srSubTitle}>Statistik</h1>
                     {themeBtn}
                 </header>
                 <div className={styles.srScroll}>
-                    <h2 className={styles.srListTitle}>Deine Statistik</h2>
                     {!connected && <p className={styles.srFineSm}>Verbinde Spotify auf der Startseite, um deine Statistik zu sehen.</p>}
                     {connected && statsState === 'loading' && <p className={styles.srFineSm}>Statistik wird geladen …</p>}
                     {connected && statsState === 'error' && (
@@ -1263,10 +1346,33 @@ export default function SecondSound({ onBack }) {
                                 ))}
                             </div>
                         ) : (
-                            <p className={styles.srFineSm}>Noch keine Spiele. Nach deiner ersten Runde erscheint hier deine Statistik.</p>
+                            <p className={styles.srFineSm}>
+                                {resetState === 'done' ? 'Deine Statistik wurde zurückgesetzt.' : 'Noch keine Spiele. Nach deiner ersten Runde erscheint hier deine Statistik.'}
+                            </p>
                         )
                     )}
+                    {resetState === 'error' && (
+                        <p className={styles.srToast} role="status">Die Statistik konnte nicht zurückgesetzt werden. Bitte versuch es nochmal.</p>
+                    )}
                 </div>
+                {connected && statsState === 'ready' && games > 0 && (
+                    <div className={styles.srFooter}>
+                        <button ref={resetBtnRef} type="button" className={`${styles.srBtn} ${styles.srResetBtn}`} onClick={() => setConfirmReset(true)}>
+                            Statistiken zurücksetzen
+                        </button>
+                    </div>
+                )}
+                <ConfirmSheet
+                    open={confirmReset}
+                    title="Statistiken zurücksetzen?"
+                    text="Alle Spiele und Werte werden gelöscht. Das kann nicht rückgängig gemacht werden."
+                    cancelLabel="Abbrechen"
+                    confirmLabel="Zurücksetzen"
+                    onCancel={closeResetSheet}
+                    onConfirm={resetStats}
+                    returnFocusRef={resetBtnRef}
+                    busy={resetState === 'busy'}
+                />
             </main>
         )
     }
@@ -1324,9 +1430,22 @@ export default function SecondSound({ onBack }) {
                     <span className={styles.srSongNo}>{songNo}</span>
                     <div role="progressbar" aria-label={songNo} aria-valuemin="1" aria-valuemax={targetCount} aria-valuenow={playedCount + 1} className={styles.srSegs}>
                         {Array.from({ length: targetCount }, (_, i) => (
-                            <span key={i} className={`${styles.srSeg} ${i < playedCount ? styles.srSegDone : (i === playedCount ? styles.srSegNow : '')}`} />
+                            <span key={i} className={`${styles.srSeg} ${i < playedCount ? (songHistory[i]?.correct ? styles.srSegOk : styles.srSegNo) : (i === playedCount ? styles.srSegNow : '')}`} />
                         ))}
                     </div>
+                    {selectedPlaylists.length > 0 && (
+                        <button type="button" className={`${styles.srBtn} ${styles.srPlaylistLine} ${showAllPlaylists ? styles.srPlaylistLineOpen : ''}`}
+                            onClick={() => setShowAllPlaylists(v => !v)}
+                            aria-expanded={showAllPlaylists}
+                            title={selectedPlaylists.map(p => p.name).join(' · ')}>
+                            <IconNote size={14} />
+                            <span>
+                                {showAllPlaylists || selectedPlaylists.length <= 2
+                                    ? selectedPlaylists.map(p => p.name).join(' · ')
+                                    : `${selectedPlaylists[0].name} + ${selectedPlaylists.length - 1} weitere`}
+                            </span>
+                        </button>
+                    )}
                 </div>
 
                 {startNotice && <p className={styles.srToast} role="status">{startNotice}</p>}
@@ -1414,25 +1533,16 @@ export default function SecondSound({ onBack }) {
                     </div>
                 </div>
 
-                {confirmClose && (
-                    <div className={styles.srScrim} onClick={(e) => { if (e.target === e.currentTarget) setConfirmClose(false) }}>
-                        <div role="dialog" aria-modal="true" aria-labelledby="sr-end-title" className={styles.srSheet}
-                            onKeyDown={(e) => {
-                                // Tab bleibt im Dialog
-                                if (e.key !== 'Tab') return
-                                const items = e.currentTarget.querySelectorAll('button')
-                                const first = items[0], last = items[items.length - 1]
-                                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
-                                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
-                            }}>
-                            <span className={styles.srGrab} aria-hidden="true" />
-                            <h2 id="sr-end-title" className={styles.srSheetTitle}>Spiel beenden?</h2>
-                            <p className={styles.srSheetText}>Die laufende Runde wird abgebrochen und nicht gewertet.</p>
-                            <button ref={keepPlayingRef} type="button" className={`${styles.srBtn} ${styles.srPrimary} ${styles.srPrimarySm}`} onClick={() => setConfirmClose(false)}>Weiterspielen</button>
-                            <button type="button" className={`${styles.srBtn} ${styles.srDanger}`} onClick={endGame}>Spiel beenden</button>
-                        </div>
-                    </div>
-                )}
+                <ConfirmSheet
+                    open={confirmClose}
+                    title="Spiel beenden?"
+                    text="Die laufende Runde wird abgebrochen und nicht gewertet."
+                    cancelLabel="Weiterspielen"
+                    confirmLabel="Spiel beenden"
+                    onCancel={closeEndSheet}
+                    onConfirm={endGame}
+                    returnFocusRef={closeBtnRef}
+                />
             </main>
         )
     }
@@ -1472,7 +1582,7 @@ export default function SecondSound({ onBack }) {
                         </div>
                         {segs.length > 0 && (
                             <div className={styles.srResSegs} aria-hidden="true">
-                                {segs.map((ok, i) => <span key={i} className={ok ? styles.srResSegOk : ''} />)}
+                                {segs.map((ok, i) => <span key={i} className={ok ? styles.srResSegOk : styles.srResSegNo} />)}
                             </div>
                         )}
                     </section>
@@ -1485,8 +1595,9 @@ export default function SecondSound({ onBack }) {
                         <section className={styles.srAvg}>
                             <span className={styles.srAvgIcon}><IconClock /></span>
                             <p className={styles.srAvgText}>
-                                <span className={styles.srMuted}>Im Schnitt erraten nach</span>
+                                <span className={styles.srMuted}>Erratene Songs: im Schnitt nach</span>
                                 <span className={styles.srAvgNum}>{avg.toFixed(1).replace('.', ',')} Sekunden</span>
+                                <span className={styles.srAvgSub}>aus {secondsArr.length} {secondsArr.length === 1 ? 'erratenem Song' : 'erratenen Songs'}</span>
                             </p>
                         </section>
                     )}
