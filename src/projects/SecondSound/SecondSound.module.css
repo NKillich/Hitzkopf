@@ -344,3 +344,27 @@
 .srRoot .srStat { padding: 14px 16px; border-radius: 18px; background: var(--sr-surface); display: flex; flex-direction: column; gap: 4px; }
 .srRoot .srStatNum { font-family: var(--sr-display); font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
 .srRoot .srStatLabel { font-size: 13px; color: var(--sr-muted); font-weight: 600; }
+
+/* Fortschritt im Spiel: erraten grün, nicht erraten rot */
+.srRoot .srSegOk { background: var(--sr-ok); }
+.srRoot .srSegNo { background: var(--sr-bad); }
+.srRoot .srResSegs .srResSegNo { background: var(--sr-bad); }
+
+/* Gespielte Playlists */
+.srRoot .srPlaylistLine { max-width: 100%; gap: 6px; padding: 2px 8px; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--sr-muted); }
+.srRoot .srPlaylistLine span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srRoot .srPlaylistLineOpen span { white-space: normal; text-align: center; }
+
+/* Ø-Zeit */
+.srRoot .srAvgSub { font-size: 13px; color: var(--sr-muted); }
+
+/* Einstellungen-Menü */
+.srRoot .srMenu { display: flex; flex-direction: column; gap: 8px; }
+.srRoot .srMenuItem { width: 100%; min-height: 68px; justify-content: flex-start; gap: 14px; padding: 10px 14px; border-radius: 18px; background: var(--sr-surface); color: var(--sr-ink); text-align: left; }
+.srRoot .srMenuIcon { width: 44px; height: 44px; flex: none; border-radius: 22px; background: var(--sr-accent-soft); color: var(--sr-accent-text); display: flex; align-items: center; justify-content: center; }
+.srRoot .srMenuText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.srRoot .srMenuTitle { font-size: 17px; font-weight: 700; }
+.srRoot .srMenuSub { font-size: 13px; color: var(--sr-muted); }
+
+/* Statistik zurücksetzen */
+.srRoot .srResetBtn { width: 100%; height: 52px; border-radius: 26px; border: 2px solid var(--sr-bad); color: var(--sr-bad); font-size: 16px; font-weight: 700; }
