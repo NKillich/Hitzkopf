@@ -7,16 +7,20 @@ service cloud.firestore {
     }
 
     // Amplify (Music Voter) Lobbies
-    // Lobbies haben keine Host-UID (host = Anzeigename), daher kann nur die Struktur
-    // eingeschraenkt werden: Raumcode-Format und Typ beim Anlegen.
+    // Gaeste schreiben mit (Songs, Stimmen), daher bleibt Update offen – aber die Host-UID
+    // (anonymer Login des Host-Geraets) darf niemand aendern, und loeschen darf nur dieses Geraet.
+    // Alte Lobbies ohne hostUid bleiben loeschbar wie bisher.
     match /musicVoterLobbies/{lobbyId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
                     && lobbyId.matches('[A-Za-z0-9]{4,10}')
                     && request.resource.data is map
-                    && request.resource.data.host is string;
-      allow update: if request.auth != null;
-      allow delete: if request.auth != null;
+                    && request.resource.data.host is string
+                    && request.resource.data.get('hostUid', request.auth.uid) == request.auth.uid;
+      allow update: if request.auth != null
+                    && request.resource.data.get('hostUid', null) == resource.data.get('hostUid', null);
+      allow delete: if request.auth != null
+                    && resource.data.get('hostUid', null) in [null, request.auth.uid];
     }
 
     // Quiz Royale Lobbies

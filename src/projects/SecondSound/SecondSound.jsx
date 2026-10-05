@@ -828,10 +828,13 @@ export default function SecondSound({ onBack }) {
         onBack()
     }
 
-    // Nach einer Runde den Hilfseintrag für die Zurück-Taste wieder entfernen
+    // Nach einer Runde den Hilfseintrag für die Zurück-Taste wieder entfernen –
+    // aber nur einen, den diese Sitzung angelegt hat (nach einem Neuladen sonst ein Schritt zu weit zurück)
+    const gameEntryRef = useRef(false)
     useEffect(() => {
-        if (phase === PHASES.GAME || !window.history.state?.ssGame) return
-        window.history.back()
+        if (phase === PHASES.GAME) return
+        if (gameEntryRef.current && window.history.state?.ssGame) window.history.back()
+        gameEntryRef.current = false
     }, [phase])
 
     // Runde abbrechen (ohne Wertung) und zurück zur Startseite
@@ -856,6 +859,7 @@ export default function SecondSound({ onBack }) {
         if (phase !== PHASES.GAME) return
         // Hilfseintrag nur einmal anlegen (React führt Effekte im Dev-Modus doppelt aus)
         if (!window.history.state?.ssGame) window.history.pushState({ ssGame: true }, '')
+        gameEntryRef.current = true
         const onPop = () => {
             if (window.history.state?.ssGame) return      // landet noch auf dem Hilfseintrag: nichts zu tun
             window.history.pushState({ ssGame: true }, '')

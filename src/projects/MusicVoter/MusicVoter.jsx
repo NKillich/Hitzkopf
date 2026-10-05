@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import { getApp } from 'firebase/app'
 import '../../firebase.js'
 import { getAuth, signInAnonymously } from 'firebase/auth'
-import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, arrayUnion, serverTimestamp, deleteDoc, deleteField, collection, query, where, getDocs } from 'firebase/firestore'
+import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, runTransaction, serverTimestamp, deleteDoc, deleteField, collection, query, where, getDocs } from 'firebase/firestore'
 import { generateRandomName } from '../../shared/randomName'
 import spotifyService from '../../services/spotifyService'
 import { log } from '../../utils/logger.js'
@@ -55,6 +55,11 @@ const PHASE_INFO = {
     laeuft: { title: 'Playlist läuft', dot: 'mvDotLive' }
 }
 
+// Beim Beitreten nur Playlists zeigen, die in diesem Zeitraum aktiv waren
+const ACTIVE_WINDOW_MS = 12 * 60 * 60 * 1000
+const lastActivity = (data) => data.lastActiveAt || data.createdAt?.toMillis?.() || 0
+const isOpen = (data) => (data.status ?? 'active') === 'active'
+
 // Stimmen pro Person und Runde (-1 = unbegrenzt)
 const UNLIMITED = -1
 const DEFAULT_UP = 3
@@ -79,7 +84,11 @@ function StepSlider({ id, label, options, value, onChange, valueText, tickText }
         setDraft(value)
     }
     let idx = options.indexOf(draft)
-    if (idx < 0) idx = 0
+    if (idx < 0) {
+        // Unbekannter Wert (ältere Playlist): nächstliegende Stufe anzeigen
+        const num = (v) => (v === UNLIMITED ? Infinity : v)
+        idx = options.reduce((best, o, i) => (Math.abs(num(o) - num(draft)) < Math.abs(num(options[best]) - num(draft)) ? i : best), 0)
+    }
     const pct = options.length > 1 ? (idx / (options.length - 1)) * 100 : 100
     return (
         <div className={styles.mvSliderField}>
@@ -153,7 +162,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
     const [roomView, setRoomView] = useState('main')         // main | settings (nur Host)
     const [toast, setToast] = useState(null)                 // { text, tone: 'info' | 'bad' }
     const [startNotice, setStartNotice] = useState(null)     // Hinweis auf der Startseite (z. B. Playlist geschlossen)
-    const [confirm, setConfirm] = useState(null)             // { kind: 'close' | 'leave' | 'remove' | 'deleteAll' | 'endVoting', item? }
+    const [confirm, setConfirm] = useState(null)             // { kind: 'close' | 'leave' | 'remove' | 'endVoting', item? }
     const [confirmBusy, setConfirmBusy] = useState(false)
     const [busyAction, setBusyAction] = useState(null)       // 'create' | 'readd' | ID der Playlist, der gerade beigetreten wird
     const [sheet, setSheet] = useState(null)                 // 'help' | 'share'
@@ -162,7 +171,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
     const unsubscribeRef = useRef(null)
     const lastPlayedTrackIdRef = useRef(null) // für automatisches Entfernen abgespielter Songs
     const lastDurationRef = useRef(null)      // Länge des laufenden Songs (für den Verlauf)
-    const lastSentQueueOrderRef = useRef(null) // letzte an Spotify gesendete Warteschlangen-Reihenfolge (Spotify-IDs)
     const closingRef = useRef(false)          // Host schließt selbst: kein "wurde geschlossen"-Hinweis
     const toastTimerRef = useRef(null)
     const searchInputRef = useRef(null)
@@ -177,6 +185,20 @@ const MusicVoter = ({ onBack, joinCode }) => {
         toastTimerRef.current = setTimeout(() => setToast(null), 5000)
     }, [])
     useEffect(() => () => clearTimeout(toastTimerRef.current), [])
+
+    // Lesen + Ändern + Schreiben als Transaktion: gleichzeitige Änderungen anderer gehen nicht verloren.
+    // change(data) muss ohne Nebenwirkungen sein (Firestore wiederholt sie bei Konflikten) und liefert
+    // { update, ...beliebige Rückgabewerte }; ohne update wird nichts geschrieben.
+    const mutateLobby = useCallback(async (code, change) => {
+        const ref = doc(db, 'musicVoterLobbies', code)
+        return runTransaction(db, async (tx) => {
+            const snap = await tx.get(ref)
+            if (!snap.exists()) return { missing: true }
+            const res = change(snap.data()) || {}
+            if (res.update) tx.update(ref, { ...res.update, lastActiveAt: Date.now() })
+            return res
+        })
+    }, [db])
 
     // Spotify OAuth-Callback verarbeiten und Login-Status prüfen
     useEffect(() => {
@@ -265,9 +287,15 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
         setBusyAction('create')
         try {
+            // Host-UID wird gespeichert (nur dieses Gerät darf löschen) – dafür muss der anonyme Login stehen
+            const auth = getAuth(getApp())
+            await auth.authStateReady()
+            if (!auth.currentUser) await signInAnonymously(auth)
             await setDoc(lobbyRef, {
                 host: name,
+                hostUid: auth.currentUser.uid,   // erlaubt dem Host-Gerät das Löschen (Firestore-Regeln)
                 createdAt: serverTimestamp(),
+                lastActiveAt: Date.now(),
                 players: {
                     [name]: { emoji, joinedAt: serverTimestamp() }
                 },
@@ -315,29 +343,25 @@ const MusicVoter = ({ onBack, joinCode }) => {
         if (!name) return
         const emoji = myEmoji
 
-        const lobbyRef = doc(db, 'musicVoterLobbies', joinRoomId)
-
         setBusyAction(joinRoomId)
         try {
-            const lobbySnap = await getDoc(lobbyRef)
+            // Als Transaktion: zwei Leute mit demselben Namen können nicht gleichzeitig durchrutschen
+            const res = await mutateLobby(joinRoomId, (data) => {
+                if (!isOpen(data)) return { missing: true }
+                if (data.players?.[name]) return { taken: true }
+                return { update: { [`players.${name}`]: { emoji, joinedAt: Date.now() } } }
+            })
 
-            if (!lobbySnap.exists()) {
+            if (res.missing) {
                 showToast('Diese Playlist gibt es nicht mehr.', 'bad')
                 setAvailableLobbies(prev => prev.filter(l => l.id !== joinRoomId))
                 if (invite?.code === joinRoomId) setInvite({ code: joinRoomId, missing: true })
                 return
             }
-
-            const lobbyData = lobbySnap.data()
-
-            if (lobbyData.players && lobbyData.players[name]) {
+            if (res.taken) {
                 showToast(`Den Namen „${name}“ gibt es in dieser Playlist schon. Wähl bitte einen anderen.`, 'bad')
                 return
             }
-
-            await updateDoc(lobbyRef, {
-                [`players.${name}`]: { emoji, joinedAt: serverTimestamp() }
-            })
 
             setRoomId(joinRoomId)
             setIsHost(false)
@@ -370,23 +394,23 @@ const MusicVoter = ({ onBack, joinCode }) => {
             const querySnapshot = await getDocs(q)
 
             const lobbies = []
+            const now = Date.now()
             querySnapshot.forEach((doc) => {
                 const data = doc.data()
+                const last = lastActivity(data)
+                // Verwaiste Playlists (lange keine Aktivität) ausblenden
+                if (now - last > ACTIVE_WINDOW_MS && doc.id !== roomId) return
                 lobbies.push({
                     id: doc.id,
                     host: data.host,
                     playerCount: Object.keys(data.players || {}).length,
-                    createdAt: data.createdAt,
+                    lastActive: last,
                     playlist: data.playlist || []
                 })
             })
 
-            // Sortiere nach Erstellungszeit (neueste zuerst)
-            lobbies.sort((a, b) => {
-                if (!a.createdAt) return 1
-                if (!b.createdAt) return -1
-                return b.createdAt.toMillis() - a.createdAt.toMillis()
-            })
+            // Zuletzt aktive zuerst
+            lobbies.sort((a, b) => b.lastActive - a.lastActive)
 
             setAvailableLobbies(lobbies)
             log(`✅ ${lobbies.length} offene Lobbies geladen`)
@@ -422,7 +446,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
         let cancelled = false
         getDoc(doc(db, 'musicVoterLobbies', code)).then((snap) => {
             if (cancelled) return
-            if (snap.exists()) {
+            if (snap.exists() && isOpen(snap.data())) {
                 const data = snap.data()
                 setInvite({ code, host: data.host, playerCount: Object.keys(data.players || {}).length, songCount: (data.playlist || []).length })
             } else {
@@ -439,30 +463,19 @@ const MusicVoter = ({ onBack, joinCode }) => {
         sessionStorage.removeItem('mv_invite')
     }
 
-    // ALLE Lobbies löschen (nach Bestätigung im Sheet)
-    const handleDeleteAllLobbies = async () => {
-        if (!db) return
-        try {
-            // Lösche alle Lobbies parallel
-            await Promise.all(availableLobbies.map(lobby =>
-                deleteDoc(doc(db, 'musicVoterLobbies', lobby.id))
-            ))
-            log(`✅ Alle ${availableLobbies.length} Playlists gelöscht`)
-            setAvailableLobbies([])
-            showToast('Alle Playlists wurden gelöscht.')
-        } catch (error) {
-            console.error('Fehler beim Löschen aller Playlists:', error)
-            showToast('Löschen hat nicht geklappt: ' + (error.message || 'Unbekannter Fehler'), 'bad')
-            loadAvailableLobbies()
-        }
-    }
-
     // Lobby schließen (nur Host, nach Bestätigung im Sheet)
     const handleCloseLobby = async () => {
         if (!isHost || !db || !roomId) return
         closingRef.current = true
+        const ref = doc(db, 'musicVoterLobbies', roomId)
         try {
-            await deleteDoc(doc(db, 'musicVoterLobbies', roomId))
+            try {
+                await deleteDoc(ref)
+            } catch (e) {
+                // Anderes Gerät als beim Erstellen (Regeln erlauben Löschen nur dem Host-Gerät): als geschlossen markieren
+                if (e?.code !== 'permission-denied') throw e
+                await updateDoc(ref, { status: 'closed', lastActiveAt: Date.now() })
+            }
             log('✅ Playlist geschlossen')
             handleSessionEnd()
         } catch (error) {
@@ -476,11 +489,12 @@ const MusicVoter = ({ onBack, joinCode }) => {
     const subscribeToLobby = (roomId) => {
         if (!db) return
         closingRef.current = false
+        unsubscribeRef.current?.()   // nie zwei Abos gleichzeitig
 
         const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
 
         const unsubscribe = onSnapshot(lobbyRef, (snapshot) => {
-            if (snapshot.exists()) {
+            if (snapshot.exists() && isOpen(snapshot.data())) {
                 const data = snapshot.data()
                 setLobbyData(data)
                 setPlaylist(data.playlist || [])
@@ -490,6 +504,9 @@ const MusicVoter = ({ onBack, joinCode }) => {
                 if (!closingRef.current) setStartNotice('Der Host hat die Playlist geschlossen.')
                 handleSessionEnd()
             }
+        }, (error) => {
+            console.error('Playlist-Abo fehlgeschlagen:', error)
+            showToast('Die Verbindung zur Playlist ist abgerissen. Bitte lade die Seite neu.', 'bad')
         })
 
         unsubscribeRef.current = unsubscribe
@@ -563,7 +580,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
         const lobbyRef = doc(db, 'musicVoterLobbies', storedRoomId)
         getDoc(lobbyRef).then((snap) => {
             if (cancelled) return
-            if (!snap.exists()) {
+            if (!snap.exists() || !isOpen(snap.data())) {
                 sessionStorage.removeItem('mv_roomId')
                 setRoomId('')
                 return
@@ -588,32 +605,34 @@ const MusicVoter = ({ onBack, joinCode }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [db])
 
-    // Mehrere Songs auf einmal einreichen (Limit pro Person wird serverseitig nachgezählt)
+    // Mehrere Songs auf einmal einreichen (Limit pro Person und Duplikate werden in der Transaktion geprüft)
     const addManyToPlaylist = async (items) => {
         if (!db || !roomId) return { added: 0, error: 'Keine Verbindung zur Playlist.' }
-        const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
         try {
-            const snap = await getDoc(lobbyRef)
-            if (!snap.exists()) return { added: 0, error: 'Diese Playlist gibt es nicht mehr.' }
-            const data = snap.data()
-            if (data.lobbyPhase === 'abstimmung') return { added: 0, error: 'Während der Abstimmung können keine Songs hinzugefügt werden.' }
-            const current = data.playlist || []
-            const maxSongs = data.maxSongsPerPerson || 5
-            let free = maxSongs - current.filter(p => p.addedBy === myName && p.queuedRound == null).length
-            const toAdd = []
-            let duplicates = 0
-            let limitHit = false
-            for (const item of items) {
-                if (current.some(p => sameSong(p, item)) || toAdd.some(p => sameSong(p, item))) { duplicates++; continue }
-                if (free <= 0) { limitHit = true; break }
-                const fresh = { ...item, addedBy: myName, votes: {}, addedAt: Date.now() }
-                delete fresh.queuedRound
-                // Firestore mag keine undefined-Werte
-                toAdd.push(Object.fromEntries(Object.entries(fresh).filter(([, v]) => v !== undefined)))
-                free--
-            }
-            if (toAdd.length) await updateDoc(lobbyRef, { playlist: arrayUnion(...toAdd) })
-            return { added: toAdd.length, duplicates, limitHit, maxSongs }
+            const res = await mutateLobby(roomId, (data) => {
+                if (data.lobbyPhase === 'abstimmung') return { added: 0, error: 'Während der Abstimmung können keine Songs hinzugefügt werden.' }
+                const current = data.playlist || []
+                const maxSongs = data.maxSongsPerPerson || 5
+                let free = maxSongs - current.filter(p => p.addedBy === myName && p.queuedRound == null).length
+                const toAdd = []
+                let duplicates = 0
+                let limitHit = false
+                for (const item of items) {
+                    if (current.some(p => sameSong(p, item)) || toAdd.some(p => sameSong(p, item))) { duplicates++; continue }
+                    if (free <= 0) { limitHit = true; break }
+                    const fresh = { ...item, addedBy: myName, votes: {}, addedAt: Date.now() }
+                    delete fresh.queuedRound
+                    // Firestore mag keine undefined-Werte
+                    toAdd.push(Object.fromEntries(Object.entries(fresh).filter(([, v]) => v !== undefined)))
+                    free--
+                }
+                return {
+                    update: toAdd.length ? { playlist: [...current, ...toAdd] } : null,
+                    added: toAdd.length, duplicates, limitHit, maxSongs
+                }
+            })
+            if (res.missing) return { added: 0, error: 'Diese Playlist gibt es nicht mehr.' }
+            return res
         } catch (error) {
             console.error('❌ Fehler beim Hinzufügen:', error)
             return { added: 0, error: 'Hinzufügen hat nicht geklappt: ' + (error.message || 'Unbekannter Fehler') }
@@ -635,48 +654,48 @@ const MusicVoter = ({ onBack, joinCode }) => {
         down: lobbyData?.downvotesPerPerson ?? DEFAULT_DOWN
     }
 
-    // Vote für Song/Album (mit Stimmen-Budget pro Runde)
+    // Vote für Song/Album (mit Stimmen-Budget pro Runde, als Transaktion)
     const handleVote = async (itemId, voteType) => {
         if (!db || !roomId || !myName) return
 
         // Voting nur während Abstimmungs-Phase
         if (lobbyData?.lobbyPhase !== 'abstimmung') return
 
-        const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
-
         try {
-            const currentLobby = await getDoc(lobbyRef)
-            const data = currentLobby.data()
-            const currentPlaylist = data.playlist || []
-            const target = currentPlaylist.find(i => i.id === itemId)
-            if (!target) return
-            const currentVote = target.votes?.[myName] || 0
-            const wanted = voteType === 'up' ? 1 : -1
-            const newVote = currentVote === wanted ? 0 : wanted
+            const res = await mutateLobby(roomId, (data) => {
+                if (data.lobbyPhase !== 'abstimmung') return null
+                const currentPlaylist = data.playlist || []
+                const target = currentPlaylist.find(i => i.id === itemId)
+                if (!target) return null
+                const currentVote = target.votes?.[myName] || 0
+                const wanted = voteType === 'up' ? 1 : -1
+                const newVote = currentVote === wanted ? 0 : wanted
 
-            if (newVote !== 0) {
-                const limit = newVote === 1 ? (data.upvotesPerPerson ?? DEFAULT_UP) : (data.downvotesPerPerson ?? DEFAULT_DOWN)
-                const used = currentPlaylist.filter(i => i.queuedRound == null && i.id !== itemId && i.votes?.[myName] === newVote).length
-                if (limit !== UNLIMITED && used >= limit) {
-                    const what = newVote === 1 ? 'Daumen hoch' : 'Daumen runter'
-                    showToast(limit === 0
-                        ? 'Daumen runter ist in dieser Playlist ausgeschaltet.'
-                        : limit === 1
-                            ? `Du hast deinen ${what} schon vergeben. Nimm ihn zurück, um umzuverteilen.`
-                            : `Du hast alle ${limit} ${what} vergeben. Nimm einen zurück, um umzuverteilen.`, 'bad')
-                    return
+                if (newVote !== 0) {
+                    const limit = newVote === 1 ? (data.upvotesPerPerson ?? DEFAULT_UP) : (data.downvotesPerPerson ?? DEFAULT_DOWN)
+                    const used = currentPlaylist.filter(i => i.queuedRound == null && i.id !== itemId && i.votes?.[myName] === newVote).length
+                    if (limit !== UNLIMITED && used >= limit) return { blocked: { limit, what: newVote === 1 ? 'Daumen hoch' : 'Daumen runter' } }
                 }
-            }
 
-            const updatedPlaylist = currentPlaylist.map(item =>
-                item.id === itemId ? { ...item, votes: { ...item.votes, [myName]: newVote } } : item
-            )
-
-            await updateDoc(lobbyRef, {
-                playlist: updatedPlaylist
+                return {
+                    update: {
+                        playlist: currentPlaylist.map(item =>
+                            item.id === itemId ? { ...item, votes: { ...item.votes, [myName]: newVote } } : item
+                        )
+                    }
+                }
             })
+            if (res?.blocked) {
+                const { limit, what } = res.blocked
+                showToast(limit === 0
+                    ? 'Daumen runter ist in dieser Playlist ausgeschaltet.'
+                    : limit === 1
+                        ? `Du hast deinen ${what} schon vergeben. Nimm ihn zurück, um umzuverteilen.`
+                        : `Du hast alle ${limit} ${what} vergeben. Nimm einen zurück, um umzuverteilen.`, 'bad')
+            }
         } catch (error) {
             console.error('Fehler beim Voten:', error)
+            showToast('Deine Stimme konnte nicht gespeichert werden. Bitte nochmal tippen.', 'bad')
         }
     }
 
@@ -684,16 +703,12 @@ const MusicVoter = ({ onBack, joinCode }) => {
     const handleRemoveItem = async (itemId) => {
         if (!db || !roomId) return
 
-        const item = playlist.find(i => i.id === itemId)
-        if (!item) return
-        if (!isHost && item.addedBy !== myName) return
-
-        const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
-
         try {
-            const updatedPlaylist = playlist.filter(i => i.id !== itemId)
-            await updateDoc(lobbyRef, {
-                playlist: updatedPlaylist
+            await mutateLobby(roomId, (data) => {
+                const current = data.playlist || []
+                const item = current.find(i => i.id === itemId)
+                if (!item || (data.host !== myName && item.addedBy !== myName)) return null
+                return { update: { playlist: current.filter(i => i.id !== itemId) } }
             })
         } catch (error) {
             console.error('Fehler beim Entfernen:', error)
@@ -836,20 +851,24 @@ const MusicVoter = ({ onBack, joinCode }) => {
         }
     }
 
-    // Admin: Abstimmung manuell aus Songwahl-Phase starten
+    // Admin: Abstimmung manuell starten (aus Sammeln oder während die Playlist läuft)
     const handleStartAbstimmung = async () => {
         if (!isHost || !db || !roomId) return
-        const snap = await getDoc(doc(db, 'musicVoterLobbies', roomId))
-        if (!snap.exists()) return
-        const data = snap.data()
-        if (data.lobbyPhase === 'abstimmung') return
-        const durationSec = data.votingDurationSec || 120
-        const newRound = (data.votingRound || 0) + 1
-        await updateDoc(doc(db, 'musicVoterLobbies', roomId), {
-            lobbyPhase: 'abstimmung',
-            phaseEndsAt: Date.now() + durationSec * 1000,
-            votingRound: newRound
-        })
+        try {
+            await mutateLobby(roomId, (data) => {
+                if (data.lobbyPhase === 'abstimmung') return null
+                return {
+                    update: {
+                        lobbyPhase: 'abstimmung',
+                        phaseEndsAt: Date.now() + (data.votingDurationSec || 120) * 1000,
+                        votingRound: (data.votingRound || 0) + 1
+                    }
+                }
+            })
+        } catch (e) {
+            console.error('Abstimmung starten fehlgeschlagen:', e)
+            showToast('Die Abstimmung konnte nicht gestartet werden. Bitte nochmal versuchen.', 'bad')
+        }
     }
 
     // Admin: Abstimmung vorzeitig beenden – der Phasenwechsel unten wertet sofort aus
@@ -858,67 +877,76 @@ const MusicVoter = ({ onBack, joinCode }) => {
         await updateLobbyConfig({ phaseEndsAt: Date.now() })
     }
 
-    // Host: Phase-Übergänge automatisch steuern
+    // Phasenwechsel nach Ablauf des Countdowns. Der Host wertet sofort aus; ist er weg (Handy im Standby),
+    // übernimmt nach ein paar Sekunden jedes andere Gerät. Die Transaktion sorgt dafür, dass es nur einmal passiert.
     useEffect(() => {
-        if (!isHost || !db || !roomId || !lobbyData) return
+        if (!db || !roomId || !lobbyData) return
         const phase = lobbyData.lobbyPhase
         if (!phase || !lobbyData.phaseEndsAt) return
 
-        const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
-
         const transition = async () => {
-            const snap = await getDoc(lobbyRef)
-            if (!snap.exists()) return
-            const data = snap.data()
-            if (data.lobbyPhase !== phase) return // bereits gewechselt
+            try {
+                await mutateLobby(roomId, (data) => {
+                    if (data.lobbyPhase !== phase || !data.phaseEndsAt || data.phaseEndsAt > Date.now() + 1000) return null   // schon gewechselt / noch nicht fällig
 
-            if (phase === 'songwahl') {
-                // → Abstimmung
-                const durationSec = data.votingDurationSec || 120
-                const newRound = (data.votingRound || 0) + 1
-                await updateDoc(lobbyRef, {
-                    lobbyPhase: 'abstimmung',
-                    phaseEndsAt: Date.now() + durationSec * 1000,
-                    votingRound: newRound
-                })
-            } else if (phase === 'abstimmung') {
-                // → Läuft: Top-N Songs auswählen und an Spotify schicken
-                const batchSize = data.batchSize || 10
-                const currentRound = data.votingRound || 0
-                const currentPlaylist = data.playlist || []
-                const candidates = currentPlaylist
-                    .filter(i => i.source === 'spotify' && i.spotifyId && i.type === 'song' && i.queuedRound == null)
-                    .sort((a, b) => {
-                        const sA = calculateScore(a), sB = calculateScore(b)
-                        if (sB !== sA) return sB - sA
-                        return (a.addedAt || 0) - (b.addedAt || 0)
+                    if (phase === 'songwahl') {
+                        return {
+                            update: {
+                                lobbyPhase: 'abstimmung',
+                                phaseEndsAt: Date.now() + (data.votingDurationSec || 120) * 1000,
+                                votingRound: (data.votingRound || 0) + 1
+                            }
+                        }
+                    }
+                    if (phase !== 'abstimmung') return null
+
+                    // → Läuft: Top-N Songs auswählen und an Spotify schicken
+                    const batchSize = data.batchSize || 10
+                    const currentRound = data.votingRound || 0
+                    const currentPlaylist = data.playlist || []
+                    const selected = currentPlaylist
+                        .filter(i => i.source === 'spotify' && i.spotifyId && i.type === 'song' && i.queuedRound == null)
+                        .sort((a, b) => {
+                            const sA = calculateScore(a), sB = calculateScore(b)
+                            if (sB !== sA) return sB - sA
+                            return (a.addedAt || 0) - (b.addedAt || 0)
+                        })
+                        .slice(0, batchSize)
+                    const selectedIds = selected.map(i => i.spotifyId)
+                    // Nicht gewählte Songs verlassen den Pool und landen bei ihrer Person unter "Zweite Chance"
+                    const notChosen = currentPlaylist.filter(i => i.queuedRound == null && !selectedIds.includes(i.spotifyId))
+                    const leftovers = {}
+                    notChosen.forEach(i => {
+                        const owner = i.addedBy || '?'
+                        if (!leftovers[owner]) leftovers[owner] = []
+                        leftovers[owner].push({ ...i, votes: {} })
                     })
-                const selected = candidates.slice(0, batchSize)
-                const selectedIds = selected.map(i => i.spotifyId)
-                // Nicht gewählte Songs verlassen den Pool und landen bei ihrer Person unter "Zweite Chance"
-                const notChosen = currentPlaylist.filter(i => i.queuedRound == null && !selectedIds.includes(i.spotifyId))
-                const leftovers = {}
-                notChosen.forEach(i => {
-                    const owner = i.addedBy || '?'
-                    if (!leftovers[owner]) leftovers[owner] = []
-                    leftovers[owner].push({ ...i, votes: {} })
+                    const updatedPlaylist = currentPlaylist
+                        .filter(i => !notChosen.includes(i))
+                        .map(i => selectedIds.includes(i.spotifyId) ? { ...i, queuedRound: currentRound } : i)
+                    return {
+                        update: {
+                            playlist: updatedPlaylist,
+                            leftovers,
+                            // Ohne Gewinner gibt es nichts abzuspielen → zurück ins Sammeln
+                            lobbyPhase: selectedIds.length ? 'laeuft' : 'songwahl',
+                            phaseEndsAt: null,
+                            pendingBatch: selectedIds.length ? { round: currentRound, spotifyIds: selectedIds } : null,
+                            // Zeiten der alten Warteschlange zurücksetzen – sonst startet sofort die nächste Abstimmung
+                            queueStartedAt: null,
+                            queueTotalDurationMs: null
+                        }
+                    }
                 })
-                const updatedPlaylist = currentPlaylist
-                    .filter(i => !notChosen.includes(i))
-                    .map(i => selectedIds.includes(i.spotifyId) ? { ...i, queuedRound: currentRound } : i)
-                await updateDoc(lobbyRef, {
-                    playlist: updatedPlaylist,
-                    leftovers,
-                    lobbyPhase: 'laeuft',
-                    phaseEndsAt: null,
-                    pendingBatch: selectedIds.length ? { round: currentRound, spotifyIds: selectedIds } : null
-                })
+            } catch (e) {
+                console.error('Phasenwechsel fehlgeschlagen:', e)
             }
         }
 
         const remaining = lobbyData.phaseEndsAt - Date.now()
-        if (remaining <= 0) { transition(); return }
-        const id = setTimeout(transition, remaining + 100)
+        const delay = remaining + (isHost ? 100 : 6000)
+        if (delay <= 0) { transition(); return }
+        const id = setTimeout(transition, delay)
         return () => clearTimeout(id)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHost, db, roomId, lobbyData?.lobbyPhase, lobbyData?.phaseEndsAt])
@@ -974,54 +1002,81 @@ const MusicVoter = ({ onBack, joinCode }) => {
         }
     }, [showAddModal, lobbyData?.lobbyPhase, showToast])
 
-    // Host: Playback-Status regelmäßig in Firestore schreiben + abgespielte Songs in den Verlauf verschieben
+    // Gespielten Song aus der Playlist in den Verlauf verschieben (Transaktion; schon verschoben → nichts passiert)
+    const moveToHistory = useCallback(async (trackId, durationMs) => {
+        if (!db || !roomId || !trackId) return
+        try {
+            await mutateLobby(roomId, (data) => {
+                const current = data.playlist || []
+                const played = current.find(i => i.spotifyId === trackId)
+                if (!played) return null
+                const { up, down } = voteCounts(played)
+                const entry = {
+                    spotifyId: played.spotifyId,
+                    title: played.title || '',
+                    artist: played.artist || '',
+                    imageUrl: played.imageUrl || null,
+                    addedBy: played.addedBy || '',
+                    up, down, score: up - down,
+                    round: played.queuedRound ?? null,
+                    durationMs: durationMs || played.duration || null,
+                    playedAt: Date.now()
+                }
+                return { update: { playlist: current.filter(i => i.spotifyId !== trackId), history: [...(data.history || []), entry] } }
+            })
+        } catch { /* nächster Durchlauf versucht es erneut */ }
+    }, [db, roomId, mutateLobby])
+
+    // Host: Playback-Status nach Firestore schreiben – nur bei Änderungen (Songwechsel, Pause, Sprung),
+    // den Fortschritt rechnen alle Geräte selbst hoch. Abgespielte Songs wandern in den Verlauf.
     useEffect(() => {
         if (!isHost || !spotifyConnected || !db || !roomId) return
         const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
+        let lastWrite = null                         // { trackId, isPlaying, pos, at }
+        let lastBeat = Date.now()
+        const progress = { trackId: null, maxPos: 0, duration: 0, moved: false }
         const interval = setInterval(async () => {
             try {
                 const state = await spotifyService.getPlaybackState()
-                await updateDoc(lobbyRef, {
-                    nowPlaying: state
-                        ? {
-                            trackId: state.trackId,
-                            trackName: state.trackName,
-                            artist: state.artist,
-                            imageUrl: state.imageUrl,
-                            positionMs: state.positionMs,
-                            durationMs: state.durationMs,
-                            isPlaying: state.isPlaying,
-                            updatedAt: state.updatedAt
-                        }
-                        : null
-                })
-                // Wenn der Track gewechselt hat: vorherigen Song aus der Playlist in den Verlauf verschieben
-                if (state?.trackId && lastPlayedTrackIdRef.current !== null && lastPlayedTrackIdRef.current !== state.trackId) {
-                    try {
-                        const snap = await getDoc(lobbyRef)
-                        const currentPlaylist = snap.data()?.playlist || []
-                        const played = currentPlaylist.find((i) => i.spotifyId === lastPlayedTrackIdRef.current)
-                        if (played) {
-                            const { up, down } = voteCounts(played)
-                            const entry = {
-                                spotifyId: played.spotifyId,
-                                title: played.title || '',
-                                artist: played.artist || '',
-                                imageUrl: played.imageUrl || null,
-                                addedBy: played.addedBy || '',
-                                up, down, score: up - down,
-                                round: played.queuedRound ?? null,
-                                durationMs: lastDurationRef.current || played.duration || null,
-                                playedAt: Date.now()
+                const now = Date.now()
+                const trackId = state?.trackId ?? null
+                const isPlaying = !!state?.isPlaying
+                const expectedPos = lastWrite ? lastWrite.pos + (lastWrite.isPlaying ? now - lastWrite.at : 0) : 0
+                const changed = !lastWrite || trackId !== lastWrite.trackId || isPlaying !== lastWrite.isPlaying
+                    || (state && Math.abs((state.positionMs || 0) - expectedPos) > 4000)
+                if (changed || now - lastBeat > 5 * 60 * 1000) {
+                    await updateDoc(lobbyRef, {
+                        nowPlaying: state
+                            ? {
+                                trackId: state.trackId,
+                                trackName: state.trackName,
+                                artist: state.artist,
+                                imageUrl: state.imageUrl,
+                                positionMs: state.positionMs,
+                                durationMs: state.durationMs,
+                                isPlaying: state.isPlaying,
+                                updatedAt: state.updatedAt
                             }
-                            const updatedPlaylist = currentPlaylist.filter((i) => i.spotifyId !== lastPlayedTrackIdRef.current)
-                            await updateDoc(lobbyRef, { playlist: updatedPlaylist, history: arrayUnion(entry) })
-                            lastSentQueueOrderRef.current = null
-                        }
-                    } catch { /* nächster Durchlauf versucht es erneut */ }
+                            : null,
+                        lastActiveAt: now     // Lebenszeichen: Playlist bleibt in "Beitreten" sichtbar
+                    })
+                    lastWrite = { trackId, isPlaying, pos: state?.positionMs || 0, at: now }
+                    lastBeat = now
                 }
-                if (state?.trackId) {
-                    lastPlayedTrackIdRef.current = state.trackId
+
+                // Songwechsel: vorherigen Song in den Verlauf
+                if (trackId && lastPlayedTrackIdRef.current && lastPlayedTrackIdRef.current !== trackId) {
+                    await moveToHistory(lastPlayedTrackIdRef.current, lastDurationRef.current)
+                }
+                // Letzter Song der Warteschlange: Spotify stoppt, es kommt kein Wechsel mehr → Ende erkennen
+                if (trackId !== progress.trackId) Object.assign(progress, { trackId, maxPos: 0, duration: state?.durationMs || 0, moved: false })
+                progress.maxPos = Math.max(progress.maxPos, state?.positionMs || 0)
+                if (trackId && !isPlaying && !progress.moved && progress.duration && progress.maxPos >= progress.duration * 0.9) {
+                    progress.moved = true
+                    await moveToHistory(trackId, progress.duration)
+                }
+                if (trackId) {
+                    lastPlayedTrackIdRef.current = trackId
                     lastDurationRef.current = state.durationMs || null
                 }
             } catch {
@@ -1029,7 +1084,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
             }
         }, 2000)
         return () => clearInterval(interval)
-    }, [isHost, spotifyConnected, db, roomId])
+    }, [isHost, spotifyConnected, db, roomId, moveToHistory])
 
     // Spotify: Web Playback Player initialisieren, wenn Host verbunden
     useEffect(() => {
@@ -1084,44 +1139,31 @@ const MusicVoter = ({ onBack, joinCode }) => {
         setSpotifyError(null)
     }
 
-    const getSpotifyUris = () =>
-        sortedPlaylist
-            .filter((item) => item.source === 'spotify' && item.spotifyId && item.type === 'song')
-            .map((item) => `spotify:track:${item.spotifyId}`)
+    // Abspielen = die Warteschlange (Gewinner der letzten Abstimmung), nicht der ungeprüfte Pool
+    const queueSongs = sortedPlaylist.filter((item) => item.queuedRound != null && item.source === 'spotify' && item.spotifyId && item.type === 'song')
+    const deviceTarget = () => (selectedSpotifyDeviceId === 'active' ? 'active' : selectedSpotifyDeviceId)
 
-    const handleStartPlayback = async () => {
-        const spotifyUris = getSpotifyUris()
-        if (spotifyUris.length === 0) {
-            setSpotifyError('In der Playlist sind noch keine Songs. Füge zuerst Songs hinzu.')
+    const sendQueueToSpotify = async () => {
+        if (queueSongs.length === 0) {
+            setSpotifyError('Die Warteschlange ist leer. Starte eine Abstimmung – die Gewinner landen hier.')
             return
         }
         setSpotifyError(null)
         try {
-            await spotifyService.playOnDevice(spotifyUris, selectedSpotifyDeviceId === 'active' ? 'active' : selectedSpotifyDeviceId)
-            lastSentQueueOrderRef.current = sortedPlaylist
-                .filter((i) => i.source === 'spotify' && i.spotifyId && i.type === 'song')
-                .map((i) => i.spotifyId)
+            await spotifyService.playOnDevice(queueSongs.map((i) => `spotify:track:${i.spotifyId}`), deviceTarget())
             setSpotifyPlaying(true)
+            // Für die automatische nächste Abstimmung: ab jetzt läuft diese Warteschlange
+            await updateLobbyConfig({
+                queueStartedAt: Date.now(),
+                queueTotalDurationMs: queueSongs.reduce((sum, s) => sum + (s.duration || 210000), 0)
+            })
         } catch (e) {
             setSpotifyError(e.message || 'Abspielen fehlgeschlagen')
         }
     }
-
-    /** Playlist erneut auf das gewählte Gerät senden (z. B. nach Wechsel zu Alexa per Connect). */
-    const handleResendPlaylist = async () => {
-        const spotifyUris = getSpotifyUris()
-        if (spotifyUris.length === 0) return
-        setSpotifyError(null)
-        try {
-            await spotifyService.playOnDevice(spotifyUris, selectedSpotifyDeviceId === 'active' ? 'active' : selectedSpotifyDeviceId)
-            lastSentQueueOrderRef.current = sortedPlaylist
-                .filter((i) => i.source === 'spotify' && i.spotifyId && i.type === 'song')
-                .map((i) => i.spotifyId)
-            setSpotifyPlaying(true)
-        } catch (e) {
-            setSpotifyError(e.message || 'Fehler')
-        }
-    }
+    const handleStartPlayback = sendQueueToSpotify
+    /** Warteschlange erneut auf das gewählte Gerät senden (z. B. nach Wechsel zu Alexa per Connect). */
+    const handleResendPlaylist = sendQueueToSpotify
 
     // Host: Live-Umbauen der Spotify-Warteschlange deaktiviert – Updates passieren nur noch rundenweise,
     // wenn Voting abgeschlossen ist und keine Musik mehr läuft (siehe pendingBatch-Logik unten).
@@ -1141,42 +1183,48 @@ const MusicVoter = ({ onBack, joinCode }) => {
         }
     }
 
-    // Host: Pending-Batch erst an Spotify schicken, wenn keine Musik mehr läuft (kein Stocken während des Songs)
+    // Host: Gewinner einer Runde an Spotify schicken, sobald keine Amplify-Musik mehr läuft (kein Abbruch mitten im Song).
+    // Läuft etwas, das nicht aus der Playlist stammt (z. B. Spotify-Autoplay nach der Warteschlange), wird trotzdem gestartet.
+    const batchSendingRef = useRef(false)
+    const lastBatchErrorRef = useRef(null)
+    const playingOurs = !!nowPlaying?.isPlaying && playlist.some(i => i.spotifyId === nowPlaying.trackId)
     useEffect(() => {
         const applyPendingBatch = async () => {
-            if (!isHost || !spotifyConnected || !db || !roomId) return
+            if (!isHost || !spotifyConnected || !db || !roomId || batchSendingRef.current) return
             const pending = lobbyData?.pendingBatch
             if (!pending || !Array.isArray(pending.spotifyIds) || pending.spotifyIds.length === 0) return
-            if (nowPlaying?.isPlaying) return
+            if (playingOurs) return
 
-            const deviceId = selectedSpotifyDeviceId === 'active' ? 'active' : selectedSpotifyDeviceId
-            const uris = pending.spotifyIds.map((id) => `spotify:track:${id}`)
-            if (uris.length === 0) return
-
+            batchSendingRef.current = true
             try {
-                // Queue-Gesamtdauer aus den gequeueten Songs berechnen
-                const currentSnap = await getDoc(doc(db, 'musicVoterLobbies', roomId))
-                const currentPlaylist = currentSnap.data()?.playlist || []
-                const queuedSongs = currentPlaylist.filter(s => pending.spotifyIds.includes(s.spotifyId))
+                const queuedSongs = playlist.filter(s => pending.spotifyIds.includes(s.spotifyId))
                 const queueTotalDurationMs = queuedSongs.reduce((sum, s) => sum + (s.duration || 210000), 0)
 
-                await spotifyService.playOnDevice(uris, deviceId)
-                lastSentQueueOrderRef.current = pending.spotifyIds
+                await spotifyService.playOnDevice(pending.spotifyIds.map((id) => `spotify:track:${id}`), deviceTarget())
                 setSpotifyPlaying(true)
-                await updateDoc(doc(db, 'musicVoterLobbies', roomId), {
-                    pendingBatch: null,
-                    queueStartedAt: Date.now(),
-                    queueTotalDurationMs
-                })
+                setSpotifyError(null)
+                lastBatchErrorRef.current = null
+                await mutateLobby(roomId, (data) => (data.pendingBatch?.round === pending.round
+                    ? { update: { pendingBatch: null, queueStartedAt: Date.now(), queueTotalDurationMs } }
+                    : null))
             } catch (e) {
-                console.error('Fehler beim Senden der Batch an Spotify:', e)
+                console.error('Fehler beim Senden der Runde an Spotify:', e)
+                const msg = e.message || 'Wiedergabe fehlgeschlagen'
+                setSpotifyError(msg)
+                if (lastBatchErrorRef.current !== msg) {
+                    lastBatchErrorRef.current = msg
+                    showToast(`Die Gewinner konnten nicht abgespielt werden: ${msg} – öffne Spotify oder wähle in den Einstellungen ein Gerät.`, 'bad')
+                }
+            } finally {
+                batchSendingRef.current = false
             }
         }
 
         applyPendingBatch()
-    }, [isHost, spotifyConnected, nowPlaying?.isPlaying, lobbyData?.pendingBatch, selectedSpotifyDeviceId, db, roomId])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isHost, spotifyConnected, playingOurs, lobbyData?.pendingBatch, selectedSpotifyDeviceId, db, roomId])
 
-    // Host: X Minuten vor Queue-Ende → Abstimmung für nächste Runde starten
+    // Host: X Minuten vor Ende der Warteschlange → Abstimmung für die nächste Runde starten (nur wenn Songs bereitstehen)
     useEffect(() => {
         if (!isHost || !db || !roomId || !lobbyData) return
         if (lobbyData.lobbyPhase !== 'laeuft') return
@@ -1187,15 +1235,22 @@ const MusicVoter = ({ onBack, joinCode }) => {
         const delayMs = (queueStartedAt + queueTotalDurationMs - preMs) - Date.now()
 
         const triggerAbstimmung = async () => {
-            const snap = await getDoc(doc(db, 'musicVoterLobbies', roomId))
-            if (!snap.exists() || snap.data().lobbyPhase !== 'laeuft') return
-            const data = snap.data()
-            const newRound = (data.votingRound || 0) + 1
-            await updateDoc(doc(db, 'musicVoterLobbies', roomId), {
-                lobbyPhase: 'abstimmung',
-                phaseEndsAt: Date.now() + (data.votingDurationSec || 120) * 1000,
-                votingRound: newRound
-            })
+            try {
+                const res = await mutateLobby(roomId, (data) => {
+                    if (data.lobbyPhase !== 'laeuft' || data.queueStartedAt !== queueStartedAt) return null
+                    if (!(data.playlist || []).some(i => i.queuedRound == null)) return { empty: true }
+                    return {
+                        update: {
+                            lobbyPhase: 'abstimmung',
+                            phaseEndsAt: Date.now() + (data.votingDurationSec || 120) * 1000,
+                            votingRound: (data.votingRound || 0) + 1
+                        }
+                    }
+                })
+                if (res?.empty) showToast('Die Warteschlange endet bald, aber es gibt noch keine neuen Songs. Starte die Abstimmung, sobald welche da sind.')
+            } catch (e) {
+                console.error('Nächste Abstimmung starten fehlgeschlagen:', e)
+            }
         }
 
         if (delayMs <= 0) { triggerAbstimmung(); return }
@@ -1288,10 +1343,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
         if (confirm.kind === 'remove') return {
             title: 'Song entfernen?', text: `„${confirm.item.title}“ wird aus der Playlist entfernt.`,
             cancelLabel: 'Abbrechen', confirmLabel: 'Entfernen', run: () => handleRemoveItem(confirm.item.id)
-        }
-        if (confirm.kind === 'deleteAll') return {
-            title: 'Alle Playlists löschen?', text: `Alle ${availableLobbies.length} offenen Playlists werden gelöscht und alle Gäste entfernt. Das kann nicht rückgängig gemacht werden.`,
-            cancelLabel: 'Abbrechen', confirmLabel: 'Alle löschen', run: handleDeleteAllLobbies
         }
         if (confirm.kind === 'endVoting') return {
             title: 'Abstimmung beenden?', text: `${voterCount} von ${playerCount} haben abgestimmt. Die Top ${lobbyData?.batchSize || 10} Songs kommen sofort in die Warteschlange.`,
@@ -1659,11 +1710,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
                     <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={loadAvailableLobbies} disabled={isLoadingLobbies}>
                         <IconRetry />{isLoadingLobbies ? 'Lädt …' : 'Aktualisieren'}
                     </button>
-                    {availableLobbies.length > 0 && (
-                        <button type="button" className={`${styles.mvBtn} ${styles.mvDangerLink}`} onClick={() => setConfirm({ kind: 'deleteAll' })}>
-                            <IconTrash size={16} />Alle Playlists löschen
-                        </button>
-                    )}
                 </div>
             </main>
         )
@@ -1803,7 +1849,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
         // ── Einstellungen (Host) ──
         if (roomView === 'settings' && isHost) {
-            const hasSongs = sortedPlaylist.some((i) => i.source === 'spotify' && i.type === 'song')
+            const hasSongs = queueSongs.length > 0
             return shell(
                 <main className={styles.mvMain}>
                     {subHeader('Einstellungen', () => setRoomView('main'))}
@@ -1841,9 +1887,12 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                         </div>
                                     </div>
                                     {!spotifyPlaying ? (
-                                        <button type="button" className={`${styles.mvBtn} ${hasSongs ? styles.mvPrimary : styles.mvPrimaryOff}`} onClick={handleStartPlayback} disabled={!hasSongs}>
-                                            <IconPlay size={18} />Abspielen
-                                        </button>
+                                        <>
+                                            <button type="button" className={`${styles.mvBtn} ${hasSongs ? styles.mvPrimary : styles.mvPrimaryOff}`} onClick={handleStartPlayback} disabled={!hasSongs}>
+                                                <IconPlay size={18} />Warteschlange abspielen
+                                            </button>
+                                            {!hasSongs && <p className={styles.mvFine}>Die Warteschlange ist leer. Nach einer Abstimmung starten die Gewinner automatisch.</p>}
+                                        </>
                                     ) : (
                                         <div className={styles.mvBtnRow}>
                                             <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={handlePausePlayback}>
