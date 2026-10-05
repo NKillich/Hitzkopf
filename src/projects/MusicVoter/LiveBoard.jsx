@@ -81,7 +81,7 @@ export default function LiveBoard({ roomCode, onBack }) {
                 if (!auth.currentUser) await signInAnonymously(auth)
                 if (cancelled) return
                 unsub = onSnapshot(doc(getFirestore(getApp()), 'musicVoterLobbies', code), (snap) => {
-                    if (snap.exists()) { setData(snap.data()); setStatus('ok') }
+                    if (snap.exists() && (snap.data().status ?? 'active') === 'active') { setData(snap.data()); setStatus('ok') }
                     else { setData(null); setStatus('missing') }
                 }, () => setStatus('error'))
             } catch {
