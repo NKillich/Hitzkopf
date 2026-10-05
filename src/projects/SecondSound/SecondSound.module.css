@@ -1,20 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600;700&display=swap');
-
-/* ── Theme ─────────────────────────────────────────────────────────────── */
-.srRoot.srLight {
-    color-scheme: light;
-    --sr-bg: #F2F3F5; --sr-surface: #FFFFFF; --sr-surface2: #E5E7EB; --sr-ink: #101216; --sr-muted: #565C66;
-    --sr-line: #D3D6DC; --sr-accent: #FF5A1F; --sr-on-accent: #1A0800; --sr-accent-soft: #FFE4D6; --sr-accent-text: #B93A0B;
-    --sr-ok: #14C98A; --sr-on-ok: #03140D; --sr-bad: #C9271B; --sr-on-bad: #FFFFFF; --sr-bad-soft: #FCE6E3; --sr-outer: #DDE0E5;
-    --sr-card: #15171C; --sr-card-line: #2E323B; --sr-card-ink: #F4F5F7; --sr-scrim: rgba(16, 18, 22, 0.5); --sr-mask: #D3D6DC;
-}
-.srRoot.srDark {
-    color-scheme: dark;
-    --sr-bg: #0B0C0F; --sr-surface: #17191E; --sr-surface2: #23262D; --sr-ink: #F3F4F6; --sr-muted: #A0A6B0;
-    --sr-line: #2F333B; --sr-accent: #FF6B2C; --sr-on-accent: #1A0800; --sr-accent-soft: #3B1D10; --sr-accent-text: #FF9461;
-    --sr-ok: #2BD99A; --sr-on-ok: #03140D; --sr-bad: #FF7A70; --sr-on-bad: #2A0504; --sr-bad-soft: #3A1716; --sr-outer: #050608;
-    --sr-card: #1D2027; --sr-card-line: #383C46; --sr-card-ink: #F3F4F6; --sr-scrim: rgba(0, 0, 0, 0.62); --sr-mask: #2F333B;
-}
 /* ── Basis ─────────────────────────────────────────────────────────────── */
 .srRoot {
     --sr-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
@@ -99,7 +82,6 @@
 .srRoot .srNoticeTitle { font-weight: 700; font-size: 16px; }
 .srRoot .srNoticeText { margin-top: 4px; font-size: 15px; line-height: 1.4; }
 .srRoot .srPrimary { height: clamp(54px, 7.4dvh, 64px); width: 100%; border-radius: 32px; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 19px; font-weight: 700; gap: 12px; }
-.srRoot .srPrimarySm { height: 60px; border-radius: 30px; font-size: 18px; }
 .srRoot .srFineRow { display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 14px; color: var(--sr-muted); text-align: center; }
 /* ── Setup ─────────────────────────────────────────────────────────────── */
 .srRoot .srScroll { flex: 1; min-height: 0; padding: 6px 20px 12px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
@@ -215,12 +197,6 @@
 .srRoot .srRate { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .srRoot .srRateNo { height: clamp(46px, 8.4dvh, 72px); border-radius: 26px; border: 2px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-size: 17px; font-weight: 700; gap: 8px; }
 .srRoot .srRateOk { height: clamp(46px, 8.4dvh, 72px); border-radius: 26px; border: 2px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-size: 17px; font-weight: 700; gap: 8px; }
-.srRoot .srScrim { position: absolute; inset: 0; z-index: 50; background: var(--sr-scrim); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
-.srRoot .srSheet { width: 100%; max-width: 440px; box-sizing: border-box; background: var(--sr-surface); border-radius: 30px 30px 0 0; padding: 12px 20px 28px; display: flex; flex-direction: column; gap: 10px; }
-.srRoot .srGrab { width: 40px; height: 5px; border-radius: 3px; background: var(--sr-line); align-self: center; margin-bottom: 10px; }
-.srRoot .srSheetTitle { font-family: var(--sr-display); font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
-.srRoot .srSheetText { margin-bottom: 8px; font-size: 16px; line-height: 1.45; color: var(--sr-muted); }
-.srRoot .srDanger { height: 52px; border-radius: 26px; color: var(--sr-bad); font-size: 17px; font-weight: 700; }
 /* ── Ergebnis ──────────────────────────────────────────────────────────── */
 .srRoot .srResultCard { flex: none; border-radius: 30px; background: var(--sr-card); border: 1px solid var(--sr-card-line); color: var(--sr-card-ink); padding: 22px 22px 24px; display: flex; flex-direction: column; gap: 20px; }
 .srRoot .srTierRow { display: flex; align-items: center; gap: 14px; }
