@@ -1,0 +1,140 @@
+/* Amplify Live – Zuschauer-Board für Tablet/TV. Farben aus shared/ui/theme.module.css */
+.lbRoot {
+    position: fixed;
+    inset: 0;
+    overflow-y: auto;
+    background: var(--sr-bg);
+    color: var(--sr-ink);
+    font-family: 'Figtree', system-ui, sans-serif;
+    font-size: 16px;
+    text-align: left;
+}
+/* App.css setzt globale h1-/button-/input-Optik – hier neutralisieren */
+.lbRoot h1,
+.lbRoot h2 { color: inherit; text-shadow: none; margin: 0; font-size: inherit; position: static; letter-spacing: normal; z-index: auto; }
+.lbRoot p,
+.lbRoot ol { margin: 0; padding: 0; }
+.lbRoot ol { list-style: none; }
+.lbRoot button { position: relative; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: 0; width: auto; min-height: 0; border: 0; box-shadow: none; transform: none; overflow: visible; font: inherit; cursor: pointer; transition: none; }
+.lbRoot button::before { display: none; }
+.lbRoot button:hover:not(:disabled),
+.lbRoot button:active:not(:disabled) { transform: none; box-shadow: none; }
+.lbRoot button:focus-visible { outline: 3px solid var(--sr-accent); outline-offset: 2px; }
+
+.lbBoard { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: clamp(14px, 2vw, 24px); padding: clamp(16px, 2.4vw, 32px); }
+.lbText { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.lbTitle { font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbSub { font-size: 14px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbSub strong { color: var(--sr-ink); font-weight: 700; }
+.lbMuted { font-size: 16px; line-height: 1.45; color: var(--sr-muted); }
+
+/* ── Kopfzeile ─────────────────────────────────────────────────────────── */
+.lbTop { display: flex; align-items: center; gap: clamp(12px, 2vw, 28px); flex-wrap: wrap; }
+.lbTopButtons { display: flex; gap: 8px; }
+.lbRoot .lbIconBtn { width: 40px; height: 40px; border-radius: 20px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); }
+.lbBrand { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; }
+.lbLogo { font-family: var(--sr-display); font-size: clamp(26px, 3vw, 40px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.lbLogo span { color: var(--sr-accent); }
+.lbMeta { display: block; font-size: 15px; color: var(--sr-muted); }
+.lbMeta svg { vertical-align: -2px; }
+.lbPhase { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 8px 0 18px; border-radius: 24px; background: var(--sr-surface); font-size: 17px; font-weight: 700; }
+.lbDot { width: 12px; height: 12px; border-radius: 6px; background: var(--sr-muted); }
+.lbDotCollect { background: var(--sr-accent); }
+.lbDotVote { background: var(--sr-accent); animation: lbPulse 1.2s ease-in-out infinite; }
+.lbDotLive { background: var(--sr-ok); animation: lbPulse 1.6s ease-in-out infinite; }
+.lbTimer { height: 36px; padding: 0 14px; border-radius: 18px; background: var(--sr-accent); color: var(--sr-on-accent); font-family: var(--sr-display); font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; display: flex; align-items: center; }
+.lbPhase:not(:has(.lbTimer)) { padding-right: 18px; }
+.lbJoin { display: flex; align-items: center; gap: 12px; padding: 6px 16px 6px 6px; border-radius: 20px; background: var(--sr-surface); }
+.lbJoinText { display: flex; flex-direction: column; gap: 2px; }
+.lbJoinLabel { font-size: 13px; font-weight: 700; color: var(--sr-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.lbJoinCode { font-family: var(--sr-display); font-size: 26px; font-weight: 800; letter-spacing: 0.06em; }
+
+/* ── Hauptbereich ──────────────────────────────────────────────────────── */
+.lbGrid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(14px, 2vw, 24px); }
+.lbNowCol { min-height: 0; display: flex; flex-direction: column; gap: clamp(14px, 2vw, 24px); }
+.lbNow { display: flex; flex-direction: column; gap: 18px; padding: clamp(16px, 2vw, 24px); border-radius: 30px; background: var(--sr-card); border: 1px solid var(--sr-card-line); color: var(--sr-card-ink); }
+.lbNowCover { width: min(100%, 34vh); align-self: center; }
+.lbNowCover > span { width: 100% !important; height: auto !important; aspect-ratio: 1 / 1; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+.lbNowText { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lbKicker { font-size: 13px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--sr-accent); }
+.lbNowTitle { font-family: var(--sr-display); font-size: clamp(24px, 2.8vw, 38px) !important; font-weight: 800; letter-spacing: -0.02em !important; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lbNowArtist { font-size: clamp(16px, 1.6vw, 20px); opacity: 0.8; }
+.lbBy { font-size: 15px; opacity: 0.75; }
+.lbBy strong { opacity: 1; color: var(--sr-card-ink); }
+.lbBar { height: 8px; margin-top: 8px; border-radius: 4px; background: var(--sr-card-line); overflow: hidden; }
+.lbBar span { display: block; height: 100%; border-radius: 4px; background: var(--sr-accent); transition: width 0.9s linear; }
+.lbTimes { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.lbNowEmpty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 32px 20px; border-radius: 30px; background: var(--sr-surface); }
+.lbNowEmptyTitle { font-size: 20px; font-weight: 700; }
+.lbEmptyIcon { width: 60px; height: 60px; border-radius: 30px; background: var(--sr-surface2); color: var(--sr-muted); display: flex; align-items: center; justify-content: center; }
+
+.lbSection { display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 26px; background: var(--sr-surface); }
+.lbSectionTitle { display: flex; align-items: center; gap: 10px; font-size: 15px !important; font-weight: 800; letter-spacing: 0.1em !important; text-transform: uppercase; color: var(--sr-muted); }
+.lbSectionTitle span { font-family: var(--sr-display); color: var(--sr-accent-text); letter-spacing: 0; }
+.lbQueue { display: flex; flex-direction: column; gap: 8px; }
+.lbQueueItem { display: flex; align-items: center; gap: 12px; }
+.lbQueueRank { width: 22px; flex: none; text-align: center; font-family: var(--sr-display); font-size: 16px; font-weight: 800; color: var(--sr-muted); }
+.lbMore { padding-left: 34px; font-size: 14px; font-weight: 600; color: var(--sr-muted); }
+
+.lbPanel { min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: clamp(16px, 2vw, 24px); border-radius: 30px; background: var(--sr-surface); }
+.lbPanelHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lbPanelTitle { font-family: var(--sr-display); font-size: clamp(22px, 2.4vw, 32px) !important; font-weight: 800; letter-spacing: -0.02em !important; }
+.lbPanelMeta { font-size: 15px; font-weight: 600; color: var(--sr-muted); }
+.lbRank { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.lbRankItem { display: flex; align-items: center; gap: 14px; padding: 8px 14px 8px 8px; border-radius: 18px; background: var(--sr-bg); border: 2px solid transparent; transition: background 0.3s; }
+.lbRankTop { border-color: color-mix(in srgb, var(--sr-accent) 45%, transparent); }
+.lbRankCut { margin-top: 14px; position: relative; }
+.lbRankCut::before { content: 'Nicht in der Warteschlange'; position: absolute; left: 8px; top: -22px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-muted); }
+.lbPos { width: 30px; flex: none; text-align: center; font-family: var(--sr-display); font-size: 22px; font-weight: 800; color: var(--sr-muted); }
+.lbRankTop .lbPos { color: var(--sr-accent-text); }
+.lbRankItem .lbText { flex: 1; }
+.lbVotes { position: relative; display: flex; height: 6px; margin-top: 4px; border-radius: 3px; background: var(--sr-surface2); overflow: hidden; }
+.lbVoteUp { position: absolute; left: 50%; top: 0; bottom: 0; background: var(--sr-ok); transition: width 0.5s ease; }
+.lbVoteDown { position: absolute; right: 50%; top: 0; bottom: 0; background: var(--sr-bad); transition: width 0.5s ease; }
+.lbPlayed { display: inline-flex; align-items: center; height: 18px; margin-right: 6px; padding: 0 7px; border-radius: 9px; background: var(--sr-bad-soft); color: var(--sr-bad); font-size: 11px; font-weight: 800; vertical-align: 1px; }
+.lbScoreBox { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 64px; }
+.lbScore { font-family: var(--sr-display); font-size: 28px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.lbCounts { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; color: var(--sr-muted); }
+
+/* ── Fun Facts ─────────────────────────────────────────────────────────── */
+.lbFacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.lbFact { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 22px; background: var(--sr-surface); min-width: 0; }
+.lbFactHint { background: transparent; border: 2px dashed var(--sr-line); }
+.lbFactHint .lbSub { white-space: normal; }
+.lbFactIcon { width: 44px; height: 44px; flex: none; border-radius: 22px; background: var(--sr-accent-soft); color: var(--sr-accent-text); display: flex; align-items: center; justify-content: center; }
+.lbFactLabel { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-muted); }
+.lbFactValue { font-family: var(--sr-display); font-size: 20px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Ohne Raumcode / Fehler ────────────────────────────────────────────── */
+.lbCenter { position: relative; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; }
+.lbCenter .lbTopButtons { position: absolute; left: 20px; top: 20px; }
+.lbBigEmoji { font-size: 88px; line-height: 1; }
+.lbCenterTitle { font-family: var(--sr-display); font-size: 44px !important; font-weight: 800; letter-spacing: -0.03em !important; }
+.lbCodeForm { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.lbCodeRow { display: flex; gap: 10px; }
+.lbRoot .lbCodeInput { width: 200px; height: 52px; margin: 0; padding: 0 18px; box-sizing: border-box; border-radius: 26px; border: 2px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-family: var(--sr-display); font-size: 22px; font-weight: 800; letter-spacing: 0.1em; text-align: center; box-shadow: none; backdrop-filter: none; transform: none; }
+.lbRoot .lbCodeInput:focus { outline: none; border-color: var(--sr-accent); background: var(--sr-surface); box-shadow: none; transform: none; }
+.lbRoot .lbCodeBtn { height: 52px; padding: 0 24px; border-radius: 26px; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 17px; font-weight: 700; }
+.lbRoot .lbCodeBtn:disabled { background: var(--sr-surface2); color: var(--sr-muted); cursor: default; }
+
+@keyframes lbPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) {
+    .lbRoot * { animation: none !important; transition: none !important; }
+}
+
+/* Hochformat / schmale Bildschirme: alles untereinander */
+@media (max-width: 860px) {
+    .lbGrid { grid-template-columns: minmax(0, 1fr); }
+    .lbNowCover { width: min(100%, 260px); }
+    .lbJoin { order: 5; }
+}
+/* Großes Querformat: Board füllt genau den Bildschirm, Listen scrollen innen */
+@media (min-width: 861px) {
+    .lbNow { flex-direction: row; align-items: center; }
+    .lbNowCover { width: min(42%, 24vh); flex: none; }
+}
+@media (min-width: 861px) and (min-height: 600px) {
+    .lbRoot { overflow: hidden; }
+    .lbBoard { height: 100%; }
+    .lbNowCol { overflow-y: auto; }
+}

@@ -88,6 +88,16 @@ src/
 }
 ```
 
+## 🧭 Runden, Links & Live-Board
+
+- **Spotify** ist nur für den Host Pflicht (Startseite). Gäste treten ohne Spotify bei.
+- **Name:** frei wählbar (2–20 Zeichen, Buchstaben/Zahlen/Leerzeichen/-/_), der Zufallsname ist nur ein Vorschlag.
+- **Stimmen pro Runde:** `upvotesPerPerson` / `downvotesPerPerson` (−1 = unbegrenzt, 0 Daumen runter = aus). Der Host kann die Abstimmung vorzeitig beenden.
+- **Zweite Chance:** Nach jeder Abstimmung verlassen nicht gewählte Songs den Pool und landen in `leftovers.<Name>`; die Person kann sie erneut einreichen.
+- **Verlauf:** Gespielte Songs wandern nach `history` (Titel, Interpret, Cover, `addedBy`, `up`/`down`/`score`, `durationMs`, `playedAt`). Daraus kommen die Warnung „Lief schon“ und die Fun Facts.
+- **Einladungslink:** `…/Hitzkopf/#amplify/RAUMCODE` öffnet direkt „Beitreten“ für diese Playlist (Teilen-Sheet mit QR-Code im Raum).
+- **Live-Board:** `…/Hitzkopf/#live/RAUMCODE` – reine Zuschauer-Ansicht (Läuft gerade, Als Nächstes, Live-Abstimmung, Fun Facts, QR-Code zum Mitmachen). Tritt der Playlist nicht bei, braucht weder Spotify noch Namen.
+
 ## 🎨 Design
 
 - **Farbschema:** Türkis (#4ecdc4) als Hauptfarbe
