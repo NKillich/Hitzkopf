@@ -117,6 +117,92 @@
 .lbRoot .lbCodeBtn { height: 52px; padding: 0 24px; border-radius: 26px; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 17px; font-weight: 700; }
 .lbRoot .lbCodeBtn:disabled { background: var(--sr-surface2); color: var(--sr-muted); cursor: default; }
 
+/* ── Phasenfarben: das ganze Board färbt sich passend zur Phase ────────── */
+.lbRoot { --phase: var(--sr-accent); --phase-soft: var(--sr-accent-soft); --on-phase: var(--sr-on-accent); transition: background 0.6s ease; }
+.lbRoot.lbCollect,
+.lbFlash.lbCollect { --phase: var(--sr-accent); --phase-soft: var(--sr-accent-soft); --on-phase: var(--sr-on-accent); }
+.lbRoot.lbVote,
+.lbFlash.lbVote { --phase: #8B6CFF; --phase-soft: rgba(139, 108, 255, 0.18); --on-phase: #0E0822; }
+.lbRoot.lbLive,
+.lbFlash.lbLive { --phase: var(--sr-ok); --phase-soft: color-mix(in srgb, var(--sr-ok) 18%, transparent); --on-phase: var(--sr-on-ok); }
+.lbRoot.lbCollect .lbBoard,
+.lbRoot.lbVote .lbBoard,
+.lbRoot.lbLive .lbBoard { box-shadow: inset 0 0 0 6px var(--phase); transition: box-shadow 0.6s ease; }
+.lbRoot .lbLogo span { color: var(--phase); }
+.lbRoot .lbRankTop { border-color: color-mix(in srgb, var(--phase) 55%, transparent); }
+.lbRoot .lbRankTop .lbPos { color: var(--phase); }
+
+/* ── Phasen-Leiste ─────────────────────────────────────────────────────── */
+.lbSteps { flex: 2; min-width: 320px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.lbStep { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 14px; background: var(--sr-surface); opacity: 0.55; transition: opacity 0.4s, background 0.4s; }
+.lbStepOn { opacity: 1; background: var(--phase-soft); box-shadow: inset 0 0 0 2px var(--phase); }
+.lbStepDone { opacity: 0.8; }
+.lbStepLabel { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbStepNo { width: 20px; height: 20px; flex: none; border-radius: 10px; background: var(--sr-surface2); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+.lbStepOn .lbStepNo { background: var(--phase); color: var(--on-phase); }
+.lbStepBar { position: relative; height: 6px; border-radius: 3px; background: var(--sr-surface2); overflow: hidden; }
+.lbStepBar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--phase); transition: width 1s linear; }
+.lbStepDone .lbStepBar > span { background: var(--sr-muted); }
+.lbStepBar > .lbStepIndeterminate { width: 35% !important; animation: lbSlide 1.8s ease-in-out infinite; }
+@keyframes lbSlide { 0% { left: -35%; } 100% { left: 100%; } }
+
+/* ── Aufforderungs-Banner ──────────────────────────────────────────────── */
+.lbCall { display: flex; align-items: center; gap: clamp(16px, 3vw, 40px); padding: clamp(16px, 2.4vw, 28px) clamp(20px, 3vw, 36px); border-radius: 30px; background: var(--phase); color: var(--on-phase); transition: background 0.6s ease; }
+.lbCallText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.lbRoot .lbCallTitle { font-family: var(--sr-display); font-size: clamp(30px, 4.4vw, 64px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.lbCallSub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: clamp(15px, 1.6vw, 22px); font-weight: 600; opacity: 0.85; }
+.lbRule { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.14); font-weight: 800; }
+.lbCallTimer { flex: none; font-family: var(--sr-display); font-size: clamp(48px, 8vw, 120px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.lbCallUrgent .lbCallTimer { animation: lbBeat 1s ease-in-out infinite; }
+@keyframes lbBeat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+.lbCallLines { flex: none; display: flex; gap: clamp(14px, 2.4vw, 36px); }
+.lbCallLine { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.lbCallLine span { font-size: clamp(13px, 1.2vw, 16px); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.75; }
+.lbCallLine strong { font-family: var(--sr-display); font-size: clamp(30px, 4.6vw, 64px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.lbCallQr { flex: none; }
+
+/* ── Live-Abstimmung: Kopf an Kopf, Punkte-Puls ────────────────────────── */
+.lbTieBanner { margin: 0; padding: 8px 14px; border-radius: 12px; background: var(--phase); color: var(--on-phase); font-size: 15px; font-weight: 800; text-align: center; animation: lbPulse 1.2s ease-in-out infinite; }
+.lbTie { flex: none; padding: 4px 10px; border-radius: 12px; background: var(--phase-soft); color: var(--sr-ink); font-size: 12px; font-weight: 800; white-space: nowrap; }
+.lbRankItem { will-change: transform; }
+.lbScore { display: inline-block; animation: lbPop 0.45s ease-out; }
+@keyframes lbPop { 0% { transform: scale(1.5); color: var(--phase); } 100% { transform: scale(1); } }
+
+/* ── Farbwelle beim Phasenwechsel ──────────────────────────────────────── */
+.lbFlash { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: var(--phase); color: var(--on-phase); pointer-events: none; animation: lbFlash 1.8s ease forwards; }
+.lbFlash span { font-family: var(--sr-display); font-size: clamp(40px, 8vw, 120px); font-weight: 800; letter-spacing: -0.03em; text-align: center; padding: 0 24px; }
+@keyframes lbFlash { 0% { opacity: 0; transform: scale(1.04); } 15% { opacity: 0.96; transform: scale(1); } 70% { opacity: 0.96; } 100% { opacity: 0; } }
+
+/* ── Gewinner-Enthüllung ───────────────────────────────────────────────── */
+.lbReveal { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(5, 6, 8, 0.94); color: #F3F4F6; cursor: pointer; animation: lbFadeIn 0.4s ease; }
+.lbRevealInner { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 1100px; width: 100%; }
+.lbRevealKicker { display: inline-flex; align-items: center; gap: 10px; font-size: clamp(16px, 1.8vw, 24px); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #FFD23F; }
+.lbRoot .lbRevealTitle { font-family: var(--sr-display); font-size: clamp(40px, 6vw, 88px) !important; font-weight: 800; letter-spacing: -0.03em !important; color: #fff; }
+.lbPodium { display: flex; align-items: flex-end; justify-content: center; gap: clamp(14px, 3vw, 40px); margin: 16px 0 0; padding: 0; list-style: none; width: 100%; }
+.lbPodiumItem { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; max-width: 260px; opacity: 0; animation: lbRise 0.8s cubic-bezier(.2, .9, .3, 1.25) forwards; }
+.lbPlace1 { order: 2; }
+.lbPlace2 { order: 1; }
+.lbPlace3 { order: 3; }
+.lbPlace1 > span:nth-child(2) { box-shadow: 0 0 0 6px #FFD23F, 0 24px 60px rgba(255, 210, 63, 0.35); }
+.lbPodiumPlace { font-family: var(--sr-display); font-size: clamp(36px, 4vw, 60px); font-weight: 800; line-height: 1; color: #FFD23F; }
+.lbPlace2 .lbPodiumPlace { color: #D7DBE2; }
+.lbPlace3 .lbPodiumPlace { color: #E0A36B; }
+.lbPodiumTitle { font-family: var(--sr-display); font-size: clamp(18px, 2vw, 28px); font-weight: 800; line-height: 1.15; }
+.lbPodiumBy { font-size: clamp(14px, 1.4vw, 18px); opacity: 0.85; }
+.lbPodiumScore { font-family: var(--sr-display); font-size: clamp(20px, 2.2vw, 32px); font-weight: 800; }
+.lbPodiumScore small { font-family: 'Figtree', system-ui, sans-serif; font-size: 0.55em; font-weight: 600; opacity: 0.7; }
+@keyframes lbRise { from { opacity: 0; transform: translateY(40px) scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes lbFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 860px) {
+    .lbSteps { order: 4; flex-basis: 100%; min-width: 0; }
+    .lbCall { flex-wrap: wrap; }
+    .lbCallLines { width: 100%; justify-content: space-between; }
+    .lbCallLine { align-items: flex-start; }
+    .lbPodium { flex-direction: column; align-items: center; }
+    .lbPlace1, .lbPlace2, .lbPlace3 { order: 0; }
+}
+
 @keyframes lbPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 @media (prefers-reduced-motion: reduce) {
     .lbRoot * { animation: none !important; transition: none !important; }

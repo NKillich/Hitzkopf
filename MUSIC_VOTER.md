@@ -96,7 +96,12 @@ src/
 - **Zweite Chance:** Nach jeder Abstimmung verlassen nicht gewählte Songs den Pool und landen in `leftovers.<Name>`; die Person kann sie erneut einreichen.
 - **Verlauf:** Gespielte Songs wandern nach `history` (Titel, Interpret, Cover, `addedBy`, `up`/`down`/`score`, `durationMs`, `playedAt`). Daraus kommen die Warnung „Lief schon“ und die Fun Facts.
 - **Einladungslink:** `…/Hitzkopf/#amplify/RAUMCODE` öffnet direkt „Beitreten“ für diese Playlist (Teilen-Sheet mit QR-Code im Raum).
-- **Live-Board:** `…/Hitzkopf/#live/RAUMCODE` – reine Zuschauer-Ansicht (Läuft gerade, Als Nächstes, Live-Abstimmung, Fun Facts, QR-Code zum Mitmachen). Tritt der Playlist nicht bei, braucht weder Spotify noch Namen.
+- **Abstimmung:** feste, pro Person gemischte Reihenfolge; Punkte erst am Ende (`lastResult` → Gewinner-Enthüllung in App und Board). Keine Stimmen für eigene Songs. Gibt es nicht mehr Songs als Plätze, kommen alle ohne Abstimmung in die Warteschlange.
+- **Vorgaben:** Schnell / Normal / Lange Party (`PRESETS` in `amplifyLogic.js`), Feinheiten unter „Erweitert“. Daumen runter standardmäßig aus.
+- **Runden-Modi** (`roundRule`): Künstler, Jahrzehnt, Stichwort – Suche filtert, Einreichen wird geprüft.
+- **Beitreten** nur per Code, QR-Code oder Link (keine öffentliche Liste). Namen ohne Groß-/Kleinschreibung eindeutig, fast gleiche Songs (Radio Edit, Remaster …) werden erkannt.
+- **Host:** Gäste entfernen, Pause/Weiter/Überspringen/Lautstärke, Gerät automatisch (aktiv → „Amplify Host“ → erstes), „Als Spotify-Playlist speichern“ (Scope `playlist-modify-private`, einmal neu verbinden).
+- **Live-Board:** `…/Hitzkopf/#live/RAUMCODE` – reine Zuschauer-Ansicht: Phasen-Leiste mit Fortschritt, Farbe je Phase, großes Banner mit Countdown / Restmusik / „Nächste Abstimmung in …“, Live-Abstimmung mit „Kopf an Kopf“, Gewinner-Podium, Fun Facts, QR-Code zum Mitmachen. Tritt der Playlist nicht bei, braucht weder Spotify noch Namen.
 
 ## 🎨 Design
 
