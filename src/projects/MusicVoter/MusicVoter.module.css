@@ -226,6 +226,70 @@
 .mvRoot .mvStep strong { display: block; font-size: 16px; color: var(--sr-ink); }
 .mvRoot .mvStepIcon { width: 40px; height: 40px; flex: none; border-radius: 20px; background: var(--sr-accent-soft); color: var(--sr-accent-text); display: flex; align-items: center; justify-content: center; }
 
+/* ── Startseite: Spotify-Status ───────────────────────────────────────── */
+.mvRoot .mvStartOff { height: clamp(54px, 7.4dvh, 62px); }
+.mvRoot .mvStatus { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--sr-muted); margin-top: 2px; }
+.mvRoot .mvStatusDot { width: 8px; height: 8px; border-radius: 50%; background: var(--sr-ok); }
+.mvRoot .mvStatusLink { height: 32px; padding: 0 2px; color: var(--sr-muted); font-size: 13px; font-weight: 600; text-decoration: underline; }
+.mvRoot .mvFineRow { display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 14px; color: var(--sr-muted); text-align: center; }
+
+/* ── Name ──────────────────────────────────────────────────────────────── */
+.mvRoot .mvNameRow { display: flex; align-items: center; gap: 10px; }
+.mvRoot .mvInput.mvInputPlain { flex: 1; min-width: 0; padding: 0 16px; font-weight: 700; }
+.mvRoot .mvInput.mvInputPlain:read-only { background: var(--sr-surface2); border-color: transparent; color: var(--sr-muted); }
+.mvRoot .mvInput.mvInputBad,
+.mvRoot .mvInput.mvInputBad:focus { border-color: var(--sr-bad); }
+.mvRoot .mvFieldHint { font-size: 13px; color: var(--sr-muted); }
+.mvRoot .mvFieldError { font-size: 13px; font-weight: 600; color: var(--sr-bad); }
+
+/* ── Einladung ─────────────────────────────────────────────────────────── */
+.mvRoot .mvInvite { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 22px; background: var(--sr-accent-soft); border: 2px solid var(--sr-accent); }
+.mvRoot .mvInviteRow { display: flex; align-items: center; gap: 12px; }
+.mvRoot .mvInvite .mvLabelSm { color: var(--sr-accent-text); font-weight: 700; }
+
+/* ── Raum: Rolle, Hilfe, Teilen ────────────────────────────────────────── */
+.mvRoot .mvRoomHeader .mvIconBtn { width: 40px; height: 40px; border-radius: 20px; }
+.mvRoot .mvRoomHeader { gap: 6px; }
+.mvRoot .mvRoleBtn { align-self: flex-start; gap: 4px; height: 22px; margin-top: 2px; border-radius: 11px; }
+.mvRoot .mvRole { height: 20px; padding: 0 8px; border-radius: 10px; background: var(--sr-surface2); color: var(--sr-muted); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; display: flex; align-items: center; }
+.mvRoot .mvRoleHost { background: var(--sr-accent-soft); color: var(--sr-accent-text); }
+.mvRoot .mvHelpDot { width: 20px; height: 20px; border-radius: 10px; border: 1.5px solid var(--sr-line); color: var(--sr-muted); display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.mvRoot .mvHelpNow { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 16px; background: var(--sr-bg); font-size: 15px; line-height: 1.45; }
+.mvRoot .mvShareBox { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
+.mvRoot .mvShareText { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.mvRoot .mvShareCode { font-family: var(--sr-display); font-size: 34px; font-weight: 800; letter-spacing: 0.06em; line-height: 1; }
+.mvRoot .mvBoardBox { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 10px 10px 10px 12px; border-radius: 18px; background: var(--sr-bg); }
+.mvRoot .mvBoardIcon { width: 40px; height: 40px; flex: none; border-radius: 20px; background: var(--sr-accent-soft); color: var(--sr-accent-text); display: flex; align-items: center; justify-content: center; }
+.mvRoot a.mvBtn { text-decoration: none; }
+.mvRoot .mvIconBtnSm { width: 38px; height: 38px; flex: none; border-radius: 19px; color: var(--sr-muted); }
+
+/* ── Abstimmung: Budget, Teilnahme ─────────────────────────────────────── */
+.mvRoot .mvVoteStats { display: flex; flex-wrap: wrap; gap: 6px; }
+.mvRoot .mvBudget,
+.mvRoot .mvVoters { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 15px; font-size: 13px; font-weight: 700; }
+.mvRoot .mvBudget { background: var(--sr-accent-soft); color: var(--sr-accent-text); }
+.mvRoot .mvBudgetEmpty { background: var(--sr-surface2); color: var(--sr-muted); }
+.mvRoot .mvVoters { background: var(--sr-surface2); color: var(--sr-ink); }
+.mvRoot .mvVoteBtnOff { opacity: 0.4; }
+.mvRoot .mvPlayedChip { display: inline-flex; align-items: center; height: 18px; margin-right: 6px; padding: 0 7px; border-radius: 9px; background: var(--sr-bad-soft); color: var(--sr-bad); font-size: 11px; font-weight: 800; vertical-align: 1px; }
+.mvRoot .mvRowFlat { background: var(--sr-bg); min-height: 54px; }
+
+/* ── Einstellungen: Schieberegler mit festen Stufen ────────────────────── */
+.mvRoot .mvSliderField { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
+.mvRoot .mvSliderValue { font-size: 16px; font-weight: 700; }
+.mvRoot .mvSlider { -webkit-appearance: none; appearance: none; width: 100%; height: 40px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; transform: none; transition: none; cursor: pointer; }
+.mvRoot .mvSlider:focus { outline: none; background: transparent; border: 0; box-shadow: none; transform: none; }
+.mvRoot .mvSlider::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--sr-accent) 0, var(--sr-accent) var(--pct, 0%), var(--sr-surface2) var(--pct, 0%), var(--sr-surface2) 100%); }
+.mvRoot .mvSlider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: var(--sr-surface); border: 4px solid var(--sr-accent); box-sizing: border-box; }
+.mvRoot .mvSlider::-moz-range-track { height: 8px; border-radius: 4px; background: var(--sr-surface2); }
+.mvRoot .mvSlider::-moz-range-progress { height: 8px; border-radius: 4px; background: var(--sr-accent); }
+.mvRoot .mvSlider::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: var(--sr-surface); border: 4px solid var(--sr-accent); box-sizing: border-box; }
+.mvRoot .mvSlider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 5px var(--sr-accent-soft); }
+.mvRoot .mvSlider:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 5px var(--sr-accent-soft); }
+.mvRoot .mvTicks { position: relative; height: 20px; }
+.mvRoot .mvTicks span { position: absolute; top: 0; transform: translateX(-50%); font-size: 13px; font-weight: 700; color: var(--sr-muted); }
+.mvRoot .mvTicks .mvTickOn { color: var(--sr-ink); }
+
 /* ── Hinweis-Leiste ────────────────────────────────────────────────────── */
 .mvRoot .mvToastSlot { position: absolute; left: 16px; right: 16px; top: 66px; z-index: 40; pointer-events: none; }
 .mvRoot .mvToast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 14px; border-radius: 16px; background: var(--sr-ink); color: var(--sr-bg); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); animation: mvToastIn 0.2s ease-out; }

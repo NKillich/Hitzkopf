@@ -1,0 +1,2 @@
+.qr { flex: none; box-sizing: border-box; padding: 6px; border-radius: 14px; background: #FFFFFF; }
+.qr svg { display: block; width: 100%; height: 100%; }

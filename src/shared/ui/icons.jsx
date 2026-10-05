@@ -33,3 +33,11 @@ export const IconQueue = ({ size = 18 }) => <Svg size={size} w={2.2}><path d="M4
 export const IconLeave = ({ size = 20 }) => <Svg size={size} w={2.2}><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" /></Svg>
 export const IconBallot = ({ size = 22 }) => <Svg size={size} w={2}><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V10M9.5 7.5l1.5 1.5 3-3M8 15h8" /></Svg>
 export const IconSpeaker = ({ size = 18 }) => <Svg size={size} w={2}><rect x="5" y="3" width="14" height="18" rx="2" /><circle cx="12" cy="14" r="3.5" /><path d="M12 7v.01" /></Svg>
+export const IconShare = ({ size = 20 }) => <Svg size={size} w={2.2}><path d="M12 15V3M7.5 7.5L12 3l4.5 4.5" /><path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" /></Svg>
+export const IconHelp = ({ size = 16 }) => <Svg size={size} w={2.4}><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5M12 18v.01" /></Svg>
+export const IconCopy = ({ size = 18 }) => <Svg size={size} w={2}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h8" /></Svg>
+export const IconTv = ({ size = 18 }) => <Svg size={size} w={2}><rect x="3" y="5" width="18" height="12" rx="2" /><path d="M8 21h8M12 17v4" /></Svg>
+export const IconDice = ({ size = 20 }) => <Svg size={size} w={2}><rect x="4" y="4" width="16" height="16" rx="3.5" /><path d="M8.5 8.5v.01M15.5 8.5v.01M12 12v.01M8.5 15.5v.01M15.5 15.5v.01" strokeWidth="3" /></Svg>
+export const IconStar = ({ size = 20 }) => <Svg size={size} w={2}><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z" /></Svg>
+export const IconFlame = ({ size = 20 }) => <Svg size={size} w={2}><path d="M12 21a6.5 6.5 0 0 0 6.5-6.5c0-3.8-3-6-4-9.5-1.5 2-2 3.5-2 5-1-1-1.5-2-1.5-3.5C8 9 5.5 11.5 5.5 14.5A6.5 6.5 0 0 0 12 21z" /></Svg>
+export const IconMic = ({ size = 20 }) => <Svg size={size} w={2}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></Svg>

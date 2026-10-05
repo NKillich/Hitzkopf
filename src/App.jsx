@@ -5,6 +5,7 @@ import HitzkopfGame from './projects/Hitzkopf/HitzkopfGame'
 import MusicVoter from './projects/MusicVoter/MusicVoter'
 import QuizGame from './projects/QuizGame/QuizGame'
 import SecondSound from './projects/SecondSound/SecondSound'
+import LiveBoard from './projects/MusicVoter/LiveBoard'
 import './App.css'
 
 const PROJECT_META = {
@@ -12,6 +13,7 @@ const PROJECT_META = {
     musicvoter:  { title: 'Amplify',     emoji: '🎵' },
     quizroyale:  { title: 'Quiz Royale', emoji: '🧠' },
     secondsound: { title: 'Song raten',  emoji: '🎧' },
+    live:        { title: 'Amplify Live', emoji: '📺' },
 }
 
 const setPageMeta = (projectId) => {
@@ -41,8 +43,15 @@ const HASH_MAP = {
     amplify:   'musicvoter',
     hitzkopf:  'hitzkopf',
     quizroyale:'quizroyale',
+    live:      'live',         // #live/RAUMCODE – Live-Board einer Amplify-Playlist
 }
 const ID_TO_HASH = Object.fromEntries(Object.entries(HASH_MAP).map(([h, id]) => [id, h]))
+
+// Hash "#amplify/ABC123" → Projekt + Zusatz (Raumcode)
+function parseHash() {
+    const [name, param] = window.location.hash.replace('#', '').split('/')
+    return { project: HASH_MAP[name.toLowerCase()] ?? null, param: param ? param.toUpperCase() : null }
+}
 
 function getInitialProject() {
     const params = new URLSearchParams(window.location.search)
@@ -50,17 +59,21 @@ function getInitialProject() {
         const returnTo = sessionStorage.getItem('spotify_return_to')
         return returnTo || 'musicvoter'
     }
-    const hash = window.location.hash.replace('#', '').toLowerCase()
-    return HASH_MAP[hash] ?? null
+    return parseHash().project
 }
 
 function App() {
     const [currentProject, setCurrentProject] = useState(getInitialProject)
+    const [hashParam, setHashParam] = useState(() => parseHash().param)   // nur beim ersten Laden (Beitritts-/Board-Link)
 
     // URL-Hash und Tab-Meta synchron halten
     useEffect(() => {
         const hash = currentProject ? ID_TO_HASH[currentProject] : null
-        window.location.hash = hash ? `#${hash}` : ''
+        const current = parseHash()
+        // Raumcode im Hash behalten, solange das Projekt gleich bleibt (#live/ABC123)
+        if (!(hash && current.project === currentProject && current.param)) {
+            window.location.hash = hash ? `#${hash}` : ''
+        }
         setPageMeta(currentProject)
     }, [currentProject])
 
@@ -68,7 +81,10 @@ function App() {
         logEvent('open_project', { project: projectId })
         setCurrentProject(projectId)
     }
-    const handleBackToHub = () => setCurrentProject(null)
+    const handleBackToHub = () => {
+        setHashParam(null)
+        setCurrentProject(null)
+    }
 
     return (
         <div className="App">
@@ -81,11 +97,15 @@ function App() {
             )}
             
             {currentProject === 'musicvoter' && (
-                <MusicVoter onBack={handleBackToHub} />
+                <MusicVoter onBack={handleBackToHub} joinCode={hashParam} />
             )}
 
             {currentProject === 'quizroyale' && (
                 <QuizGame onBack={handleBackToHub} />
+            )}
+
+            {currentProject === 'live' && (
+                <LiveBoard roomCode={hashParam} onBack={handleBackToHub} />
             )}
 
             {currentProject === 'secondsound' && (
