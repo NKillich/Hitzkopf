@@ -6,6 +6,14 @@ import '../../firebase.js'
 import spotifyService from '../../services/spotifyService'
 import clip from '../../services/clipPlayer.js'
 import { log, warn } from '../../utils/logger.js'
+import CoverArt from '../../shared/ui/CoverArt'
+import { ConfirmSheet } from '../../shared/ui/BottomSheet'
+import useTheme from '../../shared/ui/useTheme'
+import theme from '../../shared/ui/theme.module.css'
+import {
+    IconMoon, IconSun, IconBack, IconCheck, IconX, IconLock, IconPlay, IconNote, IconSearch, IconRetry, IconReplay,
+    IconEye, IconPause, IconEyeOff, IconAlert, IconClock, IconChevron, IconWave, IconInfo, IconNext
+} from '../../shared/ui/icons'
 import styles from './SecondSound.module.css'
 
 const PHASES = {
@@ -54,117 +62,14 @@ const saveSize = (id, n) => {
     } catch { /* Cache ist optional */ }
 }
 
-// Platzhalter-Cover (wenn Spotify kein Bild liefert): zwei Farben + eine Form, stabil pro Schlüssel
-const COVER_COLORS = [
-    ['#FF5A1F', '#FFD23F'], ['#2F6BFF', '#A9C8FF'], ['#12A57A', '#C8F4E4'], ['#E83F6F', '#FFC2D4'],
-    ['#7A5CFA', '#D7CCFF'], ['#F2B705', '#1C1E24'], ['#1C1E24', '#FF8A5B'], ['#00A6C8', '#FF5EA8']
-]
-
-const hashOf = (str = '') => {
-    let h = 0
-    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0
-    return h
-}
-
-function CoverArt({ src, seed, size, radius }) {
-    const h = hashOf(String(seed || ''))
-    const [c1, c2] = COVER_COLORS[h % COVER_COLORS.length]
-    const k = (h >> 3) % 3
-    const r = (f) => Math.round(size * f)
-    let shape
-    if (k === 0) shape = { width: r(0.72), height: r(0.72), right: -r(0.16), bottom: -r(0.16), borderRadius: '50%', background: c2 }
-    else if (k === 1) shape = { left: 0, right: 0, bottom: 0, height: r(0.42), background: c2 }
-    else shape = { width: r(0.6), height: r(0.6), left: r(0.2), top: r(0.2), borderRadius: '50%', border: `${Math.max(4, r(0.1))}px solid ${c2}`, boxSizing: 'border-box' }
-    return (
-        <span style={{ width: size, height: size, borderRadius: radius, background: c1, position: 'relative', display: 'block', flex: 'none', overflow: 'hidden' }}>
-            {src
-                ? <img src={src} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <span style={{ position: 'absolute', display: 'block', ...shape }} />}
-        </span>
-    )
-}
-
-const Svg = ({ size = 20, w = 2.2, fill = 'none', children }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
-)
-const IconMoon = () => <Svg w={2}><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" /></Svg>
-const IconSun = () => <Svg w={2}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></Svg>
-const IconBack = () => <Svg size={22}><path d="M15 6l-6 6 6 6" /></Svg>
-const IconCheck = ({ size = 18, w = 3 }) => <Svg size={size} w={w}><path d="M5 12.5l4.5 4.5L19 7.5" /></Svg>
-const IconX = ({ size = 18, w = 2.6 }) => <Svg size={size} w={w}><path d="M6 6l12 12M18 6L6 18" /></Svg>
-const IconLock = ({ size = 20, w = 2.2 }) => <Svg size={size} w={w}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></Svg>
-const IconPlay = ({ size = 18 }) => <Svg size={size} fill="currentColor" w={0}><path d="M7 4.5v15l13-7.5z" fill="currentColor" /></Svg>
-const IconNote = ({ size = 22 }) => <Svg size={size}><path d="M9 18V5l11-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="17" cy="16" r="3" /></Svg>
-const IconSearch = ({ size = 20 }) => <Svg size={size}><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></Svg>
-const IconRetry = ({ size = 18 }) => <Svg size={size}><path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 4v5h-5" /></Svg>
-const IconReplay = ({ size = 18 }) => <Svg size={size}><path d="M4 12a8 8 0 1 0 2.3-5.6" /><path d="M4 4v5h5" /></Svg>
-const IconEye = ({ size = 22 }) => <Svg size={size}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></Svg>
-const IconPause = ({ size = 18 }) => <Svg size={size} w={0}><rect x="6" y="4" width="4.5" height="16" rx="1.2" fill="currentColor" /><rect x="13.5" y="4" width="4.5" height="16" rx="1.2" fill="currentColor" /></Svg>
-const IconEyeOff = ({ size = 22 }) => <Svg size={size}><path d="M17.9 17.9A10.9 10.9 0 0 1 12 19c-6.5 0-10-7-10-7a18 18 0 0 1 5.1-5.9" /><path d="M9.9 4.2A9.8 9.8 0 0 1 12 4c6.5 0 10 7 10 7a18 18 0 0 1-2.2 3.2" /><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2" /><path d="M2 2l20 20" /></Svg>
-const IconAlert = ({ size = 22 }) => <Svg size={size}><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.5v.01" /></Svg>
-const IconClock = ({ size = 24 }) => <Svg size={size}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Svg>
-const IconChevron = ({ open }) => <span style={{ display: 'flex', transform: `rotate(${open ? 180 : 0}deg)`, transition: 'transform .2s' }}><Svg size={22} w={2.4}><path d="M6 9l6 6 6-6" /></Svg></span>
-const IconWave = ({ size = 13 }) => <Svg size={size} w={3}><path d="M5 10v4M10 6v12M15 8v8M20 11v2" /></Svg>
-const IconShuffle = () => <Svg size={30}><path d="M3 7h3.5c2 0 3.2 1 4.3 2.7l2.4 4.6c1.1 1.7 2.3 2.7 4.3 2.7H21" /><path d="M3 17h3.5c1.5 0 2.6-.6 3.5-1.6M14 8.6c.9-1 2-1.6 3.5-1.6H21" /><path d="M18 4l3 3-3 3M18 14l3 3-3 3" /></Svg>
-const IconPhone = () => <Svg size={18} w={2}><rect x="6" y="3" width="12" height="18" rx="2" /><circle cx="12" cy="14" r="3" /><path d="M12 7.5v.01" /></Svg>
-const IconInfo = () => <Svg size={18} w={2}><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5M12 7.5v.01" /></Svg>
-
-const IconNext = () => <Svg size={20} w={2.4}><path d="M9 6l6 6-6 6" /></Svg>
-
-/**
- * Sicherheitsabfrage als Bottom-Sheet (Spiel beenden, Statistik zurücksetzen).
- * Fokus wandert hinein, Tab bleibt im Dialog, Escape/Tipp daneben bricht ab, danach Fokus zurück.
- */
-function ConfirmSheet({ open, title, text, cancelLabel, confirmLabel, onCancel, onConfirm, returnFocusRef, busy }) {
-    const cancelRef = useRef(null)
-    useEffect(() => {
-        if (!open) return
-        const back = returnFocusRef?.current
-        cancelRef.current?.focus()
-        const onKey = (e) => { if (e.key === 'Escape') onCancel() }
-        window.addEventListener('keydown', onKey)
-        return () => {
-            window.removeEventListener('keydown', onKey)
-            back?.focus()
-        }
-    }, [open, onCancel, returnFocusRef])
-    if (!open) return null
-    return (
-        <div className={styles.srScrim} onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel() }}>
-            <div role="dialog" aria-modal="true" aria-labelledby="sr-sheet-title" className={styles.srSheet}
-                onKeyDown={(e) => {
-                    if (e.key !== 'Tab') return
-                    const items = e.currentTarget.querySelectorAll('button')
-                    const first = items[0], last = items[items.length - 1]
-                    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
-                    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
-                }}>
-                <span className={styles.srGrab} aria-hidden="true" />
-                <h2 id="sr-sheet-title" className={styles.srSheetTitle}>{title}</h2>
-                <p className={styles.srSheetText}>{text}</p>
-                <button ref={cancelRef} type="button" className={`${styles.srBtn} ${styles.srPrimary} ${styles.srPrimarySm}`} onClick={onCancel} disabled={busy}>{cancelLabel}</button>
-                <button type="button" className={`${styles.srBtn} ${styles.srDanger}`} onClick={onConfirm} disabled={busy}>{busy ? 'Einen Moment …' : confirmLabel}</button>
-            </div>
-        </div>
-    )
-}
-
 export default function SecondSound({ onBack }) {
     const [phase, setPhase] = useState(PHASES.HOME)
     const [connected, setConnected] = useState(null)   // null = wird geprüft
     const [playerReady, setPlayerReady] = useState(false)
     const [playerError, setPlayerError] = useState(null)
     const [allTimeStats, setAllTimeStats] = useState(null)
-    const [isDark, setIsDark] = useState(() => localStorage.getItem('ss_theme') !== 'light')
+    const { isDark, toggleTheme } = useTheme()
     const dbRef = useRef(null)
-
-    const toggleTheme = () => {
-        setIsDark(prev => {
-            const next = !prev
-            localStorage.setItem('ss_theme', next ? 'dark' : 'light')
-            return next
-        })
-    }
 
     // Setup state
     const [searchMode, setSearchMode] = useState('mine') // 'playlist' | 'mine'
@@ -977,7 +882,7 @@ export default function SecondSound({ onBack }) {
 
 
     // ─── Gemeinsame Bausteine der neuen Oberfläche ───────────────────────────
-    const rootClass = `${styles.srRoot} ${isDark ? styles.srDark : styles.srLight}`
+    const rootClass = `${styles.srRoot} ${isDark ? theme.dark : theme.light}`
     const themeLabel = isDark ? 'Helles Design einschalten' : 'Dunkles Design einschalten'
     const themeBtn = (
         <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={toggleTheme} aria-label={themeLabel} title={themeLabel}>

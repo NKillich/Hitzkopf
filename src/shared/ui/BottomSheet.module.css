@@ -1,0 +1,16 @@
+/* Farben kommen aus theme.module.css (Variablen am App-Wurzelelement) */
+.scrim { position: absolute; inset: 0; z-index: 50; background: var(--sr-scrim); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.sheet { width: 100%; max-width: 440px; max-height: calc(100% - 40px); overflow-y: auto; box-sizing: border-box; background: var(--sr-surface); color: var(--sr-ink); border-radius: 30px 30px 0 0; padding: 12px 20px calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.grab { width: 40px; height: 5px; flex: none; border-radius: 3px; background: var(--sr-line); align-self: center; margin-bottom: 10px; }
+.sheet .title { margin: 0; position: static; color: inherit; text-shadow: none; font-family: var(--sr-display); font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.sheet .text { margin: 0 0 8px; font-size: 16px; line-height: 1.45; color: var(--sr-muted); }
+
+/* App.css setzt globale Button-Optik – hier neutralisieren */
+.sheet .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: 0; width: 100%; min-height: 0; border: 0; box-shadow: none; transform: none; overflow: visible; letter-spacing: normal; font: inherit; font-family: inherit; cursor: pointer; transition: none; }
+.sheet .btn::before { display: none; }
+.sheet .btn:hover:not(:disabled),
+.sheet .btn:active:not(:disabled) { transform: none; box-shadow: none; }
+.sheet .btn:disabled { opacity: 0.6; cursor: default; }
+.sheet .btn:focus-visible { outline: 3px solid var(--sr-accent); outline-offset: 2px; }
+.sheet .primary { height: 60px; border-radius: 30px; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 18px; font-weight: 700; }
+.sheet .danger { height: 52px; border-radius: 26px; background: none; color: var(--sr-bad); font-size: 17px; font-weight: 700; }

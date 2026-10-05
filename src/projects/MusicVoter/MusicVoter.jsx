@@ -1,11 +1,20 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { getApp } from 'firebase/app'
 import '../../firebase.js'
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
-import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove, serverTimestamp, deleteDoc, deleteField, collection, query, where, getDocs } from 'firebase/firestore'
-import LobbySystem, { generateRandomName } from '../../shared/LobbySystem'
+import { getAuth, signInAnonymously } from 'firebase/auth'
+import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, arrayUnion, serverTimestamp, deleteDoc, deleteField, collection, query, where, getDocs } from 'firebase/firestore'
+import { generateRandomName } from '../../shared/randomName'
 import spotifyService from '../../services/spotifyService'
 import { log } from '../../utils/logger.js'
+import CoverArt from '../../shared/ui/CoverArt'
+import { BottomSheet, ConfirmSheet } from '../../shared/ui/BottomSheet'
+import useTheme from '../../shared/ui/useTheme'
+import theme from '../../shared/ui/theme.module.css'
+import {
+    IconMoon, IconSun, IconBack, IconNext, IconCheck, IconX, IconLock, IconPlay, IconPause, IconNote, IconSearch,
+    IconRetry, IconAlert, IconPlus, IconTrash, IconUsers, IconGear, IconThumbUp, IconThumbDown, IconQueue,
+    IconBallot, IconWave, IconSpeaker, IconInfo
+} from '../../shared/ui/icons'
 import styles from './MusicVoter.module.css'
 
 const baseEmojis = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵']
@@ -26,15 +35,18 @@ const getOrCreateEmoji = () => {
     return emoji
 }
 
+const PHASE_INFO = {
+    songwahl: { title: 'Songs sammeln', dot: 'mvDotCollect' },
+    abstimmung: { title: 'Abstimmung läuft', dot: 'mvDotVote' },
+    laeuft: { title: 'Playlist läuft', dot: 'mvDotLive' }
+}
 
 const MusicVoter = ({ onBack }) => {
     // Firebase
-    const [app, setApp] = useState(null)
     const [db, setDb] = useState(null)
-    const [auth, setAuth] = useState(null)
 
     // State
-    const [currentScreen, setCurrentScreen] = useState('lobby')
+    const [currentScreen, setCurrentScreen] = useState('lobby')   // lobby | create | browse | room
     const [myName, setMyName] = useState(getOrCreateName)
     const [myEmoji, setMyEmoji] = useState(getOrCreateEmoji)
     const [roomId, setRoomId] = useState(sessionStorage.getItem('mv_roomId') || '')
@@ -42,17 +54,20 @@ const MusicVoter = ({ onBack }) => {
     const [lobbyData, setLobbyData] = useState(null)
     const [availableLobbies, setAvailableLobbies] = useState([])
     const [isLoadingLobbies, setIsLoadingLobbies] = useState(false)
-    
+    const [lobbiesError, setLobbiesError] = useState(false)
+
     // Music State
     const [playlist, setPlaylist] = useState([])
     const [searchQuery, setSearchQuery] = useState('')
     const [searchResults, setSearchResults] = useState([])
     const [isSearching, setIsSearching] = useState(false)
-    const [hasSearched, setHasSearched] = useState(false)
+    const [searchedQuery, setSearchedQuery] = useState('')   // zuletzt abgeschlossene Suche
+    const [searchError, setSearchError] = useState(null)
     const [showAddModal, setShowAddModal] = useState(false)
 
     // Im Hinzufügen-Modal bereits hinzugefügte IDs (für grünen Haken)
     const [addedInModalIds, setAddedInModalIds] = useState(() => new Set())
+    const [addingId, setAddingId] = useState(null)
 
     // Album-Track-Ansicht im Suchmodal
     const [albumTracks, setAlbumTracks] = useState(null) // { album, tracks }
@@ -66,19 +81,34 @@ const MusicVoter = ({ onBack }) => {
     const [spotifyDevices, setSpotifyDevices] = useState([])
     const [selectedSpotifyDeviceId, setSelectedSpotifyDeviceId] = useState('active') // 'active' | deviceId
 
+    // Oberfläche
+    const { isDark, toggleTheme } = useTheme()
+    const [roomView, setRoomView] = useState('main')         // main | settings (nur Host)
+    const [toast, setToast] = useState(null)                 // { text, tone: 'info' | 'bad' }
+    const [startNotice, setStartNotice] = useState(null)     // Hinweis auf der Startseite (z. B. Playlist geschlossen)
+    const [confirm, setConfirm] = useState(null)             // { kind: 'close' | 'leave' | 'remove' | 'deleteAll', item? }
+    const [confirmBusy, setConfirmBusy] = useState(false)
+    const [busyAction, setBusyAction] = useState(null)       // 'create' oder die ID der Playlist, der gerade beigetreten wird
+
     // Refs
     const unsubscribeRef = useRef(null)
-    const lobbiesUnsubscribeRef = useRef(null)
     const lastPlayedTrackIdRef = useRef(null) // für automatisches Entfernen abgespielter Songs
     const lastSentQueueOrderRef = useRef(null) // letzte an Spotify gesendete Warteschlangen-Reihenfolge (Spotify-IDs)
-    const queueSyncTimeoutRef = useRef(null)
-    const pendingQueueSyncRef = useRef(null) // Daten für debounced Queue-Sync
+    const closingRef = useRef(false)          // Host schließt selbst: kein "wurde geschlossen"-Hinweis
+    const toastTimerRef = useRef(null)
+    const searchInputRef = useRef(null)
     const myNameRef = useRef(myName)
     useEffect(() => { myNameRef.current = myName }, [myName])
-    const [showHostSettings, setShowHostSettings] = useState(false)
     const [queueExpanded, setQueueExpanded] = useState(false)
     const [showWelcomePopup, setShowWelcomePopup] = useState(false)
     const [spotifyReadyForLobby, setSpotifyReadyForLobby] = useState(false)
+
+    const showToast = useCallback((text, tone = 'info') => {
+        clearTimeout(toastTimerRef.current)
+        setToast({ text, tone })
+        toastTimerRef.current = setTimeout(() => setToast(null), 5000)
+    }, [])
+    useEffect(() => () => clearTimeout(toastTimerRef.current), [])
 
     // Spotify OAuth-Callback verarbeiten und Login-Status prüfen
     useEffect(() => {
@@ -95,7 +125,7 @@ const MusicVoter = ({ onBack }) => {
                     if (cancelled) return
                 } catch (e) {
                     console.error('Spotify Callback Fehler:', e)
-                    if (!cancelled) alert('Spotify-Verbindung fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'))
+                    if (!cancelled) showToast('Spotify konnte nicht verbunden werden: ' + (e.message || 'Unbekannter Fehler'), 'bad')
                 } finally {
                     if (!cancelled) spotifyService.isUserLoggedIn().then(setSpotifyReadyForLobby)
                 }
@@ -104,16 +134,13 @@ const MusicVoter = ({ onBack }) => {
         } else {
             spotifyService.isUserLoggedIn().then(setSpotifyReadyForLobby)
         }
-    }, [])
+    }, [showToast])
 
     // Firebase Initialisierung
     useEffect(() => {
         const firebaseApp = getApp()
         const firebaseAuth = getAuth(firebaseApp)
-        const firebaseDb = getFirestore(firebaseApp)
-        
-        setAuth(firebaseAuth)
-        setDb(firebaseDb)
+        setDb(getFirestore(firebaseApp))
 
         signInAnonymously(firebaseAuth).catch(console.error)
 
@@ -124,17 +151,27 @@ const MusicVoter = ({ onBack }) => {
         }
     }, [])
 
-    const handleJoinLobbyFromBrowser = (lobbyId) => {
-        handleJoinLobby({ name: myName, emoji: myEmoji, roomId: lobbyId })
+    // Neuen Zufallsnamen würfeln (nur ohne aktive Playlist, sonst klappt das Wiedereinsteigen nicht)
+    const rerollName = () => {
+        const newName = generateRandomName()
+        const newEmoji = getRandomEmoji()
+        sessionStorage.setItem('mv_name', newName)
+        sessionStorage.setItem('mv_emoji', newEmoji)
+        setMyName(newName)
+        setMyEmoji(newEmoji)
+        myNameRef.current = newName
     }
 
     // Lobby erstellen
-    const handleCreateLobby = async ({ name, emoji }) => {
-        if (!db) return
+    const handleCreateLobby = async () => {
+        if (!db || busyAction) return
+        const name = myName
+        const emoji = myEmoji
 
         const newRoomId = generateRoomCode()
         const lobbyRef = doc(db, 'musicVoterLobbies', newRoomId)
 
+        setBusyAction('create')
         try {
             await setDoc(lobbyRef, {
                 host: name,
@@ -158,39 +195,45 @@ const MusicVoter = ({ onBack }) => {
                 queueTotalDurationMs: null
             })
 
-            setMyName(name)
-            setMyEmoji(emoji)
             setRoomId(newRoomId)
             setIsHost(true)
             sessionStorage.setItem('mv_roomId', newRoomId)
+            setStartNotice(null)
+            setRoomView('main')
             setCurrentScreen('room')
             setShowWelcomePopup(true)
-            
+
             subscribeToLobby(newRoomId)
         } catch (error) {
             console.error('Fehler beim Erstellen der Playlist:', error)
-            alert('Fehler beim Erstellen der Playlist')
+            showToast('Die Playlist konnte nicht erstellt werden. Bitte versuch es nochmal.', 'bad')
+        } finally {
+            setBusyAction(null)
         }
     }
 
     // Lobby beitreten
-    const handleJoinLobby = async ({ name, emoji, roomId: joinRoomId }) => {
-        if (!db) return
+    const handleJoinLobby = async (joinRoomId) => {
+        if (!db || busyAction) return
+        const name = myName
+        const emoji = myEmoji
 
         const lobbyRef = doc(db, 'musicVoterLobbies', joinRoomId)
 
+        setBusyAction(joinRoomId)
         try {
             const lobbySnap = await getDoc(lobbyRef)
-            
+
             if (!lobbySnap.exists()) {
-                alert('Playlist nicht gefunden!')
+                showToast('Diese Playlist gibt es nicht mehr.', 'bad')
+                setAvailableLobbies(prev => prev.filter(l => l.id !== joinRoomId))
                 return
             }
 
             const lobbyData = lobbySnap.data()
-            
+
             if (lobbyData.players && lobbyData.players[name]) {
-                alert('Dieser Name ist bereits vergeben!')
+                showToast(`Der Name „${name}“ ist in dieser Playlist schon vergeben. Würfel dir oben einen neuen.`, 'bad')
                 return
             }
 
@@ -198,18 +241,20 @@ const MusicVoter = ({ onBack }) => {
                 [`players.${name}`]: { emoji, joinedAt: serverTimestamp() }
             })
 
-            setMyName(name)
-            setMyEmoji(emoji)
             setRoomId(joinRoomId)
             setIsHost(false)
             sessionStorage.setItem('mv_roomId', joinRoomId)
+            setStartNotice(null)
+            setRoomView('main')
             setCurrentScreen('room')
             setShowWelcomePopup(true)
-            
+
             subscribeToLobby(joinRoomId)
         } catch (error) {
             console.error('Fehler beim Beitreten:', error)
-            alert('Fehler beim Beitreten der Playlist')
+            showToast('Beitreten hat nicht geklappt. Bitte versuch es nochmal.', 'bad')
+        } finally {
+            setBusyAction(null)
         }
     }
 
@@ -218,12 +263,13 @@ const MusicVoter = ({ onBack }) => {
         if (!db) return
 
         setIsLoadingLobbies(true)
-        
+        setLobbiesError(false)
+
         try {
             const lobbiesRef = collection(db, 'musicVoterLobbies')
             const q = query(lobbiesRef, where('status', '==', 'active'))
             const querySnapshot = await getDocs(q)
-            
+
             const lobbies = []
             querySnapshot.forEach((doc) => {
                 const data = doc.data()
@@ -235,136 +281,71 @@ const MusicVoter = ({ onBack }) => {
                     playlist: data.playlist || []
                 })
             })
-            
+
             // Sortiere nach Erstellungszeit (neueste zuerst)
             lobbies.sort((a, b) => {
                 if (!a.createdAt) return 1
                 if (!b.createdAt) return -1
                 return b.createdAt.toMillis() - a.createdAt.toMillis()
             })
-            
+
             setAvailableLobbies(lobbies)
             log(`✅ ${lobbies.length} offene Lobbies geladen`)
         } catch (error) {
             console.error('Fehler beim Laden der Lobbies:', error)
             setAvailableLobbies([])
+            setLobbiesError(true)
         } finally {
             setIsLoadingLobbies(false)
         }
     }
 
-    // Lobby aus Browser löschen
-    const handleDeleteLobbyFromBrowser = async (lobbyId, lobbyHost, e) => {
-        // Verhindere dass onClick der Card gefeuert wird
-        e.stopPropagation()
+    // Die Seite "Beitreten" lädt die Liste beim Öffnen
+    useEffect(() => {
+        if (currentScreen === 'browse' && db) loadAvailableLobbies()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentScreen, db])
 
-        const confirmDelete = window.confirm(
-            `Playlist von ${lobbyHost} (${lobbyId}) wirklich löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden!`
-        )
-        
-        if (!confirmDelete) return
-
-        if (!db) return
-
-        const lobbyRef = doc(db, 'musicVoterLobbies', lobbyId)
-        
-        try {
-            await deleteDoc(lobbyRef)
-            log(`✅ Playlist ${lobbyId} gelöscht`)
-            
-            // Aktualisiere die Lobby-Liste
-            setAvailableLobbies(prev => prev.filter(l => l.id !== lobbyId))
-        } catch (error) {
-            console.error('Fehler beim Löschen:', error)
-            alert('Fehler beim Löschen der Playlist: ' + (error.message || 'Unbekannter Fehler'))
-        }
-    }
-
-    // ALLE Lobbies löschen
+    // ALLE Lobbies löschen (nach Bestätigung im Sheet)
     const handleDeleteAllLobbies = async () => {
-        const confirmDelete = window.confirm(
-            `ALLE ${availableLobbies.length} Playlists wirklich löschen?\n\n⚠️ WARNUNG: Diese Aktion kann NICHT rückgängig gemacht werden!\nAlle Zuhörer werden entfernt!`
-        )
-        
-        if (!confirmDelete) return
-
-        // Zweite Bestätigung
-        const reallyConfirm = window.confirm(
-            'Bist du dir WIRKLICH sicher?\n\nDies wird alle Playlists unwiderruflich löschen!'
-        )
-        
-        if (!reallyConfirm) return
-
         if (!db) return
-
         try {
             // Lösche alle Lobbies parallel
-            const deletePromises = availableLobbies.map(lobby => 
+            await Promise.all(availableLobbies.map(lobby =>
                 deleteDoc(doc(db, 'musicVoterLobbies', lobby.id))
-            )
-            
-            await Promise.all(deletePromises)
-            
+            ))
             log(`✅ Alle ${availableLobbies.length} Playlists gelöscht`)
             setAvailableLobbies([])
-            alert('Alle Playlists wurden gelöscht!')
+            showToast('Alle Playlists wurden gelöscht.')
         } catch (error) {
             console.error('Fehler beim Löschen aller Playlists:', error)
-            alert('Fehler beim Löschen: ' + (error.message || 'Unbekannter Fehler'))
-            // Aktualisiere die Liste
+            showToast('Löschen hat nicht geklappt: ' + (error.message || 'Unbekannter Fehler'), 'bad')
             loadAvailableLobbies()
         }
     }
 
-    // Lobby schließen (nur Host)
+    // Lobby schließen (nur Host, nach Bestätigung im Sheet)
     const handleCloseLobby = async () => {
-        if (!isHost || !db || !roomId) {
-            alert('Nur der Host kann die Playlist schließen!')
-            return
-        }
-
-        const confirmClose = window.confirm(
-            'Playlist wirklich schließen? Alle Zuhörer werden entfernt!'
-        )
-        
-        if (!confirmClose) return
-
-        const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
-        
+        if (!isHost || !db || !roomId) return
+        closingRef.current = true
         try {
-            await deleteDoc(lobbyRef)
+            await deleteDoc(doc(db, 'musicVoterLobbies', roomId))
             log('✅ Playlist geschlossen')
-            
-            // Cleanup
-            if (unsubscribeRef.current) {
-                unsubscribeRef.current()
-            }
-            
-            const newName = generateRandomName()
-            const newEmoji = getRandomEmoji()
-            sessionStorage.setItem('mv_name', newName)
-            sessionStorage.setItem('mv_emoji', newEmoji)
-            setMyName(newName)
-            setMyEmoji(newEmoji)
-            myNameRef.current = newName
-            setCurrentScreen('lobby')
-            setRoomId('')
-            setIsHost(false)
-            setLobbyData(null)
-            setPlaylist([])
-            sessionStorage.removeItem('mv_roomId')
+            handleSessionEnd()
         } catch (error) {
+            closingRef.current = false
             console.error('Fehler beim Schließen:', error)
-            alert('Fehler beim Schließen der Playlist')
+            showToast('Die Playlist konnte nicht geschlossen werden.', 'bad')
         }
     }
 
     // Lobby-Updates abonnieren
     const subscribeToLobby = (roomId) => {
         if (!db) return
+        closingRef.current = false
 
         const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
-        
+
         const unsubscribe = onSnapshot(lobbyRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.data()
@@ -372,8 +353,8 @@ const MusicVoter = ({ onBack }) => {
                 setPlaylist(data.playlist || [])
                 setIsHost(data.host === myNameRef.current)
             } else {
-                // Lobby wurde vom Host gelöscht – Session vollständig beenden
-                alert('Playlist wurde geschlossen')
+                // Lobby wurde gelöscht – Session vollständig beenden
+                if (!closingRef.current) setStartNotice('Der Host hat die Playlist geschlossen.')
                 handleSessionEnd()
             }
         })
@@ -387,12 +368,16 @@ const MusicVoter = ({ onBack }) => {
             unsubscribeRef.current()
             unsubscribeRef.current = null
         }
+        closeAddModal()
+        setRoomView('main')
         setCurrentScreen('lobby')
     }
 
     // Zurück in den Room – Session wird wiederhergestellt
     const handleRejoinRoom = () => {
         if (roomId) {
+            setStartNotice(null)
+            setRoomView('main')
             setCurrentScreen('room')
             subscribeToLobby(roomId)
         }
@@ -404,13 +389,11 @@ const MusicVoter = ({ onBack }) => {
             unsubscribeRef.current()
             unsubscribeRef.current = null
         }
-        const newName = generateRandomName()
-        const newEmoji = getRandomEmoji()
-        sessionStorage.setItem('mv_name', newName)
-        sessionStorage.setItem('mv_emoji', newEmoji)
-        setMyName(newName)
-        setMyEmoji(newEmoji)
-        myNameRef.current = newName
+        rerollName()
+        closeAddModal()
+        setConfirm(null)
+        setShowWelcomePopup(false)
+        setRoomView('main')
         setCurrentScreen('lobby')
         setRoomId('')
         setIsHost(false)
@@ -446,11 +429,13 @@ const MusicVoter = ({ onBack }) => {
             if (cancelled) return
             if (!snap.exists()) {
                 sessionStorage.removeItem('mv_roomId')
+                setRoomId('')
                 return
             }
             const data = snap.data()
             if (!data.players?.[storedName]) {
                 sessionStorage.removeItem('mv_roomId')
+                setRoomId('')
                 return
             }
             setRoomId(storedRoomId)
@@ -463,34 +448,35 @@ const MusicVoter = ({ onBack }) => {
             if (!cancelled) sessionStorage.removeItem('mv_roomId')
         })
         return () => { cancelled = true }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [db])
 
-    // Song/Album zur Playlist hinzufügen
+    // Song/Album zur Playlist hinzufügen – true, wenn der Song danach in der Playlist ist
     const addToPlaylist = async (item) => {
         if (!db || !roomId) {
-            alert('Fehler: Nicht mit Lobby verbunden')
-            return
+            showToast('Keine Verbindung zur Playlist.', 'bad')
+            return false
         }
 
         // Während Abstimmung nicht hinzufügen
         if (lobbyData?.lobbyPhase === 'abstimmung') {
-            alert('Während der Abstimmung können keine Songs hinzugefügt werden.')
-            return
-        }
-
-        // Song-Limit pro Person
-        const maxSongs = lobbyData?.maxSongsPerPerson || 5
-        const myCount = playlist.filter(p => p.addedBy === myName && p.queuedRound == null).length
-        if (myCount >= maxSongs) {
-            alert(`Du hast bereits ${maxSongs} Songs eingereicht. Warte auf die nächste Runde.`)
-            return
+            showToast('Während der Abstimmung können keine Songs hinzugefügt werden.', 'bad')
+            return false
         }
 
         // Duplikat-Schutz: Song bereits in der Playlist?
         const isDuplicate = playlist.some(
             (p) => (p.spotifyId && p.spotifyId === item.spotifyId) || p.id === item.id
         )
-        if (isDuplicate) return
+        if (isDuplicate) return true
+
+        // Song-Limit pro Person
+        const maxSongs = lobbyData?.maxSongsPerPerson || 5
+        const myCount = playlist.filter(p => p.addedBy === myName && p.queuedRound == null).length
+        if (myCount >= maxSongs) {
+            showToast(`Du hast schon ${maxSongs} Songs eingereicht. In der nächsten Runde geht’s weiter.`, 'bad')
+            return false
+        }
 
         // Bereinige das Item: Entferne alle undefined Werte
         const cleanItem = Object.keys(item).reduce((acc, key) => {
@@ -502,17 +488,19 @@ const MusicVoter = ({ onBack }) => {
         try {
             // Lese aktuelle Playlist für serverseitigen Duplikat-Check
             const snap = await getDoc(lobbyRef)
-            if (!snap.exists()) return
+            if (!snap.exists()) return false
             const currentPlaylist = snap.data().playlist || []
             const alreadyExists = currentPlaylist.some(
                 (p) => (p.spotifyId && p.spotifyId === item.spotifyId) || p.id === item.id
             )
-            if (alreadyExists) return
+            if (alreadyExists) return true
 
             await updateDoc(lobbyRef, { playlist: arrayUnion(cleanItem) })
+            return true
         } catch (error) {
             console.error('❌ Fehler beim Hinzufügen:', error)
-            alert('Fehler beim Hinzufügen: ' + (error.message || 'Unbekannter Fehler'))
+            showToast('Hinzufügen hat nicht geklappt: ' + (error.message || 'Unbekannter Fehler'), 'bad')
+            return false
         }
     }
 
@@ -521,22 +509,19 @@ const MusicVoter = ({ onBack }) => {
         if (!db || !roomId || !myName) return
 
         // Voting nur während Abstimmungs-Phase
-        if (lobbyData?.lobbyPhase !== 'abstimmung') {
-            alert('Voting ist nur während der Abstimmungsphase möglich.')
-            return
-        }
+        if (lobbyData?.lobbyPhase !== 'abstimmung') return
 
         const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
-        
+
         try {
             const currentLobby = await getDoc(lobbyRef)
             const currentPlaylist = currentLobby.data().playlist || []
-            
+
             const updatedPlaylist = currentPlaylist.map(item => {
                 if (item.id === itemId) {
                     const currentVote = item.votes?.[myName] || 0
                     const newVote = voteType === 'up' ? 1 : (voteType === 'down' ? -1 : 0)
-                    
+
                     return {
                         ...item,
                         votes: {
@@ -556,27 +541,16 @@ const MusicVoter = ({ onBack }) => {
         }
     }
 
-    // Song/Album entfernen (nur Host oder Ersteller)
+    // Song/Album entfernen (nur Host oder Ersteller, nach Bestätigung im Sheet)
     const handleRemoveItem = async (itemId) => {
         if (!db || !roomId) return
 
         const item = playlist.find(i => i.id === itemId)
         if (!item) return
-
-        if (!isHost && item.addedBy !== myName) {
-            alert('Nur der Host oder der Ersteller kann diesen Eintrag löschen!')
-            return
-        }
-
-        // Sicherheitsabfrage
-        const confirmDelete = window.confirm(
-            `"${item.title}" wirklich aus der Playlist entfernen?`
-        )
-        
-        if (!confirmDelete) return
+        if (!isHost && item.addedBy !== myName) return
 
         const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
-        
+
         try {
             const updatedPlaylist = playlist.filter(i => i.id !== itemId)
             await updateDoc(lobbyRef, {
@@ -584,6 +558,7 @@ const MusicVoter = ({ onBack }) => {
             })
         } catch (error) {
             console.error('Fehler beim Entfernen:', error)
+            showToast('Der Song konnte nicht entfernt werden.', 'bad')
         }
     }
 
@@ -607,6 +582,7 @@ const MusicVoter = ({ onBack }) => {
             setAlbumTracks({ album, tracks })
         } catch (e) {
             console.error('Fehler beim Laden des Albums:', e)
+            showToast('Das Album konnte nicht geladen werden.', 'bad')
         } finally {
             setIsLoadingAlbum(false)
         }
@@ -614,40 +590,61 @@ const MusicVoter = ({ onBack }) => {
 
     // Spotify-Suche
     const handleSpotifySearch = async () => {
-        if (!searchQuery.trim()) return
+        const q = searchQuery.trim()
+        if (!q) return
 
         setIsSearching(true)
-        setHasSearched(true)
-        
+        setSearchError(null)
+
         try {
-            const results = await spotifyService.search(searchQuery, 10)
+            const results = await spotifyService.search(q, 10)
             setSearchResults(results)
-            
+
             if (results.length === 0) {
-                log('Keine Ergebnisse für:', searchQuery)
+                log('Keine Ergebnisse für:', q)
             }
         } catch (error) {
             console.error('Spotify Suche fehlgeschlagen:', error)
-            
-            // Detaillierte Fehlermeldung
-            let errorMessage = 'Spotify Suche fehlgeschlagen.\n\n'
-            
-            if (error.message?.includes('Failed to get')) {
-                errorMessage += 'Credentials Problem:\n'
-                errorMessage += '1. Überprüfe .env.local Datei\n'
-                errorMessage += '2. Dev-Server neu starten (wichtig!)\n'
-                errorMessage += '3. Spotify Developer Dashboard prüfen'
-            } else if (error.message?.includes('network')) {
-                errorMessage += 'Netzwerkproblem - Internetverbindung prüfen'
-            } else {
-                errorMessage += 'Fehler: ' + error.message
-            }
-            
-            alert(errorMessage)
+            setSearchError(error.message?.includes('Failed to get')
+                ? 'Spotify ist gerade nicht erreichbar (Zugangsdaten). Bitte später nochmal versuchen.'
+                : 'Prüf deine Internetverbindung und versuch es gleich nochmal.')
             setSearchResults([])
         } finally {
+            setSearchedQuery(q)
             setIsSearching(false)
         }
+    }
+
+    // Suche startet automatisch kurz nach dem Tippen
+    useEffect(() => {
+        if (!showAddModal) return
+        if (searchQuery.trim().length < 2) { setSearchResults([]); setSearchError(null); return }
+        const id = setTimeout(() => handleSpotifySearch(), 500)
+        return () => clearTimeout(id)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchQuery, showAddModal])
+
+    const openAddModal = () => {
+        setAddedInModalIds(new Set(playlist.flatMap(p => [p.spotifyId, p.id].filter(Boolean))))
+        setShowAddModal(true)
+    }
+
+    function closeAddModal() {
+        setAddedInModalIds(new Set())
+        setAlbumTracks(null)
+        setSearchResults([])
+        setSearchQuery('')
+        setSearchedQuery('')
+        setSearchError(null)
+        setShowAddModal(false)
+    }
+
+    const handleAddItem = async (item) => {
+        if (addingId) return
+        setAddingId(item.id)
+        const ok = await addToPlaylist({ ...item, addedBy: myName, votes: {} })
+        setAddingId(null)
+        if (ok) setAddedInModalIds(prev => new Set(prev).add(item.id).add(item.spotifyId))
     }
 
     // Hilfsfunktionen
@@ -672,12 +669,6 @@ const MusicVoter = ({ onBack }) => {
         return (a.addedAt || 0) - (b.addedAt || 0)
     })
 
-    const getVoteColor = (vote) => {
-        if (vote === 1) return '#51cf66'
-        if (vote === -1) return '#ff6b6b'
-        return 'transparent'
-    }
-
     // Host: Voting-Einstellungen aktualisieren
     const updateLobbyConfig = async (changes) => {
         if (!db || !roomId) return
@@ -685,6 +676,7 @@ const MusicVoter = ({ onBack }) => {
             await updateDoc(doc(db, 'musicVoterLobbies', roomId), changes)
         } catch (e) {
             console.error('Fehler beim Aktualisieren der Lobby-Konfiguration:', e)
+            showToast('Die Einstellung konnte nicht gespeichert werden.', 'bad')
         }
     }
 
@@ -757,6 +749,7 @@ const MusicVoter = ({ onBack }) => {
         if (remaining <= 0) { transition(); return }
         const id = setTimeout(transition, remaining + 100)
         return () => clearTimeout(id)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHost, db, roomId, lobbyData?.lobbyPhase, lobbyData?.phaseEndsAt])
 
     /** Millisekunden als "m:ss" formatieren */
@@ -769,7 +762,7 @@ const MusicVoter = ({ onBack }) => {
     }
 
     // Now Playing: Aktuelle Position (läuft jede Sekunde wenn etwas spielt, für Anzeige)
-    const [nowPlayingTick, setNowPlayingTick] = useState(0)
+    const [, setNowPlayingTick] = useState(0)
     const [phaseRemainingMs, setPhaseRemainingMs] = useState(0)
     const nowPlaying = lobbyData?.nowPlaying
     const nowPlayingPositionMs = nowPlaying
@@ -801,6 +794,14 @@ const MusicVoter = ({ onBack }) => {
         const id = setInterval(update, 500)
         return () => clearInterval(id)
     }, [lobbyData?.lobbyPhase, lobbyData?.phaseEndsAt])
+
+    // Abstimmung beginnt, während "Song hinzufügen" offen ist → zurück in die Playlist
+    useEffect(() => {
+        if (showAddModal && lobbyData?.lobbyPhase === 'abstimmung') {
+            closeAddModal()
+            showToast('Die Abstimmung hat begonnen.')
+        }
+    }, [showAddModal, lobbyData?.lobbyPhase, showToast])
 
     // Host: Playback-Status regelmäßig in Firestore schreiben + abgespielte Songs aus Playlist entfernen
     useEffect(() => {
@@ -834,10 +835,10 @@ const MusicVoter = ({ onBack }) => {
                             await updateDoc(lobbyRef, { playlist: updatedPlaylist })
                             lastSentQueueOrderRef.current = null
                         }
-                    } catch (_) {}
+                    } catch { /* nächster Durchlauf versucht es erneut */ }
                 }
                 if (state?.trackId) lastPlayedTrackIdRef.current = state.trackId
-            } catch (_) {
+            } catch {
                 // z.B. kein Token oder Player inaktiv – ignorieren
             }
         }, 2000)
@@ -883,7 +884,7 @@ const MusicVoter = ({ onBack }) => {
                 sessionStorage.setItem('mv_name', spotifyName)
                 setMyName(spotifyName)
                 myNameRef.current = spotifyName
-            } catch (_) {}
+            } catch { /* Name bleibt dann der Zufallsname */ }
         }
         applySpotifyName()
     }, [isHost, spotifyConnected, db, roomId])
@@ -900,6 +901,7 @@ const MusicVoter = ({ onBack }) => {
             spotifyService.disconnectPlayer()
             setSpotifyPlayerReady(false)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHost, spotifyConnected])
 
     // Spotify: Geräteliste laden (Browser, Alexa, …), wenn verbunden
@@ -909,7 +911,7 @@ const MusicVoter = ({ onBack }) => {
             try {
                 const list = await spotifyService.getDevices()
                 setSpotifyDevices(list)
-            } catch (_) {}
+            } catch { /* Liste bleibt wie sie ist */ }
         }
         load()
         const interval = setInterval(load, 10000)
@@ -922,7 +924,7 @@ const MusicVoter = ({ onBack }) => {
             const url = await spotifyService.getAuthUrlWithPKCE()
             window.location.href = url
         } catch (e) {
-            alert('Spotify-Verbindung starten fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'))
+            showToast('Spotify-Verbindung konnte nicht gestartet werden: ' + (e.message || 'Unbekannter Fehler'), 'bad')
         }
     }
 
@@ -930,11 +932,12 @@ const MusicVoter = ({ onBack }) => {
         if (db && roomId && isHost) {
             try {
                 await updateDoc(doc(db, 'musicVoterLobbies', roomId), { nowPlaying: null })
-            } catch (_) {}
+            } catch { /* Anzeige verschwindet spätestens beim nächsten Update */ }
         }
         spotifyService.clearUserTokens()
         spotifyService.disconnectPlayer()
         setSpotifyConnected(false)
+        setSpotifyReadyForLobby(false)
         setSpotifyPlayerReady(false)
         setSpotifyPlaying(false)
         setSpotifyError(null)
@@ -948,7 +951,7 @@ const MusicVoter = ({ onBack }) => {
     const handleStartPlayback = async () => {
         const spotifyUris = getSpotifyUris()
         if (spotifyUris.length === 0) {
-            alert('In der Playlist sind keine Spotify-Songs. Füge zuerst Songs über die Spotify-Suche hinzu.')
+            setSpotifyError('In der Playlist sind noch keine Songs. Füge zuerst Songs hinzu.')
             return
         }
         setSpotifyError(null)
@@ -960,21 +963,7 @@ const MusicVoter = ({ onBack }) => {
             setSpotifyPlaying(true)
         } catch (e) {
             setSpotifyError(e.message || 'Abspielen fehlgeschlagen')
-            alert('Spotify abspielen: ' + (e.message || 'Fehler'))
         }
-    }
-
-    /** Warteschlange bei Spotify an neue Vote-Reihenfolge anpassen (aktueller Song läuft weiter). Nutzt Ref-Daten. */
-    const syncQueueToSpotifyFromRefs = async () => {
-        const pending = pendingQueueSyncRef.current
-        if (!pending) return
-        try {
-            const state = await spotifyService.getPlaybackState()
-            if (!state || state.trackId !== pending.currentTrackId) return
-            const uris = [`spotify:track:${state.trackId}`, ...pending.queueOrder.map((id) => `spotify:track:${id}`)]
-            await spotifyService.playOnDevice(uris, pending.deviceId, state.positionMs)
-            lastSentQueueOrderRef.current = pending.queueOrder
-        } catch (_) {}
     }
 
     /** Playlist erneut auf das gewählte Gerät senden (z. B. nach Wechsel zu Alexa per Connect). */
@@ -1007,14 +996,7 @@ const MusicVoter = ({ onBack }) => {
             }
         } catch (e) {
             console.error('Pause/Resume fehlgeschlagen:', e)
-        }
-    }
-
-    const handleSkipTrack = async () => {
-        try {
-            await spotifyService.skipNext()
-        } catch (e) {
-            console.error('Skip fehlgeschlagen:', e)
+            setSpotifyError(e.message || 'Pause/Fortsetzen hat nicht geklappt')
         }
     }
 
@@ -1078,876 +1060,704 @@ const MusicVoter = ({ onBack }) => {
         if (delayMs <= 0) { triggerAbstimmung(); return }
         const id = setTimeout(triggerAbstimmung, delayMs)
         return () => clearTimeout(id)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHost, db, roomId, lobbyData?.lobbyPhase, lobbyData?.queueStartedAt, lobbyData?.queueTotalDurationMs])
 
-    const bgPhaseClass = lobbyData?.lobbyPhase === 'abstimmung'
-        ? styles.bgVoting
-        : lobbyData?.lobbyPhase === 'laeuft'
-            ? styles.bgLaeuft
-            : styles.bgCollecting
+    // ─── Zurück-Taste des Browsers ───────────────────────────────────────────
+    // Eine Ebene zurück; liefert true, wenn man danach noch in einer Unterseite ist.
+    const goBackOneLevel = () => {
+        if (confirm) { if (!confirmBusy) setConfirm(null); return true }
+        if (showWelcomePopup) { setShowWelcomePopup(false); return true }
+        if (showAddModal) {
+            if (albumTracks) setAlbumTracks(null)
+            else closeAddModal()
+            return true
+        }
+        if (currentScreen === 'room' && roomView === 'settings') { setRoomView('main'); return true }
+        if (currentScreen === 'room') { handleGoBack(); return false }
+        if (currentScreen !== 'lobby') { setCurrentScreen('lobby'); return false }
+        return false
+    }
+    const goBackRef = useRef(goBackOneLevel)
+    useLayoutEffect(() => { goBackRef.current = goBackOneLevel })
 
-    return (
-        <div className={`${styles.musicVoter} ${currentScreen === 'room' ? bgPhaseClass : ''}`}>
-            <div className={styles.backgroundOverlay}></div>
+    // Außerhalb der Startseite liegt ein Hilfseintrag im Verlauf: "Zurück" bleibt in Amplify
+    const inSub = currentScreen !== 'lobby'
+    useEffect(() => {
+        if (!inSub) {
+            if (window.history.state?.mvSub) window.history.back()
+            return
+        }
+        // Hilfseintrag nur einmal anlegen (React führt Effekte im Dev-Modus doppelt aus)
+        if (!window.history.state?.mvSub) window.history.pushState({ mvSub: true }, '')
+        const onPop = () => {
+            if (window.history.state?.mvSub) return
+            if (goBackRef.current()) window.history.pushState({ mvSub: true }, '')
+        }
+        window.addEventListener('popstate', onPop)
+        return () => window.removeEventListener('popstate', onPop)
+    }, [inSub])
 
-            {/* Lobby Screen */}
-            {currentScreen === 'lobby' && (
-                <div className={styles.lobbyStartScreen}>
-                    <div className={styles.lobbyStartCard}>
-                        <h1 className={styles.lobbyStartTitle}>Amplify</h1>
+    // ─── Sicherheitsabfragen ─────────────────────────────────────────────────
+    const confirmConfig = (() => {
+        if (!confirm) return null
+        if (confirm.kind === 'close') return {
+            title: 'Playlist schließen?', text: 'Die Playlist wird für alle beendet und alle Zuhörer werden entfernt.',
+            cancelLabel: 'Weiter hören', confirmLabel: 'Playlist schließen', run: handleCloseLobby
+        }
+        if (confirm.kind === 'leave') return {
+            title: 'Playlist verlassen?', text: 'Du wirst aus der Playlist entfernt. Deine eingereichten Songs bleiben drin.',
+            cancelLabel: 'Bleiben', confirmLabel: 'Verlassen', run: handleLeaveLobby
+        }
+        if (confirm.kind === 'remove') return {
+            title: 'Song entfernen?', text: `„${confirm.item.title}“ wird aus der Playlist entfernt.`,
+            cancelLabel: 'Abbrechen', confirmLabel: 'Entfernen', run: () => handleRemoveItem(confirm.item.id)
+        }
+        if (confirm.kind === 'deleteAll') return {
+            title: 'Alle Playlists löschen?', text: `Alle ${availableLobbies.length} offenen Playlists werden gelöscht und alle Zuhörer entfernt. Das kann nicht rückgängig gemacht werden.`,
+            cancelLabel: 'Abbrechen', confirmLabel: 'Alle löschen', run: handleDeleteAllLobbies
+        }
+        return null
+    })()
 
-                        {/* Aktive Session – Zurück zur Playlist */}
-                        {roomId && (
-                            <button
-                                className={styles.rejoinButton}
-                                onClick={handleRejoinRoom}
-                            >
-                                <span className={styles.rejoinDot} />
-                                <span className={styles.rejoinText}>
-                                    <span className={styles.rejoinLabel}>Aktive Playlist</span>
-                                    <span className={styles.rejoinSub}>
-                                        {isHost ? 'Host' : 'Zuhörer'} · {roomId}
-                                    </span>
-                                </span>
-                                <span className={styles.rejoinArrow}>→</span>
-                            </button>
-                        )}
-                        
-                        <div className={styles.lobbyStartButtons}>
-                            <button
-                                className={styles.lobbyStartButton}
-                                onClick={() => setCurrentScreen('create')}
-                            >
-                                <span className={styles.lobbyStartIcon}>➕</span>
-                                <span>Playlist erstellen</span>
-                            </button>
-                            
-                            <button
-                                className={styles.lobbyStartButton}
-                                onClick={() => {
-                                    setCurrentScreen('browse')
-                                    loadAvailableLobbies()
-                                }}
-                            >
-                                <span className={styles.lobbyStartIcon}>🔍</span>
-                                <span>Playlist beitreten</span>
-                            </button>
+    const closeConfirm = useCallback(() => setConfirm(null), [])
+    const runConfirm = async () => {
+        if (!confirmConfig || confirmBusy) return
+        setConfirmBusy(true)
+        try {
+            await confirmConfig.run()
+        } finally {
+            setConfirmBusy(false)
+            setConfirm(null)
+        }
+    }
+
+    // ─── Gemeinsame Bausteine der Oberfläche ─────────────────────────────────
+    const rootClass = `${styles.mvRoot} ${isDark ? theme.dark : theme.light}`
+    const themeLabel = isDark ? 'Helles Design einschalten' : 'Dunkles Design einschalten'
+    const themeBtn = (
+        <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtn}`} onClick={toggleTheme} aria-label={themeLabel} title={themeLabel}>
+            {isDark ? <IconSun /> : <IconMoon />}
+        </button>
+    )
+    const subHeader = (title, onBackClick, extra = null) => (
+        <header className={`${styles.mvSubHeader} ${styles.mvPad}`}>
+            <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtn}`} onClick={onBackClick} aria-label="Zurück"><IconBack /></button>
+            <h1 className={styles.mvSubTitle}>{title}</h1>
+            {extra}
+            {themeBtn}
+        </header>
+    )
+    const maxSongs = lobbyData?.maxSongsPerPerson || 5
+    const myUnqueuedCount = playlist.filter(p => p.addedBy === myName && p.queuedRound == null).length
+
+    const shell = (content) => (
+        <div className={rootClass}>
+            <div className={styles.mvApp}>
+                {content}
+
+                <div role="status" aria-live="polite" className={styles.mvToastSlot}>
+                    {toast && (
+                        <div className={`${styles.mvToast} ${toast.tone === 'bad' ? styles.mvToastBad : ''}`}>
+                            <span className={styles.mvToastIcon}>{toast.tone === 'bad' ? <IconAlert size={20} /> : <IconInfo />}</span>
+                            <span className={styles.mvToastText}>{toast.text}</span>
+                            <button type="button" className={`${styles.mvBtn} ${styles.mvToastClose}`} onClick={() => setToast(null)} aria-label="Hinweis schließen"><IconX size={16} /></button>
                         </div>
-                    </div>
-                    
-                    <button
-                        onClick={onBack}
-                        className={styles.backButtonBottom}
-                    >
-                        ← Zurück
-                    </button>
+                    )}
                 </div>
-            )}
 
-            {/* Create Lobby Screen */}
-            {currentScreen === 'create' && (
-                <LobbySystem
-                    onCreateLobby={handleCreateLobby}
-                    storagePrefix="mv"
-                    title="Playlist erstellen"
-                    buttonText="Playlist erstellen"
-                    accentColor="#4ecdc4"
-                    onBack={() => setCurrentScreen('lobby')}
-                    onSpotifyConnect={handleSpotifyConnect}
-                    spotifyConnected={spotifyReadyForLobby}
+                <ConfirmSheet
+                    open={!!confirmConfig}
+                    title={confirmConfig?.title}
+                    text={confirmConfig?.text}
+                    cancelLabel={confirmConfig?.cancelLabel}
+                    confirmLabel={confirmConfig?.confirmLabel}
+                    onCancel={closeConfirm}
+                    onConfirm={runConfirm}
+                    busy={confirmBusy}
                 />
+
+                <BottomSheet open={showWelcomePopup && currentScreen === 'room'} onClose={() => setShowWelcomePopup(false)} labelledBy="mv-welcome-title">
+                    <h2 id="mv-welcome-title" className={styles.mvSheetTitle}>Willkommen bei Amplify!</h2>
+                    <p className={styles.mvSheetText}>So läuft eine Runde:</p>
+                    <ol className={styles.mvSteps}>
+                        <li className={styles.mvStep}>
+                            <span className={styles.mvStepIcon}><IconPlus size={20} /></span>
+                            <span><strong>Songs sammeln</strong>Füge bis zu {maxSongs} Songs zur Playlist hinzu.</span>
+                        </li>
+                        <li className={styles.mvStep}>
+                            <span className={styles.mvStepIcon}><IconBallot size={20} /></span>
+                            <span><strong>Abstimmen</strong>Daumen hoch oder runter – die besten Songs kommen in die Warteschlange.</span>
+                        </li>
+                        <li className={styles.mvStep}>
+                            <span className={styles.mvStepIcon}><IconPlay size={16} /></span>
+                            <span><strong>Abspielen</strong>Die Playlist läuft. Währenddessen schlägst du Songs für die nächste Runde vor.</span>
+                        </li>
+                    </ol>
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => setShowWelcomePopup(false)}>Los geht’s</button>
+                </BottomSheet>
+            </div>
+        </div>
+    )
+
+    const nameCard = (
+        <section className={styles.mvNameCard}>
+            <span className={styles.mvAvatar} aria-hidden="true">{myEmoji}</span>
+            <span className={styles.mvRowText}>
+                <span className={styles.mvLabelSm}>Dein Name</span>
+                <span className={styles.mvRowName}>{myName}</span>
+            </span>
+            {!roomId && (
+                <button type="button" className={`${styles.mvBtn} ${styles.mvOutline} ${styles.mvOutlineSm}`} onClick={rerollName} aria-label="Neuen Namen würfeln">
+                    <IconRetry size={16} />Neu
+                </button>
             )}
+        </section>
+    )
 
-            {/* Browse Lobbies Screen */}
-            {currentScreen === 'browse' && (
-                <div className={styles.lobbySystem} style={{ '--accent-color': '#4ecdc4' }}>
-                    <div className={styles.screen}>
-                        <h1 className={styles.title}>Playlist beitreten</h1>
+    const skeletons = (label) => (
+        <div className={styles.mvSkeletons} role="status" aria-label={label}>
+            {[150, 120, 170].map((w, i) => (
+                <div key={w} className={styles.mvSkelRow} style={{ opacity: 1 - i * 0.25 }}>
+                    <span className={styles.mvSkelCover} />
+                    <span className={styles.mvSkelLines}><span style={{ width: w }} /><span style={{ width: w / 2 }} /></span>
+                </div>
+            ))}
+        </div>
+    )
 
-                        <div className={styles.randomNameDisplay}>
-                            <span className={styles.randomNameLabel}>Dein Name</span>
-                            <span className={styles.randomNameValue}>{myName}</span>
+    // ─── Start ───────────────────────────────────────────────────────────────
+    if (currentScreen === 'lobby') {
+        return shell(
+            <main className={`${styles.mvMain} ${styles.mvPad}`}>
+                <div className={styles.mvHeader}>
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvTextBtn}`} onClick={onBack}>
+                        <IconBack />Zum Menü
+                    </button>
+                    {themeBtn}
+                </div>
+
+                <div className={styles.mvHomeHero}>
+                    <span className={styles.mvEmoji} aria-hidden="true">🎵</span>
+                    <h1 className={styles.mvHeroTitle}>Amplify</h1>
+                    <p className={styles.mvLead}>
+                        Sammelt gemeinsam Songs und stimmt ab. Die beliebtesten laufen zuerst über Spotify.
+                    </p>
+                </div>
+
+                <div className={styles.mvStack}>
+                    {startNotice && (
+                        <div className={styles.mvNotice} role="status">
+                            <span className={styles.mvNoticeIcon}><IconInfo /></span>
+                            <p className={styles.mvNoticeText}>{startNotice}</p>
+                            <button type="button" className={`${styles.mvBtn} ${styles.mvCloseSm}`} onClick={() => setStartNotice(null)} aria-label="Hinweis schließen"><IconX size={16} /></button>
                         </div>
+                    )}
 
-                        <button
-                            type="button"
-                            className={spotifyReadyForLobby ? styles.spotifyConnectedBadge : styles.spotifyConnectBtn}
-                            onClick={spotifyReadyForLobby ? undefined : handleSpotifyConnect}
-                            disabled={spotifyReadyForLobby}
-                        >
-                            {spotifyReadyForLobby ? '✓ Spotify verbunden' : '🎧 Mit Spotify verbinden'}
+                    {roomId && (
+                        <button type="button" className={`${styles.mvBtn} ${styles.mvRejoin}`} onClick={handleRejoinRoom}>
+                            <span className={styles.mvLiveDot} aria-hidden="true" />
+                            <span className={styles.mvRowText}>
+                                <span className={styles.mvRowName}>Zurück zur Playlist</span>
+                                <span className={styles.mvRowMeta}>{isHost ? 'Du bist Host' : 'Du hörst zu'} · Code {roomId}</span>
+                            </span>
+                            <IconNext />
                         </button>
+                    )}
 
-                        {/* Lobby Liste */}
-                        <div className={styles.lobbyListSection}>
-                            <h2 className={styles.lobbyListTitle}>Offene Playlists</h2>
-                            
-                            {isLoadingLobbies && (
-                                <div className={styles.browseLoading}>
-                                    <div className={styles.spinner}></div>
-                                    <p>Lade Playlists...</p>
-                                </div>
-                            )}
-
-                            {!isLoadingLobbies && availableLobbies.length === 0 && (
-                                <div className={styles.browseEmpty}>
-                                    <div className={styles.browseEmptyIcon}>🎵</div>
-                                    <p>Keine Playlists gefunden</p>
-                                </div>
-                            )}
-
-                            {!isLoadingLobbies && availableLobbies.length > 0 && (
-                                <div className={styles.lobbyList}>
-                                    {availableLobbies.map((lobby) => (
-                                        <div
-                                            key={lobby.id}
-                                            className={styles.lobbyCard}
-                                            onClick={() => handleJoinLobbyFromBrowser(lobby.id)}
-                                        >
-                                            <div className={styles.lobbyCardHeader}>
-                                                <div className={styles.lobbyCardTitle}>
-                                                    <span className={styles.lobbyCardIcon}>🎵</span>
-                                                    <span>Playlist von {lobby.host}</span>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className={styles.lobbyCardInfo}>
-                                                <div className={styles.lobbyCardStat}>
-                                                    <span>👥</span>
-                                                    <span>{lobby.playerCount} Zuhörer</span>
-                                                </div>
-                                                <div className={styles.lobbyCardStat}>
-                                                    <span>🎵</span>
-                                                    <span>{lobby.playlist.length} Songs</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Buttons */}
-                        <div className={styles.buttonGroup}>
-                            <button
-                                className={styles.refreshButton}
-                                onClick={loadAvailableLobbies}
-                                disabled={isLoadingLobbies}
-                            >
-                                🔄 Aktualisieren
-                            </button>
-                            
-                            {availableLobbies.length > 0 && (
-                                <button
-                                    className={styles.deleteAllButton}
-                                    onClick={handleDeleteAllLobbies}
-                                >
-                                    🗑️ Alle Playlists löschen
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                    
-                    <button
-                        onClick={() => setCurrentScreen('lobby')}
-                        className={styles.backButtonBottom}
-                    >
-                        ← Zurück
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => setCurrentScreen('create')}>
+                        <IconPlus />Playlist erstellen
+                    </button>
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={() => setCurrentScreen('browse')}>
+                        Playlist beitreten
                     </button>
                 </div>
-            )}
+            </main>
+        )
+    }
 
-            {/* Room Screen */}
-            {currentScreen === 'room' && lobbyData && (
-                <div className={styles.roomContainer}>
-                    {/* Header */}
-                    <div className={styles.header}>
-                        <button
-                            className={styles.headerBack}
-                            onClick={handleGoBack}
-                            aria-label="Zurück"
-                        >
-                            ←
-                        </button>
-                        <div className={styles.headerCenter}>
-                            {isHost ? (() => {
-                                const phase = lobbyData.lobbyPhase
-                                const isVoting = phase === 'abstimmung'
-                                const isCollecting = phase === 'songwahl' || phase === 'laeuft'
-                                return (
-                                    <div className={styles.phaseToggle}>
-                                        <button
-                                            type="button"
-                                            className={`${styles.phaseToggleBtn} ${isCollecting ? styles.phaseToggleBtnCollecting : ''}`}
-                                            disabled={isVoting}
-                                            title={isVoting ? 'Abstimmung läuft – kein Zurück' : undefined}
-                                        >
-                                            🎵 Sammeln
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`${styles.phaseToggleBtn} ${isVoting ? styles.phaseToggleBtnVoting : ''}`}
-                                            onClick={isCollecting ? handleStartAbstimmung : undefined}
-                                            disabled={isVoting}
-                                            title={isCollecting ? 'Abstimmung starten' : undefined}
-                                        >
-                                            🗳 Voting
-                                        </button>
-                                    </div>
-                                )
-                            })() : (
-                                <h1 className={styles.roomTitle}>Amplify</h1>
-                            )}
+    // ─── Erstellen ───────────────────────────────────────────────────────────
+    if (currentScreen === 'create') {
+        const creating = busyAction === 'create'
+        return shell(
+            <main className={styles.mvMain}>
+                {subHeader('Playlist erstellen', () => setCurrentScreen('lobby'))}
+                <div className={styles.mvScroll}>
+                    <p className={styles.mvInfo}>Du wirst Host: Du startest die Abstimmung und spielst die Gewinner-Songs über Spotify ab.</p>
+                    {nameCard}
+                    <section className={styles.mvCard}>
+                        <div className={styles.mvCardHead}>
+                            <h2 className={styles.mvCardTitle}>Spotify</h2>
+                            <span className={`${styles.mvChip} ${spotifyReadyForLobby ? styles.mvChipOk : ''}`}>
+                                <span className={styles.mvChipDot} aria-hidden="true" />{spotifyReadyForLobby ? 'Verbunden' : 'Nicht verbunden'}
+                            </span>
                         </div>
-                        <div className={styles.headerActions}>
-                            {isHost && (
-                                <button
-                                    type="button"
-                                    className={`${styles.headerIconBtn} ${showHostSettings ? styles.headerIconBtnActive : ''}`}
-                                    onClick={() => setShowHostSettings(v => !v)}
-                                    aria-label="Einstellungen"
-                                >
-                                    ⚙
+                        {spotifyReadyForLobby ? (
+                            <p className={styles.mvFine}>Die Songs laufen über dein Spotify-Konto. Das Gerät wählst du später in den Einstellungen.</p>
+                        ) : (
+                            <>
+                                <p className={styles.mvFine}>Zum Abspielen brauchst du Spotify Premium. Du kannst Spotify auch später in den Einstellungen verbinden.</p>
+                                <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={handleSpotifyConnect}>
+                                    <IconNote size={20} />Spotify verbinden
                                 </button>
+                            </>
+                        )}
+                    </section>
+                </div>
+                <div className={styles.mvFooter}>
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={handleCreateLobby} disabled={creating || !db}>
+                        {creating ? 'Wird erstellt …' : 'Playlist erstellen'}
+                    </button>
+                </div>
+            </main>
+        )
+    }
+
+    // ─── Beitreten ───────────────────────────────────────────────────────────
+    if (currentScreen === 'browse') {
+        let view
+        if (isLoadingLobbies) view = 'loading'
+        else if (lobbiesError) view = 'error'
+        else view = availableLobbies.length ? 'ok' : 'empty'
+        return shell(
+            <main className={styles.mvMain}>
+                {subHeader('Beitreten', () => setCurrentScreen('lobby'))}
+                <div className={`${styles.mvScroll} ${styles.mvScrollFix}`}>
+                    {nameCard}
+                    <div className={styles.mvListHead}>
+                        <h2 className={styles.mvListTitle}>Offene Playlists</h2>
+                        {view === 'ok' && <span className={styles.mvListCount}>{availableLobbies.length}</span>}
+                    </div>
+                    <div className={styles.mvListBox}>
+                        {view === 'loading' && skeletons('Playlists werden geladen')}
+                        {view === 'error' && (
+                            <div className={styles.mvEmpty} role="alert">
+                                <span className={`${styles.mvEmptyIcon} ${styles.mvEmptyIconBad}`}><IconAlert size={24} /></span>
+                                <p className={styles.mvEmptyTitle}>Playlists konnten nicht geladen werden</p>
+                                <p className={styles.mvEmptyText}>Prüf deine Internetverbindung und versuch es gleich nochmal.</p>
+                            </div>
+                        )}
+                        {view === 'empty' && (
+                            <div className={styles.mvEmpty}>
+                                <span className={styles.mvEmptyIcon}><IconNote size={24} /></span>
+                                <p className={styles.mvEmptyTitle}>Keine offenen Playlists</p>
+                                <p className={styles.mvEmptyText}>Erstell selbst eine oder schau gleich nochmal vorbei.</p>
+                            </div>
+                        )}
+                        {view === 'ok' && (
+                            <ul className={styles.mvList}>
+                                {availableLobbies.map((lobby) => {
+                                    const mine = lobby.id === roomId
+                                    const joining = busyAction === lobby.id
+                                    return (
+                                        <li key={lobby.id}>
+                                            <button type="button" className={`${styles.mvBtn} ${styles.mvRow} ${mine ? styles.mvRowOn : ''}`}
+                                                onClick={() => (mine ? handleRejoinRoom() : handleJoinLobby(lobby.id))}
+                                                disabled={!!busyAction}>
+                                                <CoverArt seed={lobby.id} size={46} radius={11} />
+                                                <span className={styles.mvRowText}>
+                                                    <span className={styles.mvRowName}>Playlist von {lobby.host}</span>
+                                                    <span className={styles.mvRowMeta}>
+                                                        {mine ? 'Deine aktive Playlist' : `${lobby.playerCount} Zuhörer · ${lobby.playlist.length} Songs`}
+                                                    </span>
+                                                </span>
+                                                <span className={styles.mvRowEnd} aria-hidden="true">{joining ? <IconWave size={18} /> : <IconNext />}</span>
+                                            </button>
+                                        </li>
+                                    )
+                                })}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+                <div className={styles.mvFooter}>
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={loadAvailableLobbies} disabled={isLoadingLobbies}>
+                        <IconRetry />{isLoadingLobbies ? 'Lädt …' : 'Aktualisieren'}
+                    </button>
+                    {availableLobbies.length > 0 && (
+                        <button type="button" className={`${styles.mvBtn} ${styles.mvDangerLink}`} onClick={() => setConfirm({ kind: 'deleteAll' })}>
+                            <IconTrash size={16} />Alle Playlists löschen
+                        </button>
+                    )}
+                </div>
+            </main>
+        )
+    }
+
+    // ─── Raum ────────────────────────────────────────────────────────────────
+    if (currentScreen === 'room' && !lobbyData) {
+        return shell(
+            <main className={styles.mvMain}>
+                {subHeader('Amplify', handleGoBack)}
+                <div className={styles.mvScroll}>{skeletons('Playlist wird geladen')}</div>
+            </main>
+        )
+    }
+
+    if (currentScreen === 'room') {
+        const phase = lobbyData.lobbyPhase
+
+        // ── Song hinzufügen ──
+        if (showAddModal) {
+            const q = searchQuery.trim()
+            let view
+            if (albumTracks) view = 'album'
+            else if (isLoadingAlbum) view = 'loading'
+            else if (q.length < 2) view = 'prompt'
+            else if (searchError && !isSearching) view = 'error'
+            else if (isSearching || searchedQuery !== q) view = searchResults.length ? 'ok' : 'loading'
+            else view = searchResults.length ? 'ok' : 'empty'
+            const limitReached = myUnqueuedCount >= maxSongs
+            const isAdded = (item) => addedInModalIds.has(item.id) || addedInModalIds.has(item.spotifyId)
+
+            const songRow = (item) => {
+                const added = isAdded(item)
+                const adding = addingId === item.id
+                const isAlbum = item.type === 'album'
+                const blocked = !isAlbum && !added && limitReached
+                return (
+                    <li key={item.id}>
+                        <button type="button"
+                            className={`${styles.mvBtn} ${styles.mvRow} ${added ? styles.mvRowAdded : ''}`}
+                            onClick={() => (isAlbum ? handleOpenAlbum(item) : (!added && handleAddItem(item)))}
+                            disabled={(!isAlbum && (added || blocked)) || !!addingId}
+                            aria-label={isAlbum ? `Album ${item.title} von ${item.artist} öffnen` : (added ? `${item.title} ist in der Playlist` : `${item.title} von ${item.artist} hinzufügen`)}>
+                            {view !== 'album' && <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={46} radius={isAlbum ? 11 : 8} />}
+                            <span className={styles.mvRowText}>
+                                <span className={styles.mvRowName}>{item.title}</span>
+                                <span className={styles.mvRowMeta}>{isAlbum ? `Album · ${item.artist}` : item.artist}</span>
+                            </span>
+                            <span className={`${styles.mvAddMark} ${added ? styles.mvAddMarkOn : ''} ${isAlbum ? styles.mvAddMarkPlain : ''}`} aria-hidden="true">
+                                {isAlbum ? <IconNext /> : (adding ? <IconWave size={16} /> : (added ? <IconCheck size={16} /> : (blocked ? <IconLock size={16} /> : <IconPlus size={18} />)))}
+                            </span>
+                        </button>
+                    </li>
+                )
+            }
+
+            return shell(
+                <main className={styles.mvMain}>
+                    {subHeader(albumTracks ? 'Album' : 'Hinzufügen', () => (albumTracks ? setAlbumTracks(null) : closeAddModal()),
+                        <span className={`${styles.mvCountChip} ${limitReached ? styles.mvCountChipFull : ''}`} aria-label={`Deine Songs: ${myUnqueuedCount} von ${maxSongs}`}>{myUnqueuedCount}/{maxSongs}</span>
+                    )}
+                    <div className={`${styles.mvScroll} ${styles.mvScrollFix}`}>
+                        {albumTracks ? (
+                            <section className={styles.mvAlbumHead}>
+                                <CoverArt src={albumTracks.album.imageUrl} seed={albumTracks.album.spotifyId} size={64} radius={14} />
+                                <span className={styles.mvRowText}>
+                                    <span className={styles.mvAlbumTitle}>{albumTracks.album.title}</span>
+                                    <span className={styles.mvRowMeta}>{albumTracks.album.artist} · {albumTracks.tracks.length} Songs</span>
+                                </span>
+                            </section>
+                        ) : (
+                            <div className={styles.mvField}>
+                                <label htmlFor="mv-search" className={styles.mvLabel}>Song oder Album suchen</label>
+                                <div className={styles.mvInputWrap}>
+                                    <span className={styles.mvInputIcon}><IconSearch /></span>
+                                    <input
+                                        id="mv-search"
+                                        ref={searchInputRef}
+                                        type="search"
+                                        className={styles.mvInput}
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleSpotifySearch() }}
+                                        placeholder="z. B. Titel, Band oder Album"
+                                        autoComplete="off"
+                                        autoFocus
+                                    />
+                                    {searchQuery && (
+                                        <button type="button" className={`${styles.mvBtn} ${styles.mvInputClear}`} aria-label="Suche löschen"
+                                            onClick={() => { setSearchQuery(''); searchInputRef.current?.focus() }}>
+                                            <IconX size={16} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {limitReached && (
+                            <p className={styles.mvHintLine}>Du hast {maxSongs} Songs eingereicht – mehr geht in dieser Runde nicht.</p>
+                        )}
+
+                        <div className={styles.mvListBox}>
+                            {view === 'album' && <ul className={styles.mvList}>{albumTracks.tracks.map(songRow)}</ul>}
+                            {view === 'ok' && <ul className={styles.mvList}>{searchResults.map(songRow)}</ul>}
+                            {view === 'loading' && skeletons(isLoadingAlbum ? 'Album wird geladen' : 'Spotify wird durchsucht')}
+                            {view === 'prompt' && (
+                                <div className={styles.mvEmpty}>
+                                    <span className={styles.mvEmptyIcon}><IconSearch size={24} /></span>
+                                    <p className={styles.mvEmptyTitle}>Was soll laufen?</p>
+                                    <p className={styles.mvEmptyText}>Such nach einem Song oder Album. Tippe auf einen Song, um ihn hinzuzufügen.</p>
+                                </div>
                             )}
-                            {isHost && (
-                                <button
-                                    className={styles.closeButton}
-                                    onClick={handleCloseLobby}
-                                    title="Playlist schließen"
-                                >
-                                    ✕
-                                </button>
+                            {view === 'empty' && (
+                                <div className={styles.mvEmpty}>
+                                    <span className={styles.mvEmptyIcon}><IconSearch size={24} /></span>
+                                    <p className={styles.mvEmptyTitle}>Nichts gefunden</p>
+                                    <p className={styles.mvEmptyText}>Zu „{q}“ gibt es keine Treffer. Versuch einen anderen Begriff.</p>
+                                </div>
+                            )}
+                            {view === 'error' && (
+                                <div className={styles.mvEmpty} role="alert">
+                                    <span className={`${styles.mvEmptyIcon} ${styles.mvEmptyIconBad}`}><IconAlert size={24} /></span>
+                                    <p className={styles.mvEmptyTitle}>Suche fehlgeschlagen</p>
+                                    <p className={styles.mvEmptyText}>{searchError}</p>
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={handleSpotifySearch}><IconRetry />Erneut versuchen</button>
+                                </div>
                             )}
                         </div>
                     </div>
+                    <div className={styles.mvFooter}>
+                        <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={closeAddModal}>Fertig</button>
+                    </div>
+                </main>
+            )
+        }
 
-                    {/* Settings-Panel (Host only, ausklappbar) */}
-                    {isHost && showHostSettings && (
-                        <div className={styles.settingsPanel}>
-
-                            {/* Spotify */}
-                            <div className={styles.settingsPanelSection}>
-                                <div className={styles.settingsPanelSectionHeader}>
-                                    <span className={styles.settingsPanelIcon}>&#127925;</span>
-                                    <span className={styles.settingsPanelSectionTitle}>Spotify</span>
-                                    {spotifyConnected
-                                        ? <span className={styles.settingsBadgeGreen}>● Verbunden</span>
-                                        : <span className={styles.settingsBadgeRed}>● Nicht verbunden</span>
-                                    }
+        // ── Einstellungen (Host) ──
+        if (roomView === 'settings' && isHost) {
+            const hasSongs = sortedPlaylist.some((i) => i.source === 'spotify' && i.type === 'song')
+            const selects = [
+                { id: 'batchSize', label: 'Songs pro Runde', value: lobbyData.batchSize || 10, fallback: 10, options: [[5, '5'], [10, '10'], [15, '15'], [20, '20']] },
+                { id: 'maxSongsPerPerson', label: 'Max. Songs pro Person', value: lobbyData.maxSongsPerPerson || 5, fallback: 5, options: [[2, '2'], [3, '3'], [5, '5'], [10, '10']] },
+                { id: 'votingDurationSec', label: 'Dauer der Abstimmung', value: lobbyData.votingDurationSec || 120, fallback: 120, options: [[60, '1 Minute'], [120, '2 Minuten'], [180, '3 Minuten'], [300, '5 Minuten']] },
+                { id: 'preQueueVotingMinutes', label: 'Nächste Abstimmung startet', value: lobbyData.preQueueVotingMinutes || 1, fallback: 1, options: [[1, '1 Minute vor Ende'], [2, '2 Minuten vor Ende'], [3, '3 Minuten vor Ende'], [5, '5 Minuten vor Ende']] }
+            ]
+            return shell(
+                <main className={styles.mvMain}>
+                    {subHeader('Einstellungen', () => setRoomView('main'))}
+                    <div className={styles.mvScroll}>
+                        <section className={styles.mvCard}>
+                            <div className={styles.mvCardHead}>
+                                <h2 className={styles.mvCardTitle}>Spotify</h2>
+                                <span className={`${styles.mvChip} ${spotifyConnected ? styles.mvChipOk : styles.mvChipBad}`}>
+                                    <span className={styles.mvChipDot} aria-hidden="true" />{spotifyConnected ? 'Verbunden' : 'Nicht verbunden'}
+                                </span>
+                            </div>
+                            {spotifyError && (
+                                <div className={styles.mvAlert} role="alert">
+                                    <span className={styles.mvAlertIcon}><IconAlert size={20} /></span>
+                                    <p className={styles.mvAlertText}>{spotifyError}</p>
                                 </div>
-                                {spotifyError && (
-                                    <p className={styles.spotifyError}>{spotifyError}</p>
-                                )}
-                                {!spotifyConnected ? (
-                                    <div className={styles.settingsPanelBody}>
-                                        <button
-                                            type="button"
-                                            className={styles.spotifyConnectButton}
-                                            onClick={handleSpotifyConnect}
-                                        >
-                                            Mit Spotify verbinden
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className={styles.settingsPanelBody}>
-                                        <div className={styles.settingsRow}>
-                                            <span className={styles.settingsRowLabel}>Gerät</span>
-                                            <select
-                                                className={styles.settingsRowSelect}
-                                                value={selectedSpotifyDeviceId}
-                                                onChange={(e) => setSelectedSpotifyDeviceId(e.target.value)}
-                                            >
+                            )}
+                            {!spotifyConnected ? (
+                                <>
+                                    <p className={styles.mvFine}>Verbinde dein Spotify-Konto (Premium), damit die Gewinner-Songs abgespielt werden.</p>
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={handleSpotifyConnect}><IconNote size={20} />Spotify verbinden</button>
+                                </>
+                            ) : (
+                                <>
+                                    <div className={styles.mvField}>
+                                        <label htmlFor="mv-device" className={styles.mvLabel}>Gerät</label>
+                                        <div className={styles.mvInputWrap}>
+                                            <span className={styles.mvInputIcon}><IconSpeaker /></span>
+                                            <select id="mv-device" className={`${styles.mvInput} ${styles.mvSelect}`} value={selectedSpotifyDeviceId} onChange={(e) => setSelectedSpotifyDeviceId(e.target.value)}>
                                                 <option value="active">Aktives Gerät</option>
                                                 {spotifyDevices.map((d) => (
-                                                    <option key={d.id} value={d.id}>
-                                                        {d.name}{d.is_active ? ' aktiv' : ''}
-                                                    </option>
+                                                    <option key={d.id} value={d.id}>{d.name}{d.is_active ? ' (aktiv)' : ''}</option>
                                                 ))}
                                             </select>
                                         </div>
-                                        <div className={styles.settingsButtonRow}>
-                                            {!spotifyPlaying ? (
-                                                <button
-                                                    type="button"
-                                                    className={styles.settingsPrimaryBtn}
-                                                    onClick={handleStartPlayback}
-                                                    disabled={sortedPlaylist.filter((i) => i.source === 'spotify' && i.type === 'song').length === 0}
-                                                >
-                                                    Abspielen
-                                                </button>
-                                            ) : (
-                                                <>
-                                                    <button
-                                                        type="button"
-                                                        className={styles.settingsPrimaryBtn}
-                                                        onClick={handlePausePlayback}
-                                                    >
-                                                        Pause
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className={styles.settingsSecondaryBtn}
-                                                        onClick={handleResendPlaylist}
-                                                    >
-                                                        Neu senden
-                                                    </button>
-                                                </>
-                                            )}
-                                            <button
-                                                type="button"
-                                                className={styles.settingsDangerBtn}
-                                                onClick={handleSpotifyDisconnect}
-                                            >
-                                                Trennen
-                                            </button>
-                                        </div>
                                     </div>
-                                )}
-                            </div>
-
-                            {/* Voting */}
-                            <div className={styles.settingsPanelSection}>
-                                <div className={styles.settingsPanelSectionHeader}>
-                                    <span className={styles.settingsPanelIcon}>&#128499;</span>
-                                    <span className={styles.settingsPanelSectionTitle}>Runden</span>
-                                    <span className={styles.settingsBadgeMuted}>Runde {lobbyData.votingRound || 0}</span>
-                                </div>
-                                <div className={styles.settingsPanelBody}>
-                                    <div className={styles.settingsRow}>
-                                        <span className={styles.settingsRowLabel}>Songs / Runde</span>
-                                        <select
-                                            className={styles.settingsRowSelect}
-                                            value={lobbyData.batchSize || 10}
-                                            onChange={(e) =>
-                                                updateLobbyConfig({ batchSize: Number(e.target.value) || 10 })
-                                            }
-                                        >
-                                            <option value={5}>5</option>
-                                            <option value={10}>10</option>
-                                            <option value={15}>15</option>
-                                            <option value={20}>20</option>
-                                        </select>
-                                    </div>
-                                    <div className={styles.settingsRow}>
-                                        <span className={styles.settingsRowLabel}>Max. Songs/Person</span>
-                                        <select
-                                            className={styles.settingsRowSelect}
-                                            value={lobbyData.maxSongsPerPerson || 5}
-                                            onChange={(e) =>
-                                                updateLobbyConfig({ maxSongsPerPerson: Number(e.target.value) || 5 })
-                                            }
-                                        >
-                                            <option value={2}>2</option>
-                                            <option value={3}>3</option>
-                                            <option value={5}>5</option>
-                                            <option value={10}>10</option>
-                                        </select>
-                                    </div>
-                                    <div className={styles.settingsRow}>
-                                        <span className={styles.settingsRowLabel}>Voting-Dauer</span>
-                                        <select
-                                            className={styles.settingsRowSelect}
-                                            value={lobbyData.votingDurationSec || 120}
-                                            onChange={(e) =>
-                                                updateLobbyConfig({ votingDurationSec: Number(e.target.value) || 120 })
-                                            }
-                                        >
-                                            <option value={60}>1 Min</option>
-                                            <option value={120}>2 Min</option>
-                                            <option value={180}>3 Min</option>
-                                            <option value={300}>5 Min</option>
-                                        </select>
-                                    </div>
-                                    <div className={styles.settingsRow}>
-                                        <span className={styles.settingsRowLabel}>Voting startet</span>
-                                        <select
-                                            className={styles.settingsRowSelect}
-                                            value={lobbyData.preQueueVotingMinutes || 1}
-                                            onChange={(e) =>
-                                                updateLobbyConfig({ preQueueVotingMinutes: Number(e.target.value) || 1 })
-                                            }
-                                        >
-                                            <option value={1}>1 Min vor Ende</option>
-                                            <option value={2}>2 Min vor Ende</option>
-                                            <option value={3}>3 Min vor Ende</option>
-                                            <option value={5}>5 Min vor Ende</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-                    )}
-
-                    {/* Phase-Banner */}
-                    {(() => {
-                        const phase = lobbyData.lobbyPhase
-                        const myUnqueuedCount = playlist.filter(p => p.addedBy === myName && p.queuedRound == null).length
-                        const maxSongs = lobbyData.maxSongsPerPerson || 5
-
-                        if (phase === 'songwahl') return (
-                            <div className={`${styles.phaseBanner} ${styles.phaseBannerSongwahl}`}>
-                                <span className={styles.phaseBannerIcon}>🎵</span>
-                                <div className={styles.phaseBannerInfo}>
-                                    <span className={styles.phaseBannerTitle}>Songs sammeln</span>
-                                    <span className={styles.phaseBannerSub}>
-                                        {isHost
-                                            ? `Deine Songs: ${myUnqueuedCount}/${maxSongs} · Starte die Abstimmung wenn alle fertig sind`
-                                            : `Deine Songs: ${myUnqueuedCount}/${maxSongs} · Warte auf den Admin…`
-                                        }
-                                    </span>
-                                </div>
-                            </div>
-                        )
-                        if (phase === 'abstimmung') return (
-                            <div className={`${styles.phaseBanner} ${styles.phaseBannerAbstimmung}`}>
-                                <span className={styles.phaseBannerIcon}>🗳</span>
-                                <div className={styles.phaseBannerInfo}>
-                                    <span className={styles.phaseBannerTitle}>Abstimmung läuft</span>
-                                    <span className={styles.phaseBannerSub}>
-                                        {phaseRemainingMs > 0
-                                            ? `Top ${lobbyData.batchSize || 10} Songs spielen in ${formatPlaybackTime(phaseRemainingMs)}`
-                                            : 'Wird ausgewertet…'}
-                                    </span>
-                                </div>
-                                {phaseRemainingMs > 0 && (
-                                    <span className={styles.phaseBannerTimer}>{formatPlaybackTime(phaseRemainingMs)}</span>
-                                )}
-                            </div>
-                        )
-                        if (phase === 'laeuft') return (
-                            <div className={`${styles.phaseBanner} ${styles.phaseBannerLaeuft}`}>
-                                <span className={styles.phaseBannerIcon}>▶</span>
-                                <div className={styles.phaseBannerInfo}>
-                                    <span className={styles.phaseBannerTitle}>Playlist läuft</span>
-                                    <span className={styles.phaseBannerSub}>
-                                        Nächste Runde sammeln · {myUnqueuedCount}/{maxSongs} Songs
-                                    </span>
-                                </div>
-                                <span className={styles.phaseBannerLive}>LIVE</span>
-                            </div>
-                        )
-                        return null
-                    })()}
-
-                    {/* Now Playing + Queue Toggle */}
-                    {nowPlaying && (
-                        <div className={styles.nowPlayingSection}>
-                            <div className={styles.nowPlayingCard}>
-                                {nowPlaying.imageUrl && (
-                                    <img
-                                        src={nowPlaying.imageUrl}
-                                        alt=""
-                                        className={styles.nowPlayingImage}
-                                    />
-                                )}
-                                <div className={styles.nowPlayingInfo}>
-                                    <div className={styles.nowPlayingTrack}>{nowPlaying.trackName}</div>
-                                    <div className={styles.nowPlayingArtist}>{nowPlaying.artist}</div>
-                                    <div className={styles.nowPlayingTime}>
-                                        {formatPlaybackTime(nowPlayingPositionMs)} / {formatPlaybackTime(nowPlaying.durationMs)}
-                                    </div>
-                                </div>
-                                <div className={styles.nowPlayingRight}>
-                                    {/* Queue-Toggle Button */}
-                                    {sortedPlaylist.filter(i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId).length > 0 && (
-                                        <button
-                                            className={`${styles.queueToggleBtn} ${queueExpanded ? styles.queueToggleBtnActive : ''}`}
-                                            onClick={() => setQueueExpanded(v => !v)}
-                                            title="Warteschlange anzeigen"
-                                        >
-                                            <span className={styles.queueToggleIcon}>☰</span>
-                                            <span className={styles.queueToggleCount}>
-                                                {sortedPlaylist.filter(i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId).length}
-                                            </span>
+                                    {!spotifyPlaying ? (
+                                        <button type="button" className={`${styles.mvBtn} ${hasSongs ? styles.mvPrimary : styles.mvPrimaryOff}`} onClick={handleStartPlayback} disabled={!hasSongs}>
+                                            <IconPlay size={18} />Abspielen
                                         </button>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Ausgeklappte Queue */}
-                            {queueExpanded && (() => {
-                                const queueItems = sortedPlaylist.filter(
-                                    i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId
-                                )
-                                return queueItems.length > 0 ? (
-                                    <div className={styles.queueDropdown}>
-                                        <div className={styles.queueDropdownHeader}>Warteschlange</div>
-                                        {queueItems.map((item, i) => (
-                                            <div key={item.id} className={styles.queueDropdownItem}>
-                                                <span className={styles.queueDropdownRank}>{i + 1}</span>
-                                                {item.imageUrl && (
-                                                    <img src={item.imageUrl} alt="" className={styles.queueDropdownImg} />
-                                                )}
-                                                <div className={styles.queueDropdownInfo}>
-                                                    <div className={styles.queueDropdownTitle}>{item.title}</div>
-                                                    <div className={styles.queueDropdownArtist}>{item.artist}</div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : null
-                            })()}
-                        </div>
-                    )}
-
-                    {/* FAB: Song hinzufügen – nur während Songwahl und Läuft */}
-                    {lobbyData.lobbyPhase !== 'abstimmung' && (
-                        <button
-                            className={styles.fabAddButton}
-                            onClick={() => {
-                                const existingIds = new Set(
-                                    playlist.flatMap(p => [p.spotifyId, p.id].filter(Boolean))
-                                )
-                                setAddedInModalIds(existingIds)
-                                setShowAddModal(true)
-                            }}
-                        >
-                            <span className={styles.fabAddIcon}>+</span>
-                            <span className={styles.fabAddLabel}>Song hinzufügen</span>
-                        </button>
-                    )}
-
-                    {/* Playlist – phasengerechte Anzeige */}
-                    {(() => {
-                        const phase = lobbyData.lobbyPhase
-                        const queueItems = sortedPlaylist.filter(
-                            (item) => item.queuedRound != null && item.spotifyId !== nowPlaying?.trackId
-                        )
-                        const voteItems = sortedPlaylist.filter(
-                            (item) => item.queuedRound == null
-                        )
-                        const showVoting = phase === 'abstimmung'
-
-                        const playlistItem = (item, index, withVoting, isQueued = false) => {
-                            const score = calculateScore(item)
-                            const myVote = item.votes?.[myName] || 0
-                            return (
-                                <div
-                                    key={item.id}
-                                    className={`${styles.playlistItem} ${isQueued ? styles.playlistItemQueued : ''}`}
-                                    style={{ '--item-color': withVoting ? getVoteColor(myVote) : 'rgba(255,255,255,0.06)' }}
-                                >
-                                    <div className={styles.playlistArtwork}>
-                                        {item.imageUrl && item.source === 'spotify' ? (
-                                            <img src={item.imageUrl} alt={item.title} />
-                                        ) : (
-                                            <div className={styles.playlistArtworkPlaceholder}>
-                                                {item.type === 'album' ? '📀' : '♪'}
-                                            </div>
-                                        )}
-                                        <div className={styles.itemRankBadge}>{index + 1}</div>
-                                    </div>
-
-                                    <div className={styles.itemInfo}>
-                                        <div className={styles.itemTitle}>{item.title}</div>
-                                        <div className={styles.itemArtist}>{item.artist}</div>
-                                        <div className={styles.itemMeta}>
-                                            von {item.addedBy}{item.source === 'spotify' && ' • Spotify'}
-                                        </div>
-                                    </div>
-
-                                    <div className={styles.itemVoting}>
-                                        {withVoting ? (
-                                            <>
-                                                <button
-                                                    className={`${styles.voteButton} ${myVote === 1 ? styles.voted : ''}`}
-                                                    onClick={() => handleVote(item.id, 'up')}
-                                                >👍</button>
-                                                <div className={styles.voteScore}>{score > 0 ? '+' : ''}{score}</div>
-                                                <button
-                                                    className={`${styles.voteButton} ${myVote === -1 ? styles.voted : ''}`}
-                                                    onClick={() => handleVote(item.id, 'down')}
-                                                >👎</button>
-                                            </>
-                                        ) : (
-                                            <span className={styles.queuedBadge}>▶</span>
-                                        )}
-                                        {(phase === 'songwahl' || phase === 'laeuft') && (isHost || item.addedBy === myName) && (
-                                            <button
-                                                className={styles.removeButton}
-                                                onClick={() => handleRemoveItem(item.id)}
-                                                title="Entfernen"
-                                            >⋮</button>
-                                        )}
-                                    </div>
-                                </div>
-                            )
-                        }
-
-                        return (
-                            <div className={styles.playlistSection}>
-                                {/* Queue ist jetzt im Now-Playing-Block ausklappbar */}
-
-                                {/* Song-Pool: Songwahl = sammeln, Abstimmung = voten, Läuft = nächste Runde */}
-                                <div className={styles.playlistSubSection}>
-                                    <div className={styles.subSectionHeader}>
-                                        <span className={`${styles.subSectionDot} ${phase === 'abstimmung' ? styles.subSectionDotVote : phase === 'laeuft' ? styles.subSectionDotLaeuft : styles.subSectionDotSongwahl}`} />
-                                        <span className={styles.subSectionTitle}>
-                                            {phase === 'abstimmung' ? 'Zur Abstimmung' : phase === 'laeuft' ? 'Nächste Runde' : 'Eingereichte Songs'}
-                                        </span>
-                                        <span className={styles.subSectionCount}>{voteItems.length}</span>
-                                    </div>
-                                    {voteItems.length === 0 ? (
-                                        <div className={styles.emptyPlaylist}>
-                                            <div className={styles.emptyIcon}>🎵</div>
-                                            <p>{phase === 'abstimmung' ? 'Keine Songs zum Abstimmen' : 'Noch keine Songs eingereicht'}</p>
-                                            <p className={styles.emptyHint}>
-                                                {phase === 'abstimmung' ? 'Songs wurden vorab eingereicht.' : 'Füge Songs über den + Button hinzu!'}
-                                            </p>
-                                        </div>
                                     ) : (
-                                        <div className={styles.playlistItems}>
-                                            {voteItems.map((item, i) => playlistItem(item, i, showVoting))}
+                                        <div className={styles.mvBtnRow}>
+                                            <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={handlePausePlayback}>
+                                                {nowPlaying?.isPlaying ? <><IconPause size={16} />Pause</> : <><IconPlay size={16} />Fortsetzen</>}
+                                            </button>
+                                            <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={handleResendPlaylist}>
+                                                <IconRetry size={16} />Neu senden
+                                            </button>
                                         </div>
                                     )}
-                                </div>
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvDangerLink}`} onClick={handleSpotifyDisconnect}>Spotify trennen</button>
+                                </>
+                            )}
+                        </section>
+
+                        <section className={styles.mvCard}>
+                            <div className={styles.mvCardHead}>
+                                <h2 className={styles.mvCardTitle}>Runden</h2>
+                                <span className={styles.mvChip}>Runde {lobbyData.votingRound || 0}</span>
                             </div>
-                        )
-                    })()}
-                </div>
-            )}
+                            {selects.map(s => (
+                                <div key={s.id} className={styles.mvField}>
+                                    <label htmlFor={`mv-${s.id}`} className={styles.mvLabel}>{s.label}</label>
+                                    <select id={`mv-${s.id}`} className={`${styles.mvInput} ${styles.mvSelect} ${styles.mvSelectPlain}`} value={s.value}
+                                        onChange={(e) => updateLobbyConfig({ [s.id]: Number(e.target.value) || s.fallback })}>
+                                        {s.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                                    </select>
+                                </div>
+                            ))}
+                        </section>
+                    </div>
+                </main>
+            )
+        }
 
-            {/* Add Modal */}
-            {showAddModal && (
-                <div className={styles.modalOverlay} onClick={() => { setAddedInModalIds(new Set()); setAlbumTracks(null); setSearchResults([]); setSearchQuery(''); setHasSearched(false); setShowAddModal(false) }}>
-                    <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-                        <div className={styles.modalHeader}>
-                            <h2 className={styles.modalTitle}>Song hinzufügen</h2>
-                            <button
-                                type="button"
-                                className={styles.modalCloseButton}
-                                onClick={() => {
-                                    setAddedInModalIds(new Set())
-                                    setAlbumTracks(null)
-                                    setSearchResults([])
-                                    setSearchQuery('')
-                                    setHasSearched(false)
-                                    setShowAddModal(false)
-                                }}
-                                title="Schließen"
-                                aria-label="Schließen"
-                            >
-                                ×
-                            </button>
+        // ── Playlist ──
+        const info = PHASE_INFO[phase] || PHASE_INFO.songwahl
+        const phaseSub = phase === 'abstimmung'
+            ? (phaseRemainingMs > 0 ? `Die Top ${lobbyData.batchSize || 10} Songs kommen in die Warteschlange.` : 'Wird ausgewertet …')
+            : phase === 'laeuft'
+                ? 'Schlag schon Songs für die nächste Runde vor.'
+                : (isHost ? 'Starte die Abstimmung, wenn alle fertig sind.' : 'Füge Songs hinzu. Der Host startet gleich die Abstimmung.')
+        const queueItems = sortedPlaylist.filter(i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId)
+        const voteItems = sortedPlaylist.filter(i => i.queuedRound == null)
+        const showVoting = phase === 'abstimmung'
+        const canStartVoting = isHost && phase !== 'abstimmung'
+        const progressPct = nowPlaying?.durationMs ? Math.min(100, (nowPlayingPositionMs / nowPlaying.durationMs) * 100) : 0
+        const exitLabel = isHost ? 'Playlist schließen' : 'Playlist verlassen'
+
+        return shell(
+            <main className={styles.mvMain}>
+                <header className={`${styles.mvSubHeader} ${styles.mvRoomHeader} ${styles.mvPad}`}>
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtn}`} onClick={handleGoBack} aria-label="Zur Startseite (du bleibst in der Playlist)" title="Zur Startseite"><IconBack /></button>
+                    <div className={styles.mvRoomTitle}>
+                        <h1 className={styles.mvSubTitle}>Amplify</h1>
+                        <span className={styles.mvRoomCode}>{isHost ? 'Host' : 'Zuhörer'} · {roomId}</span>
+                    </div>
+                    {themeBtn}
+                    {isHost && (
+                        <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtn}`} onClick={() => setRoomView('settings')} aria-label="Einstellungen" title="Einstellungen"><IconGear /></button>
+                    )}
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtn}`} onClick={() => setConfirm({ kind: isHost ? 'close' : 'leave' })} aria-label={exitLabel} title={exitLabel}><IconX /></button>
+                </header>
+
+                <div className={styles.mvScroll}>
+                    <section className={styles.mvPhase}>
+                        <div className={styles.mvPhaseRow}>
+                            <span className={`${styles.mvPhaseDot} ${styles[info.dot]}`} aria-hidden="true" />
+                            <div className={styles.mvRowText}>
+                                <h2 className={styles.mvPhaseTitle}>{info.title}</h2>
+                                <p className={styles.mvPhaseSub}>{phaseSub}</p>
+                            </div>
+                            {phase === 'abstimmung' && phaseRemainingMs > 0 && (
+                                <span className={styles.mvTimer} role="timer" aria-label={`Noch ${formatPlaybackTime(phaseRemainingMs)} Minuten`}>{formatPlaybackTime(phaseRemainingMs)}</span>
+                            )}
+                            {phase === 'laeuft' && <span className={styles.mvLive}>LIVE</span>}
                         </div>
+                        {canStartVoting && (
+                            <button type="button" className={`${styles.mvBtn} ${styles.mvOutline} ${styles.mvPhaseBtn}`} onClick={handleStartAbstimmung} disabled={voteItems.length === 0}>
+                                <IconBallot size={20} />Abstimmung starten
+                            </button>
+                        )}
+                    </section>
 
-                        {/* Suche – direkt für alle (Host + Gäste) */}
-                        {(() => {
-                            return (
-                            <div className={styles.spotifySearch}>
-                                {/* Album-Track-Ansicht */}
-                                {albumTracks ? (
-                                    <>
-                                        <div className={styles.albumHeader}>
-                                            <button
-                                                type="button"
-                                                className={styles.albumBackButton}
-                                                onClick={() => setAlbumTracks(null)}
-                                            >
-                                                ← Zurück
-                                            </button>
-                                            <div className={styles.albumHeaderInfo}>
-                                                {albumTracks.album.imageUrl && (
-                                                    <img src={albumTracks.album.imageUrl} alt="" className={styles.albumHeaderImage} />
-                                                )}
-                                                <div>
-                                                    <div className={styles.albumHeaderTitle}>{albumTracks.album.title}</div>
-                                                    <div className={styles.albumHeaderArtist}>{albumTracks.album.artist}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className={styles.searchResults}>
-                                            {albumTracks.tracks.map((track) => {
-                                                const isAdded = addedInModalIds.has(track.id)
-                                                return (
-                                                    <div
-                                                        key={track.id}
-                                                        className={styles.searchResultItem}
-                                                        onClick={async (e) => {
-                                                            if (isAdded) return
-                                                            if (e.target.closest('button')) return
-                                                            await addToPlaylist({ ...track, addedBy: myName, votes: {} })
-                                                            setAddedInModalIds(prev => new Set(prev).add(track.id))
-                                                        }}
-                                                    >
-                                                        <div className={styles.resultInfo}>
-                                                            <div className={styles.resultTitle}>{track.title}</div>
-                                                            <div className={styles.resultArtist}>{track.artist}</div>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            className={`${styles.addResultButton} ${isAdded ? styles.addResultButtonAdded : ''}`}
-                                                            onClick={async (e) => {
-                                                                e.stopPropagation()
-                                                                if (isAdded) return
-                                                                await addToPlaylist({ ...track, addedBy: myName, votes: {} })
-                                                                setAddedInModalIds(prev => new Set(prev).add(track.id))
-                                                            }}
-                                                            disabled={isAdded}
-                                                        >
-                                                            {isAdded ? '✓' : '+'}
-                                                        </button>
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className={styles.searchBox}>
-                                            <input
-                                                type="text"
-                                                value={searchQuery}
-                                                onChange={(e) => setSearchQuery(e.target.value)}
-                                                onKeyPress={(e) => { if (e.key === 'Enter') handleSpotifySearch() }}
-                                                placeholder="Song oder Album suchen..."
-                                                className={styles.input}
-                                            />
-                                            <button
-                                                className={styles.searchButton}
-                                                onClick={handleSpotifySearch}
-                                                disabled={isSearching || !searchQuery.trim()}
-                                            >
-                                                {isSearching ? '🔍 Suche...' : '🔍 Suchen'}
-                                            </button>
-                                        </div>
-
-                                        {isLoadingAlbum && (
-                                            <div className={styles.searchLoading}>
-                                                <div className={styles.spinner}></div>
-                                                <p>Lade Album...</p>
-                                            </div>
-                                        )}
-
-                                        {isSearching && (
-                                            <div className={styles.searchLoading}>
-                                                <div className={styles.spinner}></div>
-                                                <p>Durchsuche Spotify...</p>
-                                            </div>
-                                        )}
-
-                                        {!isSearching && !isLoadingAlbum && searchResults.length > 0 && (
-                                            <div className={styles.searchResults}>
-                                                {searchResults.map((item) => {
-                                                    const isAdded = addedInModalIds.has(item.id)
-                                                    const isAlbum = item.type === 'album'
-                                                    return (
-                                                        <div
-                                                            key={item.id}
-                                                            className={styles.searchResultItem}
-                                                            onClick={async (e) => {
-                                                                if (e.target.closest('button')) return
-                                                                if (isAlbum) {
-                                                                    handleOpenAlbum(item)
-                                                                    return
-                                                                }
-                                                                if (isAdded) return
-                                                                await addToPlaylist({ ...item, addedBy: myName, votes: {} })
-                                                                setAddedInModalIds(prev => new Set(prev).add(item.id))
-                                                            }}
-                                                        >
-                                                            {item.imageUrl && (
-                                                                <img src={item.imageUrl} alt={item.title} className={styles.resultImage} />
-                                                            )}
-                                                            <div className={styles.resultInfo}>
-                                                                <div className={styles.resultTitle}>{item.title}</div>
-                                                                <div className={styles.resultArtist}>
-                                                                    {isAlbum ? `Album · ${item.artist}` : item.artist}
-                                                                </div>
-                                                                {item.album && !isAlbum && (
-                                                                    <div className={styles.resultAlbum}>{item.album}</div>
-                                                                )}
-                                                            </div>
-                                                            {isAlbum ? (
-                                                                <button
-                                                                    type="button"
-                                                                    className={styles.albumArrowButton}
-                                                                    onClick={() => handleOpenAlbum(item)}
-                                                                    title="Songs des Albums anzeigen"
-                                                                >
-                                                                    ›
-                                                                </button>
-                                                            ) : (
-                                                                <button
-                                                                    type="button"
-                                                                    className={`${styles.addResultButton} ${isAdded ? styles.addResultButtonAdded : ''}`}
-                                                                    onClick={async (e) => {
-                                                                        e.stopPropagation()
-                                                                        if (isAdded) return
-                                                                        await addToPlaylist({ ...item, addedBy: myName, votes: {} })
-                                                                        setAddedInModalIds(prev => new Set(prev).add(item.id))
-                                                                    }}
-                                                                    disabled={isAdded}
-                                                                    title={isAdded ? 'Bereits hinzugefügt' : 'Zur Playlist hinzufügen'}
-                                                                >
-                                                                    {isAdded ? '✓' : '+'}
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        )}
-
-                                        {!isSearching && hasSearched && searchResults.length === 0 && (
-                                            <div className={styles.noResults}>
-                                                <p>Keine Ergebnisse gefunden</p>
-                                                <p className={styles.noResultsHint}>Versuche einen anderen Suchbegriff</p>
-                                            </div>
-                                        )}
-                                    </>
+                    {nowPlaying && (
+                        <section className={styles.mvNow} aria-label="Läuft gerade">
+                            <div className={styles.mvNowRow}>
+                                <CoverArt src={nowPlaying.imageUrl} seed={nowPlaying.trackId} size={60} radius={14} />
+                                <div className={styles.mvRowText}>
+                                    <span className={styles.mvNowLabel}>{nowPlaying.isPlaying ? 'LÄUFT GERADE' : 'PAUSIERT'}</span>
+                                    <span className={styles.mvNowTitle}>{nowPlaying.trackName}</span>
+                                    <span className={styles.mvNowArtist}>{nowPlaying.artist}</span>
+                                </div>
+                                {queueItems.length > 0 && (
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvQueueBtn} ${queueExpanded ? styles.mvQueueBtnOn : ''}`}
+                                        onClick={() => setQueueExpanded(v => !v)} aria-expanded={queueExpanded} aria-controls="mv-queue"
+                                        aria-label={`Warteschlange: ${queueItems.length} Songs`}>
+                                        <IconQueue />{queueItems.length}
+                                    </button>
                                 )}
                             </div>
-                            )
-                        })()}
-                    </div>
-                </div>
-            )}
+                            <div className={styles.mvNowBar} aria-hidden="true"><span style={{ width: `${progressPct}%` }} /></div>
+                            <div className={styles.mvNowTimes}>
+                                <span>{formatPlaybackTime(nowPlayingPositionMs)}</span><span>{formatPlaybackTime(nowPlaying.durationMs)}</span>
+                            </div>
+                            {queueExpanded && queueItems.length > 0 && (
+                                <ol id="mv-queue" className={styles.mvQueue}>
+                                    {queueItems.map((item, i) => (
+                                        <li key={item.id} className={styles.mvQueueItem}>
+                                            <span className={styles.mvQueueRank}>{i + 1}</span>
+                                            <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={36} radius={8} />
+                                            <span className={styles.mvRowText}>
+                                                <span className={styles.mvQueueTitle}>{item.title}</span>
+                                                <span className={styles.mvQueueArtist}>{item.artist}</span>
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            )}
+                        </section>
+                    )}
 
-            {/* Welcome Popup – kurze Erklärung nach dem Beitreten */}
-            {showWelcomePopup && (
-                <div className={styles.welcomeOverlay} onClick={() => setShowWelcomePopup(false)}>
-                    <div className={styles.welcomePopup} onClick={(e) => e.stopPropagation()}>
-                        <div className={styles.welcomeHeader}>
-                            <span className={styles.welcomeIcon}>🎵</span>
-                            <h2 className={styles.welcomeTitle}>Willkommen bei Amplify!</h2>
-                        </div>
-                        <div className={styles.welcomePhases}>
-                            <div className={styles.welcomePhase}>
-                                <span className={styles.welcomePhaseIcon}>🎵</span>
-                                <div>
-                                    <strong>Songwahl</strong>
-                                    <p>Füge bis zu 5 Songs zur Playlist hinzu.</p>
-                                </div>
-                            </div>
-                            <div className={styles.welcomePhase}>
-                                <span className={styles.welcomePhaseIcon}>🗳️</span>
-                                <div>
-                                    <strong>Abstimmung</strong>
-                                    <p>Vote für oder gegen Songs – die besten kommen in die Queue.</p>
-                                </div>
-                            </div>
-                            <div className={styles.welcomePhase}>
-                                <span className={styles.welcomePhaseIcon}>▶️</span>
-                                <div>
-                                    <strong>Abspielen</strong>
-                                    <p>Die Playlist läuft! Währenddessen kannst du neue Songs für die nächste Runde vorschlagen.</p>
-                                </div>
-                            </div>
-                        </div>
-                        <button
-                            className={styles.welcomeCloseBtn}
-                            onClick={() => setShowWelcomePopup(false)}
-                        >
-                            Los geht's!
-                        </button>
+                    <div className={styles.mvListHead}>
+                        <h2 className={styles.mvListTitle}>
+                            {phase === 'abstimmung' ? 'Zur Abstimmung' : phase === 'laeuft' ? 'Nächste Runde' : 'Eingereichte Songs'}
+                        </h2>
+                        <span className={styles.mvListCount}>{voteItems.length}</span>
                     </div>
+
+                    {voteItems.length === 0 ? (
+                        <div className={styles.mvEmpty}>
+                            <span className={styles.mvEmptyIcon}><IconNote size={24} /></span>
+                            <p className={styles.mvEmptyTitle}>{phase === 'abstimmung' ? 'Keine Songs zum Abstimmen' : 'Noch keine Songs'}</p>
+                            <p className={styles.mvEmptyText}>
+                                {phase === 'abstimmung' ? 'Nach der Abstimmung kannst du wieder Songs hinzufügen.' : 'Tippe unten auf „Song hinzufügen“.'}
+                            </p>
+                        </div>
+                    ) : (
+                        <ul className={styles.mvList}>
+                            {voteItems.map((item, index) => {
+                                const score = calculateScore(item)
+                                const myVote = item.votes?.[myName] || 0
+                                const canRemove = (phase === 'songwahl' || phase === 'laeuft') && (isHost || item.addedBy === myName)
+                                return (
+                                    <li key={item.id} className={`${styles.mvSong} ${showVoting && myVote === 1 ? styles.mvSongUp : ''} ${showVoting && myVote === -1 ? styles.mvSongDown : ''}`}>
+                                        <span className={styles.mvCoverBox}>
+                                            <CoverArt src={item.source === 'spotify' ? item.imageUrl : null} seed={item.spotifyId || item.id} size={46} radius={11} />
+                                            <span className={styles.mvRank}>{index + 1}</span>
+                                        </span>
+                                        <span className={styles.mvRowText}>
+                                            <span className={styles.mvRowName}>{item.title}</span>
+                                            <span className={styles.mvRowMeta}>{item.artist} · von {item.addedBy === myName ? 'dir' : item.addedBy}</span>
+                                        </span>
+                                        {showVoting ? (
+                                            <span className={styles.mvVote} role="group" aria-label={`Abstimmen für ${item.title}`}>
+                                                <button type="button" className={`${styles.mvBtn} ${styles.mvVoteBtn} ${myVote === 1 ? styles.mvVoteUpOn : ''}`}
+                                                    onClick={() => handleVote(item.id, 'up')} aria-pressed={myVote === 1} aria-label="Gefällt mir"><IconThumbUp /></button>
+                                                <span className={styles.mvScore}>{score > 0 ? '+' : ''}{score}</span>
+                                                <button type="button" className={`${styles.mvBtn} ${styles.mvVoteBtn} ${myVote === -1 ? styles.mvVoteDownOn : ''}`}
+                                                    onClick={() => handleVote(item.id, 'down')} aria-pressed={myVote === -1} aria-label="Gefällt mir nicht"><IconThumbDown /></button>
+                                            </span>
+                                        ) : canRemove && (
+                                            <button type="button" className={`${styles.mvBtn} ${styles.mvRemoveBtn}`} onClick={() => setConfirm({ kind: 'remove', item })}
+                                                aria-label={`„${item.title}“ entfernen`} title="Entfernen"><IconTrash /></button>
+                                        )}
+                                    </li>
+                                )
+                            })}
+                        </ul>
+                    )}
                 </div>
-            )}
-        </div>
-    )
+
+                {phase !== 'abstimmung' && (
+                    <div className={styles.mvFooter}>
+                        {myUnqueuedCount < maxSongs ? (
+                            <button type="button" className={`${styles.mvBtn} ${styles.mvStart}`} onClick={openAddModal}>
+                                <span className={styles.mvStartText}>
+                                    <span className={styles.mvStartTitle}>Song hinzufügen</span>
+                                    <span className={styles.mvStartSub}>Deine Songs: {myUnqueuedCount} von {maxSongs}</span>
+                                </span>
+                                <span className={styles.mvStartIcon}><IconPlus /></span>
+                            </button>
+                        ) : (
+                            <button type="button" disabled aria-disabled="true" className={`${styles.mvBtn} ${styles.mvStartOff}`}>
+                                <IconLock />Alle {maxSongs} Songs eingereicht
+                            </button>
+                        )}
+                    </div>
+                )}
+            </main>
+        )
+    }
+
+    return null
 }
 
 export default MusicVoter

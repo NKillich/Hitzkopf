@@ -35,7 +35,7 @@ Weitere Scripts: `npm run build`, `npm run preview`, `npm run lint`.
 src/
 ├── App.jsx                    # Router (Hash-basiert)
 ├── components/ProjectHub.jsx  # Startseite
-├── shared/LobbySystem.jsx     # Gemeinsame Lobby (Name + Emoji)
+├── shared/ui/                 # Gemeinsames Design (Amplify, Song raten)
 ├── projects/
 │   ├── MusicVoter/            # Amplify
 │   ├── QuizGame/              # Quiz Royale

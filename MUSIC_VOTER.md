@@ -34,8 +34,8 @@ src/
 ├── components/
 │   └── ProjectHub.jsx               # Projekt-Auswahlseite
 ├── shared/
-│   ├── LobbySystem.jsx              # Wiederverwendbare Lobby-Komponente
-│   └── LobbySystem.module.css
+│   ├── randomName.js                # Zufällige Spielernamen
+│   └── ui/                          # Gemeinsames Design (Farben, Symbole, Cover, Bottom-Sheet)
 ├── projects/
 │   ├── Hitzkopf/
 │   │   ├── HitzkopfGame.jsx
@@ -182,7 +182,7 @@ Kurzfassung:
 
 ## 🤝 Gemeinsame Komponenten mit Hitzkopf
 
-- **LobbySystem:** Wird von beiden Projekten genutzt
+- **shared/ui:** Farben, Symbole, Cover und Bestätigungs-Sheet für Amplify und Song raten
 - **Firebase Config:** Gleiche Firebase-Instanz
 - **Design-System:** Gemeinsame CSS-Variablen
 - **Audio-Utils:** Könnten geteilt werden (für Sound-Effekte)
