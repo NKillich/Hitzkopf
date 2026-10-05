@@ -83,8 +83,8 @@
 .lbRank { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
 .lbRankItem { display: flex; align-items: center; gap: 14px; padding: 8px 14px 8px 8px; border-radius: 18px; background: var(--sr-bg); border: 2px solid transparent; transition: background 0.3s; }
 .lbRankTop { border-color: color-mix(in srgb, var(--sr-accent) 45%, transparent); }
-.lbRankCut { margin-top: 14px; position: relative; }
-.lbRankCut::before { content: 'Nicht in der Warteschlange'; position: absolute; left: 8px; top: -22px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-muted); }
+.lbRankCut { margin-top: 26px; position: relative; }
+.lbRankCut::before { content: 'Nicht in der Warteschlange'; position: absolute; left: 8px; top: -22px; line-height: 18px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-muted); }
 .lbPos { width: 30px; flex: none; text-align: center; font-family: var(--sr-display); font-size: 22px; font-weight: 800; color: var(--sr-muted); }
 .lbRankTop .lbPos { color: var(--sr-accent-text); }
 .lbRankItem .lbText { flex: 1; }
@@ -162,7 +162,8 @@
 .lbCallQr { flex: none; }
 
 /* ── Live-Abstimmung: Kopf an Kopf, Punkte-Puls ────────────────────────── */
-.lbTieBanner { margin: 0; padding: 8px 14px; border-radius: 12px; background: var(--phase); color: var(--on-phase); font-size: 15px; font-weight: 800; text-align: center; animation: lbPulse 1.2s ease-in-out infinite; }
+.lbTieBanner { display: inline-block; margin-left: 12px; padding: 3px 10px; border-radius: 10px; background: var(--phase); color: var(--on-phase); font-size: 14px; font-weight: 800; animation: lbPulse 1.2s ease-in-out infinite; }
+.lbPanelMeta { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 0; }
 .lbTie { flex: none; padding: 4px 10px; border-radius: 12px; background: var(--phase-soft); color: var(--sr-ink); font-size: 12px; font-weight: 800; white-space: nowrap; }
 .lbRankItem { will-change: transform; }
 .lbScore { display: inline-block; animation: lbPop 0.45s ease-out; }
@@ -196,6 +197,9 @@
 
 @media (max-width: 860px) {
     .lbSteps { order: 4; flex-basis: 100%; min-width: 0; }
+    .lbStep { padding: 6px 8px; }
+    .lbStepLabel { font-size: 12px; gap: 4px; }
+    .lbStepNo { display: none; }
     .lbCall { flex-wrap: wrap; }
     .lbCallLines { width: 100%; justify-content: space-between; }
     .lbCallLine { align-items: flex-start; }
@@ -219,8 +223,39 @@
     .lbNow { flex-direction: row; align-items: center; }
     .lbNowCover { width: min(42%, 24vh); flex: none; }
 }
-@media (min-width: 861px) and (min-height: 600px) {
-    .lbRoot { overflow: hidden; }
-    .lbBoard { height: 100%; }
-    .lbNowCol { overflow-y: auto; }
-}
+
+/* ── Bühne: festes 1600 × 900, als Ganzes auf das Fenster skaliert (siehe LiveBoard.jsx) ── */
+.lbFlow { min-height: 100%; display: flex; flex-direction: column; }
+.lbFlow > .lbBoard { flex: 1; }
+.lbStageMode { overflow: hidden; background: var(--phase); }
+.lbStage { position: absolute; left: 50%; top: 50%; transform-origin: center center; }
+.lbStageMode .lbBoard { height: 100%; min-height: 0; padding: 26px 32px; gap: 18px; background: var(--sr-bg); overflow: hidden; }
+.lbStageMode .lbTop { flex-wrap: nowrap; gap: 24px; }
+.lbStageMode .lbBrand { min-width: 0; }
+.lbStageMode .lbLogo { font-size: 38px; }
+.lbStageMode .lbSteps { min-width: 0; }
+.lbStageMode .lbCall { flex: none; gap: 32px; padding: 20px 34px; }
+.lbStageMode .lbCallTitle { font-size: 54px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbStageMode .lbCallSub { font-size: 20px; }
+.lbStageMode .lbCallTimer { font-size: 104px; }
+.lbStageMode .lbCallLines { gap: 36px; }
+.lbStageMode .lbCallLine span { font-size: 15px; }
+.lbStageMode .lbCallLine strong { font-size: 58px; }
+.lbStageMode .lbGrid { min-height: 0; gap: 20px; }
+.lbStageMode .lbNowCol { min-height: 0; gap: 18px; overflow: hidden; }
+.lbStageMode .lbNow { flex: none; flex-direction: row; align-items: center; padding: 20px; gap: 20px; }
+.lbStageMode .lbNowCover { width: 170px; flex: none; }
+.lbStageMode .lbNowTitle { font-size: 32px !important; }
+.lbStageMode .lbNowArtist { font-size: 18px; }
+.lbStageMode .lbNowEmpty { flex: none; padding: 24px 20px; }
+.lbStageMode .lbSection { flex: 1; min-height: 0; overflow: hidden; padding: 16px 18px; }
+.lbStageMode .lbPanel { min-height: 0; padding: 20px 22px; overflow: hidden; }
+.lbStageMode .lbPanelTitle { font-size: 30px !important; }
+.lbStageMode .lbRank { overflow: hidden; }
+.lbStageMode .lbFacts { flex: none; }
+.lbStageMode .lbFact { padding: 10px 14px; }
+
+/* Automatisches Blättern */
+.lbPage { margin-left: 12px; padding: 3px 10px; border-radius: 10px; background: var(--sr-surface2); color: var(--sr-ink); font-weight: 800; }
+.lbRankPaged { animation: lbPageIn 0.5s ease; }
+@keyframes lbPageIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }

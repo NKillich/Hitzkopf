@@ -44,3 +44,5 @@ export const IconMic = ({ size = 20 }) => <Svg size={size} w={2}><rect x="9" y="
 export const IconSkip = ({ size = 18 }) => <Svg size={size} w={0}><path d="M5 5.5v13l9.5-6.5z" fill="currentColor" /><rect x="16" y="5" width="3" height="14" rx="1" fill="currentColor" /></Svg>
 export const IconVolume = ({ size = 18 }) => <Svg size={size} w={2}><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></Svg>
 export const IconTrophy = ({ size = 22 }) => <Svg size={size} w={2}><path d="M8 4h8v5a4 4 0 0 1-8 0z" /><path d="M8 6H5v1.5A3.5 3.5 0 0 0 8.5 11M16 6h3v1.5a3.5 3.5 0 0 1-3.5 3.5M12 13v4M8.5 20h7M10 17h4" /></Svg>
+export const IconExpand = ({ size = 20 }) => <Svg size={size} w={2.2}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></Svg>
+export const IconShrink = ({ size = 20 }) => <Svg size={size} w={2.2}><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></Svg>
