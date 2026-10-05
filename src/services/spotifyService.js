@@ -107,7 +107,9 @@ class SpotifyService {
             'user-modify-playback-state',
             'user-read-playback-state',
             'playlist-read-private',
-            'playlist-read-collaborative'
+            'playlist-read-collaborative',
+            'playlist-modify-private',
+            'playlist-modify-public'
         ].join(' ')
 
         const params = new URLSearchParams({
@@ -413,7 +415,9 @@ class SpotifyService {
                 spotifyId: track.id,
                 title: track.name,
                 artist: track.artists.map(a => a.name).join(', '),
+                artistIds: track.artists.map(a => a.id),
                 album: track.album.name,
+                releaseYear: parseInt(track.album.release_date, 10) || null,
                 type: 'song',
                 source: 'spotify',
                 spotifyUrl: track.external_urls.spotify,
@@ -434,6 +438,8 @@ class SpotifyService {
                 spotifyUrl: album.external_urls.spotify,
                 imageUrl: album.images[0]?.url,
                 releaseDate: album.release_date,
+                releaseYear: parseInt(album.release_date, 10) || null,
+                artistIds: album.artists.map(a => a.id),
                 totalTracks: album.total_tracks,
                 votes: {},
                 addedAt: Date.now()
@@ -447,6 +453,20 @@ class SpotifyService {
             console.error('❌ Spotify Suche fehlgeschlagen:', error)
             throw error
         }
+    }
+
+    /**
+     * Sucht Künstler (für die Künstler-Runde in Amplify). Returns [{ id, name, imageUrl }]
+     */
+    async searchArtists(query, limit = 6) {
+        await this.ensureValidToken()
+        const params = new URLSearchParams({ q: query, type: 'artist', limit: String(limit) })
+        const res = await fetch(`${SPOTIFY_API_BASE}/search?${params}`, {
+            headers: { 'Authorization': `Bearer ${this.accessToken}` }
+        })
+        if (!res.ok) throw new Error(`Künstlersuche fehlgeschlagen (${res.status})`)
+        const data = await res.json()
+        return (data.artists?.items || []).map(a => ({ id: a.id, name: a.name, imageUrl: a.images?.[a.images.length - 1]?.url || a.images?.[0]?.url || null }))
     }
 
     /**
@@ -791,7 +811,14 @@ class SpotifyService {
         if (!res.ok) {
             const err = await res.json().catch(() => ({}))
             if (res.status === 404) {
-                throw new Error('Kein aktiver Player. Bitte "Mit Spotify verbinden" und in Amplify starten.')
+                const e = new Error('Kein aktives Spotify-Gerät gefunden.')
+                e.code = 'NO_DEVICE'
+                throw e
+            }
+            if (res.status === 403) {
+                const e = new Error(err.error?.message || 'Spotify hat die Wiedergabe abgelehnt (Premium nötig?).')
+                e.code = 'FORBIDDEN'
+                throw e
             }
             throw new Error(err.error?.message || 'Wiedergabe fehlgeschlagen')
         }
@@ -877,8 +904,53 @@ class SpotifyService {
             positionMs: data.progress_ms ?? 0,
             durationMs: item.duration_ms ?? 0,
             isPlaying: !!data.is_playing,
+            volumePercent: data.device?.volume_percent ?? null,
+            deviceName: data.device?.name || null,
             updatedAt: Date.now()
         }
+    }
+
+    /** Lautstärke des aktiven Geräts (0–100) */
+    async setVolume(percent) {
+        const token = await this.getStoredUserToken()
+        if (!token) return
+        const v = Math.max(0, Math.min(100, Math.round(percent)))
+        await fetch(`${SPOTIFY_API_BASE}/me/player/volume?volume_percent=${v}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+    }
+
+    /**
+     * Legt eine private Playlist im Konto an und füllt sie (Amplify: "Als Spotify-Playlist speichern").
+     * Braucht den Scope playlist-modify-private. Returns { id, url }
+     */
+    async createPlaylistWithTracks(name, description, uris) {
+        const token = await this.getStoredUserToken()
+        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        const profile = await this.getUserProfile()
+        if (!profile?.id) throw new Error('Spotify-Konto nicht ermittelbar.')
+        const res = await fetch(`${SPOTIFY_API_BASE}/users/${encodeURIComponent(profile.id)}/playlists`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description, public: false })
+        })
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            const e = new Error(err.error?.message || `Playlist anlegen fehlgeschlagen (${res.status})`)
+            e.code = res.status === 403 ? 'FORBIDDEN' : 'FAILED'
+            throw e
+        }
+        const playlist = await res.json()
+        for (let i = 0; i < uris.length; i += 100) {
+            const add = await fetch(`${SPOTIFY_API_BASE}/playlists/${playlist.id}/tracks`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uris: uris.slice(i, i + 100) })
+            })
+            if (!add.ok) throw new Error(`Songs hinzufügen fehlgeschlagen (${add.status})`)
+        }
+        return { id: playlist.id, url: playlist.external_urls?.spotify || null }
     }
 
     /**
