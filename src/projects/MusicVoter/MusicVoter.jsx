@@ -313,7 +313,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                 createdAt: serverTimestamp(),
                 lastActiveAt: Date.now(),
                 players: {
-                    [name]: { emoji, joinedAt: serverTimestamp() }
+                    [name]: { emoji, joinedAt: serverTimestamp(), uid: auth.currentUser.uid }
                 },
                 playlist: [],
                 history: [],
@@ -365,11 +365,20 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
         setBusyAction(joinRoomId)
         try {
+            // Geräte-ID (anonymer Login): erkennt einen erneuten Beitritt vom selben Handy
+            const auth = getAuth(getApp())
+            await auth.authStateReady()
+            if (!auth.currentUser) await signInAnonymously(auth)
+            const uid = auth.currentUser.uid
             // Als Transaktion: zwei Leute mit demselben Namen (auch in anderer Schreibweise) rutschen nicht durch
             const res = await mutateLobby(joinRoomId, (data) => {
                 if (!isOpen(data)) return { missing: true }
-                if (Object.keys(data.players || {}).some(k => nameKey(k) === nameKey(name))) return { taken: true }
-                return { update: { [`players.${name}`]: { emoji, joinedAt: Date.now() } } }
+                const existing = Object.keys(data.players || {}).find(k => nameKey(k) === nameKey(name))
+                if (existing) {
+                    // Gleicher Name vom selben Gerät = Wiedereintritt (z. B. nach abgebrochenem Beitritt), sonst vergeben
+                    return data.players[existing]?.uid === uid ? { rejoin: existing } : { taken: true }
+                }
+                return { update: { [`players.${name}`]: { emoji, joinedAt: Date.now(), uid } } }
             })
 
             if (res.missing) {
@@ -380,6 +389,13 @@ const MusicVoter = ({ onBack, joinCode }) => {
             if (res.taken) {
                 showToast(`Den Namen „${name}“ gibt es in dieser Playlist schon. Wähl bitte einen anderen.`, 'bad')
                 return
+            }
+            if (res.rejoin && res.rejoin !== name) {
+                // Schreibweise aus der Playlist übernehmen (sonst passt der Schlüssel players.<Name> nicht)
+                sessionStorage.setItem('mv_name', res.rejoin)
+                setMyName(res.rejoin)
+                setNameDraft(res.rejoin)
+                myNameRef.current = res.rejoin
             }
 
             setRoomId(joinRoomId)
@@ -466,13 +482,25 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
         const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
 
+        // Erst wenn wir uns einmal in der Teilnehmerliste gesehen haben, kann ein Fehlen "entfernt" bedeuten
+        let seenSelf = false
         const unsubscribe = onSnapshot(lobbyRef, (snapshot) => {
+            // Firebase liefert zuerst evtl. eine gemerkte, veraltete Fassung (z. B. von der Einladungs-Vorschau) –
+            // die darf weder "entfernt" noch "geschlossen" auslösen. Entscheidend ist der Stand vom Server.
+            const fromCache = snapshot.metadata.fromCache
             if (snapshot.exists() && isOpen(snapshot.data())) {
                 const data = snapshot.data()
                 const me = myNameRef.current
+                const present = !!data.players && Object.prototype.hasOwnProperty.call(data.players, me)
+                if (present) seenSelf = true
                 // Vom Host entfernt (oder anderswo verlassen)?
-                if (data.players && !Object.prototype.hasOwnProperty.call(data.players, me)) {
-                    if (!leavingRef.current) setStartNotice('Du bist nicht mehr in der Playlist – der Host hat dich entfernt.')
+                if (!present) {
+                    if (fromCache) return
+                    if (!leavingRef.current) {
+                        setStartNotice(seenSelf
+                            ? 'Du bist nicht mehr in der Playlist – der Host hat dich entfernt.'
+                            : 'Du bist nicht (mehr) in dieser Playlist. Tritt einfach erneut bei.')
+                    }
                     handleSessionEnd()
                     return
                 }
@@ -480,6 +508,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                 setPlaylist(data.playlist || [])
                 setIsHost(data.host === me)
             } else {
+                if (fromCache) return
                 // Lobby wurde gelöscht – Session vollständig beenden
                 if (!closingRef.current) setStartNotice('Der Host hat die Playlist geschlossen.')
                 handleSessionEnd()
@@ -1349,6 +1378,11 @@ const MusicVoter = ({ onBack, joinCode }) => {
         .map(([name, p]) => ({ name, emoji: p?.emoji || '🙂' }))
         .sort((a, b) => (a.name === lobbyData?.host ? -1 : b.name === lobbyData?.host ? 1 : a.name.localeCompare(b.name, 'de')))
     const playerCount = players.length
+    const activeNames = new Set([
+        ...playlist.flatMap(i => [i.addedBy, ...Object.entries(i.votes || {}).filter(([, v]) => v !== 0).map(([n]) => n)]),
+        ...(lobbyData?.history || []).map(h => h.addedBy),
+        ...Object.keys(lobbyData?.leftovers || {})
+    ])
     const voterNames = new Set(poolItems.flatMap(i => Object.entries(i.votes || {}).filter(([, v]) => v !== 0).map(([n]) => n)))
     const voterCount = voterNames.size
     const queueItems = sortedPlaylist.filter(i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId)
@@ -2195,6 +2229,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                     <li key={p.name} className={styles.mvPerson}>
                                         <span className={styles.mvPersonEmoji} aria-hidden="true">{p.emoji}</span>
                                         <span className={styles.mvPersonName}>{p.name}{p.name === myName ? ' (du)' : ''}{p.name === lobbyData.host ? ' · Host' : ''}</span>
+                                        {!showVoting && p.name !== lobbyData.host && p.name !== myName && !activeNames.has(p.name) && <span className={styles.mvNotVoted}>noch nicht aktiv</span>}
                                         {showVoting && (voterNames.has(p.name)
                                             ? <span className={styles.mvVoted}><IconCheck size={14} />abgestimmt</span>
                                             : <span className={styles.mvNotVoted}>noch nicht</span>)}

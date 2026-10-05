@@ -7,7 +7,7 @@ import CoverArt from '../../shared/ui/CoverArt'
 import QrCode from '../../shared/ui/QrCode'
 import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
-import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconCheck, IconTrophy } from '../../shared/ui/icons'
+import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconCheck, IconTrophy, IconExpand, IconShrink } from '../../shared/ui/icons'
 import { joinLink } from './links'
 import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextVotingInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION } from './amplifyLogic'
 import styles from './LiveBoard.module.css'
@@ -19,6 +19,31 @@ const STEPS = [
 ]
 const PHASE_CLASS = { songwahl: 'lbCollect', abstimmung: 'lbVote', laeuft: 'lbLive' }
 const FLASH_TEXT = { songwahl: 'Jetzt Songs einreichen!', abstimmung: 'Jetzt abstimmen!', laeuft: 'Die Gewinner laufen!' }
+
+// Bühne: im Querformat wird das Board für 1600 × 900 gebaut und als Ganzes auf das Fenster skaliert –
+// so passt auf jedem Bildschirm (TV, Beamer, Laptop, Tablet quer) alles ohne Scrollen hinein.
+const STAGE_W = 1600
+const STAGE_H = 900
+const calcStage = () => {
+    const w = window.innerWidth, h = window.innerHeight
+    return w >= 900 && w / h >= 1.2 ? { scale: Math.min(w / STAGE_W, h / STAGE_H) } : null
+}
+// Plätze pro Liste auf der Bühne (mehr → automatisch blättern)
+const STAGE_RANK_ROWS = 5
+const STAGE_QUEUE_ROWS = 3
+const PAGE_MS = 8000
+
+/** Blättert eine lange Liste automatisch weiter (Seite 1/3 …) */
+function usePager(count, perPage, enabled) {
+    const pages = enabled ? Math.max(1, Math.ceil(count / perPage)) : 1
+    const [page, setPage] = useState(0)
+    useEffect(() => {
+        if (pages <= 1) return
+        const id = setInterval(() => setPage(p => p + 1), PAGE_MS)
+        return () => clearInterval(id)
+    }, [pages])
+    return { page: page % pages, pages }
+}
 
 const hoursMinutes = (ms) => {
     const min = Math.round((ms || 0) / 60000)
@@ -56,7 +81,7 @@ function buildFacts(history, players, pool) {
 }
 
 /** Platzwechsel weich animieren (FLIP): alte Position merken, neue messen, Differenz zurückgleiten lassen */
-function useFlip(orderKey) {
+function useFlip(orderKey, scale = 1) {
     const nodes = useRef(new Map())
     const lastTops = useRef(new Map())
     useLayoutEffect(() => {
@@ -67,13 +92,15 @@ function useFlip(orderKey) {
             const el = nodes.current.get(k)
             if (before == null || !el || Math.abs(before - top) < 1) return
             el.style.transition = 'none'
-            el.style.transform = `translateY(${before - top}px)`
+            // Auf der skalierten Bühne sind gemessene Pixel größer/kleiner als die inneren
+            el.style.transform = `translateY(${(before - top) / scale}px)`
             requestAnimationFrame(() => {
                 el.style.transition = 'transform 0.6s cubic-bezier(.2, .8, .2, 1)'
                 el.style.transform = ''
             })
         })
         lastTops.current = tops
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orderKey])
     return (key) => (el) => { if (el) nodes.current.set(key, el); else nodes.current.delete(key) }
 }
@@ -89,6 +116,21 @@ export default function LiveBoard({ roomCode, onBack }) {
     const [reveal, setReveal] = useState(null)             // Gewinner-Enthüllung
     const lastPhaseRef = useRef(null)
     const seenResultRef = useRef(null)
+    const [stage, setStage] = useState(calcStage)
+    const [fullscreen, setFullscreen] = useState(() => !!document.fullscreenElement)
+
+    // Bühne an Fenstergröße anpassen; Vollbild-Status mitverfolgen
+    useEffect(() => {
+        const onResize = () => setStage(calcStage())
+        const onFs = () => setFullscreen(!!document.fullscreenElement)
+        window.addEventListener('resize', onResize)
+        document.addEventListener('fullscreenchange', onFs)
+        return () => { window.removeEventListener('resize', onResize); document.removeEventListener('fullscreenchange', onFs) }
+    }, [])
+    const toggleFullscreen = () => {
+        if (document.fullscreenElement) document.exitFullscreen?.()
+        else document.documentElement.requestFullscreen?.().catch(() => { /* z. B. iOS: kein Vollbild */ })
+    }
 
     // Lobby live mitlesen (anonymer Login reicht laut Firestore-Regeln, kein Beitritt)
     useEffect(() => {
@@ -159,7 +201,11 @@ export default function LiveBoard({ roomCode, onBack }) {
     const ranked = [...pool].sort(byScore)
     const phase = data?.lobbyPhase || 'songwahl'
     const isVoting = phase === 'abstimmung'
-    const setRowRef = useFlip(isVoting ? ranked.map(i => i.id).join('|') : 'off')
+    const listAll = isVoting ? ranked : [...pool].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
+    const pager = usePager(listAll.length, STAGE_RANK_ROWS, !!stage)
+    const pageStart = stage ? pager.page * STAGE_RANK_ROWS : 0
+    const visibleList = stage ? listAll.slice(pageStart, pageStart + STAGE_RANK_ROWS) : listAll
+    const setRowRef = useFlip(isVoting ? visibleList.map(i => i.id).join('|') + '#' + pager.page : 'off', stage?.scale || 1)
 
     const openCode = (e) => {
         e.preventDefault()
@@ -175,6 +221,11 @@ export default function LiveBoard({ roomCode, onBack }) {
         <div className={styles.lbTopButtons}>
             <button type="button" className={styles.lbIconBtn} onClick={onBack} aria-label="Zum Menü" title="Zum Menü"><IconBack /></button>
             <button type="button" className={styles.lbIconBtn} onClick={toggleTheme} aria-label={themeLabel} title={themeLabel}>{isDark ? <IconSun /> : <IconMoon />}</button>
+            {document.fullscreenEnabled && (
+                <button type="button" className={styles.lbIconBtn} onClick={toggleFullscreen} aria-label={fullscreen ? 'Vollbild beenden' : 'Vollbild'} title={fullscreen ? 'Vollbild beenden (Esc)' : 'Vollbild'}>
+                    {fullscreen ? <IconShrink /> : <IconExpand />}
+                </button>
+            )}
         </div>
     )
 
@@ -210,7 +261,6 @@ export default function LiveBoard({ roomCode, onBack }) {
     const nowPos = nowPosition(now, clock)
     const nowItem = now ? playlist.find(i => i.spotifyId === now.trackId) : null
     const queue = playlist.filter(i => i.queuedRound != null && i.spotifyId !== now?.trackId).sort(byScore)
-    const newest = [...pool].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
     const maxAbs = Math.max(1, ...pool.map(i => { const c = voteCounts(i); return Math.max(c.up, c.down) }))
     const votingLeft = isVoting && data.phaseEndsAt ? Math.max(0, data.phaseEndsAt - clock) : 0
     const voters = new Set(pool.flatMap(i => Object.entries(i.votes || {}).filter(([, v]) => v !== 0).map(([n]) => n))).size
@@ -251,7 +301,7 @@ export default function LiveBoard({ roomCode, onBack }) {
     } else if (phase === 'laeuft') {
         if (waiting) banner = { title: 'Gleich geht’s los', sub: 'Die Gewinner warten auf Spotify …' }
         else banner = {
-            title: nextVoting != null && nextVoting > 0 ? 'Jetzt Songs für die nächste Runde einreichen' : 'Die Playlist läuft',
+            title: nextVoting != null && nextVoting > 0 ? 'Nächste Runde: Songs einreichen!' : 'Die Playlist läuft',
             lines: [remaining != null ? ['Noch Musik', mmss(remaining)] : null, nextVoting != null ? ['Nächste Abstimmung', nextVoting > 0 ? `in ${mmss(nextVoting)}` : 'gleich'] : null].filter(Boolean),
             sub: pool.length ? `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen` : 'Noch keine Songs für die nächste Runde'
         }
@@ -259,11 +309,12 @@ export default function LiveBoard({ roomCode, onBack }) {
         banner = { title: 'Jetzt Songs einreichen!', sub: `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen · der Host startet gleich die Abstimmung`, qr: true }
     }
 
-    const list = isVoting ? ranked : newest
+    const queueRows = stage ? STAGE_QUEUE_ROWS : 6
     const stepIndex = STEPS.findIndex(s => s.id === phase)
 
     return (
-        <div className={`${styles.lbRoot} ${isDark ? theme.dark : theme.light} ${styles[PHASE_CLASS[phase]]}`}>
+        <div className={`${styles.lbRoot} ${isDark ? theme.dark : theme.light} ${styles[PHASE_CLASS[phase]]} ${stage ? styles.lbStageMode : ''}`}>
+            <div className={stage ? styles.lbStage : styles.lbFlow} style={stage ? { width: STAGE_W, height: STAGE_H, transform: `translate(-50%, -50%) scale(${stage.scale})` } : undefined}>
             <div className={styles.lbBoard}>
                 <header className={styles.lbTop}>
                     {topButtons}
@@ -344,7 +395,7 @@ export default function LiveBoard({ roomCode, onBack }) {
                                 <p className={styles.lbMuted}>Die Warteschlange ist leer – die nächste Abstimmung füllt sie.</p>
                             ) : (
                                 <ol className={styles.lbQueue}>
-                                    {queue.slice(0, 6).map((item, i) => (
+                                    {queue.slice(0, queueRows).map((item, i) => (
                                         <li key={item.id} className={styles.lbQueueItem}>
                                             <span className={styles.lbQueueRank}>{i + 1}</span>
                                             <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={44} radius={9} />
@@ -354,7 +405,7 @@ export default function LiveBoard({ roomCode, onBack }) {
                                             </span>
                                         </li>
                                     ))}
-                                    {queue.length > 6 && <li className={styles.lbMore}>+ {queue.length - 6} weitere</li>}
+                                    {queue.length > queueRows && <li className={styles.lbMore}>+ {queue.length - queueRows} weitere</li>}
                                 </ol>
                             )}
                         </div>
@@ -365,18 +416,20 @@ export default function LiveBoard({ roomCode, onBack }) {
                             <h2 className={styles.lbPanelTitle}>{isVoting ? 'Live-Abstimmung' : 'Im Rennen für die nächste Runde'}</h2>
                             <span className={styles.lbPanelMeta}>
                                 {isVoting ? `Top ${batchSize} kommen in die Warteschlange` : `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} eingereicht`}
+                                {cutTie && <span className={styles.lbTieBanner}>Kopf an Kopf um Platz {batchSize}!</span>}
+                                {pager.pages > 1 && <span className={styles.lbPage}>Seite {pager.page + 1}/{pager.pages}</span>}
                             </span>
                         </div>
-                        {cutTie && <p className={styles.lbTieBanner}>Kopf an Kopf um Platz {batchSize}!</p>}
-                        {list.length === 0 ? (
+                        {listAll.length === 0 ? (
                             <div className={styles.lbNowEmpty}>
                                 <span className={styles.lbEmptyIcon}><IconNote size={28} /></span>
                                 <p className={styles.lbNowEmptyTitle}>Noch keine Songs</p>
                                 <p className={styles.lbMuted}>Scanne den QR-Code und reich den ersten Song ein.</p>
                             </div>
                         ) : (
-                            <ol className={styles.lbRank}>
-                                {list.map((item, i) => {
+                            <ol key={pager.page} className={`${styles.lbRank} ${pager.pages > 1 ? styles.lbRankPaged : ''}`}>
+                                {visibleList.map((item, idx) => {
+                                    const i = pageStart + idx
                                     const { up, down } = voteCounts(item)
                                     const score = scoreOf(item)
                                     const inTop = isVoting && i < batchSize
@@ -428,6 +481,7 @@ export default function LiveBoard({ roomCode, onBack }) {
                         </div>
                     )}
                 </footer>
+            </div>
             </div>
 
             {flash && (
