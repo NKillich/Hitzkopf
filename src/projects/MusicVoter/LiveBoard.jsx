@@ -215,6 +215,9 @@ export default function LiveBoard({ roomCode, onBack }) {
     const pager = usePager(listAll.length, rankRows, !!stage)
     const pageStart = stage ? pager.page * rankRows : 0
     const visibleList = stage ? listAll.slice(pageStart, pageStart + rankRows) : listAll
+    const queueAll = data ? upcomingQueue(data, clock) : []
+    const queueRows = queueRowsFor(stage)
+    const queuePager = usePager(queueAll.length, queueRows, true)
     const setRowRef = useFlip(isVoting ? visibleList.map(i => i.id).join('|') + '#' + pager.page : 'off', stage?.scale || 1)
 
     const openCode = (e) => {
@@ -271,7 +274,7 @@ export default function LiveBoard({ roomCode, onBack }) {
     const now = liveNowPlaying(data, clock)
     const nowPos = nowPosition(now, clock)
     const nowItem = now ? playlist.find(i => i.spotifyId === now.trackId) : null
-    const queue = upcomingQueue(data, clock)
+    const queue = queueAll
     const maxAbs = Math.max(1, ...pool.map(i => { const c = voteCounts(i); return Math.max(c.up, c.down) }))
     const votingLeft = isVoting && data.phaseEndsAt ? Math.max(0, data.phaseEndsAt - clock) : 0
     const voters = new Set(pool.flatMap(i => Object.entries(i.votes || {}).filter(([, v]) => v !== 0).map(([n]) => n))).size
@@ -284,10 +287,16 @@ export default function LiveBoard({ roomCode, onBack }) {
     const rule = data.roundRule
 
     // Fortschritt der aktiven Phase (0–1)
+    // Musik läuft: Gewinner werden übergeben oder laufen schon, während neue Songs gesammelt werden
+    const musicOn = phase === 'laeuft' || (phase === 'songwahl' && remaining != null)
     let progress = null
     if (isVoting && data.phaseEndsAt) {
         const start = data.phaseStartedAt || (data.phaseEndsAt - (data.votingDurationSec || 120) * 1000)
         progress = Math.min(1, Math.max(0, (clock - start) / (data.phaseEndsAt - start)))
+    } else if (phase === 'songwahl' && nextVoting != null && data.phaseStartedAt) {
+        // Einreichen bis zur nächsten automatischen Abstimmung
+        const done = Math.max(0, clock - data.phaseStartedAt)
+        progress = done + nextVoting > 0 ? Math.min(1, done / (done + nextVoting)) : null
     } else if (phase === 'laeuft' && remaining != null) {
         const queuedRounds = playlist.filter(i => i.queuedRound != null).map(i => i.queuedRound)
         const round = queuedRounds.length ? Math.min(...queuedRounds) : null
@@ -313,14 +322,16 @@ export default function LiveBoard({ roomCode, onBack }) {
     let banner
     if (isVoting) {
         banner = { title: 'Jetzt abstimmen!', timer: votingLeft > 0 ? mmss(votingLeft) : null, urgent: votingLeft > 0 && votingLeft <= 15000, sub: votingLeft > 0 ? `${voters} von ${players} haben abgestimmt · ${totalVotes} ${totalVotes === 1 ? 'Stimme' : 'Stimmen'}` : 'Wird ausgewertet …' }
-    } else if (phase === 'laeuft') {
+    } else if (musicOn) {
         const lines = [remaining != null ? ['Noch Musik', mmss(remaining)] : null, nextVoting != null ? ['Nächste Abstimmung', nextVoting > 0 ? `in ${mmss(nextVoting)}` : (pool.length ? 'gleich' : 'sobald Songs da sind')] : null].filter(Boolean)
-        if (waiting) banner = { title: 'Gleich geht’s los', sub: 'Die Gewinner warten auf Spotify …' }
+        if (waiting) banner = now?.isPlaying
+            ? { title: 'Die Gewinner stehen fest', sub: 'Sie kommen gleich in die Warteschlange …', lines }
+            : { title: 'Gleich geht’s los', sub: 'Die Gewinner warten auf Spotify …' }
         else if (isLastSong(data, clock)) banner = pool.length
             ? { title: 'Bald geht’s weiter', sub: 'Letzter Song – die nächste Runde wird gerade gewählt', lines }
             : { title: 'Letzter Song!', sub: 'Jetzt Songs für die nächste Runde einreichen – sonst wird’s still', lines, urgent: true }
         else banner = {
-            title: nextVoting != null && nextVoting > 0 ? 'Nächste Runde: Songs einreichen!' : 'Die Playlist läuft',
+            title: nextVoting != null && nextVoting > 0 ? 'Jetzt Songs einreichen!' : 'Die Playlist läuft',
             lines,
             sub: pool.length ? `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen` : 'Noch keine Songs für die nächste Runde'
         }
@@ -328,7 +339,6 @@ export default function LiveBoard({ roomCode, onBack }) {
         banner = { title: 'Jetzt Songs einreichen!', sub: `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen · QR-Code oben rechts scannen und mitmachen` }
     }
 
-    const queueRows = queueRowsFor(stage)
     const stepIndex = STEPS.findIndex(s => s.id === phase)
 
     return (
@@ -404,14 +414,14 @@ export default function LiveBoard({ roomCode, onBack }) {
                         )}
 
                         <div className={styles.lbSection}>
-                            <h2 className={styles.lbSectionTitle}>Als Nächstes <span>{queue.length}</span></h2>
+                            <h2 className={styles.lbSectionTitle}>Als Nächstes <span>{queue.length}</span>{queuePager.pages > 1 && <span className={styles.lbPage}>Seite {queuePager.page + 1}/{queuePager.pages}</span>}</h2>
                             {queue.length === 0 ? (
                                 <p className={styles.lbMuted}>Die Warteschlange ist leer – die nächste Abstimmung füllt sie.</p>
                             ) : (
-                                <ol className={styles.lbQueue}>
-                                    {queue.slice(0, queueRows).map((item, i) => (
+                                <ol key={queuePager.page} className={`${styles.lbQueue} ${queuePager.pages > 1 ? styles.lbRankPaged : ''}`}>
+                                    {queue.slice(queuePager.page * queueRows, (queuePager.page + 1) * queueRows).map((item, i) => (
                                         <li key={item.id} className={styles.lbQueueItem}>
-                                            <span className={styles.lbQueueRank}>{i + 1}</span>
+                                            <span className={styles.lbQueueRank}>{queuePager.page * queueRows + i + 1}</span>
                                             <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={44} radius={9} />
                                             <span className={styles.lbText}>
                                                 <span className={styles.lbTitle}>{item.title}</span>
@@ -420,7 +430,6 @@ export default function LiveBoard({ roomCode, onBack }) {
                                             {item.queueDrawn && <span className={styles.lbDrawn} title="Gleich viele Stimmen – Reihenfolge ausgelost"><IconDice size={14} />ausgelost</span>}
                                         </li>
                                     ))}
-                                    {queue.length > queueRows && <li className={styles.lbMore}>+ {queue.length - queueRows} weitere</li>}
                                 </ol>
                             )}
                         </div>

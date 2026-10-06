@@ -107,9 +107,7 @@ class SpotifyService {
             'user-modify-playback-state',
             'user-read-playback-state',
             'playlist-read-private',
-            'playlist-read-collaborative',
-            'playlist-modify-private',
-            'playlist-modify-public'
+            'playlist-read-collaborative'
         ].join(' ')
 
         const params = new URLSearchParams({
@@ -846,6 +844,16 @@ class SpotifyService {
         }
     }
 
+    /** IDs von laufendem Song und Spotify-Warteschlange ("Als Nächstes") – zum Abgleich vor dem Anhängen */
+    async getQueueIds() {
+        const token = await this.getStoredUserToken()
+        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        const res = await fetch(`${SPOTIFY_API_BASE}/me/player/queue`, { headers: { 'Authorization': `Bearer ${token}` } })
+        if (!res.ok) throw new Error(`Warteschlange lesen fehlgeschlagen (${res.status})`)
+        const data = await res.json().catch(() => ({}))
+        return [data.currently_playing?.id, ...(data.queue || []).map(t => t?.id)].filter(Boolean)
+    }
+
     async pausePlayback() {
         const token = await this.getStoredUserToken()
         if (!token) return
@@ -919,38 +927,6 @@ class SpotifyService {
             method: 'PUT',
             headers: { 'Authorization': `Bearer ${token}` }
         })
-    }
-
-    /**
-     * Legt eine private Playlist im Konto an und füllt sie (Amplify: "Als Spotify-Playlist speichern").
-     * Braucht den Scope playlist-modify-private. Returns { id, url }
-     */
-    async createPlaylistWithTracks(name, description, uris) {
-        const token = await this.getStoredUserToken()
-        if (!token) throw new Error('Nicht mit Spotify verbunden.')
-        const profile = await this.getUserProfile()
-        if (!profile?.id) throw new Error('Spotify-Konto nicht ermittelbar.')
-        const res = await fetch(`${SPOTIFY_API_BASE}/users/${encodeURIComponent(profile.id)}/playlists`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, description, public: false })
-        })
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}))
-            const e = new Error(err.error?.message || `Playlist anlegen fehlgeschlagen (${res.status})`)
-            e.code = res.status === 403 ? 'FORBIDDEN' : 'FAILED'
-            throw e
-        }
-        const playlist = await res.json()
-        for (let i = 0; i < uris.length; i += 100) {
-            const add = await fetch(`${SPOTIFY_API_BASE}/playlists/${playlist.id}/tracks`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uris: uris.slice(i, i + 100) })
-            })
-            if (!add.ok) throw new Error(`Songs hinzufügen fehlgeschlagen (${add.status})`)
-        }
-        return { id: playlist.id, url: playlist.external_urls?.spotify || null }
     }
 
     /**

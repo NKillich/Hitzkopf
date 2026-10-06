@@ -133,7 +133,7 @@ export const isLastSong = (data, now = Date.now()) => {
  * Wenn nur noch die eingestellte Zeit Musik übrig ist – spätestens aber, sobald der letzte Song beginnt.
  */
 export const nextVotingInMs = (data, now) => {
-    if (data?.lobbyPhase !== 'laeuft' || data.pendingBatch) return null
+    if (!data || data.lobbyPhase === 'abstimmung' || data.pendingBatch) return null
     const rem = queueRemainingMs(data, now)
     if (rem == null) return null
     const queued = queueOrder(data)
@@ -259,10 +259,10 @@ export const finishRound = (data, now, { voted }) => {
     const update = {
         playlist: current.filter(i => !notChosen.includes(i)).map(i => (selectedIds.includes(i.spotifyId) ? { ...i, queuedRound: round, queuePos: selectedIds.indexOf(i.spotifyId), queueDrawn: drawn.has(i.spotifyId) } : i)),
         leftovers,
-        // Ohne Gewinner gibt es nichts abzuspielen → zurück ins Sammeln
-        lobbyPhase: selectedIds.length || data.nowPlaying?.isPlaying ? 'laeuft' : 'songwahl',
+        // "laeuft" nur, bis die Gewinner bei Spotify sind – danach (oder ohne Gewinner) wieder Songs einreichen
+        lobbyPhase: batchIds.length ? 'laeuft' : 'songwahl',
         phaseEndsAt: null,
-        phaseStartedAt: null,
+        phaseStartedAt: batchIds.length ? null : now,
         votingRound: round,
         pendingBatch: batchIds.length ? { round, spotifyIds: batchIds } : null,
         queueStartedAt: null,
