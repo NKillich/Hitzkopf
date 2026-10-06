@@ -22,8 +22,10 @@ import {
     UNLIMITED, DEFAULT_UP, DEFAULT_DOWN, PRESETS, DEFAULT_PRESET, activePresetId, voteCounts, byScore,
     cleanName, nameKey, sameSong, similarSong, seededOrder, queueRemainingMs, nextVotingInMs, mmss, nowPosition,
     DECADES, decadeLabel, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
-    limitsFor, streakOf, isLastSong, STREAK_LEVELS, resultNotes, liveNowPlaying, upcomingQueue, queueOrder
+    limitsFor, streakOf, isLastSong, STREAK_LEVELS, resultNotes, splitConfigChange, pendingLabels, liveNowPlaying, upcomingQueue, queueOrder
 } from './amplifyLogic'
+import ReactionPad from './ReactionPad'
+import { deleteReactions } from './reactions'
 import styles from './MusicVoter.module.css'
 
 const baseEmojis = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵']
@@ -458,6 +460,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
         closingRef.current = true
         const ref = doc(db, 'musicVoterLobbies', roomId)
         try {
+            try { await deleteReactions(db, roomId) } catch { /* Reste stören nicht */ }
             try {
                 await deleteDoc(ref)
             } catch (e) {
@@ -780,13 +783,13 @@ const MusicVoter = ({ onBack, joinCode }) => {
     // Spotify-Suche (mit Filter des Runden-Modus)
     const handleSpotifySearch = async () => {
         const q = searchQuery.trim()
-        if (!q) return
+        if (!q && lobbyData?.roundRule?.type !== 'decade') return
 
         setIsSearching(true)
         setSearchError(null)
 
         try {
-            const results = await spotifyService.search(ruleSearchQuery(lobbyData?.roundRule, q), 10)
+            const results = await spotifyService.search(ruleSearchQuery(lobbyData?.roundRule, q).trim(), 10)
             setSearchResults(results)
             if (results.length === 0) log('Keine Ergebnisse für:', q)
         } catch (error) {
@@ -801,10 +804,13 @@ const MusicVoter = ({ onBack, joinCode }) => {
         }
     }
 
+    // Jahrzehnt-Runde: ohne Suchwort gleich die beliebtesten Songs des Jahrzehnts zeigen
+    const searchable = (q) => q.length >= 2 || (q.length === 0 && lobbyData?.roundRule?.type === 'decade')
+
     // Suche startet automatisch kurz nach dem Tippen
     useEffect(() => {
         if (!showAddModal) return
-        if (searchQuery.trim().length < 2) { setSearchResults([]); setSearchError(null); return }
+        if (!searchable(searchQuery.trim())) { setSearchResults([]); setSearchError(null); return }
         const id = setTimeout(() => handleSpotifySearch(), 500)
         return () => clearTimeout(id)
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -812,6 +818,10 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
     const openAddModal = () => {
         setAddedInModalIds(new Set())
+        // Runden-Modus: Suche gleich passend vorausfüllen (Jahrzehnt: Treffer erscheinen auch ohne Suchwort)
+        const r = lobbyData?.roundRule
+        if (!searchQuery.trim() && r?.type === 'artist') setSearchQuery(r.artistName)
+        if (!searchQuery.trim() && r?.type === 'keyword') setSearchQuery(r.word)
         setShowAddModal(true)
     }
 
@@ -872,10 +882,19 @@ const MusicVoter = ({ onBack, joinCode }) => {
     const wasPlayed = (item) => !!item.spotifyId && playedIds.has(item.spotifyId)
 
     // Host: Einstellungen aktualisieren
+    // Strengere Regeln gelten ab der nächsten Runde, sobald schon Songs eingereicht sind (siehe splitConfigChange)
     const updateLobbyConfig = async (changes) => {
         if (!db || !roomId) return
         try {
-            await updateDoc(doc(db, 'musicVoterLobbies', roomId), { ...changes, lastActiveAt: Date.now() })
+            const res = await mutateLobby(roomId, (data) => {
+                if ('pendingConfig' in changes) return { update: { pendingConfig: null, lastActiveAt: Date.now() } }   // Vorgemerktes zurücknehmen
+                const { now, later } = splitConfigChange(data, changes, 3)
+                const pending = { ...(data.pendingConfig || {}) }
+                Object.keys(now).forEach(k => { delete pending[k] })   // sofort Geltendes hebt Vorgemerktes auf
+                Object.assign(pending, later)
+                return { update: { ...now, pendingConfig: Object.keys(pending).length ? pending : null, lastActiveAt: Date.now() }, deferred: Object.keys(later).length > 0 }
+            })
+            if (res?.deferred) showToast('Gilt ab der nächsten Runde – es sind schon Songs eingereicht.')
         } catch (e) {
             console.error('Fehler beim Aktualisieren der Lobby-Konfiguration:', e)
             showToast('Die Einstellung konnte nicht gespeichert werden.', 'bad')
@@ -1870,7 +1889,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
             let view
             if (albumTracks) view = 'album'
             else if (isLoadingAlbum) view = 'loading'
-            else if (q.length < 2) view = 'prompt'
+            else if (!searchable(q)) view = 'prompt'
             else if (searchError && !isSearching) view = 'error'
             else if (isSearching || searchedQuery !== q) view = searchResults.length ? 'ok' : 'loading'
             else view = searchResults.length ? 'ok' : 'empty'
@@ -1999,8 +2018,17 @@ const MusicVoter = ({ onBack, joinCode }) => {
         // ── Einstellungen (für alle; Host sieht mehr) ──
         if (roomView === 'settings') {
             const hasQueue = queueSongs.length > 0
-            const presetId = activePresetId(lobbyData)
-            const currentRuleTab = ruleTab ?? rule?.type ?? null
+            const pending = lobbyData.pendingConfig || {}
+            const planned = { ...lobbyData, ...pending }                       // so, wie es ab der nächsten Runde gilt
+            const plannedRule = 'roundRule' in pending ? pending.roundRule : rule
+            const presetId = activePresetId(planned)
+            const currentRuleTab = ruleTab ?? plannedRule?.type ?? null
+            const pendingNotice = pendingLabels(lobbyData).length > 0 && (
+                <div className={styles.mvPendingNote} role="status">
+                    <span>⏳ Gilt ab der nächsten Runde: <strong>{pendingLabels(lobbyData).join(' · ')}</strong></span>
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvInlineLink}`} onClick={() => updateLobbyConfig({ pendingConfig: null })}>Zurücknehmen</button>
+                </div>
+            )
             return shell(
                 <main className={`${styles.mvMain} ${previewId ? styles.mvWithPreview : ''}`}>
                     {subHeader('Einstellungen', () => setRoomView('main'), null, false)}
@@ -2066,6 +2094,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                     <h2 className={styles.mvCardTitle}>Runden</h2>
                                     <span className={styles.mvChip}>Runde {lobbyData.votingRound || 0}</span>
                                 </div>
+                                {'maxSongsPerPerson' in pending && pendingNotice}
                                 <div className={styles.mvPresets} role="radiogroup" aria-label="Vorgabe">
                                     {PRESETS.map(p => (
                                         <button key={p.id} type="button" role="radio" aria-checked={presetId === p.id}
@@ -2082,7 +2111,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                 </button>
                                 {advancedOpen && ROOM_SETTINGS.map(s => (
                                     <StepSlider key={s.id} id={`mv-${s.id}`} label={s.label} options={s.options}
-                                        value={lobbyData[s.id] ?? s.fallback}
+                                        value={planned[s.id] ?? s.fallback}
                                         onChange={(v) => updateLobbyConfig({ [s.id]: v })}
                                         valueText={s.text} tickText={s.tick} />
                                 ))}
@@ -2118,12 +2147,13 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                     <h2 className={styles.mvCardTitle}>Runden-Modus</h2>
                                     {rule && <span className={`${styles.mvChip} ${styles.mvChipOk}`}>{ruleEmoji(rule)} aktiv</span>}
                                 </div>
-                                <p className={styles.mvFine}>{rule ? `${ruleLabel(rule)}: ${ruleHint(rule)}.` : 'Freie Runde – alle Songs erlaubt.'} Gilt für neu eingereichte Songs.</p>
+                                <p className={styles.mvFine}>{rule ? `Jetzt: ${ruleLabel(rule)} – ${ruleHint(rule)}.` : 'Jetzt: freie Runde – alle Songs erlaubt.'} Ein neuer Modus gilt sofort, solange noch keine Songs eingereicht sind – sonst ab der nächsten Runde.</p>
+                                {'roundRule' in pending && pendingNotice}
                                 <div className={styles.mvSegments} role="tablist" aria-label="Modus">
                                     {[[null, 'Frei'], ['artist', 'Künstler'], ['decade', 'Jahrzehnt'], ['keyword', 'Stichwort']].map(([id, label]) => (
                                         <button key={label} type="button" role="tab" aria-selected={currentRuleTab === id}
                                             className={`${styles.mvBtn} ${styles.mvSegment} ${currentRuleTab === id ? styles.mvSegmentOn : ''}`}
-                                            onClick={() => { setRuleTab(id); if (id === null && rule) setRoundRule(null) }}>{label}</button>
+                                            onClick={() => { setRuleTab(id); if (id === null && (rule || plannedRule)) setRoundRule(null) }}>{label}</button>
                                     ))}
                                 </div>
                                 {currentRuleTab === 'artist' && (
@@ -2132,17 +2162,17 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                         <div className={styles.mvInputWrap}>
                                             <span className={styles.mvInputIcon}><IconSearch /></span>
                                             <input id="mv-artist" type="search" className={styles.mvInput} value={artistQuery} onChange={(e) => setArtistQuery(e.target.value)}
-                                                placeholder={rule?.type === 'artist' ? rule.artistName : 'z. B. Helene Fischer'} autoComplete="off" />
+                                                placeholder={plannedRule?.type === 'artist' ? plannedRule.artistName : 'z. B. Helene Fischer'} autoComplete="off" />
                                         </div>
                                         {artistResults.length > 0 && (
                                             <ul className={styles.mvList}>
                                                 {artistResults.map(a => (
                                                     <li key={a.id}>
-                                                        <button type="button" className={`${styles.mvBtn} ${styles.mvRow} ${styles.mvRowFlat} ${rule?.artistId === a.id ? styles.mvRowOn : ''}`}
+                                                        <button type="button" className={`${styles.mvBtn} ${styles.mvRow} ${styles.mvRowFlat} ${plannedRule?.artistId === a.id ? styles.mvRowOn : ''}`}
                                                             onClick={() => setRoundRule({ type: 'artist', artistId: a.id, artistName: a.name })}>
                                                             <CoverArt src={a.imageUrl} seed={a.id} size={40} radius={20} />
                                                             <span className={styles.mvRowText}><span className={styles.mvRowName}>{a.name}</span></span>
-                                                            {rule?.artistId === a.id && <IconCheck size={16} />}
+                                                            {plannedRule?.artistId === a.id && <IconCheck size={16} />}
                                                         </button>
                                                     </li>
                                                 ))}
@@ -2153,15 +2183,15 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                 {currentRuleTab === 'decade' && (
                                     <div className={styles.mvDecades}>
                                         {DECADES.map(d => (
-                                            <button key={d} type="button" className={`${styles.mvBtn} ${styles.mvDecade} ${rule?.type === 'decade' && rule.from === d ? styles.mvDecadeOn : ''}`}
-                                                onClick={() => setRoundRule({ type: 'decade', from: d })} aria-pressed={rule?.type === 'decade' && rule.from === d}>{decadeLabel(d)}</button>
+                                            <button key={d} type="button" className={`${styles.mvBtn} ${styles.mvDecade} ${plannedRule?.type === 'decade' && plannedRule.from === d ? styles.mvDecadeOn : ''}`}
+                                                onClick={() => setRoundRule({ type: 'decade', from: d })} aria-pressed={plannedRule?.type === 'decade' && plannedRule.from === d}>{decadeLabel(d)}</button>
                                         ))}
                                     </div>
                                 )}
                                 {currentRuleTab === 'keyword' && (
                                     <form className={styles.mvNameRow} onSubmit={(e) => { e.preventDefault(); const w = keywordDraft.trim(); if (w.length >= 2) setRoundRule({ type: 'keyword', word: w.slice(0, 30) }) }}>
                                         <input type="text" className={`${styles.mvInput} ${styles.mvInputPlain}`} value={keywordDraft} onChange={(e) => setKeywordDraft(e.target.value)}
-                                            placeholder={rule?.type === 'keyword' ? rule.word : 'z. B. Love, Summer, Nacht'} aria-label="Stichwort im Songtitel" maxLength={30} />
+                                            placeholder={plannedRule?.type === 'keyword' ? plannedRule.word : 'z. B. Love, Summer, Nacht'} aria-label="Stichwort im Songtitel" maxLength={30} />
                                         <button type="submit" className={`${styles.mvBtn} ${styles.mvOutline} ${styles.mvOutlineSm}`} disabled={keywordDraft.trim().length < 2}>Übernehmen</button>
                                     </form>
                                 )}
@@ -2243,6 +2273,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                             {musicOn && <span className={styles.mvLive}>LIVE</span>}
                         </div>
                         {rule && <p className={styles.mvRuleBanner}><span aria-hidden="true">{ruleEmoji(rule)}</span>{ruleLabel(rule)} · {ruleHint(rule)}</p>}
+                        {pendingLabels(lobbyData).length > 0 && <p className={styles.mvNextRule}>Ab der nächsten Runde: {pendingLabels(lobbyData).join(' · ')}</p>}
                         {lastSong && (
                             <p className={`${styles.mvLastSong} ${poolItems.length === 0 ? styles.mvLastSongUrgent : ''}`} role="status">
                                 {poolItems.length === 0 ? '⏳ Letzter Song! Jetzt Songs für die nächste Runde einreichen.' : '🎶 Bald geht’s weiter – die nächste Runde wird gerade gewählt.'}
@@ -2258,7 +2289,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                             <p className={styles.mvTimes}>
                                 {waitingForSpotify
                                     ? (nowPlaying?.isPlaying ? 'Die Gewinner stehen fest und kommen gleich in die Warteschlange …' : 'Die Gewinner warten auf Spotify …')
-                                    : <>{remainingMusic != null && <span>Noch <strong>{mmss(remainingMusic)}</strong> Musik</span>}{nextVoting != null && (nextVoting > 0
+                                    : <>{nextVoting != null && (nextVoting > 0
                                         ? <span>Nächste Abstimmung in <strong>{mmss(nextVoting)}</strong></span>
                                         : <span>Nächste Abstimmung <strong>{poolItems.length ? 'gleich' : 'sobald Songs da sind'}</strong></span>)}</>}
                             </p>
@@ -2452,6 +2483,8 @@ const MusicVoter = ({ onBack, joinCode }) => {
                         </ul>
                     )}
                 </div>
+
+                <ReactionPad db={db} roomId={roomId} myName={myName} raised={phase !== 'abstimmung'} />
 
                 {phase !== 'abstimmung' && (
                     <div className={styles.mvFooter}>
