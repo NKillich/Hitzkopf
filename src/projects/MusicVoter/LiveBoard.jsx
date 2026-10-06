@@ -9,7 +9,7 @@ import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
 import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconCheck, IconTrophy, IconExpand, IconShrink } from '../../shared/ui/icons'
 import { joinLink } from './links'
-import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextVotingInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, isLastSong, STREAK_DEFAULT_MIN } from './amplifyLogic'
+import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextVotingInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, isLastSong, STREAK_DEFAULT_MIN, liveNowPlaying, upcomingQueue, queueOrder } from './amplifyLogic'
 import styles from './LiveBoard.module.css'
 
 const STEPS = [
@@ -267,10 +267,11 @@ export default function LiveBoard({ roomCode, onBack }) {
     const history = data.history || []
     const players = Object.keys(data.players || {}).length
     const batchSize = data.batchSize || 10
-    const now = data.nowPlaying
+    // Hochgerechnet, falls das Host-Gerät gerade im Hintergrund ist und keinen Songwechsel meldet
+    const now = liveNowPlaying(data, clock)
     const nowPos = nowPosition(now, clock)
     const nowItem = now ? playlist.find(i => i.spotifyId === now.trackId) : null
-    const queue = playlist.filter(i => i.queuedRound != null && i.spotifyId !== now?.trackId).sort(byScore)
+    const queue = upcomingQueue(data, clock)
     const maxAbs = Math.max(1, ...pool.map(i => { const c = voteCounts(i); return Math.max(c.up, c.down) }))
     const votingLeft = isVoting && data.phaseEndsAt ? Math.max(0, data.phaseEndsAt - clock) : 0
     const voters = new Set(pool.flatMap(i => Object.entries(i.votes || {}).filter(([, v]) => v !== 0).map(([n]) => n))).size
@@ -290,8 +291,12 @@ export default function LiveBoard({ roomCode, onBack }) {
     } else if (phase === 'laeuft' && remaining != null) {
         const queuedRounds = playlist.filter(i => i.queuedRound != null).map(i => i.queuedRound)
         const round = queuedRounds.length ? Math.min(...queuedRounds) : null
+        const order = queueOrder(data)
+        const nowIdx = now ? order.findIndex(i => i.spotifyId === now.trackId) : -1
+        // schon gelaufen, aber vom Host noch nicht in den Verlauf verschoben
+        const passed = order.slice(0, Math.max(0, nowIdx)).filter(i => i.queuedRound === round).reduce((s, i) => s + (i.duration || FALLBACK_DURATION), 0)
         const played = history.filter(h => h.round === round).reduce((s, h) => s + (h.durationMs || FALLBACK_DURATION), 0)
-            + (nowItem ? nowPos : 0)
+            + passed + (nowItem ? nowPos : 0)
         progress = played + remaining > 0 ? Math.min(1, played / (played + remaining)) : null
     }
 
@@ -311,7 +316,7 @@ export default function LiveBoard({ roomCode, onBack }) {
     } else if (phase === 'laeuft') {
         const lines = [remaining != null ? ['Noch Musik', mmss(remaining)] : null, nextVoting != null ? ['Nächste Abstimmung', nextVoting > 0 ? `in ${mmss(nextVoting)}` : (pool.length ? 'gleich' : 'sobald Songs da sind')] : null].filter(Boolean)
         if (waiting) banner = { title: 'Gleich geht’s los', sub: 'Die Gewinner warten auf Spotify …' }
-        else if (isLastSong(data)) banner = pool.length
+        else if (isLastSong(data, clock)) banner = pool.length
             ? { title: 'Bald geht’s weiter', sub: 'Letzter Song – die nächste Runde wird gerade gewählt', lines }
             : { title: 'Letzter Song!', sub: 'Jetzt Songs für die nächste Runde einreichen – sonst wird’s still', lines, urgent: true }
         else banner = {

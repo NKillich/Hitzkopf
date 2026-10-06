@@ -22,7 +22,7 @@ import {
     UNLIMITED, DEFAULT_UP, DEFAULT_DOWN, PRESETS, DEFAULT_PRESET, activePresetId, voteCounts, byScore,
     cleanName, nameKey, sameSong, similarSong, seededOrder, queueRemainingMs, nextVotingInMs, mmss, nowPosition,
     DECADES, decadeLabel, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
-    limitsFor, streakOf, isLastSong, STREAK_REWARDS, STREAK_DEFAULT_MIN
+    limitsFor, streakOf, isLastSong, STREAK_REWARDS, STREAK_DEFAULT_MIN, liveNowPlaying, upcomingQueue, queueOrder
 } from './amplifyLogic'
 import styles from './MusicVoter.module.css'
 
@@ -1005,7 +1005,8 @@ const MusicVoter = ({ onBack, joinCode }) => {
         const id = setInterval(() => setClock(Date.now()), 1000)
         return () => clearInterval(id)
     }, [currentScreen])
-    const nowPlaying = lobbyData?.nowPlaying
+    const rawNowPlaying = lobbyData?.nowPlaying            // so, wie der Host es zuletzt gemeldet hat
+    const nowPlaying = liveNowPlaying(lobbyData, clock)    // für die Anzeige hochgerechnet, falls der Host im Hintergrund ist
     const nowPlayingPositionMs = nowPosition(nowPlaying, clock)
     const phaseRemainingMs = lobbyData?.lobbyPhase === 'abstimmung' && lobbyData.phaseEndsAt ? Math.max(0, lobbyData.phaseEndsAt - clock) : 0
 
@@ -1027,40 +1028,55 @@ const MusicVoter = ({ onBack, joinCode }) => {
         if (Date.now() - res.at < 120000) setReveal(res)
     }, [lobbyData?.lastResult, roomId])
 
-    // Gespielten Song aus der Playlist in den Verlauf verschieben (Transaktion; schon verschoben → nichts passiert)
-    const moveToHistory = useCallback(async (trackId, durationMs) => {
-        if (!db || !roomId || !trackId) return
+    // Gespielte Songs aus der Playlist in den Verlauf verschieben (Transaktion; schon verschoben → nichts passiert).
+    // before: der neue Song – alles, was in der Warteschlange davor steht, ist inzwischen gelaufen
+    // (mehrfach übersprungen oder gelaufen, während das Host-Gerät im Hintergrund war).
+    const moveToHistory = useCallback(async (trackIds, { durations = {}, before = null } = {}) => {
+        if (!db || !roomId) return
         try {
             await mutateLobby(roomId, (data) => {
                 const current = data.playlist || []
-                const played = current.find(i => i.spotifyId === trackId)
-                if (!played) return null
-                const { up, down } = voteCounts(played)
-                const entry = {
-                    spotifyId: played.spotifyId,
-                    title: played.title || '',
-                    artist: played.artist || '',
-                    imageUrl: played.imageUrl || null,
-                    addedBy: played.addedBy || '',
-                    up, down, score: up - down,
-                    round: played.queuedRound ?? null,
-                    durationMs: durationMs || played.duration || null,
-                    playedAt: Date.now()
+                const done = new Set(trackIds.filter(Boolean))
+                if (before) {
+                    const order = queueOrder(data)
+                    order.slice(0, Math.max(0, order.findIndex(i => i.spotifyId === before))).forEach(i => done.add(i.spotifyId))
+                    done.delete(before)
                 }
-                return { update: { playlist: current.filter(i => i.spotifyId !== trackId), history: [...(data.history || []), entry] } }
+                const played = current.filter(i => done.has(i.spotifyId))
+                if (!played.length) return null
+                const now = Date.now()
+                const entries = played.map(p => {
+                    const { up, down } = voteCounts(p)
+                    return {
+                        spotifyId: p.spotifyId,
+                        title: p.title || '',
+                        artist: p.artist || '',
+                        imageUrl: p.imageUrl || null,
+                        addedBy: p.addedBy || '',
+                        up, down, score: up - down,
+                        round: p.queuedRound ?? null,
+                        durationMs: durations[p.spotifyId] || p.duration || null,
+                        playedAt: now
+                    }
+                })
+                return { update: { playlist: current.filter(i => !done.has(i.spotifyId)), history: [...(data.history || []), ...entries] } }
             })
         } catch { /* nächster Durchlauf versucht es erneut */ }
     }, [db, roomId, mutateLobby])
 
     // Host: Playback-Status nach Firestore schreiben – nur bei Änderungen (Songwechsel, Pause, Sprung),
     // den Fortschritt rechnen alle Geräte selbst hoch. Abgespielte Songs wandern in den Verlauf.
+    // Im Hintergrund drosselt der Browser den Takt – beim Zurückholen der App wird sofort nachgefragt.
     useEffect(() => {
         if (!isHost || !spotifyConnected || !db || !roomId) return
         const lobbyRef = doc(db, 'musicVoterLobbies', roomId)
         let lastWrite = null                         // { trackId, isPlaying, pos, at }
         let lastBeat = Date.now()
         const progress = { trackId: null, maxPos: 0, duration: 0, moved: false }
-        const interval = setInterval(async () => {
+        let busy = false
+        const poll = async () => {
+            if (busy) return
+            busy = true
             try {
                 const state = await spotifyService.getPlaybackState()
                 const now = Date.now()
@@ -1092,14 +1108,15 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
                 // Songwechsel: vorherigen Song in den Verlauf
                 if (trackId && lastPlayedTrackIdRef.current && lastPlayedTrackIdRef.current !== trackId) {
-                    await moveToHistory(lastPlayedTrackIdRef.current, lastDurationRef.current)
+                    const prev = lastPlayedTrackIdRef.current
+                    await moveToHistory([prev], { durations: { [prev]: lastDurationRef.current }, before: trackId })
                 }
                 // Letzter Song der Warteschlange: Spotify stoppt, es kommt kein Wechsel mehr → Ende erkennen
                 if (trackId !== progress.trackId) Object.assign(progress, { trackId, maxPos: 0, duration: state?.durationMs || 0, moved: false })
                 progress.maxPos = Math.max(progress.maxPos, state?.positionMs || 0)
                 if (trackId && !isPlaying && !progress.moved && progress.duration && progress.maxPos >= progress.duration * 0.9) {
                     progress.moved = true
-                    await moveToHistory(trackId, progress.duration)
+                    await moveToHistory([trackId], { durations: { [trackId]: progress.duration } })
                 }
                 if (trackId) {
                     lastPlayedTrackIdRef.current = trackId
@@ -1107,9 +1124,14 @@ const MusicVoter = ({ onBack, joinCode }) => {
                 }
             } catch {
                 // z.B. kein Token oder Player inaktiv – ignorieren
+            } finally {
+                busy = false
             }
-        }, 2000)
-        return () => clearInterval(interval)
+        }
+        const interval = setInterval(poll, 2000)
+        const onVisible = () => { if (document.visibilityState === 'visible') poll() }
+        document.addEventListener('visibilitychange', onVisible)
+        return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
     }, [isHost, spotifyConnected, db, roomId, moveToHistory])
 
     // Spotify: Web Playback Player ("Amplify Host") initialisieren, wenn Host verbunden
@@ -1181,7 +1203,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
     }
 
     // Abspielen = die Warteschlange (Gewinner), nicht der ungeprüfte Pool
-    const queueSongs = sortedPlaylist.filter((item) => item.queuedRound != null && item.source === 'spotify' && item.spotifyId && item.type === 'song')
+    const queueSongs = queueOrder(lobbyData).filter((item) => item.source === 'spotify' && item.spotifyId && item.type === 'song')
 
     const sendQueueToSpotify = async (deviceOverride) => {
         if (queueSongs.length === 0) {
@@ -1238,21 +1260,36 @@ const MusicVoter = ({ onBack, joinCode }) => {
         volumeTimerRef.current = setTimeout(() => { spotifyService.setVolume(v).catch(() => { /* egal */ }) }, 250)
     }
 
-    // Host: Gewinner einer Runde an Spotify schicken, sobald keine Amplify-Musik mehr läuft (kein Abbruch mitten im Song).
-    // Läuft etwas, das nicht aus der Playlist stammt (z. B. Spotify-Autoplay nach der Warteschlange), wird trotzdem gestartet.
+    // Host: Gewinner einer Runde an Spotify schicken, ohne einen Amplify-Song mittendrin abzubrechen:
+    // - Läuft der letzte schon gesendete Song, werden die Gewinner hinten angehängt. Danach spielt Spotify sie von selbst,
+    //   auch wenn das Host-Gerät inzwischen im Hintergrund ist.
+    // - Läuft keine Amplify-Musik (mehr), startet die neue Runde direkt. Fremde Musik (z. B. Spotify-Autoplay) wird abgelöst.
+    // - Davor nichts tun – angehängte Songs kämen bei Spotify sonst vor dem Rest der laufenden Warteschlange.
     const batchSendingRef = useRef(false)
-    const playingOurs = !!nowPlaying?.isPlaying && playlist.some(i => i.spotifyId === nowPlaying.trackId)
+    const appendedRef = useRef({ round: null, count: 0 })   // bei Fehlern nicht doppelt anhängen
+    const playingOurs = !!rawNowPlaying?.isPlaying && playlist.some(i => i.spotifyId === rawNowPlaying.trackId)
+    const pendingIds = lobbyData?.pendingBatch?.spotifyIds || []
+    const sentOrder = queueOrder(lobbyData).filter(i => !pendingIds.includes(i.spotifyId))
+    const onLastSent = playingOurs && sentOrder.length > 0 && sentOrder[sentOrder.length - 1].spotifyId === rawNowPlaying.trackId
     useEffect(() => {
         const applyPendingBatch = async () => {
             if (!isHost || !spotifyConnected || !db || !roomId || batchSendingRef.current) return
             const pending = lobbyData?.pendingBatch
             if (!pending || !Array.isArray(pending.spotifyIds) || pending.spotifyIds.length === 0) return
-            if (playingOurs) return
+            if (playingOurs && !onLastSent) return
 
             batchSendingRef.current = true
             try {
                 const device = await pickDevice()
-                await spotifyService.playOnDevice(pending.spotifyIds.map((id) => `spotify:track:${id}`), device)
+                if (onLastSent) {
+                    const start = appendedRef.current.round === pending.round ? appendedRef.current.count : 0
+                    for (let k = start; k < pending.spotifyIds.length; k++) {
+                        await spotifyService.addToQueue(`spotify:track:${pending.spotifyIds[k]}`, device)
+                        appendedRef.current = { round: pending.round, count: k + 1 }
+                    }
+                } else {
+                    await spotifyService.playOnDevice(pending.spotifyIds.map((id) => `spotify:track:${id}`), device)
+                }
                 setSpotifyError(null)
                 setDeviceProblem(null)
                 await mutateLobby(roomId, (data) => (data.pendingBatch?.round === pending.round ? { update: { pendingBatch: null } } : null))
@@ -1268,18 +1305,25 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
         applyPendingBatch()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHost, spotifyConnected, playingOurs, lobbyData?.pendingBatch, selectedSpotifyDeviceId, batchRetry, db, roomId])
+    }, [isHost, spotifyConnected, playingOurs, onLastSent, lobbyData?.pendingBatch, selectedSpotifyDeviceId, batchRetry, db, roomId])
 
-    // Host: Wenn nur noch wenig Musik übrig ist → nächste Abstimmung starten (oder bei wenigen Songs direkt einreihen)
+    // Wenn nur noch wenig Musik übrig ist → nächste Abstimmung starten (oder bei wenigen Songs direkt einreihen).
+    // Der Host macht das sofort; die anderen Geräte springen nach 15 s ein, falls das Host-Gerät im Hintergrund ist.
+    // Die Transaktion prüft die Runde – starten zwei Geräte gleichzeitig, passiert nichts doppelt.
     const autoRoundRef = useRef(null)
     const emptyNoticeRef = useRef(null)
+    const dueSinceRef = useRef(null)
     useEffect(() => {
-        if (!isHost || !db || !roomId || lobbyData?.lobbyPhase !== 'laeuft') return
+        if (!db || !roomId || lobbyData?.lobbyPhase !== 'laeuft') return
         const id = setInterval(async () => {
             const data = latestLobbyRef.current
             if (!data || data.lobbyPhase !== 'laeuft') return
             const wait = nextVotingInMs(data, Date.now())
-            if (wait == null || wait > 0) return
+            if (wait == null || wait > 0) { dueSinceRef.current = null; return }
+            if (!isHost) {
+                dueSinceRef.current ??= Date.now()
+                if (Date.now() - dueSinceRef.current < 15000) return
+            }
             const round = data.votingRound || 0
             if (autoRoundRef.current === round) return
             autoRoundRef.current = round
@@ -1295,12 +1339,13 @@ const MusicVoter = ({ onBack, joinCode }) => {
                 })
                 if (res?.empty) {
                     autoRoundRef.current = null   // weiter prüfen – sobald Songs da sind, geht's los
-                    if (emptyNoticeRef.current !== round) {
+                    if (!isHost) dueSinceRef.current = Date.now()   // Gäste prüfen dann seltener
+                    else if (emptyNoticeRef.current !== round) {
                         emptyNoticeRef.current = round
                         showToast('Die Warteschlange endet bald – es fehlen neue Songs für die nächste Runde.')
                     }
                 }
-                if (res?.skipped) showToast(`${res.skipped} ${res.skipped === 1 ? 'Song kommt' : 'Songs kommen'} ohne Abstimmung in die Warteschlange – es gab nicht mehr Songs als Plätze.`)
+                if (res?.skipped && isHost) showToast(`${res.skipped} ${res.skipped === 1 ? 'Song kommt' : 'Songs kommen'} ohne Abstimmung in die Warteschlange – es gab nicht mehr Songs als Plätze.`)
             } catch (e) {
                 autoRoundRef.current = null
                 console.error('Nächste Runde starten fehlgeschlagen:', e)
@@ -1444,7 +1489,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
     ])
     const voterNames = new Set(poolItems.flatMap(i => Object.entries(i.votes || {}).filter(([, v]) => v !== 0).map(([n]) => n)))
     const voterCount = voterNames.size
-    const queueItems = sortedPlaylist.filter(i => i.queuedRound != null && i.spotifyId !== nowPlaying?.trackId)
+    const queueItems = lobbyData ? upcomingQueue(lobbyData, clock) : []
     const remainingMusic = lobbyData ? queueRemainingMs(lobbyData, clock) : null
     const nextVoting = lobbyData ? nextVotingInMs(lobbyData, clock) : null
 
@@ -2309,7 +2354,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
             : [...poolItems].sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0))
         const progressPct = nowPlaying?.durationMs ? Math.min(100, (nowPlayingPositionMs / nowPlaying.durationMs) * 100) : 0
         const waitingForSpotify = !!lobbyData.pendingBatch
-        const lastSong = phase === 'laeuft' && isLastSong(lobbyData)
+        const lastSong = phase === 'laeuft' && isLastSong(lobbyData, clock)
         const fewSongs = poolItems.length > 0 && poolItems.length <= batchSize
 
         return shell(

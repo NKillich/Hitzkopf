@@ -56,25 +56,62 @@ export const nowPosition = (np, now) => (np
     ? (np.isPlaying ? Math.min((np.positionMs || 0) + (now - (np.updatedAt || now)), np.durationMs || 0) : (np.positionMs || 0))
     : 0)
 
+/** Reihenfolge der Warteschlange (so, wie sie an Spotify ging): Runde für Runde, innerhalb der Runde der feste Platz */
+const byQueue = (a, b) => ((a.queuedRound || 0) - (b.queuedRound || 0))
+    || ((a.queuePos ?? Infinity) - (b.queuePos ?? Infinity))
+    || byScore(a, b)
+export const queueOrder = (data) => (data?.playlist || []).filter(i => i.queuedRound != null).sort(byQueue)
+
+/**
+ * Was läuft gerade? Den Stand meldet nur das Host-Gerät – ist es im Hintergrund, kommt kein Songwechsel an.
+ * Ist der gemeldete Song rechnerisch zu Ende, wird entlang der Warteschlange weitergerechnet (nur Anzeige,
+ * die nächste echte Meldung des Hosts gilt sofort wieder). Songs, die noch nicht an Spotify gingen, zählen nicht.
+ */
+export const liveNowPlaying = (data, now) => {
+    const np = data?.nowPlaying || null
+    if (!np?.isPlaying || !np.durationMs) return np
+    let over = (np.positionMs || 0) + (now - (np.updatedAt || now)) - np.durationMs
+    if (over < 0) return np
+    const pending = new Set(data.pendingBatch?.spotifyIds || [])
+    const order = queueOrder(data).filter(i => !pending.has(i.spotifyId))
+    const idx = order.findIndex(i => i.spotifyId === np.trackId)
+    if (idx < 0) return np
+    const rest = order.slice(idx + 1)
+    if (!rest.length) return np
+    const predicted = (it, pos, dur) => ({ trackId: it.spotifyId, trackName: it.title || '', artist: it.artist || '', imageUrl: it.imageUrl || null, positionMs: pos, durationMs: dur, isPlaying: true, updatedAt: now, predicted: true })
+    for (const it of rest) {
+        const dur = it.duration || FALLBACK_DURATION
+        if (over < dur) return predicted(it, over, dur)
+        over -= dur
+    }
+    const last = rest[rest.length - 1]   // Warteschlange rechnerisch zu Ende: letzter Song steht am Ende
+    return predicted(last, last.duration || FALLBACK_DURATION, last.duration || FALLBACK_DURATION)
+}
+
+/** Songs der Warteschlange nach dem laufenden (davor = schon gelaufen, auch wenn der Host es noch nicht gemeldet hat) */
+export const upcomingQueue = (data, now) => {
+    const order = queueOrder(data)
+    const np = liveNowPlaying(data, now)
+    const idx = np ? order.findIndex(i => i.spotifyId === np.trackId) : -1
+    return order.slice(idx + 1)
+}
+
 /** Restliche Musik der Warteschlange: Rest des laufenden Songs + Länge der noch wartenden Songs (null = keine Warteschlange) */
 export const queueRemainingMs = (data, now) => {
-    const queued = (data?.playlist || []).filter(i => i.queuedRound != null)
-    if (!queued.length) return null
-    const np = data.nowPlaying
-    const current = np ? queued.find(i => i.spotifyId === np.trackId) : null
-    let ms = current ? Math.max(0, (np.durationMs || current.duration || FALLBACK_DURATION) - nowPosition(np, now)) : 0
-    for (const q of queued) if (q !== current) ms += q.duration || FALLBACK_DURATION
+    const order = queueOrder(data)
+    if (!order.length) return null
+    const np = liveNowPlaying(data, now)
+    const idx = np ? order.findIndex(i => i.spotifyId === np.trackId) : -1
+    let ms = idx >= 0 ? Math.max(0, (np.durationMs || order[idx].duration || FALLBACK_DURATION) - nowPosition(np, now)) : 0
+    for (const q of order.slice(idx + 1)) ms += q.duration || FALLBACK_DURATION
     return ms
 }
 
-/** Reihenfolge der Warteschlange (so, wie sie an Spotify ging) */
-export const queueOrder = (data) => (data?.playlist || []).filter(i => i.queuedRound != null).sort(byScore)
-
 /** Läuft gerade der letzte Song der Warteschlange? */
-export const isLastSong = (data) => {
-    const np = data?.nowPlaying
-    const queued = queueOrder(data)
-    return !!np && queued.length > 0 && queued.every(i => i.spotifyId === np.trackId)
+export const isLastSong = (data, now = Date.now()) => {
+    const np = liveNowPlaying(data, now)
+    const order = queueOrder(data)
+    return !!np && order.length > 0 && order[order.length - 1].spotifyId === np.trackId
 }
 
 /**
@@ -87,7 +124,8 @@ export const nextVotingInMs = (data, now) => {
     if (rem == null) return null
     const queued = queueOrder(data)
     const last = queued[queued.length - 1]
-    const lastDur = last ? (last.spotifyId === data.nowPlaying?.trackId && data.nowPlaying?.durationMs) || last.duration || FALLBACK_DURATION : 0
+    const np = liveNowPlaying(data, now)
+    const lastDur = last ? (last.spotifyId === np?.trackId && np?.durationMs) || last.duration || FALLBACK_DURATION : 0
     return Math.max(0, rem - Math.max((data.preQueueVotingMinutes || 1) * 60000, lastDur))
 }
 
@@ -179,7 +217,14 @@ export const finishRound = (data, now, { voted }) => {
     const round = voted ? (data.votingRound || 0) : (data.votingRound || 0) + 1
     const current = data.playlist || []
     const pool = current.filter(i => i.queuedRound == null)
-    const playable = pool.filter(i => i.source === 'spotify' && i.spotifyId && i.type === 'song').sort(byScore)
+    // Meiste Stimmen (Saldo) zuerst; bei Gleichstand entscheidet der Zufall – auch darüber, wer an der Grenze reinkommt.
+    // Einmal hier gewürfelt und als queuePos gespeichert, damit alle Geräte und Spotify dieselbe Reihenfolge haben.
+    const shuffled = pool.filter(i => i.source === 'spotify' && i.spotifyId && i.type === 'song')
+    for (let k = shuffled.length - 1; k > 0; k--) {
+        const j = Math.floor(Math.random() * (k + 1));
+        [shuffled[k], shuffled[j]] = [shuffled[j], shuffled[k]]
+    }
+    const playable = shuffled.sort((a, b) => scoreOf(b) - scoreOf(a))   // stabil: Zufall bleibt innerhalb gleicher Stimmen
     const selected = voted ? playable.slice(0, batchSize) : playable
     const selectedIds = selected.map(i => i.spotifyId)
     const notChosen = pool.filter(i => !selectedIds.includes(i.spotifyId))
@@ -193,7 +238,7 @@ export const finishRound = (data, now, { voted }) => {
     const pendingIds = data.pendingBatch?.spotifyIds || []
     const batchIds = [...pendingIds, ...selectedIds.filter(id => !pendingIds.includes(id))]
     const update = {
-        playlist: current.filter(i => !notChosen.includes(i)).map(i => (selectedIds.includes(i.spotifyId) ? { ...i, queuedRound: round } : i)),
+        playlist: current.filter(i => !notChosen.includes(i)).map(i => (selectedIds.includes(i.spotifyId) ? { ...i, queuedRound: round, queuePos: selectedIds.indexOf(i.spotifyId) } : i)),
         leftovers,
         // Ohne Gewinner gibt es nichts abzuspielen → zurück ins Sammeln
         lobbyPhase: selectedIds.length || data.nowPlaying?.isPlaying ? 'laeuft' : 'songwahl',
