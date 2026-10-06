@@ -7,9 +7,9 @@ import CoverArt from '../../shared/ui/CoverArt'
 import QrCode from '../../shared/ui/QrCode'
 import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
-import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconCheck, IconTrophy, IconExpand, IconShrink } from '../../shared/ui/icons'
+import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconCheck, IconTrophy, IconExpand, IconShrink, IconDice } from '../../shared/ui/icons'
 import { joinLink } from './links'
-import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextVotingInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, isLastSong, STREAK_DEFAULT_MIN, liveNowPlaying, upcomingQueue, queueOrder } from './amplifyLogic'
+import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextVotingInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, isLastSong, placeOf, resultNotes, liveNowPlaying, upcomingQueue, queueOrder } from './amplifyLogic'
 import styles from './LiveBoard.module.css'
 
 const STEPS = [
@@ -62,7 +62,7 @@ function buildFacts(history, players, pool, data) {
     const facts = []
     if (data?.streakEnabled) {
         const [name, st] = Object.entries(data.streaks || {}).filter(([n]) => data.players?.[n]).sort((a, b) => (b[1].current || 0) - (a[1].current || 0))[0] || []
-        if (name && st.current >= (data.streakMin || STREAK_DEFAULT_MIN)) facts.push({ icon: <span aria-hidden="true">🔥</span>, label: 'Streak', value: name, sub: `${st.current} Treffer-Runden in Folge` })
+        if (name && st.current > 0) facts.push({ icon: <span aria-hidden="true">🔥</span>, label: 'Streak', value: name, sub: st.current === 1 ? 'Platz-1-Hit in der letzten Runde' : `${st.current}× Platz 1 in Folge` })
     }
     if (history.length) {
         const totalMs = history.reduce((s, h) => s + (h.durationMs || 0), 0)
@@ -417,6 +417,7 @@ export default function LiveBoard({ roomCode, onBack }) {
                                                 <span className={styles.lbTitle}>{item.title}</span>
                                                 <span className={styles.lbSub}>{item.artist} · von {item.addedBy}</span>
                                             </span>
+                                            {item.queueDrawn && <span className={styles.lbDrawn} title="Gleich viele Stimmen – Reihenfolge ausgelost"><IconDice size={14} />ausgelost</span>}
                                         </li>
                                     ))}
                                     {queue.length > queueRows && <li className={styles.lbMore}>+ {queue.length - queueRows} weitere</li>}
@@ -450,7 +451,7 @@ export default function LiveBoard({ roomCode, onBack }) {
                                     return (
                                         <li key={item.id} ref={isVoting ? setRowRef(item.id) : undefined}
                                             className={`${styles.lbRankItem} ${inTop ? styles.lbRankTop : ''} ${isVoting && i === batchSize ? styles.lbRankCut : ''}`}>
-                                            {isVoting && <span className={styles.lbPos}>{i + 1}</span>}
+                                            {isVoting && <span className={styles.lbPos}>{placeOf(ranked, i)}</span>}
                                             <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={52} radius={11} />
                                             <span className={styles.lbText}>
                                                 <span className={styles.lbTitle}>{item.title}</span>
@@ -510,16 +511,20 @@ export default function LiveBoard({ roomCode, onBack }) {
                         <span className={styles.lbRevealKicker}><IconTrophy size={26} />Runde {reveal.round} ist entschieden</span>
                         <h2 className={styles.lbRevealTitle}>Die Gewinner</h2>
                         <ol className={styles.lbPodium}>
-                            {reveal.top.map((t, i) => (
-                                <li key={t.spotifyId || i} className={`${styles.lbPodiumItem} ${styles[`lbPlace${i + 1}`]}`} style={{ animationDelay: `${0.5 + (reveal.top.length - 1 - i) * 1.1}s` }}>
-                                    <span className={styles.lbPodiumPlace}>{i + 1}</span>
-                                    <CoverArt src={t.imageUrl} seed={t.spotifyId || t.title} size={i === 0 ? 200 : 150} radius={20} />
+                            {reveal.top.map((t, i) => {
+                                const place = t.place ?? i + 1
+                                return (
+                                <li key={t.spotifyId || i} className={`${styles.lbPodiumItem} ${styles[`lbPlace${Math.min(place, 3)}`]}`} style={{ animationDelay: `${0.5 + (reveal.top.length - 1 - i) * 1.1}s` }}>
+                                    <span className={styles.lbPodiumPlace}>{place}</span>
+                                    <CoverArt src={t.imageUrl} seed={t.spotifyId || t.title} size={place === 1 ? (reveal.top.length > 4 ? 160 : 200) : 150} radius={20} />
                                     <span className={styles.lbPodiumTitle}>{t.title}</span>
                                     <span className={styles.lbPodiumBy}>von <strong>{t.addedBy}</strong></span>
                                     <span className={styles.lbPodiumScore}>{t.score > 0 ? '+' : ''}{t.score} <small>({t.up}× hoch{t.down ? ` · ${t.down}× runter` : ''})</small></span>
                                 </li>
-                            ))}
+                                )
+                            })}
                         </ol>
+                        {resultNotes(reveal).map(n => <p key={n} className={styles.lbRevealNote} style={{ animationDelay: `${0.8 + reveal.top.length * 1.1}s` }}><IconDice size={22} />{n}</p>)}
                     </div>
                 </div>
             )}

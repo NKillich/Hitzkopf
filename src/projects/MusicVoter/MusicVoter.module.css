@@ -399,4 +399,7 @@
 .mvRoot .mvSegments2 .mvSegment { gap: 6px; height: 40px; font-size: 14px; }
 .mvRoot .mvLastSong { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--sr-surface2); font-size: 14px; font-weight: 700; line-height: 1.35; }
 .mvRoot .mvLastSongUrgent { background: var(--sr-accent); color: var(--sr-on-accent); animation: mvPulse 1.4s ease-in-out infinite; }
+.mvRoot .mvStreakNext { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; opacity: 0.8; }
+.mvRoot .mvRevealNote { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--sr-muted); }
+.mvRoot .mvDrawn { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 12px; font-weight: 700; color: var(--sr-muted); }
 .mvRoot .mvStreakChip { margin: 0; align-self: flex-start; padding: 6px 12px; border-radius: 14px; background: color-mix(in srgb, #FF9F1C 22%, transparent); font-size: 13px; font-weight: 800; }
