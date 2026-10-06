@@ -24,6 +24,20 @@ export const voteCounts = (item) => {
     return { up: vals.filter(v => v === 1).length, down: vals.filter(v => v === -1).length }
 }
 export const byScore = (a, b) => (scoreOf(b) - scoreOf(a)) || ((a.addedAt || 0) - (b.addedAt || 0))
+/** Plätze wie im Sport: gleiche Stimmen = gleicher Platz, danach geht es mit der echten Position weiter (1, 1, 1, 4) */
+export const placeOf = (sorted, i) => 1 + sorted.findIndex(x => scoreOf(x) === scoreOf(sorted[i]))
+const ORDINAL = { 1: 'erste', 2: 'zweite', 3: 'dritte' }
+const signed = (n) => `${n > 0 ? '+' : ''}${n}`
+/** Hinweise zur Auswertung: geteilte Plätze (Reihenfolge ausgelost) und Los an der Grenze */
+export const resultNotes = (res) => {
+    const notes = []
+    const counts = {}
+    ;(res?.top || []).forEach(t => { if (t.place) counts[t.place] = (counts[t.place] || 0) + 1 })
+    Object.entries(counts).filter(([, c]) => c > 1).forEach(([p, c]) => notes.push(`${c} ${ORDINAL[p] || `${p}.`} Plätze – die Reihenfolge wurde ausgelost`))
+    const l = res?.lottery
+    if (l) notes.push(`${l.won} von ${l.tied} Songs mit ${signed(l.score)} ${l.won === 1 ? 'ist' : 'sind'} per Los weitergekommen`)
+    return notes
+}
 
 // Namen vergleichen ohne Groß-/Kleinschreibung ("DizzyCapybara" = "dizzycapybara")
 export const cleanName = (s) => String(s || '').replace(/\s+/g, ' ').trim()
@@ -129,20 +143,23 @@ export const nextVotingInMs = (data, now) => {
     return Math.max(0, rem - Math.max((data.preQueueVotingMinutes || 1) * 60000, lastDur))
 }
 
-// ── Streak: wer mehrere Runden in Folge gut ankommt, bekommt einen kleinen Bonus (nur Belohnung, keine Strafe) ──
-export const STREAK_DEFAULT_MIN = 2
-export const STREAK_REWARDS = [
-    { id: 'song', label: '+1 Song', songs: 1, up: 0 },
-    { id: 'vote', label: '+1 Daumen hoch', songs: 0, up: 1 },
-    { id: 'both', label: '+1 Song & +1 Daumen', songs: 1, up: 1 }
+// ── Streak: Runden in Folge mit einem eigenen Song auf Platz 1 (Gleichstand zählt) – nur Belohnung, keine Strafe ──
+// Stufe = Platz-1-Runden in Folge, ab Stufe 3 gibt es nicht mehr (sonst übernimmt eine Person die Party)
+export const STREAK_LEVELS = [
+    null,
+    { songs: 1, up: 0, label: '+1 Song' },
+    { songs: 1, up: 1, label: '+1 Song & +1 Daumen' },
+    { songs: 2, up: 1, label: '+2 Songs & +1 Daumen' }
 ]
+export const STREAK_MAX = STREAK_LEVELS.length - 1
 export const streakOf = (data, name) => data?.streaks?.[name]?.current || 0
-/** Bonus für eine Person (0, wenn Streak aus oder noch nicht erreicht) */
+export const streakLevel = (n) => STREAK_LEVELS[Math.min(n, STREAK_MAX)] || null
+/** Bonus für eine Person (0, wenn Streak aus oder noch kein Platz-1-Hit) */
 export const streakBonus = (data, name) => {
-    if (!data?.streakEnabled) return { songs: 0, up: 0, active: false }
-    if (streakOf(data, name) < (data.streakMin || STREAK_DEFAULT_MIN)) return { songs: 0, up: 0, active: false }
-    const r = STREAK_REWARDS.find(x => x.id === (data.streakReward || 'both')) || STREAK_REWARDS[2]
-    return { songs: r.songs, up: r.up, active: true }
+    const n = streakOf(data, name)
+    const lvl = data?.streakEnabled ? streakLevel(n) : null
+    if (!lvl) return { songs: 0, up: 0, active: false, streak: 0, label: null, next: null }
+    return { songs: lvl.songs, up: lvl.up, active: true, streak: n, label: lvl.label, next: n < STREAK_MAX ? STREAK_LEVELS[n + 1].label : null }
 }
 /** Eigenes Song-Limit und Daumen-Budget inkl. Streak-Bonus */
 export const limitsFor = (data, name, defaults) => {
@@ -227,6 +244,8 @@ export const finishRound = (data, now, { voted }) => {
     const playable = shuffled.sort((a, b) => scoreOf(b) - scoreOf(a))   // stabil: Zufall bleibt innerhalb gleicher Stimmen
     const selected = voted ? playable.slice(0, batchSize) : playable
     const selectedIds = selected.map(i => i.spotifyId)
+    // Reihenfolge ausgelost? (ein anderer Gewinner hat gleich viele Stimmen)
+    const drawn = new Set(selected.filter(i => selected.some(o => o !== i && scoreOf(o) === scoreOf(i))).map(i => i.spotifyId))
     const notChosen = pool.filter(i => !selectedIds.includes(i.spotifyId))
     const leftovers = {}
     notChosen.forEach(i => {
@@ -238,7 +257,7 @@ export const finishRound = (data, now, { voted }) => {
     const pendingIds = data.pendingBatch?.spotifyIds || []
     const batchIds = [...pendingIds, ...selectedIds.filter(id => !pendingIds.includes(id))]
     const update = {
-        playlist: current.filter(i => !notChosen.includes(i)).map(i => (selectedIds.includes(i.spotifyId) ? { ...i, queuedRound: round, queuePos: selectedIds.indexOf(i.spotifyId) } : i)),
+        playlist: current.filter(i => !notChosen.includes(i)).map(i => (selectedIds.includes(i.spotifyId) ? { ...i, queuedRound: round, queuePos: selectedIds.indexOf(i.spotifyId), queueDrawn: drawn.has(i.spotifyId) } : i)),
         leftovers,
         // Ohne Gewinner gibt es nichts abzuspielen → zurück ins Sammeln
         lobbyPhase: selectedIds.length || data.nowPlaying?.isPlaying ? 'laeuft' : 'songwahl',
@@ -250,20 +269,30 @@ export const finishRound = (data, now, { voted }) => {
         queueTotalDurationMs: null
     }
     if (voted) {
-        const net = {}
-        pool.forEach(i => { if (i.addedBy) net[i.addedBy] = (net[i.addedBy] || 0) + scoreOf(i) })
+        // Platz-1-Hit: ein eigener Song auf Platz 1 (auch geteilt) mit mehr Daumen hoch als runter.
+        // Wer Songs in der Runde hatte, aber keinen Hit, verliert die Streak; wer nichts eingereicht hat, behält sie.
+        const topScore = playable.length ? scoreOf(playable[0]) : 0
+        const hitters = new Set(topScore > 0 ? playable.filter(i => scoreOf(i) === topScore).map(i => i.addedBy).filter(Boolean) : [])
         const streaks = { ...(data.streaks || {}) }
-        Object.entries(net).forEach(([owner, n]) => {
+        new Set(pool.map(i => i.addedBy).filter(Boolean)).forEach(owner => {
             const prev = streaks[owner] || { current: 0, best: 0 }
-            const current = n > 0 ? (prev.current || 0) + 1 : 0
+            const current = hitters.has(owner) ? (prev.current || 0) + 1 : 0
             streaks[owner] = { current, best: Math.max(prev.best || 0, current) }
         })
         update.streaks = streaks
     }
     if (voted && selected.length) {
+        // Podest: alle Gewinner auf Platz 1–3 (bei Gleichstand auch mehr als drei)
+        const top = selected.map((i, k) => ({ i, place: placeOf(playable, k) })).filter(x => x.place <= 3)
+        // Gleichstand an der Grenze: nur ein Teil der gleichauf liegenden Songs kam per Los weiter
+        let lottery = null
+        if (playable.length > selected.length && scoreOf(playable[selected.length - 1]) === scoreOf(playable[selected.length])) {
+            const score = scoreOf(playable[selected.length])
+            lottery = { score, place: placeOf(playable, selected.length), tied: playable.filter(i => scoreOf(i) === score).length, won: selected.filter(i => scoreOf(i) === score).length }
+        }
         update.lastResult = {
-            round, at: now, total: playable.length,
-            top: selected.slice(0, 3).map(i => ({ ...voteCounts(i), score: scoreOf(i), title: i.title || '', artist: i.artist || '', imageUrl: i.imageUrl || null, addedBy: i.addedBy || '', spotifyId: i.spotifyId }))
+            round, at: now, total: playable.length, lottery,
+            top: top.map(({ i, place }) => ({ ...voteCounts(i), place, score: scoreOf(i), title: i.title || '', artist: i.artist || '', imageUrl: i.imageUrl || null, addedBy: i.addedBy || '', spotifyId: i.spotifyId }))
         }
     }
     return update

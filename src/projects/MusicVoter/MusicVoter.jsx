@@ -22,7 +22,7 @@ import {
     UNLIMITED, DEFAULT_UP, DEFAULT_DOWN, PRESETS, DEFAULT_PRESET, activePresetId, voteCounts, byScore,
     cleanName, nameKey, sameSong, similarSong, seededOrder, queueRemainingMs, nextVotingInMs, mmss, nowPosition,
     DECADES, decadeLabel, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
-    limitsFor, streakOf, isLastSong, STREAK_REWARDS, STREAK_DEFAULT_MIN, liveNowPlaying, upcomingQueue, queueOrder
+    limitsFor, streakOf, isLastSong, STREAK_LEVELS, resultNotes, liveNowPlaying, upcomingQueue, queueOrder
 } from './amplifyLogic'
 import styles from './MusicVoter.module.css'
 
@@ -330,8 +330,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
                 downvotesPerPerson: DEFAULT_DOWN,
                 roundRule: null,
                 streakEnabled: false,
-                streakMin: STREAK_DEFAULT_MIN,
-                streakReward: 'both',
                 streaks: {},
                 // Sammelphase ohne Timer – Host startet manuell
                 lobbyPhase: 'songwahl',
@@ -1592,7 +1590,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                 : phase === 'laeuft'
                     ? `Die Gewinner laufen gerade. Schlag schon bis zu ${maxSongs} Songs für die nächste Runde vor.`
                     : `Reich bis zu ${maxSongs} Songs ein. Der Host startet danach die Abstimmung.`,
-            extra: `Nicht gewählte Songs findest du nach der Abstimmung unter „Zweite Chance“. Tippe auf ein Cover für eine Hörprobe.${lobbyData?.streakEnabled ? ' Streak ist an: Kommen deine Songs mehrere Runden in Folge gut an, bekommst du einen Bonus.' : ''}`
+            extra: `Nicht gewählte Songs findest du nach der Abstimmung unter „Zweite Chance“. Tippe auf ein Cover für eine Hörprobe.${lobbyData?.streakEnabled ? ' Streak ist an: Landet ein Song von dir auf Platz 1, bekommst du für die nächste Runde einen Bonus – und mehr, je öfter es in Folge klappt.' : ''}`
         }
     })()
 
@@ -1706,10 +1704,10 @@ const MusicVoter = ({ onBack, joinCode }) => {
                             <h2 id="mv-reveal-title" className={styles.mvSheetTitle}>Die Gewinner</h2>
                             <ol className={styles.mvReveal}>
                                 {[...reveal.top].reverse().map((t, i, arr) => {
-                                    const place = arr.length - i
+                                    const place = t.place ?? arr.length - i
                                     const mine = t.addedBy === myName
                                     return (
-                                        <li key={t.spotifyId || place} className={`${styles.mvRevealItem} ${place === 1 ? styles.mvRevealFirst : ''} ${mine ? styles.mvRevealMine : ''}`}
+                                        <li key={t.spotifyId || i} className={`${styles.mvRevealItem} ${place === 1 ? styles.mvRevealFirst : ''} ${mine ? styles.mvRevealMine : ''}`}
                                             style={{ animationDelay: `${0.35 + i * 0.7}s` }}>
                                             <span className={styles.mvRevealPlace}>{place}</span>
                                             <CoverArt src={t.imageUrl} seed={t.spotifyId || t.title} size={place === 1 ? 64 : 48} radius={12} />
@@ -1722,6 +1720,10 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                     )
                                 })}
                             </ol>
+                            {resultNotes(reveal).map(n => <p key={n} className={styles.mvRevealNote}><IconDice size={16} />{n}</p>)}
+                            {lobbyData?.streakEnabled && reveal.top.some(t => t.place === 1 && t.addedBy === myName && t.score > 0) && (
+                                <p className={styles.mvStreakChip}>🔥 Platz-1-Hit! Dein Bonus für die nächste Runde: {myLimits.bonus.label}</p>
+                            )}
                             <p className={styles.mvFine}>{reveal.total > reveal.top.length ? `Insgesamt standen ${reveal.total} Songs zur Wahl. ` : ''}Die Gewinner laufen gleich.</p>
                             <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={closeReveal}>Weiter</button>
                         </>
@@ -2211,7 +2213,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                     <span className={styles.mvBoardIcon} aria-hidden="true">🔥</span>
                                     <span className={styles.mvRowText}>
                                         <span className={styles.mvRowName}>Streak</span>
-                                        <span className={styles.mvRowMeta}>{lobbyData.streakEnabled ? 'An – gute DJs werden belohnt' : 'Aus'}</span>
+                                        <span className={styles.mvRowMeta}>{lobbyData.streakEnabled ? 'An – Platz-1-Hits werden belohnt' : 'Aus'}</span>
                                     </span>
                                     <span className={`${styles.mvSwitch} ${lobbyData.streakEnabled ? styles.mvSwitchOn : ''}`} aria-hidden="true"><span /></span>
                                 </button>
@@ -2220,26 +2222,10 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                 </button>
                                 {streakInfoOpen && (
                                     <p className={styles.mvFine}>
-                                        Eine Runde zählt für dich als Treffer, wenn deine Songs darin zusammen mehr Daumen hoch als runter bekommen.
-                                        Schaffst du das mehrere Runden hintereinander, hast du eine Streak und bekommst einen kleinen Bonus.
-                                        Ein Flop beendet die Streak – sonst passiert nichts, es gibt keine Strafen. Runden ohne Abstimmung zählen nicht.
+                                        Landet ein Song von dir auf Platz 1 (auch geteilt), beginnt deine Streak – der Bonus gilt gleich in der nächsten Runde.
+                                        Je mehr Runden in Folge, desto größer: {STREAK_LEVELS.slice(1).map((l, i) => `${i + 1}× ${l.label}`).join(' · ')} (mehr gibt es nicht).
+                                        Hast du Songs in einer Runde, aber keinen auf Platz 1, endet die Streak. Reichst du nichts ein, pausiert sie nur. Runden ohne Abstimmung zählen nicht.
                                     </p>
-                                )}
-                                {lobbyData.streakEnabled && (
-                                    <>
-                                        <StepSlider id="mv-streakMin" label="Streak gilt ab" options={[2, 3, 4, 5]}
-                                            value={lobbyData.streakMin ?? STREAK_DEFAULT_MIN}
-                                            onChange={(v) => updateLobbyConfig({ streakMin: v })}
-                                            valueText={(v) => `${v} Treffer-Runden in Folge`} tickText={String} />
-                                        <span className={styles.mvLabel}>Belohnung</span>
-                                        <div className={styles.mvSegments} style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }} role="radiogroup" aria-label="Belohnung">
-                                            {STREAK_REWARDS.map(r => (
-                                                <button key={r.id} type="button" role="radio" aria-checked={(lobbyData.streakReward || 'both') === r.id}
-                                                    className={`${styles.mvBtn} ${styles.mvSegment} ${(lobbyData.streakReward || 'both') === r.id ? styles.mvSegmentOn : ''}`}
-                                                    onClick={() => updateLobbyConfig({ streakReward: r.id })}>{r.label}</button>
-                                            ))}
-                                        </div>
-                                    </>
                                 )}
                             </section>
                         )}
@@ -2405,7 +2391,10 @@ const MusicVoter = ({ onBack, joinCode }) => {
                             </p>
                         )}
                         {streakBonusActive && (
-                            <p className={styles.mvStreakChip}>🔥 Streak! Dein Bonus: {STREAK_REWARDS.find(r => r.id === (lobbyData.streakReward || 'both'))?.label}</p>
+                            <p className={styles.mvStreakChip}>
+                                🔥 {myLimits.bonus.streak}× Platz 1 in Folge – dein Bonus: {myLimits.bonus.label}
+                                {myLimits.bonus.next && <span className={styles.mvStreakNext}>Nächste Runde wieder Platz 1: {myLimits.bonus.next}</span>}
+                            </p>
                         )}
                         {phase === 'laeuft' && (
                             <p className={styles.mvTimes}>
@@ -2432,7 +2421,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                 {players.map(p => (
                                     <li key={p.name} className={styles.mvPerson}>
                                         <span className={styles.mvPersonEmoji} aria-hidden="true">{p.emoji}</span>
-                                        <span className={styles.mvPersonName}>{p.name}{p.name === myName ? ' (du)' : ''}{p.name === lobbyData.host ? ' · Host' : ''}{lobbyData.streakEnabled && streakOf(lobbyData, p.name) >= (lobbyData.streakMin || STREAK_DEFAULT_MIN) ? ` · 🔥 ${streakOf(lobbyData, p.name)}` : ''}</span>
+                                        <span className={styles.mvPersonName}>{p.name}{p.name === myName ? ' (du)' : ''}{p.name === lobbyData.host ? ' · Host' : ''}{lobbyData.streakEnabled && streakOf(lobbyData, p.name) > 0 ? ` · 🔥 ${streakOf(lobbyData, p.name)}` : ''}</span>
                                         {!showVoting && p.name !== lobbyData.host && p.name !== myName && !activeNames.has(p.name) && <span className={styles.mvNotVoted}>noch nicht aktiv</span>}
                                         {showVoting && (voterNames.has(p.name)
                                             ? <span className={styles.mvVoted}><IconCheck size={14} />abgestimmt</span>
@@ -2513,6 +2502,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                             <span className={styles.mvQueueTitle}>{item.title}</span>
                                             <span className={styles.mvQueueArtist}>{item.artist} · von {item.addedBy === myName ? 'dir' : item.addedBy}</span>
                                         </span>
+                                        {item.queueDrawn && <span className={styles.mvDrawn} title="Gleich viele Stimmen – Reihenfolge ausgelost"><IconDice size={14} />ausgelost</span>}
                                     </li>
                                 ))}
                             </ol>
