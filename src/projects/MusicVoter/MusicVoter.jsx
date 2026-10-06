@@ -148,9 +148,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
     // Album-Track-Ansicht im Suchmodal
     const [albumTracks, setAlbumTracks] = useState(null) // { album, tracks }
     const [isLoadingAlbum, setIsLoadingAlbum] = useState(false)
-    const [addTab, setAddTab] = useState('search')          // search | mine
-    const [myPlaylists, setMyPlaylists] = useState([])
-    const [myPlState, setMyPlState] = useState('idle')      // idle | loading | ok | error | limit
     const [streakInfoOpen, setStreakInfoOpen] = useState(false)
 
     // Spotify (Pflicht nur für den Host)
@@ -162,8 +159,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
     const [deviceProblem, setDeviceProblem] = useState(null)  // Banner im Raum, wenn die Gewinner nicht starten
     const [batchRetry, setBatchRetry] = useState(0)
     const [hostVolume, setHostVolume] = useState(null)
-    const [savingPlaylist, setSavingPlaylist] = useState(false)
-    const [savedPlaylistUrl, setSavedPlaylistUrl] = useState(null)
 
     // Oberfläche
     const { isDark, toggleTheme } = useTheme()
@@ -346,7 +341,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
             setIsHost(true)
             sessionStorage.setItem('mv_roomId', newRoomId)
             setStartNotice(null)
-            setSavedPlaylistUrl(null)
             setRoomView('main')
             setCurrentScreen('room')
             setShowWelcomePopup(true)
@@ -783,54 +777,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
         }
     }
 
-    // Eigene Spotify-Playlists (eigene und gemeinsame – fremde gibt Spotify seit 2026 nicht mehr heraus)
-    const loadMyPlaylists = async () => {
-        setMyPlState('loading')
-        try {
-            setMyPlaylists(await spotifyService.getMyPlaylists(50))
-            setMyPlState('ok')
-        } catch (e) {
-            console.error('Eigene Playlists laden fehlgeschlagen:', e)
-            // Spotify-App im Testmodus: weitere Konten werden abgewiesen ("user not registered")
-            setMyPlState(/403|forbidden|not registered|registered|developer/i.test(String(e?.message)) ? 'limit' : 'error')
-        }
-    }
-    useEffect(() => {
-        if (showAddModal && addTab === 'mine' && spotifyConnected && myPlState === 'idle') loadMyPlaylists()
-    }, [showAddModal, addTab, spotifyConnected, myPlState])
-
-    const handleOpenPlaylist = async (pl) => {
-        setIsLoadingAlbum(true)
-        try {
-            const tracks = await spotifyService.getPlaylistTracks(pl.id)
-            setAlbumTracks({
-                album: { title: pl.name, artist: pl.owner, imageUrl: pl.imageUrl, spotifyId: pl.id, kind: 'playlist' },
-                tracks: tracks.filter(t => t.id).map(t => ({
-                    id: `spotify_track_${t.id}`,
-                    spotifyId: t.id,
-                    title: t.name,
-                    artist: t.artist,
-                    artistIds: t.artistIds || [],
-                    album: t.album,
-                    releaseYear: t.releaseYear || null,
-                    type: 'song',
-                    source: 'spotify',
-                    imageUrl: t.albumImage,
-                    duration: t.durationMs,
-                    votes: {},
-                    addedAt: Date.now()
-                }))
-            })
-        } catch (e) {
-            console.error('Playlist laden fehlgeschlagen:', e)
-            showToast(/403/.test(String(e?.message))
-                ? 'Spotify gibt die Songs dieser Playlist nicht heraus – das geht nur bei eigenen und gemeinsamen Playlists.'
-                : 'Die Playlist konnte nicht geladen werden.', 'bad')
-        } finally {
-            setIsLoadingAlbum(false)
-        }
-    }
-
     // Spotify-Suche (mit Filter des Runden-Modus)
     const handleSpotifySearch = async () => {
         const q = searchQuery.trim()
@@ -885,6 +831,15 @@ const MusicVoter = ({ onBack, joinCode }) => {
         const ok = await addToPlaylist(item)
         setAddingId(null)
         if (ok) setAddedInModalIds(prev => new Set(prev).add(item.id).add(item.spotifyId))
+    }
+
+    // Eigenen, noch nicht gewählten Song in der Auswahl wieder abwählen
+    const handleUnpick = async (item, existing) => {
+        if (addingId) return
+        setAddingId(item.id)
+        await handleRemoveItem(existing.id)
+        setAddingId(null)
+        setAddedInModalIds(prev => { const next = new Set(prev); next.delete(item.id); next.delete(item.spotifyId); return next })
     }
 
     // Zweite Chance: nicht gewählte Songs der letzten Runde erneut einreichen
@@ -1203,6 +1158,26 @@ const MusicVoter = ({ onBack, joinCode }) => {
     // Abspielen = die Warteschlange (Gewinner), nicht der ungeprüfte Pool
     const queueSongs = queueOrder(lobbyData).filter((item) => item.source === 'spotify' && item.spotifyId && item.type === 'song')
 
+    // Songs kommen immer in die Spotify-Warteschlange ("Als Nächstes"), nie als Abspielliste: dort wird hinten
+    // angehängt, also können neue Gewinner jederzeit dazu – ohne den laufenden Song oder den Rest zu überholen.
+    // Läuft gerade nichts von uns, startet der erste Song direkt. Vorher Abgleich, damit nichts doppelt landet.
+    const playingOurs = !!rawNowPlaying?.isPlaying && playlist.some(i => i.spotifyId === rawNowPlaying.trackId)
+    const pushToSpotify = async (ids, device) => {
+        if (!ids.length) return
+        let inSpotify = []
+        try { inSpotify = await spotifyService.getQueueIds() } catch { /* ohne Abgleich weiter */ }
+        let rest = ids
+        if (!playingOurs) {
+            await spotifyService.playOnDevice([`spotify:track:${ids[0]}`], device)
+            rest = ids.slice(1)
+        }
+        for (const id of rest) {
+            if (!inSpotify.includes(id)) await spotifyService.addToQueue(`spotify:track:${id}`, device)
+        }
+    }
+    // Übergabe geschafft: zurück ins Einreichen – die Musik läuft, die nächste Abstimmung startet automatisch
+    const handedOver = (data) => ({ pendingBatch: null, ...(data.lobbyPhase === 'laeuft' ? { lobbyPhase: 'songwahl', phaseStartedAt: Date.now() } : {}) })
+
     const sendQueueToSpotify = async (deviceOverride) => {
         if (queueSongs.length === 0) {
             setSpotifyError('Die Warteschlange ist leer. Starte eine Abstimmung – die Gewinner landen hier.')
@@ -1211,9 +1186,9 @@ const MusicVoter = ({ onBack, joinCode }) => {
         setSpotifyError(null)
         try {
             const device = await pickDevice(deviceOverride)
-            await spotifyService.playOnDevice(queueSongs.map((i) => `spotify:track:${i.spotifyId}`), device)
+            await pushToSpotify(queueSongs.map(i => i.spotifyId), device)
             setDeviceProblem(null)
-            await mutateLobby(roomId, (data) => (data.pendingBatch ? { update: { pendingBatch: null } } : null))
+            await mutateLobby(roomId, (data) => (data.pendingBatch ? { update: handedOver(data) } : null))
         } catch (e) {
             const msg = friendlySpotifyError(e)
             setSpotifyError(msg)
@@ -1258,39 +1233,22 @@ const MusicVoter = ({ onBack, joinCode }) => {
         volumeTimerRef.current = setTimeout(() => { spotifyService.setVolume(v).catch(() => { /* egal */ }) }, 250)
     }
 
-    // Host: Gewinner einer Runde an Spotify schicken, ohne einen Amplify-Song mittendrin abzubrechen:
-    // - Läuft der letzte schon gesendete Song, werden die Gewinner hinten angehängt. Danach spielt Spotify sie von selbst,
-    //   auch wenn das Host-Gerät inzwischen im Hintergrund ist.
-    // - Läuft keine Amplify-Musik (mehr), startet die neue Runde direkt. Fremde Musik (z. B. Spotify-Autoplay) wird abgelöst.
-    // - Davor nichts tun – angehängte Songs kämen bei Spotify sonst vor dem Rest der laufenden Warteschlange.
+    // Host: Gewinner einer Runde sofort an Spotify übergeben (hinten an die Warteschlange). Danach spielt Spotify
+    // sie von selbst – auch wenn das Host-Gerät inzwischen im Hintergrund ist.
     const batchSendingRef = useRef(false)
-    const appendedRef = useRef({ round: null, count: 0 })   // bei Fehlern nicht doppelt anhängen
-    const playingOurs = !!rawNowPlaying?.isPlaying && playlist.some(i => i.spotifyId === rawNowPlaying.trackId)
-    const pendingIds = lobbyData?.pendingBatch?.spotifyIds || []
-    const sentOrder = queueOrder(lobbyData).filter(i => !pendingIds.includes(i.spotifyId))
-    const onLastSent = playingOurs && sentOrder.length > 0 && sentOrder[sentOrder.length - 1].spotifyId === rawNowPlaying.trackId
     useEffect(() => {
         const applyPendingBatch = async () => {
             if (!isHost || !spotifyConnected || !db || !roomId || batchSendingRef.current) return
             const pending = lobbyData?.pendingBatch
             if (!pending || !Array.isArray(pending.spotifyIds) || pending.spotifyIds.length === 0) return
-            if (playingOurs && !onLastSent) return
 
             batchSendingRef.current = true
             try {
                 const device = await pickDevice()
-                if (onLastSent) {
-                    const start = appendedRef.current.round === pending.round ? appendedRef.current.count : 0
-                    for (let k = start; k < pending.spotifyIds.length; k++) {
-                        await spotifyService.addToQueue(`spotify:track:${pending.spotifyIds[k]}`, device)
-                        appendedRef.current = { round: pending.round, count: k + 1 }
-                    }
-                } else {
-                    await spotifyService.playOnDevice(pending.spotifyIds.map((id) => `spotify:track:${id}`), device)
-                }
+                await pushToSpotify(pending.spotifyIds, device)
                 setSpotifyError(null)
                 setDeviceProblem(null)
-                await mutateLobby(roomId, (data) => (data.pendingBatch?.round === pending.round ? { update: { pendingBatch: null } } : null))
+                await mutateLobby(roomId, (data) => (data.pendingBatch?.round === pending.round ? { update: handedOver(data) } : null))
             } catch (e) {
                 console.error('Fehler beim Senden der Runde an Spotify:', e)
                 const msg = friendlySpotifyError(e)
@@ -1303,7 +1261,18 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
         applyPendingBatch()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHost, spotifyConnected, playingOurs, onLastSent, lobbyData?.pendingBatch, selectedSpotifyDeviceId, batchRetry, db, roomId])
+    }, [isHost, spotifyConnected, lobbyData?.pendingBatch, selectedSpotifyDeviceId, batchRetry, db, roomId])
+
+    // Host: Bildschirm wach halten, solange die Playlist offen ist – ein gesperrtes Handy meldet keine Songwechsel
+    useEffect(() => {
+        if (!isHost || currentScreen !== 'room') return
+        let lock = null
+        const request = async () => { try { lock = await navigator.wakeLock?.request('screen') } catch { /* nicht unterstützt */ } }
+        const onVisible = () => { if (document.visibilityState === 'visible') request() }
+        request()
+        document.addEventListener('visibilitychange', onVisible)
+        return () => { document.removeEventListener('visibilitychange', onVisible); lock?.release?.() }
+    }, [isHost, currentScreen])
 
     // Wenn nur noch wenig Musik übrig ist → nächste Abstimmung starten (oder bei wenigen Songs direkt einreihen).
     // Der Host macht das sofort; die anderen Geräte springen nach 15 s ein, falls das Host-Gerät im Hintergrund ist.
@@ -1312,10 +1281,10 @@ const MusicVoter = ({ onBack, joinCode }) => {
     const emptyNoticeRef = useRef(null)
     const dueSinceRef = useRef(null)
     useEffect(() => {
-        if (!db || !roomId || lobbyData?.lobbyPhase !== 'laeuft') return
+        if (!db || !roomId || lobbyData?.lobbyPhase === 'abstimmung') return
         const id = setInterval(async () => {
             const data = latestLobbyRef.current
-            if (!data || data.lobbyPhase !== 'laeuft') return
+            if (!data || data.lobbyPhase === 'abstimmung') return
             const wait = nextVotingInMs(data, Date.now())
             if (wait == null || wait > 0) { dueSinceRef.current = null; return }
             if (!isHost) {
@@ -1327,7 +1296,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
             autoRoundRef.current = round
             try {
                 const res = await mutateLobby(roomId, (d) => {
-                    if (d.lobbyPhase !== 'laeuft' || (d.votingRound || 0) !== round) return null
+                    if (d.lobbyPhase === 'abstimmung' || (d.votingRound || 0) !== round) return null
                     const pool = (d.playlist || []).filter(i => i.queuedRound == null)
                     if (!pool.length) return { empty: true }
                     if (pool.length <= (d.batchSize || 10)) return { update: finishRound(d, Date.now(), { voted: false }), skipped: pool.length }
@@ -1352,36 +1321,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
         return () => clearInterval(id)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHost, db, roomId, lobbyData?.lobbyPhase])
-
-    // ─── Als Spotify-Playlist speichern ──────────────────────────────────────
-    const canSavePlaylist = spotifyService.hasScope('playlist-modify-private')
-    const songsToSave = (() => {
-        const seen = new Set()
-        return [...(lobbyData?.history || []), ...queueSongs].filter(s => s.spotifyId && !seen.has(s.spotifyId) && seen.add(s.spotifyId))
-    })()
-    const handleSavePlaylist = async () => {
-        if (!songsToSave.length || savingPlaylist) return false
-        setSavingPlaylist(true)
-        try {
-            const date = new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })
-            const res = await spotifyService.createPlaylistWithTracks(
-                `Amplify · ${date}`,
-                `Gemeinsam gewählt mit Amplify – ${songsToSave.length} Songs`,
-                songsToSave.map(s => `spotify:track:${s.spotifyId}`)
-            )
-            setSavedPlaylistUrl(res.url || 'saved')
-            showToast(`Gespeichert: ${songsToSave.length} Songs als Playlist in deinem Spotify.`)
-            return true
-        } catch (e) {
-            console.error('Playlist speichern fehlgeschlagen:', e)
-            showToast(e.code === 'FORBIDDEN'
-                ? 'Spotify erlaubt das Speichern noch nicht – bitte Spotify einmal neu verbinden.'
-                : 'Die Playlist konnte nicht gespeichert werden: ' + (e.message || 'Fehler'), 'bad')
-            return false
-        } finally {
-            setSavingPlaylist(false)
-        }
-    }
 
     // ─── Runden-Modus: Künstlersuche ─────────────────────────────────────────
     useEffect(() => {
@@ -1489,6 +1428,8 @@ const MusicVoter = ({ onBack, joinCode }) => {
     const voterCount = voterNames.size
     const queueItems = lobbyData ? upcomingQueue(lobbyData, clock) : []
     const remainingMusic = lobbyData ? queueRemainingMs(lobbyData, clock) : null
+    // Musik läuft: Gewinner werden übergeben ("laeuft") oder schon in der Warteschlange, während neue Songs gesammelt werden
+    const musicOn = phase === 'laeuft' || (phase === 'songwahl' && remainingMusic != null)
     const nextVoting = lobbyData ? nextVotingInMs(lobbyData, clock) : null
 
     // ─── Sicherheitsabfragen ─────────────────────────────────────────────────
@@ -1526,13 +1467,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
             setConfirm(null)
         }
     }
-    const closeWithSave = async () => {
-        setBusyAction('close')
-        const ok = await handleSavePlaylist()
-        setBusyAction(null)
-        if (ok) { setSheet(null); await handleCloseLobby() }
-    }
-    const closeWithoutSave = async () => {
+    const closeLobbyNow = async () => {
         setBusyAction('close')
         setSheet(null)
         await handleCloseLobby()
@@ -1578,8 +1513,10 @@ const MusicVoter = ({ onBack, joinCode }) => {
             now: phase === 'abstimmung'
                 ? `${voteRule} Die Punkte sieht man erst am Ende. Wenn alle abgestimmt haben, kannst du die Abstimmung vorzeitig beenden.`
                 : phase === 'laeuft'
-                    ? 'Die Gewinner laufen. Die nächste Abstimmung startet automatisch, wenn nur noch wenig Musik übrig ist.'
-                    : `Reich bis zu ${maxSongs} Songs ein. Wenn alle fertig sind, starte die Abstimmung.`,
+                    ? 'Die Gewinner werden gerade an Spotify übergeben.'
+                    : musicOn
+                        ? 'Die Musik läuft. Die nächste Abstimmung startet automatisch, wenn nur noch wenig Musik übrig ist – du kannst sie auch früher starten, die Gewinner werden dann hinten angehängt.'
+                        : `Reich bis zu ${maxSongs} Songs ein. Wenn alle fertig sind, starte die Abstimmung.`,
             extra: 'Teilen lädt Gäste ein und öffnet das Live-Board. In den Einstellungen findest du Gerät, Runden-Modus und Teilnehmer-Optionen.'
         }
         return {
@@ -1587,8 +1524,8 @@ const MusicVoter = ({ onBack, joinCode }) => {
             intro: 'Du schlägst Songs vor und stimmst mit ab. Der Host spielt die Gewinner über Spotify.',
             now: phase === 'abstimmung'
                 ? `${voteRule} Für eigene Songs kannst du nicht stimmen. Die Punkte gibt’s erst am Ende.`
-                : phase === 'laeuft'
-                    ? `Die Gewinner laufen gerade. Schlag schon bis zu ${maxSongs} Songs für die nächste Runde vor.`
+                : musicOn
+                    ? `Die Musik läuft. Schlag schon bis zu ${maxSongs} Songs für die nächste Runde vor.`
                     : `Reich bis zu ${maxSongs} Songs ein. Der Host startet danach die Abstimmung.`,
             extra: `Nicht gewählte Songs findest du nach der Abstimmung unter „Zweite Chance“. Tippe auf ein Cover für eine Hörprobe.${lobbyData?.streakEnabled ? ' Streak ist an: Landet ein Song von dir auf Platz 1, bekommst du für die nächste Runde einen Bonus – und mehr, je öfter es in Folge klappt.' : ''}`
         }
@@ -1632,15 +1569,8 @@ const MusicVoter = ({ onBack, joinCode }) => {
                 <BottomSheet open={sheet === 'close' && currentScreen === 'room'} onClose={closeSheet} labelledBy="mv-close-title" busy={busyAction === 'close'}>
                     <h2 id="mv-close-title" className={styles.mvSheetTitle}>Playlist beenden?</h2>
                     <p className={styles.mvSheetText}>Die Playlist wird für alle beendet und alle Gäste werden entfernt.</p>
-                    {songsToSave.length > 0 && !savedPlaylistUrl && canSavePlaylist && (
-                        <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={closeWithSave} disabled={busyAction === 'close'}>
-                            {savingPlaylist ? 'Wird gespeichert …' : `Als Spotify-Playlist speichern & beenden (${songsToSave.length})`}
-                        </button>
-                    )}
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={closeLobbyNow} disabled={busyAction === 'close'}>Playlist beenden</button>
                     <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={closeSheet} disabled={busyAction === 'close'}>Abbrechen</button>
-                    <button type="button" className={`${styles.mvBtn} ${styles.mvDangerLink}`} onClick={closeWithoutSave} disabled={busyAction === 'close'}>
-                        {songsToSave.length > 0 && !savedPlaylistUrl ? 'Ohne Speichern beenden' : 'Playlist beenden'}
-                    </button>
                 </BottomSheet>
 
                 <BottomSheet open={showWelcomePopup && currentScreen === 'room'} onClose={() => setShowWelcomePopup(false)} labelledBy="mv-welcome-title">
@@ -1940,7 +1870,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
             let view
             if (albumTracks) view = 'album'
             else if (isLoadingAlbum) view = 'loading'
-            else if (addTab === 'mine') view = 'mine'
             else if (q.length < 2) view = 'prompt'
             else if (searchError && !isSearching) view = 'error'
             else if (isSearching || searchedQuery !== q) view = searchResults.length ? 'ok' : 'loading'
@@ -1958,20 +1887,22 @@ const MusicVoter = ({ onBack, joinCode }) => {
                 const adding = addingId === item.id
                 const problem = !isAlbum && !existing && !justAdded ? ruleProblem(rule, item) : null
                 const blocked = !isAlbum && !existing && !justAdded && (limitReached || !!problem)
+                const removable = mine && !!exact && exact.queuedRound == null   // noch nicht in der Warteschlange
                 const played = !isAlbum && wasPlayed(item)
                 let meta = isAlbum ? `Album · ${item.artist}` : item.artist
                 if (twin && !justAdded) meta = `Ähnlicher Song schon drin („${twin.title}“ von ${twin.addedBy === myName ? 'dir' : twin.addedBy})`
                 else if (takenByOther) meta = existing.queuedRound != null ? 'Schon in der Warteschlange' : `Schon drin · von ${existing.addedBy}`
-                else if (mine) meta = 'Von dir eingereicht'
+                else if (mine) meta = removable ? 'Von dir eingereicht · nochmal tippen zum Entfernen' : 'Von dir eingereicht'
                 else if (problem) meta = problem
                 return (
                     <li key={item.id} className={`${styles.mvResult} ${mine ? styles.mvRowAdded : ''} ${takenByOther || problem ? styles.mvResultMuted : ''}`}>
                         {previewBtn(item)}
                         <button type="button"
                             className={`${styles.mvBtn} ${styles.mvResultMain}`}
-                            onClick={() => (isAlbum ? handleOpenAlbum(item) : (!existing && !justAdded && handleAddItem(item)))}
-                            disabled={(!isAlbum && (!!existing || justAdded || blocked)) || !!addingId}
-                            aria-label={isAlbum ? `Album ${item.title} von ${item.artist} öffnen` : (existing || justAdded ? `${item.title}: ${meta}` : `${item.title} von ${item.artist} hinzufügen${played ? ' (lief schon)' : ''}`)}>
+                            onClick={() => (isAlbum ? handleOpenAlbum(item) : removable ? handleUnpick(item, exact) : (!existing && !justAdded && handleAddItem(item)))}
+                            disabled={(!isAlbum && !removable && (!!existing || justAdded || blocked)) || !!addingId}
+                            aria-pressed={!isAlbum && mine ? true : undefined}
+                            aria-label={isAlbum ? `Album ${item.title} von ${item.artist} öffnen` : removable ? `${item.title} wieder entfernen` : (existing || justAdded ? `${item.title}: ${meta}` : `${item.title} von ${item.artist} hinzufügen${played ? ' (lief schon)' : ''}`)}>
                             <span className={styles.mvRowText}>
                                 <span className={styles.mvRowName}>{item.title}</span>
                                 <span className={`${styles.mvRowMeta} ${problem ? styles.mvMetaBad : ''}`}>{played && !existing && playedChip}{meta}</span>
@@ -1986,17 +1917,11 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
             return shell(
                 <main className={`${styles.mvMain} ${previewId ? styles.mvWithPreview : ''}`}>
-                    {subHeader(albumTracks ? (albumTracks.album.kind === 'playlist' ? 'Playlist' : 'Album') : 'Hinzufügen', () => (albumTracks ? setAlbumTracks(null) : closeAddModal()),
+                    {subHeader(albumTracks ? 'Album' : 'Hinzufügen', () => (albumTracks ? setAlbumTracks(null) : closeAddModal()),
                         <span className={`${styles.mvCountChip} ${limitReached ? styles.mvCountChipFull : ''}`} aria-label={`Deine Songs: ${myUnqueuedCount} von ${maxSongs}`}>{myUnqueuedCount}/{maxSongs}</span>
                     )}
                     <div className={`${styles.mvScroll} ${styles.mvScrollFix}`}>
                         {rule && <p className={styles.mvRuleBanner}><span aria-hidden="true">{ruleEmoji(rule)}</span>{ruleHint(rule)}</p>}
-                        {!albumTracks && (
-                            <div className={`${styles.mvSegments} ${styles.mvSegments2}`} role="tablist" aria-label="Quelle">
-                                <button type="button" role="tab" aria-selected={addTab === 'search'} className={`${styles.mvBtn} ${styles.mvSegment} ${addTab === 'search' ? styles.mvSegmentOn : ''}`} onClick={() => setAddTab('search')}><IconSearch size={16} />Suchen</button>
-                                <button type="button" role="tab" aria-selected={addTab === 'mine'} className={`${styles.mvBtn} ${styles.mvSegment} ${addTab === 'mine' ? styles.mvSegmentOn : ''}`} onClick={() => setAddTab('mine')}><IconNote size={16} />Meine Playlists</button>
-                            </div>
-                        )}
                         {albumTracks ? (
                             <section className={styles.mvAlbumHead}>
                                 <CoverArt src={albumTracks.album.imageUrl} seed={albumTracks.album.spotifyId} size={64} radius={14} />
@@ -2005,7 +1930,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                     <span className={styles.mvRowMeta}>{albumTracks.album.artist} · {albumTracks.tracks.length} Songs</span>
                                 </span>
                             </section>
-                        ) : addTab === 'search' && (
+                        ) : (
                             <div className={styles.mvField}>
                                 <label htmlFor="mv-search" className={styles.mvLabel}>{rule?.type === 'artist' ? `Song von ${rule.artistName} suchen` : 'Song oder Album suchen'}</label>
                                 <div className={styles.mvInputWrap}>
@@ -2038,46 +1963,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
                         <div className={styles.mvListBox}>
                             {view === 'album' && <ul className={styles.mvList}>{albumTracks.tracks.map(songRow)}</ul>}
-                            {view === 'mine' && (
-                                !spotifyConnected ? (
-                                    <div className={styles.mvEmpty}>
-                                        <span className={styles.mvEmptyIcon}><IconNote size={24} /></span>
-                                        <p className={styles.mvEmptyTitle}>Deine Playlists</p>
-                                        <p className={styles.mvEmptyText}>Verbinde Spotify, um Songs aus deinen eigenen Playlists auszuwählen. Danach bist du automatisch wieder in der Playlist.</p>
-                                        <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={handleSpotifyConnect}><IconNote size={18} />Spotify verbinden</button>
-                                    </div>
-                                ) : myPlState === 'limit' ? (
-                                    <div className={styles.mvEmpty} role="alert">
-                                        <span className={`${styles.mvEmptyIcon} ${styles.mvEmptyIconBad}`}><IconAlert size={24} /></span>
-                                        <p className={styles.mvEmptyTitle}>Spotify lässt dein Konto gerade nicht zu</p>
-                                        <p className={styles.mvEmptyText}>Amplify ist bei Spotify noch im Testmodus – dort sind nur wenige freigeschaltete Konten erlaubt. Über „Suchen“ findest du trotzdem jeden Song.</p>
-                                        <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={() => setAddTab('search')}><IconSearch size={18} />Zur Suche</button>
-                                    </div>
-                                ) : myPlState === 'error' ? (
-                                    <div className={styles.mvEmpty} role="alert">
-                                        <span className={`${styles.mvEmptyIcon} ${styles.mvEmptyIconBad}`}><IconAlert size={24} /></span>
-                                        <p className={styles.mvEmptyTitle}>Playlists konnten nicht geladen werden</p>
-                                        <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={loadMyPlaylists}><IconRetry />Erneut versuchen</button>
-                                    </div>
-                                ) : myPlState !== 'ok' ? skeletons('Deine Playlists werden geladen') : myPlaylists.length === 0 ? (
-                                    <p className={styles.mvFine}>In deinem Spotify-Konto gibt es noch keine Playlists.</p>
-                                ) : (
-                                    <ul className={styles.mvList}>
-                                        {myPlaylists.map(pl => (
-                                            <li key={pl.id}>
-                                                <button type="button" className={`${styles.mvBtn} ${styles.mvRow}`} onClick={() => handleOpenPlaylist(pl)} disabled={isLoadingAlbum}>
-                                                    <CoverArt src={pl.imageUrl} seed={pl.id} size={46} radius={10} />
-                                                    <span className={styles.mvRowText}>
-                                                        <span className={styles.mvRowName}>{pl.name}</span>
-                                                        <span className={styles.mvRowMeta}>{pl.trackCount ? `${pl.trackCount} Songs · ` : ''}{pl.owner}</span>
-                                                    </span>
-                                                    <span className={styles.mvRowEnd} aria-hidden="true"><IconNext /></span>
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )
-                            )}
                             {view === 'ok' && <ul className={styles.mvList}>{searchResults.map(songRow)}</ul>}
                             {view === 'loading' && skeletons(isLoadingAlbum ? 'Wird geladen' : 'Spotify wird durchsucht')}
                             {view === 'prompt' && (
@@ -2085,9 +1970,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                     <span className={styles.mvEmptyIcon}><IconSearch size={24} /></span>
                                     <p className={styles.mvEmptyTitle}>Was soll laufen?</p>
                                     <p className={styles.mvEmptyText}>Such nach einem Song oder Album. Tippe auf einen Song, um ihn hinzuzufügen – aufs Cover für eine Hörprobe.</p>
-                                    {!spotifyConnected && (
-                                        <button type="button" className={`${styles.mvBtn} ${styles.mvInlineLink}`} onClick={() => setAddTab('mine')}>Tipp: Mit Spotify verbinden und Songs aus deinen eigenen Playlists wählen</button>
-                                    )}
                                 </div>
                             )}
                             {view === 'empty' && (
@@ -2286,32 +2168,6 @@ const MusicVoter = ({ onBack, joinCode }) => {
                             </section>
                         )}
 
-                        {isHost && (
-                            <section className={styles.mvCard}>
-                                <div className={styles.mvCardHead}>
-                                    <h2 className={styles.mvCardTitle}>Als Spotify-Playlist speichern</h2>
-                                </div>
-                                {!canSavePlaylist ? (
-                                    <>
-                                        <p className={styles.mvFine}>Dafür braucht Amplify eine zusätzliche Erlaubnis von Spotify. Einmal neu verbinden reicht.</p>
-                                        <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={handleSpotifyConnect}><IconRetry size={18} />Spotify neu verbinden</button>
-                                    </>
-                                ) : savedPlaylistUrl ? (
-                                    <>
-                                        <p className={styles.mvFine}>Gespeichert! Die Playlist liegt in deinem Spotify.</p>
-                                        {savedPlaylistUrl !== 'saved' && <a className={`${styles.mvBtn} ${styles.mvSecondary}`} href={savedPlaylistUrl} target="_blank" rel="noopener noreferrer"><IconNote size={18} />In Spotify öffnen</a>}
-                                    </>
-                                ) : (
-                                    <>
-                                        <p className={styles.mvFine}>{songsToSave.length ? `${songsToSave.length} Songs (gespielt und in der Warteschlange) als private Playlist in deinem Konto.` : 'Sobald Songs gelaufen sind, kannst du sie hier speichern.'}</p>
-                                        <button type="button" className={`${styles.mvBtn} ${songsToSave.length ? styles.mvSecondary : styles.mvPrimaryOff}`} onClick={handleSavePlaylist} disabled={!songsToSave.length || savingPlaylist}>
-                                            <IconNote size={18} />{savingPlaylist ? 'Wird gespeichert …' : 'Jetzt speichern'}
-                                        </button>
-                                    </>
-                                )}
-                            </section>
-                        )}
-
                         <button type="button" className={`${styles.mvBtn} ${styles.mvLeaveBtn}`} onClick={() => (isHost ? setSheet('close') : setConfirm({ kind: 'leave' }))}>
                             <IconLeave size={18} />{isHost ? 'Playlist beenden' : 'Playlist verlassen'}
                         </button>
@@ -2326,8 +2182,10 @@ const MusicVoter = ({ onBack, joinCode }) => {
         const phaseSub = showVoting
             ? (phaseRemainingMs > 0 ? `Die Top ${batchSize} kommen weiter. Die Punkte gibt’s erst am Ende.` : 'Wird ausgewertet …')
             : phase === 'laeuft'
-                ? 'Schlag schon Songs für die nächste Runde vor.'
-                : (isHost ? 'Starte die Abstimmung, wenn alle fertig sind.' : 'Füge Songs hinzu. Der Host startet dann die Abstimmung.')
+                ? 'Die Gewinner kommen gleich in die Warteschlange.'
+                : musicOn
+                    ? 'Schlag Songs für die nächste Runde vor – die Abstimmung startet automatisch.'
+                    : (isHost ? 'Starte die Abstimmung, wenn alle fertig sind.' : 'Füge Songs hinzu. Der Host startet dann die Abstimmung.')
         const downAllowed = voteLimits.down !== 0
         const budgetText = (limit, used) => (limit === UNLIMITED ? 'unbegrenzt' : `${Math.max(0, limit - used)} von ${limit} übrig`)
         const upLeft = voteLimits.up === UNLIMITED || myUpUsed < voteLimits.up
@@ -2340,7 +2198,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
             : [...poolItems].sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0))
         const progressPct = nowPlaying?.durationMs ? Math.min(100, (nowPlayingPositionMs / nowPlaying.durationMs) * 100) : 0
         const waitingForSpotify = !!lobbyData.pendingBatch
-        const lastSong = phase === 'laeuft' && isLastSong(lobbyData, clock)
+        const lastSong = musicOn && !waitingForSpotify && isLastSong(lobbyData, clock)
         const fewSongs = poolItems.length > 0 && poolItems.length <= batchSize
 
         return shell(
@@ -2382,7 +2240,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
                             {showVoting && phaseRemainingMs > 0 && (
                                 <span className={styles.mvTimer} role="timer" aria-label={`Noch ${mmss(phaseRemainingMs)} Minuten`}>{mmss(phaseRemainingMs)}</span>
                             )}
-                            {phase === 'laeuft' && <span className={styles.mvLive}>LIVE</span>}
+                            {musicOn && <span className={styles.mvLive}>LIVE</span>}
                         </div>
                         {rule && <p className={styles.mvRuleBanner}><span aria-hidden="true">{ruleEmoji(rule)}</span>{ruleLabel(rule)} · {ruleHint(rule)}</p>}
                         {lastSong && (
@@ -2396,10 +2254,10 @@ const MusicVoter = ({ onBack, joinCode }) => {
                                 {myLimits.bonus.next && <span className={styles.mvStreakNext}>Nächste Runde wieder Platz 1: {myLimits.bonus.next}</span>}
                             </p>
                         )}
-                        {phase === 'laeuft' && (
+                        {musicOn && (
                             <p className={styles.mvTimes}>
                                 {waitingForSpotify
-                                    ? 'Die Gewinner warten auf Spotify …'
+                                    ? (nowPlaying?.isPlaying ? 'Die Gewinner stehen fest und kommen gleich in die Warteschlange …' : 'Die Gewinner warten auf Spotify …')
                                     : <>{remainingMusic != null && <span>Noch <strong>{mmss(remainingMusic)}</strong> Musik</span>}{nextVoting != null && (nextVoting > 0
                                         ? <span>Nächste Abstimmung in <strong>{mmss(nextVoting)}</strong></span>
                                         : <span>Nächste Abstimmung <strong>{poolItems.length ? 'gleich' : 'sobald Songs da sind'}</strong></span>)}</>}
@@ -2546,7 +2404,7 @@ const MusicVoter = ({ onBack, joinCode }) => {
 
                     <div className={styles.mvListHead}>
                         <h2 className={styles.mvListTitle}>
-                            {showVoting ? 'Zur Abstimmung' : phase === 'laeuft' ? 'Für die nächste Runde' : 'Eingereichte Songs'}
+                            {showVoting ? 'Zur Abstimmung' : musicOn ? 'Für die nächste Runde' : 'Eingereichte Songs'}
                         </h2>
                         <span className={styles.mvListCount}>{displayPool.length}</span>
                     </div>

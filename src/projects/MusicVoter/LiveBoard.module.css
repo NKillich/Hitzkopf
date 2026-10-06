@@ -71,6 +71,7 @@
 .lbSection { display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 26px; background: var(--sr-surface); }
 .lbSectionTitle { display: flex; align-items: center; gap: 10px; font-size: 15px !important; font-weight: 800; letter-spacing: 0.1em !important; text-transform: uppercase; color: var(--sr-muted); }
 .lbSectionTitle span { font-family: var(--sr-display); color: var(--sr-accent-text); letter-spacing: 0; }
+.lbSectionTitle .lbPage { margin-left: auto; font-family: inherit; font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--sr-ink); }
 .lbQueue { display: flex; flex-direction: column; gap: 8px; }
 .lbQueueItem { display: flex; align-items: center; gap: 12px; }
 .lbQueueRank { width: 22px; flex: none; text-align: center; font-family: var(--sr-display); font-size: 16px; font-weight: 800; color: var(--sr-muted); }
