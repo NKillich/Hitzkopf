@@ -1390,7 +1390,10 @@ class SpotifyService {
                     artist: item.track.artists?.map(a => a.name).join(', ') || '',
                     album: item.track.album?.name || '',
                     albumImage: item.track.album?.images?.[0]?.url || null,
-                    uri: item.track.uri
+                    uri: item.track.uri,
+                    durationMs: item.track.duration_ms ?? null,
+                    artistIds: item.track.artists?.map(a => a.id).filter(Boolean) || [],
+                    releaseYear: parseInt(item.track.album?.release_date, 10) || null
                 }))
 
             log(`[SpotifyService] Seite geladen: ${pageTracks.length} Tracks (gesamt: ${tracks.length + pageTracks.length})`)

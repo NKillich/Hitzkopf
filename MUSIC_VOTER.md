@@ -101,6 +101,9 @@ src/
 - **Runden-Modi** (`roundRule`): Künstler, Jahrzehnt, Stichwort – Suche filtert, Einreichen wird geprüft.
 - **Beitreten** nur per Code, QR-Code oder Link (keine öffentliche Liste). Namen ohne Groß-/Kleinschreibung eindeutig, fast gleiche Songs (Radio Edit, Remaster …) werden erkannt.
 - **Host:** Gäste entfernen, Pause/Weiter/Überspringen/Lautstärke, Gerät automatisch (aktiv → „Amplify Host“ → erstes), „Als Spotify-Playlist speichern“ (Scope `playlist-modify-private`, einmal neu verbinden).
+- **Streak** (Host-Einstellung, standardmäßig aus): Runde = Treffer, wenn die eigenen Songs netto mehr Daumen hoch bekamen; ab X Treffer-Runden in Folge Bonus (+1 Song / +1 Daumen / beides). Nur Belohnung, keine Strafe (`streaks`, `streakEnabled`, `streakMin`, `streakReward`).
+- **Abstimmung startet** bei „X Min. Musik übrig“, spätestens wenn der letzte Song der Warteschlange beginnt; automatische Abstimmungen werden so gekürzt, dass sie vor dem Ende der Musik fertig sind.
+- **Meine Playlists:** Reiter in „Hinzufügen“ für Leute mit Spotify-Login (eigene/gemeinsame Playlists – fremde gibt Spotify seit 2026 nicht heraus).
 - **Live-Board:** `…/Hitzkopf/#live/RAUMCODE` – reine Zuschauer-Ansicht: Phasen-Leiste mit Fortschritt, Farbe je Phase, großes Banner mit Countdown / Restmusik / „Nächste Abstimmung in …“, Live-Abstimmung mit „Kopf an Kopf“, Gewinner-Podium, Fun Facts, QR-Code zum Mitmachen. Tritt der Playlist nicht bei, braucht weder Spotify noch Namen.
 
 ## 🎨 Design

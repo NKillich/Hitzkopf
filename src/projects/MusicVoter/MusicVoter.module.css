@@ -393,3 +393,10 @@
     .mvRoot { background: var(--sr-outer); }
     .mvRoot .mvApp { height: min(100%, 880px); border-radius: 34px; border: 1px solid var(--sr-line); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35); }
 }
+
+/* ── Reiter Suchen / Meine Playlists, letzter Song, Streak ─────────────── */
+.mvRoot .mvSegments2 { grid-template-columns: repeat(2, minmax(0, 1fr)); flex: none; }
+.mvRoot .mvSegments2 .mvSegment { gap: 6px; height: 40px; font-size: 14px; }
+.mvRoot .mvLastSong { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--sr-surface2); font-size: 14px; font-weight: 700; line-height: 1.35; }
+.mvRoot .mvLastSongUrgent { background: var(--sr-accent); color: var(--sr-on-accent); animation: mvPulse 1.4s ease-in-out infinite; }
+.mvRoot .mvStreakChip { margin: 0; align-self: flex-start; padding: 6px 12px; border-radius: 14px; background: color-mix(in srgb, #FF9F1C 22%, transparent); font-size: 13px; font-weight: 800; }
