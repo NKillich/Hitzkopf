@@ -196,6 +196,35 @@ export const ruleHint = (rule) => {
     if (rule.type === 'keyword') return `Nur Songs mit „${rule.word}“ im Titel`
     return null
 }
+// ── Vorgemerkte Einstellungen ──
+// Strengere Regeln (Runden-Modus, niedrigeres Song-Limit) gelten ab der nächsten Runde, sobald schon Songs eingereicht
+// sind – sonst passten eingereichte Songs plötzlich nicht mehr. Lockerungen gelten sofort. finishRound übernimmt sie.
+const sameRule = (a, b) => JSON.stringify(a || null) === JSON.stringify(b || null)
+export const splitConfigChange = (data, changes, defaultMaxSongs) => {
+    const hasPool = (data?.playlist || []).some(i => i.queuedRound == null)
+    const now = {}, later = {}
+    Object.entries(changes).forEach(([k, v]) => {
+        const stricter = hasPool && (
+            (k === 'roundRule' && v != null && !sameRule(v, data.roundRule))
+            || (k === 'maxSongsPerPerson' && v < (data.maxSongsPerPerson ?? defaultMaxSongs)))
+        ;(stricter ? later : now)[k] = v
+    })
+    return { now, later }
+}
+/** Was ab der nächsten Runde gilt, als lesbare Liste */
+export const pendingLabels = (data) => {
+    const p = data?.pendingConfig || {}
+    const out = []
+    if ('roundRule' in p) out.push(p.roundRule ? `${ruleEmoji(p.roundRule)} ${ruleLabel(p.roundRule)}` : 'Freie Runde')
+    if ('maxSongsPerPerson' in p) out.push(`max. ${p.maxSongsPerPerson} ${p.maxSongsPerPerson === 1 ? 'Song' : 'Songs'} pro Person`)
+    return out
+}
+/** Laufende Runde (fürs Board): während Abstimmung/Übergabe die gerade gewählte, sonst die, für die gesammelt wird */
+export const currentRoundNo = (data) => {
+    const r = data?.votingRound || 0
+    return ['abstimmung', 'laeuft'].includes(data?.lobbyPhase) ? Math.max(1, r) : r + 1
+}
+
 export const ruleEmoji = (rule) => ({ artist: '🎤', decade: '📼', keyword: '🔤' }[rule?.type] || '')
 
 /** Suchanfrage passend zum Modus (Spotify-Filter) */
@@ -266,7 +295,10 @@ export const finishRound = (data, now, { voted }) => {
         votingRound: round,
         pendingBatch: batchIds.length ? { round, spotifyIds: batchIds } : null,
         queueStartedAt: null,
-        queueTotalDurationMs: null
+        queueTotalDurationMs: null,
+        // Vorgemerkte Regeln gelten ab jetzt
+        ...(data.pendingConfig || {}),
+        pendingConfig: null
     }
     if (voted) {
         // Platz-1-Hit: ein eigener Song auf Platz 1 (auch geteilt) mit mehr Daumen hoch als runter.

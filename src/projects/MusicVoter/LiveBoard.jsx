@@ -9,7 +9,8 @@ import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
 import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconCheck, IconTrophy, IconExpand, IconShrink, IconDice } from '../../shared/ui/icons'
 import { joinLink } from './links'
-import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextVotingInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, isLastSong, placeOf, resultNotes, liveNowPlaying, upcomingQueue, queueOrder } from './amplifyLogic'
+import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextVotingInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, isLastSong, placeOf, resultNotes, currentRoundNo, pendingLabels, liveNowPlaying, upcomingQueue, queueOrder } from './amplifyLogic'
+import ReactionRain from './ReactionRain'
 import styles from './LiveBoard.module.css'
 
 const STEPS = [
@@ -84,6 +85,8 @@ function buildFacts(history, players, pool, data) {
         const [topDj, djCount] = Object.entries(byDj).sort((a, b) => b[1] - a[1])[0] || []
         if (topDj && djCount > 1) facts.push({ icon: <IconUsers size={20} />, label: 'Bester DJ', value: topDj, sub: `${djCount} Songs gelaufen` })
     }
+    const roundsDone = Math.max(0, currentRoundNo(data) - 1)
+    if (roundsDone > 0 && facts.length < 4) facts.push({ icon: <IconTrophy size={20} />, label: 'Gespielt', value: `${roundsDone} ${roundsDone === 1 ? 'Runde' : 'Runden'}`, sub: 'heute Abend' })
     if (facts.length < 4) facts.push({ icon: <IconUsers size={20} />, label: 'Dabei', value: `${players} ${players === 1 ? 'Person' : 'Leute'}`, sub: null })
     if (facts.length < 4) facts.push({ icon: <IconNote size={20} />, label: 'Im Rennen', value: `${pool} ${pool === 1 ? 'Song' : 'Songs'}`, sub: 'für die nächste Runde' })
     return facts.slice(0, 4)
@@ -323,7 +326,7 @@ export default function LiveBoard({ roomCode, onBack }) {
     if (isVoting) {
         banner = { title: 'Jetzt abstimmen!', timer: votingLeft > 0 ? mmss(votingLeft) : null, urgent: votingLeft > 0 && votingLeft <= 15000, sub: votingLeft > 0 ? `${voters} von ${players} haben abgestimmt · ${totalVotes} ${totalVotes === 1 ? 'Stimme' : 'Stimmen'}` : 'Wird ausgewertet …' }
     } else if (musicOn) {
-        const lines = [remaining != null ? ['Noch Musik', mmss(remaining)] : null, nextVoting != null ? ['Nächste Abstimmung', nextVoting > 0 ? `in ${mmss(nextVoting)}` : (pool.length ? 'gleich' : 'sobald Songs da sind')] : null].filter(Boolean)
+        const lines = [nextVoting != null ? ['Nächste Abstimmung', nextVoting > 0 ? `in ${mmss(nextVoting)}` : (pool.length ? 'gleich' : 'sobald Songs da sind')] : null].filter(Boolean)
         if (waiting) banner = now?.isPlaying
             ? { title: 'Die Gewinner stehen fest', sub: 'Sie kommen gleich in die Warteschlange …', lines }
             : { title: 'Gleich geht’s los', sub: 'Die Gewinner warten auf Spotify …' }
@@ -349,7 +352,7 @@ export default function LiveBoard({ roomCode, onBack }) {
                     {topButtons}
                     <div className={styles.lbBrand}>
                         <span className={styles.lbLogo}>Amplify <span>Live</span></span>
-                        <span className={styles.lbMeta}>Playlist von {data.host} · <IconUsers size={14} /> {players} dabei</span>
+                        <span className={styles.lbMeta}><strong className={styles.lbRound}>Runde {currentRoundNo(data)}</strong> · Playlist von {data.host} · <IconUsers size={14} /> {players} dabei</span>
                     </div>
                     <ol className={styles.lbSteps} aria-label="Ablauf">
                         {STEPS.map((s, i) => (
@@ -376,6 +379,7 @@ export default function LiveBoard({ roomCode, onBack }) {
                         <h1 className={styles.lbCallTitle}>{banner.title}</h1>
                         <p className={styles.lbCallSub}>
                             {rule && <span className={styles.lbRule}>{ruleEmoji(rule)} {ruleLabel(rule)}</span>}
+                            {pendingLabels(data).length > 0 && <span className={styles.lbRule}>Nächste Runde: {pendingLabels(data).join(' · ')}</span>}
                             {banner.sub}
                         </p>
                     </div>
@@ -507,6 +511,8 @@ export default function LiveBoard({ roomCode, onBack }) {
                 </footer>
             </div>
             </div>
+
+            <ReactionRain code={code} />
 
             {flash && (
                 <div key={flash.key} className={`${styles.lbFlash} ${styles[PHASE_CLASS[flash.phase]]}`} aria-hidden="true">
