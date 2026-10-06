@@ -2,14 +2,15 @@
 
 export const UNLIMITED = -1
 export const DEFAULT_UP = 3
-export const DEFAULT_DOWN = 0            // Daumen runter standardmäßig aus
+export const DEFAULT_DOWN = 1            // ein Daumen runter: Interaktion ohne gezieltes Abschießen
 export const FALLBACK_DURATION = 210000  // falls Spotify keine Länge geliefert hat
 
 // Drei Vorgaben statt vieler Regler (Feinheiten unter "Erweitert")
+// Ziel: alle ~20 Min. eine Abstimmung, und mehr eingereichte Songs als Plätze (sonst ist Abstimmen sinnlos)
 export const PRESETS = [
-    { id: 'schnell', label: 'Schnell', sub: '5 Songs pro Runde · 1 Min. abstimmen', values: { batchSize: 5, votingDurationSec: 60, maxSongsPerPerson: 3, preQueueVotingMinutes: 1 } },
-    { id: 'normal', label: 'Normal', sub: '10 Songs pro Runde · 2 Min. abstimmen', values: { batchSize: 10, votingDurationSec: 120, maxSongsPerPerson: 5, preQueueVotingMinutes: 2 } },
-    { id: 'lang', label: 'Lange Party', sub: '15 Songs pro Runde · 3 Min. abstimmen', values: { batchSize: 15, votingDurationSec: 180, maxSongsPerPerson: 5, preQueueVotingMinutes: 3 } }
+    { id: 'schnell', label: 'Schnell', sub: '4 Songs pro Runde (≈ 15 Min.) · 60 s abstimmen · 2 pro Person', values: { batchSize: 4, votingDurationSec: 60, maxSongsPerPerson: 2, preQueueVotingMinutes: 2 } },
+    { id: 'normal', label: 'Normal', sub: '6 Songs pro Runde (≈ 20 Min.) · 90 s abstimmen · 3 pro Person', values: { batchSize: 6, votingDurationSec: 90, maxSongsPerPerson: 3, preQueueVotingMinutes: 3 } },
+    { id: 'lang', label: 'Lange Party', sub: '10 Songs pro Runde (≈ 35 Min.) · 2 Min. abstimmen · 4 pro Person', values: { batchSize: 10, votingDurationSec: 120, maxSongsPerPerson: 4, preQueueVotingMinutes: 4 } }
 ]
 export const DEFAULT_PRESET = PRESETS[1]
 export const activePresetId = (data) => {
@@ -66,12 +67,55 @@ export const queueRemainingMs = (data, now) => {
     return ms
 }
 
-/** Wann startet die nächste Abstimmung automatisch? (null = gerade nicht absehbar) */
+/** Reihenfolge der Warteschlange (so, wie sie an Spotify ging) */
+export const queueOrder = (data) => (data?.playlist || []).filter(i => i.queuedRound != null).sort(byScore)
+
+/** Läuft gerade der letzte Song der Warteschlange? */
+export const isLastSong = (data) => {
+    const np = data?.nowPlaying
+    const queued = queueOrder(data)
+    return !!np && queued.length > 0 && queued.every(i => i.spotifyId === np.trackId)
+}
+
+/**
+ * Wann startet die nächste Abstimmung automatisch? (null = gerade nicht absehbar)
+ * Wenn nur noch die eingestellte Zeit Musik übrig ist – spätestens aber, sobald der letzte Song beginnt.
+ */
 export const nextVotingInMs = (data, now) => {
     if (data?.lobbyPhase !== 'laeuft' || data.pendingBatch) return null
     const rem = queueRemainingMs(data, now)
     if (rem == null) return null
-    return Math.max(0, rem - (data.preQueueVotingMinutes || 1) * 60000)
+    const queued = queueOrder(data)
+    const last = queued[queued.length - 1]
+    const lastDur = last ? (last.spotifyId === data.nowPlaying?.trackId && data.nowPlaying?.durationMs) || last.duration || FALLBACK_DURATION : 0
+    return Math.max(0, rem - Math.max((data.preQueueVotingMinutes || 1) * 60000, lastDur))
+}
+
+// ── Streak: wer mehrere Runden in Folge gut ankommt, bekommt einen kleinen Bonus (nur Belohnung, keine Strafe) ──
+export const STREAK_DEFAULT_MIN = 2
+export const STREAK_REWARDS = [
+    { id: 'song', label: '+1 Song', songs: 1, up: 0 },
+    { id: 'vote', label: '+1 Daumen hoch', songs: 0, up: 1 },
+    { id: 'both', label: '+1 Song & +1 Daumen', songs: 1, up: 1 }
+]
+export const streakOf = (data, name) => data?.streaks?.[name]?.current || 0
+/** Bonus für eine Person (0, wenn Streak aus oder noch nicht erreicht) */
+export const streakBonus = (data, name) => {
+    if (!data?.streakEnabled) return { songs: 0, up: 0, active: false }
+    if (streakOf(data, name) < (data.streakMin || STREAK_DEFAULT_MIN)) return { songs: 0, up: 0, active: false }
+    const r = STREAK_REWARDS.find(x => x.id === (data.streakReward || 'both')) || STREAK_REWARDS[2]
+    return { songs: r.songs, up: r.up, active: true }
+}
+/** Eigenes Song-Limit und Daumen-Budget inkl. Streak-Bonus */
+export const limitsFor = (data, name, defaults) => {
+    const b = streakBonus(data, name)
+    const up = data?.upvotesPerPerson ?? defaults.up
+    return {
+        maxSongs: (data?.maxSongsPerPerson || defaults.maxSongs) + b.songs,
+        up: up === UNLIMITED ? UNLIMITED : up + b.up,
+        down: data?.downvotesPerPerson ?? defaults.down,
+        bonus: b
+    }
 }
 
 export const mmss = (ms) => {
@@ -159,6 +203,17 @@ export const finishRound = (data, now, { voted }) => {
         pendingBatch: batchIds.length ? { round, spotifyIds: batchIds } : null,
         queueStartedAt: null,
         queueTotalDurationMs: null
+    }
+    if (voted) {
+        const net = {}
+        pool.forEach(i => { if (i.addedBy) net[i.addedBy] = (net[i.addedBy] || 0) + scoreOf(i) })
+        const streaks = { ...(data.streaks || {}) }
+        Object.entries(net).forEach(([owner, n]) => {
+            const prev = streaks[owner] || { current: 0, best: 0 }
+            const current = n > 0 ? (prev.current || 0) + 1 : 0
+            streaks[owner] = { current, best: Math.max(prev.best || 0, current) }
+        })
+        update.streaks = streaks
     }
     if (voted && selected.length) {
         update.lastResult = {
