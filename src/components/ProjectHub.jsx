@@ -8,7 +8,8 @@ const GROUPS = [
     {
         label: 'Musik',
         games: [
-            { id: 'musicvoter', name: 'Amplify', emoji: '🎵', description: 'Sammelt gemeinsam Songs und stimmt ab. Die beliebtesten laufen zuerst.', tag: 'Spotify' },
+            { id: 'amplify2', name: 'Amplify 2.0', emoji: '🎵', description: 'Sammelt gemeinsam Songs und stimmt ab. Die beliebtesten laufen zuerst.', tag: 'Neu' },
+            { id: 'musicvoter', name: 'Amplify 1.0', emoji: '🎵', description: 'Die bewährte Version zum Vergleichen.', tag: 'Klassisch' },
             { id: 'secondsound', name: 'Song raten', emoji: '🎧', description: 'Erkennst du den Song nach 1, 5, 10 oder 30 Sekunden?', tag: 'Spotify' }
         ]
     },
@@ -21,13 +22,18 @@ const GROUPS = [
     }
 ]
 
-const readAmplifyRoom = () => {
-    try { return sessionStorage.getItem('mv_roomId') || null } catch { return null }
+// Offene Amplify-Playlists in diesem Tab (1.0 und 2.0 haben getrennte Sitzungen)
+const readAmplifyRooms = () => {
+    const read = (key) => { try { return sessionStorage.getItem(key) || null } catch { return null } }
+    return [
+        { id: 'amplify2', label: 'Amplify 2.0', code: read('a2_roomId') },
+        { id: 'musicvoter', label: 'Amplify 1.0', code: read('mv_roomId') }
+    ].filter(r => r.code)
 }
 
 const ProjectHub = ({ onSelectProject }) => {
     const { isDark, toggleTheme } = useTheme()
-    const amplifyRoom = readAmplifyRoom()
+    const amplifyRooms = readAmplifyRooms()
     const themeLabel = isDark ? 'Helles Design einschalten' : 'Dunkles Design einschalten'
 
     return (
@@ -46,16 +52,16 @@ const ProjectHub = ({ onSelectProject }) => {
                         <p className={styles.hubLead}>Spiele für den Abend mit Freunden – alle machen mit dem eigenen Handy mit.</p>
                     </div>
 
-                    {amplifyRoom && (
-                        <button type="button" className={`${styles.hubBtn} ${styles.hubRejoin}`} onClick={() => onSelectProject('musicvoter')}>
+                    {amplifyRooms.map(r => (
+                        <button key={r.id} type="button" className={`${styles.hubBtn} ${styles.hubRejoin}`} onClick={() => onSelectProject(r.id)}>
                             <span className={styles.hubLiveDot} aria-hidden="true" />
                             <span className={styles.hubRowText}>
                                 <span className={styles.hubRowName}>Zurück zu deiner Playlist</span>
-                                <span className={styles.hubRowMeta}>Amplify · Code {amplifyRoom}</span>
+                                <span className={styles.hubRowMeta}>{r.label} · Code {r.code}</span>
                             </span>
                             <IconNext />
                         </button>
-                    )}
+                    ))}
 
                     {GROUPS.map(group => (
                         <section key={group.label} className={styles.hubGroup} aria-label={group.label}>
@@ -78,14 +84,17 @@ const ProjectHub = ({ onSelectProject }) => {
                         </section>
                     ))}
 
-                    <button type="button" className={`${styles.hubBtn} ${styles.hubBoard}`} onClick={() => onSelectProject('live')}>
-                        <span className={styles.hubBoardIcon}><IconTv size={22} /></span>
-                        <span className={styles.hubRowText}>
-                            <span className={styles.hubRowName}>Amplify Live-Board</span>
-                            <span className={styles.hubRowMeta}>Die Playlist groß auf Fernseher oder Beamer zeigen</span>
-                        </span>
-                        <IconNext />
-                    </button>
+                    {[['live2', 'Live-Board 2.0', 'Eine Amplify-2.0-Playlist groß auf Fernseher oder Beamer zeigen'],
+                        ['live', 'Live-Board 1.0', 'Für Playlists aus Amplify 1.0']].map(([id, name, meta]) => (
+                        <button key={id} type="button" className={`${styles.hubBtn} ${styles.hubBoard}`} onClick={() => onSelectProject(id)}>
+                            <span className={styles.hubBoardIcon}><IconTv size={22} /></span>
+                            <span className={styles.hubRowText}>
+                                <span className={styles.hubRowName}>{name}</span>
+                                <span className={styles.hubRowMeta}>{meta}</span>
+                            </span>
+                            <IconNext />
+                        </button>
+                    ))}
 
                     <p className={styles.hubFooter}>Made with <span aria-label="Liebe">♥</span> by Niklas</p>
                 </main>
