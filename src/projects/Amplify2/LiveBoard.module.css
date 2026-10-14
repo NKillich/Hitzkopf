@@ -280,3 +280,7 @@
     100% { transform: translate(calc(var(--sway) * -0.4), -125vh) scale(1); opacity: 0; }
 }
 .lbRound { color: var(--sr-ink); font-weight: 800; }
+
+/* Amplify 2.0: nur noch ein Fortschrittsbalken (bis zur nächsten Runde) */
+.lbStepsOne { grid-template-columns: minmax(0, 1fr); }
+.lbRankCut::before { content: 'Braucht noch Daumen'; }
