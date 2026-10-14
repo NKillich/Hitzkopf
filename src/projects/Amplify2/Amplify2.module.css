@@ -436,3 +436,6 @@
 .mvRoot .mvAvatarGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; padding: 10px; border-radius: 16px; background: var(--sr-surface); }
 .mvRoot .mvAvatarPick { height: 44px; border-radius: 12px; font-size: 24px; border: 2px solid transparent; }
 .mvRoot .mvAvatarPickOn { border-color: var(--sr-accent); background: var(--sr-accent-soft); }
+
+/* ── NEU-Markierung ── */
+.mvRoot .mvNewChip { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 8px; background: color-mix(in srgb, #FFD23F 30%, transparent); color: var(--sr-ink); font-size: 11px; font-weight: 800; letter-spacing: 0.02em; vertical-align: 1px; }

@@ -9,7 +9,7 @@ import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
 import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconTrophy, IconExpand, IconShrink } from '../../shared/ui/icons'
 import { joinLink } from './links'
-import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextRoundInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, placeOf, currentRoundNo, liveNowPlaying, upcomingQueue, queueOrder, DEFAULT_BATCH } from './amplifyLogic'
+import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextRoundInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, placeOf, currentRoundNo, liveNowPlaying, upcomingQueue, queueOrder, DEFAULT_BATCH, isNew } from './amplifyLogic'
 import ReactionRain from './ReactionRain'
 import styles from './LiveBoard.module.css'
 
@@ -417,7 +417,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                             <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={52} radius={11} />
                                             <span className={styles.lbText}>
                                                 <span className={styles.lbTitle}>{item.title}</span>
-                                                <span className={styles.lbSub}>{playedIds.has(item.spotifyId) && <span className={styles.lbPlayed}>Lief schon</span>}{item.artist} · von <strong>{item.addedBy}</strong></span>
+                                                <span className={styles.lbSub}>{isNew(item, clock) && <span className={styles.lbNew}>✨ NEU</span>}{playedIds.has(item.spotifyId) && <span className={styles.lbPlayed}>Lief schon</span>}{item.artist} · von <strong>{item.addedBy}</strong></span>
                                                 <span className={styles.lbVotes} aria-label={`${up} Daumen hoch, ${down} Daumen runter`}>
                                                     <span className={styles.lbVoteUp} style={{ width: `${(up / maxAbs) * 50}%` }} />
                                                     <span className={styles.lbVoteDown} style={{ width: `${(down / maxAbs) * 50}%` }} />
