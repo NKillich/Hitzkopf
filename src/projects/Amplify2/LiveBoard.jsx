@@ -9,7 +9,7 @@ import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
 import { IconMoon, IconSun, IconBack, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconTrophy, IconWave, IconLock, IconExpand, IconShrink } from '../../shared/ui/icons'
 import { joinLink } from './links'
-import { scoreOf, voteCounts, byScore, mmss, nowPosition, nextRoundInMs, ruleLabel, ruleEmoji, currentRoundNo, liveNowPlaying, upcomingQueue, DEFAULT_BATCH, isNew } from './amplifyLogic'
+import { scoreOf, voteCounts, byScore, mmss, nowPosition, nextRoundInMs, ruleLabel, ruleEmoji, currentRoundNo, liveNowPlaying, upcomingQueue, DEFAULT_BATCH, isNew, isReady } from './amplifyLogic'
 import ReactionRain from './ReactionRain'
 import { IconArrowUp, IconArrowDown } from './icons'
 import styles from './LiveBoard.module.css'
@@ -254,6 +254,9 @@ export default function LiveBoard2({ roomCode, onBack }) {
         </span>
     )
     const queueShown = queue.slice(0, 4)
+    // Grün = kommt sicher weiter: die besten N mit Saldo ≥ +1
+    const greenCount = Math.min(batchSize, ranked.filter(isReady).length)
+    const onBackup = !!now && !nowItem && !!data.backupPlaylist?.uri && now.contextUri === data.backupPlaylist.uri
 
     return (
         <div className={`${styles.lbRoot} ${isDark ? theme.dark : theme.light} ${stage ? styles.lbStageMode : ''}`}>
@@ -292,6 +295,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                         <h2 className={styles.lb2NowTitle}>{now.trackName}</h2>
                                         <span className={styles.lb2NowArtist}>{now.artist}</span>
                                         {nowItem?.addedBy && <span className={styles.lb2By}>{emojiOf(nowItem.addedBy)} {nowItem.addedBy}</span>}
+                                        {onBackup && <span className={styles.lb2By}>🎵 Backup-Playlist</span>}
                                     </div>
                                 </div>
                                 <div className={styles.lb2Progress}>
@@ -320,7 +324,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                             {cover(item.imageUrl, item.spotifyId || item.id, item.addedBy, 46)}
                                             <span className={styles.lb2Text}>
                                                 <span className={styles.lb2Title}>{item.title}</span>
-                                                <span className={styles.lb2Artist}>{item.artist}</span>
+                                                <span className={styles.lb2Artist}>{item.artist} · {item.addedBy}</span>
                                             </span>
                                             <span className={styles.lb2Time}>{mmss(item.duration)}</span>
                                         </li>
@@ -354,7 +358,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                     <section className={styles.lb2Right} aria-label="Im Voting">
                         <div className={styles.lb2Head}>
                             <h2 className={styles.lb2HeadTitle}>Im Voting</h2>
-                            <span className={styles.lb2HeadMeta}>{batchSize === 1 ? 'Platz 1 kommt weiter' : `Die besten ${batchSize} kommen weiter`} · {pool.length} {pool.length === 1 ? 'Song' : 'Songs'}</span>
+                            <span className={styles.lb2HeadMeta}>{batchSize === 1 ? 'Der beste ab +1 kommt weiter' : `Die besten ${batchSize} ab +1 kommen weiter`} · {pool.length} {pool.length === 1 ? 'Song' : 'Songs'}</span>
                         </div>
                         {top10.length === 0 ? (
                             <div className={styles.lb2Empty}>
@@ -369,13 +373,13 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                     const score = scoreOf(item)
                                     return (
                                         <Fragment key={item.id}>
-                                            {i === batchSize && <li className={styles.lb2Cut} aria-hidden="true"><span><IconArrowUp size={16} /></span></li>}
-                                            <li ref={setRowRef(item.id)} className={`${styles.lb2Row} ${i < batchSize ? styles.lb2RowTop : ''}`}>
+                                            {i === greenCount && <li className={styles.lb2Cut}><span><IconArrowUp size={16} />ab +1 geht’s weiter</span></li>}
+                                            <li ref={setRowRef(item.id)} className={`${styles.lb2Row} ${i < greenCount ? styles.lb2RowTop : ''}`}>
                                                 <span className={styles.lb2No}>{i + 1}</span>
                                                 {cover(item.imageUrl, item.spotifyId || item.id, item.addedBy, 42)}
                                                 <span className={styles.lb2Text}>
                                                     <span className={styles.lb2Title}>{item.title}</span>
-                                                    <span className={styles.lb2Artist}>{isNew(item, clock) && <span className={styles.lbNew}>✨ NEU</span>}{playedIds.has(item.spotifyId) && <span className={styles.lbPlayed}>Lief schon</span>}{item.artist}</span>
+                                                    <span className={styles.lb2Artist}>{isNew(item, clock) && <span className={styles.lbNew}>✨ NEU</span>}{playedIds.has(item.spotifyId) && <span className={styles.lbPlayed}>Lief schon</span>}{item.artist} · {item.addedBy}</span>
                                                 </span>
                                                 <span className={styles.lb2Pill} aria-label={`${score} Punkte: ${up}× hoch, ${down}× runter`}>
                                                     <span className={styles.lb2PillUp}><IconArrowUp size={16} />{up}</span>

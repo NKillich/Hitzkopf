@@ -13,7 +13,7 @@ import theme from '../../shared/ui/theme.module.css'
 import {
     IconMoon, IconSun, IconBack, IconNext, IconCheck, IconX, IconLock, IconPlay, IconPause, IconNote, IconSearch,
     IconRetry, IconAlert, IconPlus, IconTrash, IconUsers, IconGear, IconThumbUp, IconThumbDown,
-    IconWave, IconSpeaker, IconInfo, IconShare, IconHelp, IconCopy, IconTv, IconSkip,
+    IconWave, IconSpeaker, IconInfo, IconShare, IconHelp, IconCopy, IconTv, IconSkip, IconQueue,
     IconVolume, IconTrophy, IconLeave, IconChevron
 } from '../../shared/ui/icons'
 import { joinLink, boardLink } from './links'
@@ -22,7 +22,7 @@ import {
     cleanName, nameKey, sameSong, similarSong, mmss, nowPosition, roundDue,
     DECADES, decadeLabel, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
     limitsFor, streakOf, STREAK_LEVELS, liveNowPlaying, upcomingQueue, queueOrder, voteCounts,
-    isNew, staleItems, dropUpdate, DEFAULT_DROP_BELOW, DEFAULT_DROP_AFTER
+    isNew, staleItems, dropUpdate, DEFAULT_DROP_BELOW, DEFAULT_DROP_AFTER, isReady
 } from './amplifyLogic'
 import ReactionPad from './ReactionPad'
 import { IconArrowUp, IconArrowDown } from './icons'
@@ -181,6 +181,8 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const [artistQuery, setArtistQuery] = useState('')
     const [artistResults, setArtistResults] = useState([])
     const [keywordDraft, setKeywordDraft] = useState('')
+    const [backupPicker, setBackupPicker] = useState(null)   // null = zu | { list, loading, error }
+    const [backupFilter, setBackupFilter] = useState('')
 
     // Refs
     const unsubscribeRef = useRef(null)
@@ -862,29 +864,45 @@ const Amplify2 = ({ onBack, joinCode }) => {
         }
     }
 
-    // Nächste Runde an Spotify: die besten N der Live-Rangliste kommen in die Warteschlange.
+    // Nächste Runde an Spotify: die besten N bereiten Songs (Saldo ≥ +1) kommen in die Warteschlange.
     // round = erwartete Rundennummer – starten zwei Geräte gleichzeitig, passiert nichts doppelt.
-    const startRound = useCallback(async (round, { manual = false } = {}) => {
+    const startRound = useCallback(async (round) => {
         if (!db || !roomId) return null
         return mutateLobby(roomId, (d) => {
-            if ((d.votingRound || 0) !== round || d.pendingBatch) return null
-            if (!manual && !roundDue(d, Date.now())) return null
+            if ((d.votingRound || 0) !== round || !roundDue(d, Date.now())) return null
             const update = finishRound(d, Date.now())
-            return update ? { update } : { empty: true }
+            return update ? { update } : null
         })
     }, [db, roomId, mutateLobby])
 
-    // Host: erste Runde starten (oder wieder anwerfen, wenn die Warteschlange leer gelaufen ist)
-    const handleStartRound = async () => {
-        if (!isHost) return
+    // ── Backup-Playlist: läuft, wenn keine Songs aus dem Voting in der Warteschlange sind ──
+    // Startet an einer zufälligen Stelle; neue Runden kommen per Warteschlange davor (Spotify spielt die Warteschlange zuerst).
+    const backupBusyRef = useRef(0)
+    const startBackup = async ({ manual = false } = {}) => {
+        const backup = latestLobbyRef.current?.backupPlaylist
+        if (!backup?.uri || Date.now() - backupBusyRef.current < 15000) return false
+        backupBusyRef.current = Date.now()
         try {
-            const res = await startRound(lobbyData?.votingRound || 0, { manual: true })
-            if (res?.empty) showToast('Es ist noch kein Song im Rennen.', 'bad')
+            const device = await pickDevice()
+            const offset = backup.trackCount > 1 ? Math.floor(Math.random() * backup.trackCount) : 0
+            try {
+                await spotifyService.playContextAtOffset(backup.uri, offset, device)
+            } catch (e) {
+                if (offset === 0) throw e
+                await spotifyService.playContextAtOffset(backup.uri, 0, device)   // Stelle gibt es nicht (mehr) → von vorn
+            }
+            if (!latestLobbyRef.current?.musicStarted) updateLobbyConfig({ musicStarted: true })
+            setDeviceProblem(null)
+            return true
         } catch (e) {
-            console.error('Runde starten fehlgeschlagen:', e)
-            showToast('Das hat nicht geklappt. Bitte nochmal versuchen.', 'bad')
+            console.error('Backup-Playlist starten fehlgeschlagen:', e)
+            if (manual) showToast(friendlySpotifyError(e), 'bad')
+            else setDeviceProblem(`Die Backup-Playlist ließ sich nicht starten: ${friendlySpotifyError(e)}`)
+            return false
         }
     }
+    const startBackupRef = useRef(startBackup)
+    useLayoutEffect(() => { startBackupRef.current = startBackup })
 
     // Uhr für Fortschritt, Countdown und Restzeit (eine Sekunde reicht für die Anzeige)
     const [clock, setClock] = useState(() => Date.now())
@@ -1022,6 +1040,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 positionMs: state.positionMs,
                                 durationMs: state.durationMs,
                                 isPlaying: state.isPlaying,
+                                contextUri: state.contextUri || null,
                                 updatedAt: state.updatedAt
                             }
                             : null,
@@ -1046,6 +1065,17 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 if (trackId) {
                     lastPlayedTrackIdRef.current = trackId
                     lastDurationRef.current = state.durationMs || null
+                }
+
+                // Leerlauf → Backup-Playlist: Warteschlange durch und es kommt nichts mehr (Spotify steht am Ende
+                // oder spielt eigenes Autoplay). Eine Pause mitten im Song lässt sie in Ruhe.
+                const data = latestLobbyRef.current
+                const backup = data?.backupPlaylist
+                if (backup?.uri && (data.musicStarted || (data.votingRound || 0) > 0) && !data.pendingBatch && upcomingQueue(data, now).length === 0) {
+                    const ours = !!trackId && (data.playlist || []).some(i => i.spotifyId === trackId)
+                    const ended = !isPlaying && (!trackId || progress.moved || (state.durationMs && state.positionMs >= state.durationMs - 3000))
+                    const foreign = isPlaying && !!trackId && !ours && state.contextUri !== backup.uri
+                    if (ended || foreign) await startBackupRef.current()
                 }
             } catch {
                 // z.B. kein Token oder Player inaktiv – ignorieren
@@ -1132,14 +1162,16 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     // Songs kommen immer in die Spotify-Warteschlange ("Als Nächstes"), nie als Abspielliste: dort wird hinten
     // angehängt, also können neue Gewinner jederzeit dazu – ohne den laufenden Song oder den Rest zu überholen.
-    // Läuft gerade nichts von uns, startet der erste Song direkt. Vorher Abgleich, damit nichts doppelt landet.
-    const playingOurs = !!rawNowPlaying?.isPlaying && playlist.some(i => i.spotifyId === rawNowPlaying.trackId)
+    // Läuft gerade gar nichts, startet der erste Song direkt; läuft etwas (auch die Backup-Playlist), wird nur
+    // angestellt – der laufende Song spielt zu Ende. Vorher Abgleich, damit nichts doppelt landet (nicht während
+    // der Backup-Playlist: deren eigene nächste Songs stehen auch in der Liste).
     const pushToSpotify = async (ids, device) => {
         if (!ids.length) return
         let inSpotify = []
-        try { inSpotify = await spotifyService.getQueueIds() } catch { /* ohne Abgleich weiter */ }
+        const onBackup = !!lobbyData?.backupPlaylist?.uri && rawNowPlaying?.contextUri === lobbyData.backupPlaylist.uri
+        if (!onBackup) { try { inSpotify = await spotifyService.getQueueIds() } catch { /* ohne Abgleich weiter */ } }
         let rest = ids
-        if (!playingOurs) {
+        if (!rawNowPlaying?.isPlaying) {
             await spotifyService.playOnDevice([`spotify:track:${ids[0]}`], device)
             rest = ids.slice(1)
         }
@@ -1152,7 +1184,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     const sendQueueToSpotify = async (deviceOverride) => {
         if (queueSongs.length === 0) {
-            setSpotifyError('Die Warteschlange ist leer. Starte die erste Runde – die besten Songs landen hier.')
+            setSpotifyError('Die Warteschlange ist leer. Sobald ein Song +1 hat, landet er hier.')
             return
         }
         setSpotifyError(null)
@@ -1298,6 +1330,22 @@ const Amplify2 = ({ onBack, joinCode }) => {
         setArtistQuery('')
         setArtistResults([])
         setKeywordDraft('')
+    }
+
+    // ─── Backup-Playlist wählen (eigene und gefolgte Playlists des Hosts) ─────
+    const openBackupPicker = async () => {
+        setBackupFilter('')
+        setBackupPicker({ list: [], loading: true, error: null })
+        try {
+            setBackupPicker({ list: await spotifyService.getMyPlaylists(50), loading: false, error: null })
+        } catch (e) {
+            setBackupPicker({ list: [], loading: false, error: e.message || 'Die Playlists konnten nicht geladen werden.' })
+        }
+    }
+    const chooseBackup = async (pl) => {
+        await updateLobbyConfig({ backupPlaylist: pl ? { uri: pl.uri, name: pl.name || '', imageUrl: pl.imageUrl || null, trackCount: pl.trackCount || 0 } : null })
+        setBackupPicker(null)
+        showToast(pl ? `🎵 „${pl.name}“ läuft, wenn nichts aus dem Voting dran ist.` : 'Keine Backup-Playlist – dann übernimmt Spotify-Autoplay.')
     }
 
     // ─── Teilen ──────────────────────────────────────────────────────────────
@@ -1529,7 +1577,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                         </li>
                         <li className={styles.mvStep}>
                             <span className={styles.mvStepIcon}><IconPlay size={16} /></span>
-                            <span><strong>Die Besten laufen zuerst</strong>Die grünen Songs kommen als Nächstes dran.</span>
+                            <span><strong>Die Besten laufen zuerst</strong>Ab +1 kommt ein Song weiter – die grünen sind als Nächstes dran.</span>
                         </li>
                     </ol>
                     <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => setShowWelcomePopup(false)}>Los geht’s</button>
@@ -2057,6 +2105,62 @@ const Amplify2 = ({ onBack, joinCode }) => {
                         {isHost && (
                             <section className={styles.mvCard}>
                                 <div className={styles.mvCardHead}>
+                                    <h2 className={styles.mvCardTitle}>Backup-Playlist</h2>
+                                    {lobbyData.backupPlaylist?.uri && <span className={`${styles.mvChip} ${styles.mvChipOk}`}>aktiv</span>}
+                                </div>
+                                <p className={styles.mvFine}>Läuft, wenn kein Song aus dem Voting dran ist (Songs kommen erst ab +1 weiter). Neue Runden spielen nach dem aktuellen Song.</p>
+                                {lobbyData.backupPlaylist?.uri && (
+                                    <div className={styles.mvBackupNow}>
+                                        <CoverArt src={lobbyData.backupPlaylist.imageUrl} seed={lobbyData.backupPlaylist.uri} size={46} radius={10} />
+                                        <span className={styles.mvRowText}>
+                                            <span className={styles.mvRowName}>{lobbyData.backupPlaylist.name}</span>
+                                            <span className={styles.mvRowMeta}>{lobbyData.backupPlaylist.trackCount ? `${lobbyData.backupPlaylist.trackCount} Songs · ` : ''}startet an zufälliger Stelle</span>
+                                        </span>
+                                        <button type="button" className={`${styles.mvBtn} ${styles.mvKickBtn}`} onClick={() => chooseBackup(null)} aria-label="Backup-Playlist entfernen"><IconX size={14} /></button>
+                                    </div>
+                                )}
+                                {!backupPicker ? (
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={openBackupPicker} disabled={!spotifyConnected}>
+                                        <IconQueue size={18} />{lobbyData.backupPlaylist?.uri ? 'Andere Playlist wählen' : 'Playlist wählen'}
+                                    </button>
+                                ) : (
+                                    <>
+                                        <div className={styles.mvInputWrap}>
+                                            <span className={styles.mvInputIcon}><IconSearch /></span>
+                                            <input type="search" className={styles.mvInput} value={backupFilter} onChange={(e) => setBackupFilter(e.target.value)}
+                                                placeholder="Deine Playlists durchsuchen" aria-label="Deine Playlists durchsuchen" autoComplete="off" />
+                                        </div>
+                                        {backupPicker.loading && skeletons('Playlists werden geladen')}
+                                        {backupPicker.error && <p className={styles.mvFieldError}>{backupPicker.error}</p>}
+                                        {!backupPicker.loading && !backupPicker.error && (() => {
+                                            const f = backupFilter.trim().toLocaleLowerCase('de')
+                                            const list = backupPicker.list.filter(pl => !f || `${pl.name} ${pl.owner}`.toLocaleLowerCase('de').includes(f))
+                                            return list.length ? (
+                                                <ul className={`${styles.mvList} ${styles.mvBackupList}`}>
+                                                    {list.map(pl => (
+                                                        <li key={pl.id}>
+                                                            <button type="button" className={`${styles.mvBtn} ${styles.mvRow} ${styles.mvRowFlat} ${lobbyData.backupPlaylist?.uri === pl.uri ? styles.mvRowOn : ''}`} onClick={() => chooseBackup(pl)}>
+                                                                <CoverArt src={pl.imageUrl} seed={pl.id} size={40} radius={8} />
+                                                                <span className={styles.mvRowText}>
+                                                                    <span className={styles.mvRowName}>{pl.name}</span>
+                                                                    <span className={styles.mvRowMeta}>{pl.owner}{pl.trackCount ? ` · ${pl.trackCount} Songs` : ''}</span>
+                                                                </span>
+                                                                {lobbyData.backupPlaylist?.uri === pl.uri && <IconCheck size={16} />}
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            ) : <p className={styles.mvFine}>{f ? `Keine Playlist mit „${backupFilter.trim()}“.` : 'Keine Playlists gefunden.'}</p>
+                                        })()}
+                                        <button type="button" className={`${styles.mvBtn} ${styles.mvExpand}`} onClick={() => setBackupPicker(null)}>Schließen</button>
+                                    </>
+                                )}
+                            </section>
+                        )}
+
+                        {isHost && (
+                            <section className={styles.mvCard}>
+                                <div className={styles.mvCardHead}>
                                     <h2 className={styles.mvCardTitle}>Runden</h2>
                                     <span className={styles.mvChip}>Runde {round}</span>
                                 </div>
@@ -2184,6 +2288,10 @@ const Amplify2 = ({ onBack, joinCode }) => {
         const nowItem = showNow ? playlist.find(i => i.spotifyId === nowPlaying.trackId) : null
         const live = showNow && nowPlaying.isPlaying
         const full = myUnqueuedCount >= maxSongs
+        const onBackup = showNow && !nowItem && !!lobbyData.backupPlaylist?.uri && nowPlaying.contextUri === lobbyData.backupPlaylist.uri
+        // Grün = kommt sicher weiter: die besten N mit Saldo ≥ +1 (sie stehen durch die Sortierung immer oben)
+        const greenCount = Math.min(batchSize, poolItems.filter(isReady).length)
+        const byName = (name) => (name === myName ? 'du' : name)
 
         return shell(
             <main className={`${styles.mvMain} ${previewId ? styles.mvWithPreview : ''}`}>
@@ -2210,11 +2318,13 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             </div>
                         </div>
                     )}
-                    {isHost && round === 0 && poolItems.length > 0 && (
-                        <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={handleStartRound}>
-                            <IconPlay size={18} />Musik starten – die besten {Math.min(batchSize, poolItems.length)} an Spotify
+                    {isHost && !showNow && queueItems.length === 0 && (lobbyData.backupPlaylist?.uri ? (
+                        <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => startBackup({ manual: true })}>
+                            <IconPlay size={18} />Backup-Playlist starten
                         </button>
-                    )}
+                    ) : (
+                        <p className={styles.mvHintLine}>Die Musik startet, sobald ein Song +1 hat. Tipp: Wähl in den Einstellungen eine Backup-Playlist – die läuft, solange nichts dran ist.</p>
+                    ))}
                     {rule && <p className={styles.mvRuleBanner}><span aria-hidden="true">{ruleEmoji(rule)}</span>{ruleLabel(rule)} · {ruleHint(rule)}</p>}
                     {streakBonusActive && <p className={styles.mvStreakChip}>🔥 {myLimits.bonus.streak}× Platz 1 in Folge – Bonus: {myLimits.bonus.label}</p>}
 
@@ -2226,6 +2336,8 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <span className={styles.mvNowTag}>{nowPlaying.isPlaying ? <><IconWave size={14} />Läuft</> : <><IconPause size={12} />Pausiert</>}</span>
                                     <span className={styles.mvNowCardTitle}>{nowPlaying.trackName}</span>
                                     <span className={styles.mvRowMeta}>{nowPlaying.artist}</span>
+                                    {nowItem?.addedBy && <span className={styles.mvByLine}>{byName(nowItem.addedBy)}</span>}
+                                    {onBackup && <span className={styles.mvByLine}>🎵 Backup-Playlist</span>}
                                 </div>
                                 {isHost && (
                                     <span className={styles.mvNowCtrls}>
@@ -2257,6 +2369,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                         <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>
                                             <span className={styles.mvRowName}>{item.title}</span>
                                             <span className={styles.mvRowMeta}>{item.artist}</span>
+                                            <span className={styles.mvByLine}>{byName(item.addedBy)}</span>
                                         </span>
                                         <span className={styles.mvTrackTime}>{mmss(item.duration)}</span>
                                     </li>
@@ -2287,16 +2400,17 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     const canRemove = isHost || own
                                     const score = scoreOf(item)
                                     const { up, down } = voteCounts(item)
-                                    const top = idx < batchSize
+                                    const top = idx < greenCount
                                     const text = (
                                         <>
                                             <span className={styles.mvRowName}>{item.title}</span>
                                             <span className={styles.mvRowMeta}>{isNew(item, clock) && <span className={styles.mvNewChip} title="Gerade vorgeschlagen – braucht noch Stimmen">✨ NEU</span>}{wasPlayed(item) && playedChip}{item.artist}</span>
+                                            <span className={styles.mvByLine}>{byName(item.addedBy)}</span>
                                         </>
                                     )
                                     return (
                                         <Fragment key={item.id}>
-                                            {idx === batchSize && <li className={styles.mvCutLine} aria-hidden="true"><span><IconArrowUp size={14} /></span></li>}
+                                            {idx === greenCount && <li className={styles.mvCutLine}><span><IconArrowUp size={14} />{greenCount ? 'ab +1 geht’s weiter' : 'ab +1 kommt ein Song weiter'}</span></li>}
                                             <li className={`${styles.mvTrack} ${top ? styles.mvTrackTop : ''}`}>
                                                 <span className={styles.mvTrackNo}>{idx + 1}</span>
                                                 {coverWithBadge(item.imageUrl, item.spotifyId || item.id, item.addedBy)}

@@ -357,3 +357,4 @@
 .lbStageMode .lb2Right .lb2Pill { height: 38px; }
 .lbStageMode .lb2Right .lb2Head { margin-bottom: 8px; }
 .lbStageMode .lb2Right .lb2Cut { margin: 0 6px; }
+.lb2Cut > span { align-items: center; gap: 6px; font-size: 14px; font-weight: 800; }
