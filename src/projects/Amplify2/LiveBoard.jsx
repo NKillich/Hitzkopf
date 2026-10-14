@@ -7,9 +7,9 @@ import CoverArt from '../../shared/ui/CoverArt'
 import QrCode from '../../shared/ui/QrCode'
 import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
-import { IconMoon, IconSun, IconBack, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconTrophy, IconWave, IconLock, IconExpand, IconShrink } from '../../shared/ui/icons'
+import { IconMoon, IconSun, IconBack, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconWave, IconLock, IconExpand, IconShrink } from '../../shared/ui/icons'
 import { joinLink } from './links'
-import { scoreOf, voteCounts, byScore, mmss, nowPosition, nextRoundInMs, ruleLabel, ruleEmoji, currentRoundNo, liveNowPlaying, upcomingQueue, DEFAULT_BATCH, isNew, isReady } from './amplifyLogic'
+import { scoreOf, voteCounts, byScore, mmss, nowPosition, nextSongInMs, ruleLabel, ruleEmoji, currentRoundNo, liveNowPlaying, upcomingQueue, isNew } from './amplifyLogic'
 import ReactionRain from './ReactionRain'
 import { IconArrowUp, IconArrowDown } from './icons'
 import styles from './LiveBoard.module.css'
@@ -39,7 +39,7 @@ function buildFacts(history, players, pool, data) {
     const facts = []
     if (data?.streakEnabled) {
         const [name, st] = Object.entries(data.streaks || {}).filter(([n]) => data.players?.[n]).sort((a, b) => (b[1].current || 0) - (a[1].current || 0))[0] || []
-        if (name && st.current > 0) facts.push({ icon: <span aria-hidden="true">🔥</span>, label: 'Streak', value: name, sub: st.current === 1 ? 'Platz-1-Hit in der letzten Runde' : `${st.current}× Platz 1 in Folge` })
+        if (name && st.current > 0) facts.push({ icon: <span aria-hidden="true">🔥</span>, label: 'Streak', value: name, sub: st.current === 1 ? 'ein Nummer-1-Hit' : `${st.current} Nummer-1-Hits` })
     }
     if (history.length) {
         const totalMs = history.reduce((s, h) => s + (h.durationMs || 0), 0)
@@ -61,8 +61,6 @@ function buildFacts(history, players, pool, data) {
         const [topDj, djCount] = Object.entries(byDj).sort((a, b) => b[1] - a[1])[0] || []
         if (topDj && djCount > 1) facts.push({ icon: <IconUsers size={20} />, label: 'Bester DJ', value: topDj, sub: `${djCount} Songs gelaufen` })
     }
-    const roundsDone = currentRoundNo(data)
-    if (roundsDone > 0 && facts.length < 4) facts.push({ icon: <IconTrophy size={20} />, label: 'Gespielt', value: `${roundsDone} ${roundsDone === 1 ? 'Runde' : 'Runden'}`, sub: 'heute Abend' })
     if (facts.length < 4) facts.push({ icon: <IconUsers size={20} />, label: 'Dabei', value: `${players} ${players === 1 ? 'Person' : 'Leute'}`, sub: null })
     if (facts.length < 4) facts.push({ icon: <IconNote size={20} />, label: 'Im Rennen', value: `${pool} ${pool === 1 ? 'Song' : 'Songs'}`, sub: 'für die nächste Runde' })
     return facts.slice(0, 4)
@@ -100,8 +98,6 @@ export default function LiveBoard2({ roomCode, onBack }) {
     const [data, setData] = useState(null)
     const [status, setStatus] = useState(roomCode ? 'loading' : 'nocode')   // nocode | loading | ok | missing | error
     const [clock, setClock] = useState(() => Date.now())   // Uhrzeit für Fortschritt und Countdowns
-    const [reveal, setReveal] = useState(null)             // Siegeranimation, wenn eine Runde an Spotify geht
-    const seenResultRef = useRef(null)
     const [stage, setStage] = useState(calcStage)
     const [fullscreen, setFullscreen] = useState(() => !!document.fullscreenElement)
 
@@ -132,13 +128,6 @@ export default function LiveBoard2({ roomCode, onBack }) {
                 unsub = onSnapshot(doc(getFirestore(getApp()), 'amplify2Lobbies', code), (snap) => {
                     if (snap.exists() && (snap.data().status ?? 'active') === 'active') {
                         const next = snap.data()
-                        // Neue Runde erkennen (nicht beim ersten Laden)
-                        const res = next.lastResult
-                        if (seenResultRef.current === null) seenResultRef.current = res?.round ?? 0
-                        else if (res && res.round !== seenResultRef.current) {
-                            seenResultRef.current = res.round
-                            if (Date.now() - res.at < 60000) setReveal(res)
-                        }
                         setData(next)
                         setStatus('ok')
                     }
@@ -155,12 +144,6 @@ export default function LiveBoard2({ roomCode, onBack }) {
         const id = setInterval(() => setClock(Date.now()), 1000)
         return () => clearInterval(id)
     }, [])
-
-    useEffect(() => {
-        if (!reveal) return
-        const id = setTimeout(() => setReveal(null), 15000)
-        return () => clearTimeout(id)
-    }, [reveal])
 
     // Bildschirm wach halten (Tablet/TV als Dauer-Anzeige)
     useEffect(() => {
@@ -229,7 +212,6 @@ export default function LiveBoard2({ roomCode, onBack }) {
 
     const history = data.history || []
     const players = Object.keys(data.players || {}).length
-    const batchSize = data.batchSize || DEFAULT_BATCH
     const round = currentRoundNo(data)
     // Hochgerechnet, falls das Host-Gerät gerade im Hintergrund ist und keinen Songwechsel meldet
     const now = liveNowPlaying(data, clock)
@@ -239,7 +221,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
     const facts = buildFacts(history, players, pool.length, data)
     const playedIds = new Set(history.map(h => h.spotifyId).filter(Boolean))
     const waiting = !!data.pendingBatch
-    const nextRound = nextRoundInMs(data, clock)
+    const nextSong = nextSongInMs(data, clock)
     const rule = data.roundRule
 
     // Im Voting: die Top 10 – die besten N kommen weiter (grün). Neue Songs dahinter bekommen eine eigene Zeile.
@@ -255,7 +237,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
     )
     const queueShown = queue.slice(0, 4)
     // Grün = kommt sicher weiter: die besten N mit Saldo ≥ +1
-    const greenCount = Math.min(batchSize, ranked.filter(isReady).length)
+    const greenCount = ranked.length ? 1 : 0   // Platz 1 läuft als Nächstes
     const onBackup = !!now && !nowItem && !!data.backupPlaylist?.uri && now.contextUri === data.backupPlaylist.uri
 
     return (
@@ -272,9 +254,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                         </span>
                     </div>
                     {rule && <span className={styles.lb2Chip}>{ruleEmoji(rule)} {ruleLabel(rule)}</span>}
-                    {round > 0 && nextRound != null && !waiting && (
-                        <span className={styles.lb2Chip}>Nächste Runde <strong>{nextRound > 0 ? mmss(nextRound) : (pool.length ? 'gleich' : 'sobald Songs da sind')}</strong></span>
-                    )}
+                    {nextSong != null && <span className={styles.lb2Chip}>Platz 1 läuft in <strong>{mmss(nextSong)}</strong></span>}
                     <div className={styles.lbJoin}>
                         <QrCode text={joinLink(code)} size={92} label={`QR-Code zum Mitmachen, Raumcode ${code}`} />
                         <span className={styles.lbJoinText}>
@@ -307,7 +287,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                         ) : (
                             <section className={`${styles.lb2Now} ${styles.lb2NowIdle}`}>
                                 <span className={styles.lbEmptyIcon}><IconNote size={28} /></span>
-                                <p className={styles.lb2NowTitle}>{round === 0 ? 'Gleich geht’s los' : waiting ? 'Die Runde geht an Spotify' : 'Gerade läuft nichts'}</p>
+                                <p className={styles.lb2NowTitle}>{round === 0 ? 'Gleich geht’s los' : waiting ? 'Platz 1 geht an Spotify' : 'Gerade läuft nichts'}</p>
                                 <p className={styles.lbMuted}>{round === 0 ? 'QR-Code scannen, Songs vorschlagen und voten.' : 'Sobald der Host abspielt, erscheint der Song hier.'}</p>
                             </section>
                         )}
@@ -358,7 +338,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                     <section className={styles.lb2Right} aria-label="Im Voting">
                         <div className={styles.lb2Head}>
                             <h2 className={styles.lb2HeadTitle}>Im Voting</h2>
-                            <span className={styles.lb2HeadMeta}>{batchSize === 1 ? 'Der beste ab +1 kommt weiter' : `Die besten ${batchSize} ab +1 kommen weiter`} · {pool.length} {pool.length === 1 ? 'Song' : 'Songs'}</span>
+                            <span className={styles.lb2HeadMeta}>Platz 1 läuft als Nächstes · {pool.length} {pool.length === 1 ? 'Song' : 'Songs'}</span>
                         </div>
                         {top10.length === 0 ? (
                             <div className={styles.lb2Empty}>
@@ -373,7 +353,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                     const score = scoreOf(item)
                                     return (
                                         <Fragment key={item.id}>
-                                            {i === greenCount && <li className={styles.lb2Cut}><span><IconArrowUp size={16} />ab +1 geht’s weiter</span></li>}
+                                            {i === 1 && <li className={styles.lb2Cut}><span><IconArrowUp size={16} />Platz 1 läuft als Nächstes</span></li>}
                                             <li ref={setRowRef(item.id)} className={`${styles.lb2Row} ${i < greenCount ? styles.lb2RowTop : ''}`}>
                                                 <span className={styles.lb2No}>{i + 1}</span>
                                                 {cover(item.imageUrl, item.spotifyId || item.id, item.addedBy, 42)}
@@ -383,7 +363,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                                 </span>
                                                 <span className={styles.lb2Pill} aria-label={`${score} Punkte: ${up}× hoch, ${down}× runter`}>
                                                     <span className={styles.lb2PillUp}><IconArrowUp size={16} />{up}</span>
-                                                    <strong key={score} className={styles.lb2Score}>{score}</strong>
+                                                    <strong key={score} className={styles.lb2Score}><span className={styles.lb2Num}>{score < 0 && <span className={styles.lb2Sign}>−</span>}{Math.abs(score)}</span></strong>
                                                     <span className={styles.lb2PillDown}><IconArrowDown size={16} />{down}</span>
                                                 </span>
                                             </li>
@@ -419,28 +399,6 @@ export default function LiveBoard2({ roomCode, onBack }) {
 
             <ReactionRain code={code} />
 
-            {reveal && (
-                <div className={styles.lbReveal} role="dialog" aria-label={`Runde ${reveal.round} geht an Spotify`} onClick={() => setReveal(null)}>
-                    <div className={styles.lbRevealInner}>
-                        <span className={styles.lbRevealKicker}><IconTrophy size={26} />Runde {reveal.round} geht an Spotify</span>
-                        <h2 className={styles.lbRevealTitle}>Die Gewinner</h2>
-                        <ol className={styles.lbPodium}>
-                            {reveal.top.map((t, i) => {
-                                const place = t.place ?? i + 1
-                                return (
-                                <li key={t.spotifyId || i} className={`${styles.lbPodiumItem} ${styles[`lbPlace${Math.min(place, 3)}`]}`} style={{ animationDelay: `${0.5 + (reveal.top.length - 1 - i) * 1.1}s` }}>
-                                    <span className={styles.lbPodiumPlace}>{place}</span>
-                                    <CoverArt src={t.imageUrl} seed={t.spotifyId || t.title} size={place === 1 ? (reveal.top.length > 4 ? 160 : 200) : 150} radius={20} />
-                                    <span className={styles.lbPodiumTitle}>{t.title}</span>
-                                    <span className={styles.lbPodiumBy}>{data.players?.[t.addedBy]?.emoji || '🙂'} <strong>{t.addedBy}</strong></span>
-                                    <span className={styles.lbPodiumScore}>{t.score > 0 ? '+' : ''}{t.score} <small>({t.up}× hoch{t.down ? ` · ${t.down}× runter` : ''})</small></span>
-                                </li>
-                                )
-                            })}
-                        </ol>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }
