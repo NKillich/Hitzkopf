@@ -464,3 +464,51 @@
 .mvRoot .mvReactInline { position: relative; right: auto; bottom: auto; flex: none; }
 .mvRoot .mvReactInline .mvReactBar { position: absolute; right: 0; bottom: calc(100% + 12px); }
 .mvRoot .mvReactInline .mvReactToggle { width: 58px; height: 58px; border-radius: 29px; box-shadow: none; }
+
+/* ── Amplify 2.0 Design: Läuft-Karte, Abschnitte, Voting-Pille ── */
+.mvRoot .mvRoomSub { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sr-muted); font-weight: 600; white-space: nowrap; }
+.mvRoot .mvRoomDot { width: 7px; height: 7px; border-radius: 50%; background: var(--sr-muted); flex: none; }
+.mvRoot .mvRoomDotLive { background: var(--sr-ok); }
+.mvRoot .mvCoverWrap { position: relative; flex: none; display: inline-block; }
+.mvRoot .mvBadge { position: absolute; right: -6px; bottom: -6px; width: 24px; height: 24px; border-radius: 9px; background: var(--sr-bg); border: 2px solid var(--sr-bg); display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1; box-sizing: border-box; }
+.mvRoot .mvBadgeOwn { border-color: var(--sr-ok); }
+.mvRoot .mvNowCard { padding: 14px 14px 12px; border-radius: 22px; background: color-mix(in srgb, var(--sr-ok) 9%, var(--sr-surface)); border: 1.5px solid color-mix(in srgb, var(--sr-ok) 28%, transparent); display: flex; flex-direction: column; gap: 12px; }
+.mvRoot .mvNowCardRow { display: flex; align-items: center; gap: 14px; }
+.mvRoot .mvNowTag { display: inline-flex; align-items: center; gap: 6px; color: var(--sr-ok); font-size: 13px; font-weight: 800; }
+.mvRoot .mvNowCardTitle { font-family: var(--sr-display); font-size: 21px; font-weight: 800; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mvRoot .mvNowCtrls { display: flex; align-items: center; gap: 8px; flex: none; }
+.mvRoot .mvNowPlayBtn { width: 52px; height: 52px; border-radius: 26px; background: #F3F4F6; color: #101216; }
+.mvRoot .mvNowSkipBtn { width: 46px; height: 46px; border-radius: 23px; border: 1.5px solid color-mix(in srgb, var(--sr-ok) 30%, var(--sr-line)); color: var(--sr-ink); }
+.mvRoot .mvNowProgress { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+.mvRoot .mvNowCardBar { flex: 1; height: 4px; border-radius: 2px; background: var(--sr-line); overflow: hidden; }
+.mvRoot .mvNowCardBar > span { display: block; height: 100%; background: var(--sr-ok); transition: width 1s linear; }
+.mvRoot .mvSecHead { display: flex; align-items: center; justify-content: space-between; margin: 6px 2px 8px; }
+.mvRoot .mvSecTitle { margin: 0; font-family: var(--sr-display); font-size: 17px; font-weight: 800; }
+.mvRoot .mvSecMeta { display: inline-flex; align-items: center; gap: 10px; color: var(--sr-muted); font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mvRoot .mvFreeUp, .mvRoot .mvFreeDown { display: inline-flex; align-items: center; gap: 2px; }
+.mvRoot .mvFreeUp { color: var(--sr-ok); }
+.mvRoot .mvFreeDown { color: var(--sr-accent); }
+.mvRoot .mvFreeEmpty { opacity: 0.4; }
+.mvRoot .mvTrack { min-height: 72px; padding: 8px 10px; gap: 12px; border-radius: 18px; border: 1.5px solid transparent; }
+.mvRoot .mvTrackTop { background: color-mix(in srgb, var(--sr-ok) 8%, var(--sr-surface)); border-color: color-mix(in srgb, var(--sr-ok) 26%, transparent); }
+.mvRoot .mvTrackNo { width: 18px; flex: none; text-align: center; font-size: 15px; font-weight: 800; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+.mvRoot .mvTrackTop .mvTrackNo { color: var(--sr-ok); }
+.mvRoot .mvTrack .mvRowName { font-size: 17px; }
+.mvRoot .mvTrackTime { flex: none; font-size: 14px; color: var(--sr-muted); font-variant-numeric: tabular-nums; padding-right: 4px; }
+.mvRoot .mvCutLine { display: flex; align-items: center; gap: 10px; margin: 6px 4px; color: var(--sr-muted); }
+.mvRoot .mvCutLine::before, .mvRoot .mvCutLine::after { content: ''; flex: 1; border-top: 1.5px dashed var(--sr-line); }
+.mvRoot .mvCutLine > span { display: flex; }
+.mvRoot .mvPill { flex: none; display: flex; align-items: center; height: 46px; padding: 0 4px; border-radius: 23px; background: var(--sr-surface2); }
+.mvRoot .mvPillBtn { width: 38px; height: 38px; border-radius: 19px; color: var(--sr-muted); }
+.mvRoot .mvPillBtn:hover { color: var(--sr-ink); }
+.mvRoot .mvPillUpOn { background: var(--sr-ok); color: var(--sr-on-ok); }
+.mvRoot .mvPillUpOn:hover { color: var(--sr-on-ok); }
+.mvRoot .mvPillDownOn { background: var(--sr-accent); color: var(--sr-on-accent); }
+.mvRoot .mvPillDownOn:hover { color: var(--sr-on-accent); }
+.mvRoot .mvPillOff { opacity: 0.35; }
+.mvRoot .mvPillScore { min-width: 22px; text-align: center; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mvRoot .mvScoreOnly { flex: none; min-width: 46px; text-align: center; font-size: 17px; font-weight: 800; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+.mvRoot .mvSuggest { flex: 1; min-width: 0; height: 60px; border-radius: 30px; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 18px; font-weight: 800; gap: 10px; justify-content: center; }
+.mvRoot .mvSuggest:disabled { background: var(--sr-surface); color: var(--sr-muted); border: 1.5px solid var(--sr-line); cursor: not-allowed; }
+.mvRoot .mvSuggestCount { padding: 3px 9px; border-radius: 10px; background: color-mix(in srgb, currentColor 16%, transparent); font-size: 13px; font-weight: 800; }
+.mvRoot .mvReactInline .mvReactToggle { width: 60px; height: 60px; border-radius: 30px; background: var(--sr-surface); color: var(--sr-ink); }
