@@ -914,6 +914,7 @@ class SpotifyService {
             isPlaying: !!data.is_playing,
             volumePercent: data.device?.volume_percent ?? null,
             deviceName: data.device?.name || null,
+            contextUri: data.context?.uri || null,   // laufende Playlist/Album (z. B. Amplify-Backup-Playlist)
             updatedAt: Date.now()
         }
     }

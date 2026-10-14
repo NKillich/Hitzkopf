@@ -105,6 +105,9 @@ export const poolOf = (data) => (data?.playlist || []).filter(i => i.queuedRound
 const playable = (i) => i.source === 'spotify' && !!i.spotifyId && i.type === 'song'
 /** Live-Rangliste: meiste Stimmen (Saldo) zuerst, bei Gleichstand der früher eingereichte Song */
 export const rankedPool = (data) => poolOf(data).sort(byScore)
+/** Bereit für eine Runde: mehr Daumen hoch als runter (Saldo ≥ +1) – sonst läuft lieber die Backup-Playlist */
+export const isReady = (item) => scoreOf(item) >= 1
+export const readyPool = (data) => poolOf(data).filter(i => playable(i) && isReady(i)).sort(byScore)
 
 /**
  * Wann geht die nächste Runde an Spotify? (null = gerade nicht absehbar)
@@ -122,12 +125,12 @@ export const nextRoundInMs = (data, now) => {
 }
 
 /**
- * Ist die nächste Runde fällig? Ab der 2. Runde automatisch: der letzte Song der Warteschlange läuft
- * (oder sie ist schon leer) und es gibt Songs im Rennen. Die erste Runde startet der Host.
+ * Ist die nächste Runde fällig? Sobald der letzte Song der Warteschlange läuft (oder sie leer ist – dann läuft
+ * die Backup-Playlist) und mindestens ein Song bereit ist (Saldo ≥ +1). Ohne bereite Songs fällt die Runde aus.
  */
 export const roundDue = (data, now) => {
-    if (!data || data.pendingBatch || !(data.votingRound > 0)) return false
-    if (!poolOf(data).some(playable)) return false
+    if (!data || data.pendingBatch) return false
+    if (!readyPool(data).length) return false
     return queueOrder(data).length === 0 || upcomingQueue(data, now).length === 0
 }
 
@@ -224,8 +227,7 @@ export const finishRound = (data, now) => {
     const batchSize = data.batchSize || DEFAULT_BATCH
     const round = (data.votingRound || 0) + 1
     const current = data.playlist || []
-    const pool = current.filter(i => i.queuedRound == null)
-    const ranked = pool.filter(playable).sort(byScore)
+    const ranked = readyPool(data)   // nur Songs mit Saldo ≥ +1 kommen weiter
     const selected = ranked.slice(0, batchSize)
     if (!selected.length) return null
     const selectedIds = selected.map(i => i.spotifyId)
@@ -237,11 +239,11 @@ export const finishRound = (data, now) => {
         pendingBatch: { round, spotifyIds: [...pendingIds, ...selectedIds.filter(id => !pendingIds.includes(id))] }
     }
     // Platz-1-Hit: ein eigener Song auf Platz 1 (auch geteilt) mit mehr Daumen hoch als runter.
-    // Wer Songs im Rennen hatte, aber keinen Hit, verliert die Streak; wer nichts eingereicht hat, behält sie.
+    // Wer bereite Songs im Rennen hatte, aber keinen Hit, verliert die Streak; alle anderen behalten sie.
     const topScore = scoreOf(selected[0])
     const hitters = new Set(topScore > 0 ? ranked.filter(i => scoreOf(i) === topScore).map(i => i.addedBy).filter(Boolean) : [])
     const streaks = { ...(data.streaks || {}) }
-    new Set(pool.map(i => i.addedBy).filter(Boolean)).forEach(owner => {
+    new Set(ranked.map(i => i.addedBy).filter(Boolean)).forEach(owner => {
         const prev = streaks[owner] || { current: 0, best: 0 }
         const cur = hitters.has(owner) ? (prev.current || 0) + 1 : 0
         streaks[owner] = { current: cur, best: Math.max(prev.best || 0, cur) }

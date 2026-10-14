@@ -512,3 +512,14 @@
 .mvRoot .mvSuggest:disabled { background: var(--sr-surface); color: var(--sr-muted); border: 1.5px solid var(--sr-line); cursor: not-allowed; }
 .mvRoot .mvSuggestCount { padding: 3px 9px; border-radius: 10px; background: color-mix(in srgb, currentColor 16%, transparent); font-size: 13px; font-weight: 800; }
 .mvRoot .mvReactInline .mvReactToggle { width: 60px; height: 60px; border-radius: 30px; background: var(--sr-surface); color: var(--sr-ink); }
+
+/* ── Namenszeile, „braucht noch ↑“, zentrierte Punkte, Backup-Playlist ── */
+.mvRoot .mvByLine { font-size: 13px; font-weight: 700; color: var(--sr-muted); opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.mvRoot .mvNeeds { color: var(--sr-accent-text); font-weight: 800; }
+.mvRoot .mvTrack { min-height: 78px; }
+.mvRoot .mvPillScore { width: 32px; min-width: 32px; flex: none; }
+.mvRoot .mvPill { width: 116px; box-sizing: border-box; justify-content: space-between; }
+.mvRoot .mvScoreOnly { width: 116px; min-width: 116px; }
+.mvRoot .mvBackupNow { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 14px; background: var(--sr-surface2); }
+.mvRoot .mvBackupList { max-height: 320px; overflow-y: auto; }
+.mvRoot .mvCutLine > span { align-items: center; gap: 4px; font-size: 12px; font-weight: 800; }
