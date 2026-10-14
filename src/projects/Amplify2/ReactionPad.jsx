@@ -9,7 +9,7 @@ const readRecent = () => {
 }
 
 /** Emoji-Knopf in der Playlist: Antippen schickt sofort aufs Live-Board, Spammen erlaubt */
-export default function ReactionPad({ db, roomId, myName, raised }) {
+export default function ReactionPad({ db, roomId, myName, inline }) {
     const [open, setOpen] = useState(false)
     const [recent, setRecent] = useState(readRecent)
     const [pop, setPop] = useState(null)          // kurzes Feedback am Knopf
@@ -52,7 +52,7 @@ export default function ReactionPad({ db, roomId, myName, raised }) {
     const palette = [...new Set([...recent, ...DEFAULT_EMOJIS])].slice(0, 12)
 
     return (
-        <div className={`${styles.mvReact} ${raised ? styles.mvReactRaised : ''}`}>
+        <div className={`${styles.mvReact} ${inline ? styles.mvReactInline : ''}`}>
             {open && (
                 <div className={styles.mvReactBar} role="group" aria-label="Reaktion aufs Live-Board schicken">
                     <div className={styles.mvReactRow}>

@@ -18,10 +18,11 @@ import {
 } from '../../shared/ui/icons'
 import { joinLink, boardLink } from './links'
 import {
-    UNLIMITED, DEFAULT_UP, DEFAULT_DOWN, DEFAULT_BATCH, DEFAULT_MAX_SONGS, BATCH_OPTIONS, byScore, scoreOf, placeOf,
-    cleanName, nameKey, sameSong, similarSong, mmss, nowPosition, nextRoundInMs, roundDue,
+    UNLIMITED, DEFAULT_UP, DEFAULT_DOWN, DEFAULT_BATCH, DEFAULT_MAX_SONGS, BATCH_OPTIONS, byScore, scoreOf,
+    cleanName, nameKey, sameSong, similarSong, nowPosition, roundDue,
     DECADES, decadeLabel, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
-    limitsFor, streakOf, STREAK_LEVELS, liveNowPlaying, upcomingQueue, queueOrder, voteCounts
+    limitsFor, streakOf, STREAK_LEVELS, liveNowPlaying, upcomingQueue, queueOrder, voteCounts,
+    isNew, staleItems, dropUpdate, DEFAULT_DROP_BELOW, DEFAULT_DROP_AFTER
 } from './amplifyLogic'
 import ReactionPad from './ReactionPad'
 import { deleteReactions } from './reactions'
@@ -67,6 +68,12 @@ const ROOM_SETTINGS = [
     { id: 'maxSongsPerPerson', label: 'Songs pro Person', fallback: DEFAULT_MAX_SONGS, options: [1, 2, 3, 4, 5, 10], tick: String, text: (v) => `Jeder hat bis zu ${v} ${v === 1 ? 'Song' : 'Songs'} gleichzeitig im Rennen` },
     { id: 'upvotesPerPerson', label: 'Daumen hoch pro Person', fallback: DEFAULT_UP, options: [1, 2, 3, 5, 10, UNLIMITED], tick: (v) => (v === UNLIMITED ? '∞' : String(v)), text: (v) => thumbsText(v, 'Daumen hoch') },
     { id: 'downvotesPerPerson', label: 'Daumen runter pro Person', fallback: DEFAULT_DOWN, options: [0, 1, 2, 3, 5, UNLIMITED], tick: (v) => (v === UNLIMITED ? '∞' : String(v)), text: (v) => thumbsText(v, 'Daumen runter') }
+]
+
+// Ladenhüter: Songs, die nicht ankommen, fliegen raus – sonst blockieren sie Song-Limits und Daumen
+const DROP_SETTINGS = [
+    { id: 'dropBelow', label: 'Raus bei zu vielen Daumen runter', fallback: DEFAULT_DROP_BELOW, options: [0, 2, 3, 4, 5], tick: (v) => (v === 0 ? 'aus' : `−${v}`), text: (v) => (v === 0 ? 'Aus – kein Song fliegt wegen Stimmen raus' : `Ein Song fliegt raus, sobald er bei −${v} steht`) },
+    { id: 'dropAfterMin', label: 'Raus nach Zeit im Rennen', fallback: DEFAULT_DROP_AFTER, options: [0, 30, 45, 60, 90, 120], tick: (v) => (v === 0 ? 'aus' : `${v}m`), text: (v) => (v === 0 ? 'Aus – Songs bleiben, bis sie laufen' : `Wer nach ${v} Minuten noch nicht dran war, fliegt raus`) }
 ]
 
 const LIMIT_DEFAULTS = { maxSongs: DEFAULT_MAX_SONGS, up: DEFAULT_UP, down: DEFAULT_DOWN }
@@ -167,8 +174,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const [confirmBusy, setConfirmBusy] = useState(false)
     const [busyAction, setBusyAction] = useState(null)       // 'create' | 'readd' | 'close' | Raumcode beim Beitreten
     const [sheet, setSheet] = useState(null)                 // 'help' | 'share' | 'close'
-    const [showPeople, setShowPeople] = useState(false)
-    const [showAllQueue, setShowAllQueue] = useState(false)
     const [previewId, setPreviewId] = useState(null)         // Spotify-Vorschau (eingebetteter Player)
     const [reveal, setReveal] = useState(null)               // Siegeranimation, wenn ein eigener Song in der Runde ist
     const [ruleTab, setRuleTab] = useState(null)             // Einstellungen: gewählter Runden-Modus-Reiter
@@ -307,6 +312,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 maxSongsPerPerson: DEFAULT_MAX_SONGS,
                 upvotesPerPerson: DEFAULT_UP,
                 downvotesPerPerson: DEFAULT_DOWN,
+                dropBelow: DEFAULT_DROP_BELOW,
+                dropAfterMin: DEFAULT_DROP_AFTER,
+                dropped: [],
                 roundRule: null,
                 streakEnabled: false,
                 streaks: {},
@@ -685,14 +693,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     if (limit !== UNLIMITED && used >= limit) return { blocked: { limit, what: newVote === 1 ? 'Daumen hoch' : 'Daumen runter' } }
                 }
 
-                return {
-                    update: {
-                        playlist: currentPlaylist.map(item =>
-                            item.id === itemId ? { ...item, votes: { ...item.votes, [myName]: newVote } } : item
-                        )
-                    }
-                }
+                const next = { ...data, playlist: currentPlaylist.map(item =>
+                    item.id === itemId ? { ...item, votes: { ...item.votes, [myName]: newVote } } : item
+                ) }
+                // Zu weit im Minus → Ladenhüter fliegt sofort raus (die Daumen darauf werden wieder frei)
+                const stale = staleItems(next, Date.now()).filter(i => i.id === itemId)
+                return { update: dropUpdate(next, Date.now(), stale) || { playlist: next.playlist }, dropped: stale.length > 0 }
             })
+            if (res?.dropped) showToast('Der Song ist als Ladenhüter rausgeflogen – dein Daumen ist wieder frei.')
             if (res?.own) showToast('Für deine eigenen Songs kannst du nicht abstimmen.', 'bad')
             if (res?.blocked) {
                 const { limit, what } = res.blocked
@@ -887,6 +895,51 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const rawNowPlaying = lobbyData?.nowPlaying            // so, wie der Host es zuletzt gemeldet hat
     const nowPlaying = liveNowPlaying(lobbyData, clock)    // für die Anzeige hochgerechnet, falls der Host im Hintergrund ist
     const nowPlayingPositionMs = nowPosition(nowPlaying, clock)
+
+    // Eigener Song als Ladenhüter rausgeflogen → leiser Hinweis (nur, was nach dem Öffnen passiert ist)
+    useEffect(() => {
+        const list = lobbyData?.dropped
+        if (!list || !roomId) return
+        const key = `a2_seen_drop_${roomId}`
+        const seen = sessionStorage.getItem(key)
+        const latest = Math.max(0, ...list.map(d => d.at || 0))
+        sessionStorage.setItem(key, String(latest))
+        if (seen == null) return
+        const mine = list.filter(d => d.at > Number(seen) && d.addedBy === myNameRef.current)
+        if (mine.length) showToast(mine.length === 1
+            ? `„${mine[0].title}“ ist rausgeflogen – ${mine[0].reason === 'time' ? 'zu lange nicht drangekommen' : 'zu viele Daumen runter'}. Du hast wieder Platz für einen Song.`
+            : `${mine.length} Songs von dir sind als Ladenhüter rausgeflogen. Du hast wieder Platz.`)
+    }, [lobbyData?.dropped, roomId, showToast])
+
+    // Eigener Song rutscht in die nächste Runde (oder raus) → leiser Hinweis, erst wenn der Platz ~20 s hält,
+    // höchstens einmal pro Richtung und Runde (sonst nervt ein Song, der zwischen zwei Plätzen pendelt)
+    const topWatchRef = useRef(new Map())   // id → { inTop, since, told, toldRound: { in, out } }
+    useEffect(() => {
+        if (!lobbyData) return
+        const n = lobbyData.batchSize || DEFAULT_BATCH
+        const ranked = (lobbyData.playlist || []).filter(i => i.queuedRound == null).sort(byScore)
+        const round = lobbyData.votingRound || 0
+        const watch = topWatchRef.current
+        const now = Date.now()
+        const mine = new Set()
+        ranked.forEach((item, idx) => {
+            if (item.addedBy !== myName) return
+            mine.add(item.id)
+            const inTop = idx < n
+            const w = watch.get(item.id)
+            if (!w) { watch.set(item.id, { inTop, since: now, told: inTop, toldRound: {} }); return }   // Ausgangslage, kein Hinweis
+            if (w.inTop !== inTop) { w.inTop = inTop; w.since = now }
+            const dir = inTop ? 'in' : 'out'
+            if (w.told !== inTop && now - w.since >= 20000 && w.toldRound[dir] !== round) {
+                w.told = inTop
+                w.toldRound[dir] = round
+                showToast(inTop
+                    ? `🎉 „${item.title}“ ist ${n === 1 ? 'auf Platz 1' : `in den Top ${n}`} – läuft mit der nächsten Runde!`
+                    : `„${item.title}“ ist aus den Top ${n} gerutscht – noch ein paar Daumen hoch, und es klappt.`)
+            }
+        })
+        watch.forEach((_, id) => { if (!mine.has(id)) watch.delete(id) })   // gelaufen, entfernt oder rausgeflogen
+    }, [clock, lobbyData, myName, showToast])
 
     // Siegeranimation auf dem Handy: nur, wenn ein eigener Song in der Runde ist (positives Feedback, keine
     // Unterbrechung für alle anderen – die sehen sie auf dem Live-Board). Einmal pro Runde und Gerät.
@@ -1200,6 +1253,13 @@ const Amplify2 = ({ onBack, joinCode }) => {
         if (!db || !roomId) return
         const id = setInterval(async () => {
             const data = latestLobbyRef.current
+            // Ladenhüter nach Zeit (oder nach geänderter Einstellung) aufräumen – die Transaktion prüft erneut
+            if (data && staleItems(data, Date.now()).length) {
+                mutateLobby(roomId, (d) => {
+                    const update = dropUpdate(d, Date.now(), staleItems(d, Date.now()))
+                    return update ? { update } : null
+                }).catch(() => { /* nächster Takt versucht es erneut */ })
+            }
             if (!roundDue(data, Date.now())) { dueSinceRef.current = null; return }
             if (!isHost) {
                 dueSinceRef.current ??= Date.now()
@@ -1217,7 +1277,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
             }
         }, 3000)
         return () => clearInterval(id)
-    }, [isHost, db, roomId, startRound])
+    }, [isHost, db, roomId, startRound, mutateLobby])
 
     // ─── Runden-Modus: Künstlersuche ─────────────────────────────────────────
     useEffect(() => {
@@ -1316,12 +1376,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
         .map(([name, p]) => ({ name, emoji: p?.emoji || '🙂' }))
         .sort((a, b) => (a.name === lobbyData?.host ? -1 : b.name === lobbyData?.host ? 1 : a.name.localeCompare(b.name, 'de')))
     const playerCount = players.length
-    const activeNames = new Set([
-        ...playlist.flatMap(i => [i.addedBy, ...Object.entries(i.votes || {}).filter(([, v]) => v !== 0).map(([n]) => n)]),
-        ...(lobbyData?.history || []).map(h => h.addedBy)
-    ])
     const queueItems = lobbyData ? upcomingQueue(lobbyData, clock) : []
-    const nextRound = lobbyData ? nextRoundInMs(lobbyData, clock) : null
 
     // ─── Sicherheitsabfragen ─────────────────────────────────────────────────
     const confirmConfig = (() => {
@@ -1331,7 +1386,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
             cancelLabel: 'Bleiben', confirmLabel: 'Verlassen', run: handleLeaveLobby
         }
         if (confirm.kind === 'remove') return {
-            title: 'Song entfernen?', text: `„${confirm.item.title}“ wird aus der Playlist entfernt.`,
+            title: `„${confirm.item.title}“ entfernen?`, text: confirm.item.addedBy === myName ? 'Dein Song fliegt aus dem Rennen – dafür hast du wieder Platz für einen anderen.' : `Der Song von ${confirm.item.addedBy} fliegt aus dem Rennen.`,
             cancelLabel: 'Abbrechen', confirmLabel: 'Entfernen', run: () => handleRemoveItem(confirm.item.id)
         }
         if (confirm.kind === 'kick') return {
@@ -1453,19 +1508,18 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
                 <BottomSheet open={showWelcomePopup && currentScreen === 'room'} onClose={() => setShowWelcomePopup(false)} labelledBy="mv-welcome-title">
                     <h2 id="mv-welcome-title" className={styles.mvSheetTitle}>Willkommen bei Amplify!</h2>
-                    <p className={styles.mvSheetText}>Ganz nebenbei – kein Countdown, keine Phasen:</p>
                     <ol className={styles.mvSteps}>
                         <li className={styles.mvStep}>
                             <span className={styles.mvStepIcon}><IconPlus size={20} /></span>
-                            <span><strong>Songs einreichen</strong>Jederzeit bis zu {maxSongs} gleichzeitig. Tippe aufs Cover für eine Hörprobe.</span>
+                            <span><strong>Füg Songs hinzu</strong>Bis zu {maxSongs} gleichzeitig.</span>
                         </li>
                         <li className={styles.mvStep}>
                             <span className={styles.mvStepIcon}><IconThumbUp size={20} /></span>
-                            <span><strong>Abstimmen</strong>Wann du willst. Die Songs mit den meisten Daumen stehen oben.</span>
+                            <span><strong>Gib Daumen</strong>Wann immer du willst.</span>
                         </li>
                         <li className={styles.mvStep}>
                             <span className={styles.mvStepIcon}><IconPlay size={16} /></span>
-                            <span><strong>Abspielen</strong>Die besten {batchSize} gehen als Runde an Spotify – dann rücken die nächsten nach.</span>
+                            <span><strong>Die Beliebtesten laufen zuerst</strong>Die Liste ist die Playlist – von oben nach unten.</span>
                         </li>
                     </ol>
                     <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => setShowWelcomePopup(false)}>Los geht’s</button>
@@ -1909,6 +1963,35 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             </button>
                         </section>
 
+                        <section className={styles.mvCard}>
+                            <button type="button" className={`${styles.mvBtn} ${styles.mvMenuRow}`} onClick={() => setSheet('help')}>
+                                <span className={styles.mvBoardIcon}><IconHelp size={18} /></span>
+                                <span className={styles.mvRowText}>
+                                    <span className={styles.mvRowName}>So funktioniert’s</span>
+                                    <span className={styles.mvRowMeta}>{isHost ? 'Du bist Host' : 'Du bist Gast'} · kurz erklärt</span>
+                                </span>
+                                <IconNext />
+                            </button>
+                        </section>
+
+                        <section className={styles.mvCard}>
+                            <div className={styles.mvCardHead}>
+                                <h2 className={styles.mvCardTitle}>Dabei</h2>
+                                <span className={styles.mvChip}>{playerCount}</span>
+                            </div>
+                            <ul className={styles.mvPeople}>
+                                {players.map(p => (
+                                    <li key={p.name} className={styles.mvPerson}>
+                                        <span className={styles.mvPersonEmoji} aria-hidden="true">{p.emoji}</span>
+                                        <span className={styles.mvPersonName}>{p.name}{p.name === myName ? ' (du)' : ''}{p.name === lobbyData.host ? ' · Host' : ''}{lobbyData.streakEnabled && streakOf(lobbyData, p.name) > 0 ? ` · 🔥 ${streakOf(lobbyData, p.name)}` : ''}</span>
+                                        {isHost && p.name !== myName && (
+                                            <button type="button" className={`${styles.mvBtn} ${styles.mvKickBtn}`} onClick={() => setConfirm({ kind: 'kick', name: p.name })} aria-label={`${p.name} entfernen`}><IconX size={14} /></button>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
+
                         {isHost && (
                             <section className={styles.mvCard}>
                                 <div className={styles.mvCardHead}>
@@ -1942,6 +2025,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                                 </select>
                                             </div>
                                         </div>
+                                        <div className={styles.mvField}>
+                                            <span className={styles.mvLabel}>Lautstärke</span>
+                                            <span className={styles.mvVolume}>
+                                                <IconVolume size={18} />
+                                                <input type="range" min={0} max={100} step={5} value={hostVolume ?? 50} onChange={(e) => handleVolume(Number(e.target.value))}
+                                                    aria-label="Lautstärke" className={styles.mvVolumeSlider} style={{ '--pct': `${hostVolume ?? 50}%` }} />
+                                            </span>
+                                        </div>
                                         <button type="button" className={`${styles.mvBtn} ${styles.mvSecondary}`} onClick={playHere}><IconSpeaker />Hier im Browser abspielen</button>
                                         <button type="button" className={`${styles.mvBtn} ${hasQueue ? styles.mvPrimary : styles.mvPrimaryOff}`} onClick={() => sendQueueToSpotify()} disabled={!hasQueue}>
                                             <IconPlay size={18} />{nowPlaying?.isPlaying ? 'Warteschlange neu senden' : 'Warteschlange abspielen'}
@@ -1961,6 +2052,21 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 </div>
                                 <p className={styles.mvFine}>Gilt sofort. Schon eingereichte Songs und gesetzte Daumen bleiben.</p>
                                 {ROOM_SETTINGS.map(s => (
+                                    <StepSlider key={s.id} id={`mv-${s.id}`} label={s.label} options={s.options}
+                                        value={lobbyData[s.id] ?? s.fallback}
+                                        onChange={(v) => updateLobbyConfig({ [s.id]: v })}
+                                        valueText={s.text} tickText={s.tick} />
+                                ))}
+                            </section>
+                        )}
+
+                        {isHost && (
+                            <section className={styles.mvCard}>
+                                <div className={styles.mvCardHead}>
+                                    <h2 className={styles.mvCardTitle}>Ladenhüter</h2>
+                                </div>
+                                <p className={styles.mvFine}>Songs, die nicht ankommen, fliegen raus – so werden Plätze und Daumen wieder frei. Die Person bekommt einen kurzen Hinweis.</p>
+                                {DROP_SETTINGS.map(s => (
                                     <StepSlider key={s.id} id={`mv-${s.id}`} label={s.label} options={s.options}
                                         value={lobbyData[s.id] ?? s.fallback}
                                         onChange={(v) => updateLobbyConfig({ [s.id]: v })}
@@ -2056,37 +2162,65 @@ const Amplify2 = ({ onBack, joinCode }) => {
             )
         }
 
-        // ── Playlist ──
+        // ── Playlist: eine durchgehende Liste – läuft gerade → schon an Spotify → nächste Runde → Rest ──
         const downAllowed = voteLimits.down !== 0
-        const budgetText = (limit, used) => (limit === UNLIMITED ? 'unbegrenzt' : `${Math.max(0, limit - used)} von ${limit} frei`)
-        const upLeft = voteLimits.up === UNLIMITED || myUpUsed < voteLimits.up
-        const downLeft = voteLimits.down === UNLIMITED || myDownUsed < voteLimits.down
+        const upFree = voteLimits.up === UNLIMITED ? null : Math.max(0, voteLimits.up - myUpUsed)
+        const downFree = voteLimits.down === UNLIMITED ? null : Math.max(0, voteLimits.down - myDownUsed)
+        const upLeft = upFree === null || upFree > 0
+        const downLeft = downFree === null || downFree > 0
         const progressPct = nowPlaying?.durationMs ? Math.min(100, (nowPlayingPositionMs / nowPlaying.durationMs) * 100) : 0
-        const waitingForSpotify = !!lobbyData.pendingBatch
-        const musicOn = !!nowPlaying?.isPlaying || queueItems.length > 0
-        const statusTitle = round === 0 ? 'Songs sammeln' : `Runde ${round} läuft`
-        const statusSub = round === 0
-            ? (isHost ? `Wenn genug Songs da sind, startest du die erste Runde – die besten ${batchSize} gehen an Spotify.` : 'Reich Songs ein und stimm ab. Der Host startet gleich die erste Runde.')
-            : `Einreichen und abstimmen geht jederzeit. Die besten ${batchSize} bilden die nächste Runde.`
-        let nextRoundText = null
-        if (waitingForSpotify) nextRoundText = 'Die nächste Runde geht gerade an Spotify …'
-        else if (nextRound != null) {
-            nextRoundText = nextRound > 60000
-                ? `Nächste Runde in ca. ${Math.round(nextRound / 60000)} Min.`
-                : (poolItems.length ? 'Nächste Runde gleich' : 'Nächste Runde, sobald Songs da sind')
+        // Ein fremder Song (z. B. Spotify-Autoplay), der rechnerisch zu Ende ist, bleibt sonst bei 4:42 / 4:42 stehen
+        const showNow = !!nowPlaying && !(nowPlaying.isPlaying && nowPlaying.durationMs && nowPlayingPositionMs >= nowPlaying.durationMs)
+        const nowItem = showNow ? playlist.find(i => i.spotifyId === nowPlaying.trackId) : null
+        const byText = (name) => (name === myName ? 'von dir' : `von ${name}`)
+        const empty = !showNow && queueItems.length === 0 && poolItems.length === 0
+
+        const songRow = (item, idx) => {
+            const myVote = item.votes?.[myName] || 0
+            const own = item.addedBy === myName
+            const canRemove = isHost || own
+            const score = scoreOf(item)
+            const { up, down } = voteCounts(item)
+            const meta = <>{isNew(item, clock) && <span className={styles.mvNewChip} title="Gerade eingereicht – braucht noch Stimmen">✨ NEU</span>}{wasPlayed(item) && playedChip}{item.artist} · {byText(item.addedBy)}</>
+            return (
+                <li key={item.id} className={`${styles.mvTrack} ${idx < batchSize ? styles.mvTrackNext : ''} ${idx === batchSize ? styles.mvTrackCut : ''} ${myVote === 1 ? styles.mvSongUp : ''} ${myVote === -1 ? styles.mvSongDown : ''}`}>
+                    {previewBtn(item)}
+                    {canRemove ? (
+                        <button type="button" className={`${styles.mvBtn} ${styles.mvTrackText}`} onClick={() => setConfirm({ kind: 'remove', item })} aria-label={`${item.title} – Optionen`}>
+                            <span className={styles.mvRowName}>{item.title}</span>
+                            <span className={styles.mvRowMeta}>{meta}</span>
+                        </button>
+                    ) : (
+                        <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>
+                            <span className={styles.mvRowName}>{item.title}</span>
+                            <span className={styles.mvRowMeta}>{meta}</span>
+                        </span>
+                    )}
+                    <span className={`${styles.mvScore} ${score > 0 ? styles.mvScorePlus : ''} ${score < 0 ? styles.mvScoreMinus : ''}`}
+                        title={`${up}× hoch · ${down}× runter`} aria-label={`${score} Punkte`}>{score > 0 ? '+' : ''}{score}</span>
+                    {!own && (
+                        <span className={styles.mvVote} role="group" aria-label={`Abstimmen für ${item.title}`}>
+                            <button type="button" className={`${styles.mvBtn} ${styles.mvVoteBtn} ${myVote === 1 ? styles.mvVoteUpOn : ''} ${myVote !== 1 && !upLeft ? styles.mvVoteBtnOff : ''}`}
+                                onClick={() => handleVote(item.id, 'up')} aria-pressed={myVote === 1} aria-label="Gefällt mir"><IconThumbUp /></button>
+                            {downAllowed && (
+                                <button type="button" className={`${styles.mvBtn} ${styles.mvVoteBtn} ${myVote === -1 ? styles.mvVoteDownOn : ''} ${myVote !== -1 && !downLeft ? styles.mvVoteBtnOff : ''}`}
+                                    onClick={() => handleVote(item.id, 'down')} aria-pressed={myVote === -1} aria-label="Gefällt mir nicht"><IconThumbDown /></button>
+                            )}
+                        </span>
+                    )}
+                </li>
+            )
         }
 
         return shell(
             <main className={`${styles.mvMain} ${previewId ? styles.mvWithPreview : ''}`}>
                 <header className={`${styles.mvSubHeader} ${styles.mvRoomHeader} ${styles.mvPad}`}>
                     <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtn}`} onClick={handleGoBack} aria-label="Zur Startseite (du bleibst in der Playlist)" title="Zur Startseite"><IconBack /></button>
-                    <div className={styles.mvRoomTitle}>
-                        <h1 className={styles.mvSubTitle}>Amplify 2.0</h1>
-                        <button type="button" className={`${styles.mvBtn} ${styles.mvRoleBtn}`} onClick={() => setSheet('help')} aria-label={`${isHost ? 'Host' : 'Gast'} – was kann ich tun?`}>
-                            <span className={`${styles.mvRole} ${isHost ? styles.mvRoleHost : ''}`}>{isHost ? 'Host' : 'Gast'}</span>
-                            <span className={styles.mvHelpDot} aria-hidden="true"><IconHelp size={12} /></span>
-                        </button>
-                    </div>
+                    <h1 className={`${styles.mvSubTitle} ${styles.mvRoomName}`}>Amplify</h1>
+                    <span className={styles.mvThumbs} aria-label={`Freie Daumen: ${upFree ?? 'unbegrenzt'} hoch${downAllowed ? `, ${downFree ?? 'unbegrenzt'} runter` : ''}`}>
+                        <span className={upLeft ? '' : styles.mvThumbsEmpty}><IconThumbUp size={15} />{upFree ?? '∞'}</span>
+                        {downAllowed && <span className={downLeft ? '' : styles.mvThumbsEmpty}><IconThumbDown size={15} />{downFree ?? '∞'}</span>}
+                    </span>
                     <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtn}`} onClick={() => setSheet('share')} aria-label="Teilen und Live-Board" title="Teilen"><IconShare /></button>
                     <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtn}`} onClick={() => setRoomView('settings')} aria-label="Einstellungen" title="Einstellungen"><IconGear /></button>
                 </header>
@@ -2104,184 +2238,77 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             </div>
                         </div>
                     )}
-
-                    <section className={styles.mvPhase}>
-                        <div className={styles.mvPhaseRow}>
-                            <span className={`${styles.mvPhaseDot} ${musicOn ? styles.mvDotLive : styles.mvDotCollect}`} aria-hidden="true" />
-                            <div className={styles.mvRowText}>
-                                <h2 className={styles.mvPhaseTitle}>{statusTitle}</h2>
-                                <p className={styles.mvPhaseSub}>{statusSub}</p>
-                            </div>
-                            {musicOn && <span className={styles.mvLive}>LIVE</span>}
-                        </div>
-                        {rule && <p className={styles.mvRuleBanner}><span aria-hidden="true">{ruleEmoji(rule)}</span>{ruleLabel(rule)} · {ruleHint(rule)}</p>}
-                        {streakBonusActive && (
-                            <p className={styles.mvStreakChip}>
-                                🔥 {myLimits.bonus.streak}× Platz 1 in Folge – dein Bonus: {myLimits.bonus.label}
-                                {myLimits.bonus.next && <span className={styles.mvStreakNext}>Nächste Runde wieder Platz 1: {myLimits.bonus.next}</span>}
-                            </p>
-                        )}
-                        <div className={styles.mvVoteStats}>
-                            <span className={`${styles.mvBudget} ${upLeft ? '' : styles.mvBudgetEmpty}`}><IconThumbUp size={16} />{budgetText(voteLimits.up, myUpUsed)}</span>
-                            {downAllowed && <span className={`${styles.mvBudget} ${downLeft ? '' : styles.mvBudgetEmpty}`}><IconThumbDown size={16} />{budgetText(voteLimits.down, myDownUsed)}</span>}
-                        </div>
-                        {nextRoundText && round > 0 && <p className={styles.mvTimes}>{nextRoundText}</p>}
-                        <button type="button" className={`${styles.mvBtn} ${styles.mvPeopleToggle}`} onClick={() => setShowPeople(v => !v)} aria-expanded={showPeople} aria-controls="mv-people">
-                            <IconUsers size={16} />
-                            {`${playerCount} ${playerCount === 1 ? 'Person' : 'Leute'} dabei`}
-                            <IconChevron open={showPeople} />
+                    {isHost && round === 0 && poolItems.length > 0 && (
+                        <button type="button" className={`${styles.mvBtn} ${styles.mvOutline} ${styles.mvPhaseBtn}`} onClick={handleStartRound}>
+                            <IconPlay size={18} />Musik starten – die besten {Math.min(batchSize, poolItems.length)} an Spotify
                         </button>
-                        {showPeople && (
-                            <ul id="mv-people" className={styles.mvPeople}>
-                                {players.map(p => (
-                                    <li key={p.name} className={styles.mvPerson}>
-                                        <span className={styles.mvPersonEmoji} aria-hidden="true">{p.emoji}</span>
-                                        <span className={styles.mvPersonName}>{p.name}{p.name === myName ? ' (du)' : ''}{p.name === lobbyData.host ? ' · Host' : ''}{lobbyData.streakEnabled && streakOf(lobbyData, p.name) > 0 ? ` · 🔥 ${streakOf(lobbyData, p.name)}` : ''}</span>
-                                        {p.name !== lobbyData.host && p.name !== myName && !activeNames.has(p.name) && <span className={styles.mvNotVoted}>noch nicht aktiv</span>}
-                                        {isHost && p.name !== myName && (
-                                            <button type="button" className={`${styles.mvBtn} ${styles.mvKickBtn}`} onClick={() => setConfirm({ kind: 'kick', name: p.name })} aria-label={`${p.name} entfernen`}><IconX size={14} /></button>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                        {isHost && round === 0 && (
-                            poolItems.length === 0 ? (
-                                <p className={styles.mvFine}>Sobald Songs eingereicht sind, kannst du die erste Runde starten.</p>
-                            ) : (
-                                <button type="button" className={`${styles.mvBtn} ${styles.mvOutline} ${styles.mvPhaseBtn}`} onClick={handleStartRound}>
-                                    <IconPlay size={18} />Erste Runde starten ({Math.min(batchSize, poolItems.length)} {Math.min(batchSize, poolItems.length) === 1 ? 'Song' : 'Songs'})
-                                </button>
-                            )
-                        )}
-                    </section>
-
-                    {nowPlaying && (
-                        <section className={styles.mvNow} aria-label="Läuft gerade">
-                            <div className={styles.mvNowRow}>
-                                <CoverArt src={nowPlaying.imageUrl} seed={nowPlaying.trackId} size={60} radius={14} />
-                                <div className={styles.mvRowText}>
-                                    <span className={styles.mvNowLabel}>{nowPlaying.isPlaying ? 'LÄUFT GERADE' : 'PAUSIERT'}</span>
-                                    <span className={styles.mvNowTitle}>{nowPlaying.trackName}</span>
-                                    <span className={styles.mvNowArtist}>{nowPlaying.artist}</span>
-                                </div>
-                            </div>
-                            <div className={styles.mvNowBar} aria-hidden="true"><span style={{ width: `${progressPct}%` }} /></div>
-                            <div className={styles.mvNowTimes}>
-                                <span>{mmss(nowPlayingPositionMs)}</span><span>{mmss(nowPlaying.durationMs)}</span>
-                            </div>
-                            {isHost && (
-                                <div className={styles.mvControls}>
-                                    <button type="button" className={`${styles.mvBtn} ${styles.mvCtrlBtn}`} onClick={handlePausePlayback} aria-label={nowPlaying.isPlaying ? 'Pause' : 'Weiter abspielen'}>
-                                        {nowPlaying.isPlaying ? <IconPause size={18} /> : <IconPlay size={18} />}
-                                    </button>
-                                    <button type="button" className={`${styles.mvBtn} ${styles.mvCtrlBtn}`} onClick={handleSkip} aria-label="Song überspringen"><IconSkip size={18} /></button>
-                                    <span className={styles.mvVolume}>
-                                        <IconVolume size={18} />
-                                        <input type="range" min={0} max={100} step={5} value={hostVolume ?? 50} onChange={(e) => handleVolume(Number(e.target.value))}
-                                            aria-label="Lautstärke" className={styles.mvVolumeSlider} style={{ '--pct': `${hostVolume ?? 50}%` }} />
-                                    </span>
-                                </div>
-                            )}
-                        </section>
                     )}
+                    {rule && <p className={styles.mvRuleBanner}><span aria-hidden="true">{ruleEmoji(rule)}</span>{ruleLabel(rule)} · {ruleHint(rule)}</p>}
+                    {streakBonusActive && <p className={styles.mvStreakChip}>🔥 {myLimits.bonus.streak}× Platz 1 in Folge – Bonus: {myLimits.bonus.label}</p>}
 
-                    {queueItems.length > 0 && (
-                        <section className={styles.mvCard} aria-label="Warteschlange">
-                            <div className={styles.mvCardHead}>
-                                <h2 className={styles.mvCardTitle}>{waitingForSpotify ? 'Wartet auf Spotify' : 'Als Nächstes'}</h2>
-                                <span className={styles.mvChip}>{queueItems.length}</span>
-                            </div>
-                            {waitingForSpotify && !isHost && <p className={styles.mvFine}>Die Runde steht fest und startet, sobald der Host abspielt.</p>}
-                            <ol className={styles.mvQueueList}>
-                                {(showAllQueue ? queueItems : queueItems.slice(0, 5)).map((item, i) => (
-                                    <li key={item.id} className={styles.mvQueueItem}>
-                                        <span className={styles.mvQueueRank}>{i + 1}</span>
-                                        <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={36} radius={8} />
-                                        <span className={styles.mvRowText}>
-                                            <span className={styles.mvQueueTitle}>{item.title}</span>
-                                            <span className={styles.mvQueueArtist}>{item.artist} · von {item.addedBy === myName ? 'dir' : item.addedBy}</span>
-                                        </span>
-                                    </li>
-                                ))}
-                            </ol>
-                            {queueItems.length > 5 && (
-                                <button type="button" className={`${styles.mvBtn} ${styles.mvExpand}`} onClick={() => setShowAllQueue(v => !v)} aria-expanded={showAllQueue}>
-                                    {showAllQueue ? 'Weniger anzeigen' : `Alle ${queueItems.length} anzeigen`}<IconChevron open={showAllQueue} />
-                                </button>
-                            )}
-                        </section>
-                    )}
-
-                    <div className={styles.mvListHead}>
-                        <h2 className={styles.mvListTitle}>Im Rennen</h2>
-                        <span className={styles.mvListCount}>{poolItems.length}</span>
-                    </div>
-
-                    {poolItems.length === 0 ? (
+                    {empty ? (
                         <div className={styles.mvEmpty}>
                             <span className={styles.mvEmptyIcon}><IconNote size={24} /></span>
-                            <p className={styles.mvEmptyTitle}>Noch keine Songs im Rennen</p>
+                            <p className={styles.mvEmptyTitle}>Noch keine Songs</p>
                             <p className={styles.mvEmptyText}>Tippe unten auf „Song hinzufügen“.</p>
                         </div>
                     ) : (
-                        <ul className={styles.mvList}>
-                            {poolItems.map((item, idx) => {
-                                const myVote = item.votes?.[myName] || 0
-                                const own = item.addedBy === myName
-                                const canRemove = isHost || own
-                                const played = wasPlayed(item)
-                                const score = scoreOf(item)
-                                const { up, down } = voteCounts(item)
-                                const place = placeOf(poolItems, idx)
-                                return (
-                                    <li key={item.id} className={`${styles.mvSong} ${styles.mvSongVoting} ${idx < batchSize ? styles.mvSongNext : ''} ${myVote === 1 ? styles.mvSongUp : ''} ${myVote === -1 ? styles.mvSongDown : ''}`}>
-                                        <span className={styles.mvRankNo} aria-label={`Platz ${place}`}>{place}</span>
-                                        {previewBtn(item)}
-                                        <span className={styles.mvRowText}>
-                                            <span className={`${styles.mvRowName} ${styles.mvRowNameWrap}`}>{item.title}</span>
-                                            <span className={styles.mvRowMeta}>{played && playedChip}{item.artist} · von {own ? 'dir' : item.addedBy}</span>
+                        <ol className={styles.mvPlaylist} aria-label="Playlist">
+                            {showNow && (
+                                <li className={styles.mvTrackNow} aria-label="Läuft gerade">
+                                    <div className={styles.mvTrackRow}>
+                                        <CoverArt src={nowPlaying.imageUrl} seed={nowPlaying.trackId} size={46} radius={10} />
+                                        <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>
+                                            <span className={styles.mvRowName}>{nowPlaying.trackName}</span>
+                                            <span className={styles.mvRowMeta}>{nowPlaying.artist}{nowItem?.addedBy ? ` · ${byText(nowItem.addedBy)}` : ''}</span>
                                         </span>
-                                        <span className={`${styles.mvScore} ${score > 0 ? styles.mvScorePlus : ''} ${score < 0 ? styles.mvScoreMinus : ''}`}
-                                            title={`${up}× hoch · ${down}× runter`} aria-label={`${score} Punkte`}>{score > 0 ? '+' : ''}{score}</span>
-                                        {own ? <span className={styles.mvOwnTag}>Dein Song</span> : (
-                                            <span className={styles.mvVote} role="group" aria-label={`Abstimmen für ${item.title}`}>
-                                                <button type="button" className={`${styles.mvBtn} ${styles.mvVoteBtn} ${myVote === 1 ? styles.mvVoteUpOn : ''} ${myVote !== 1 && !upLeft ? styles.mvVoteBtnOff : ''}`}
-                                                    onClick={() => handleVote(item.id, 'up')} aria-pressed={myVote === 1} aria-label="Gefällt mir"><IconThumbUp /></button>
-                                                {downAllowed && (
-                                                    <button type="button" className={`${styles.mvBtn} ${styles.mvVoteBtn} ${myVote === -1 ? styles.mvVoteDownOn : ''} ${myVote !== -1 && !downLeft ? styles.mvVoteBtnOff : ''}`}
-                                                        onClick={() => handleVote(item.id, 'down')} aria-pressed={myVote === -1} aria-label="Gefällt mir nicht"><IconThumbDown /></button>
-                                                )}
+                                        {isHost ? (
+                                            <span className={styles.mvVote}>
+                                                <button type="button" className={`${styles.mvBtn} ${styles.mvVoteBtn}`} onClick={handlePausePlayback} aria-label={nowPlaying.isPlaying ? 'Pause' : 'Weiter abspielen'}>
+                                                    {nowPlaying.isPlaying ? <IconPause size={16} /> : <IconPlay size={16} />}
+                                                </button>
+                                                <button type="button" className={`${styles.mvBtn} ${styles.mvVoteBtn}`} onClick={handleSkip} aria-label="Song überspringen"><IconSkip size={16} /></button>
                                             </span>
+                                        ) : (
+                                            <span className={styles.mvNowEq} aria-hidden="true">{nowPlaying.isPlaying ? <IconWave size={18} /> : <IconPause size={16} />}</span>
                                         )}
-                                        {canRemove && (
-                                            <button type="button" className={`${styles.mvBtn} ${styles.mvRemoveBtn} ${styles.mvRemoveSm}`} onClick={() => setConfirm({ kind: 'remove', item })}
-                                                aria-label={`„${item.title}“ entfernen`} title="Entfernen"><IconTrash size={16} /></button>
-                                        )}
-                                    </li>
-                                )
-                            })}
-                        </ul>
+                                    </div>
+                                    <div className={styles.mvTrackBar} aria-hidden="true"><span style={{ width: `${progressPct}%` }} /></div>
+                                </li>
+                            )}
+                            {queueItems.map(item => (
+                                <li key={item.id} className={`${styles.mvTrack} ${styles.mvTrackLocked}`}>
+                                    <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={46} radius={10} />
+                                    <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>
+                                        <span className={styles.mvRowName}>{item.title}</span>
+                                        <span className={styles.mvRowMeta}>{item.artist} · {byText(item.addedBy)}</span>
+                                    </span>
+                                    <span className={styles.mvLockMark} title="Steht fest – geht schon an Spotify" aria-label="steht fest"><IconLock size={15} /></span>
+                                </li>
+                            ))}
+                            {poolItems.length > 0 && (showNow || queueItems.length > 0) && <li className={styles.mvTrackDivider} aria-hidden="true" />}
+                            {poolItems.map(songRow)}
+                        </ol>
                     )}
-                    {poolItems.length > batchSize && <p className={styles.mvFine}>Die markierten {batchSize === 1 ? 'Song bildet' : `${batchSize} Songs bilden`} die nächste Runde – der Rest braucht noch Daumen.</p>}
                 </div>
 
-                <ReactionPad db={db} roomId={roomId} myName={myName} raised />
-
                 <div className={styles.mvFooter}>
-                    {myUnqueuedCount < maxSongs ? (
-                        <button type="button" className={`${styles.mvBtn} ${styles.mvStart}`} onClick={openAddModal}>
-                            <span className={styles.mvStartText}>
-                                <span className={styles.mvStartTitle}>Song hinzufügen</span>
-                                <span className={styles.mvStartSub}>Im Rennen: {myUnqueuedCount} von {maxSongs}{rule ? ` · ${ruleLabel(rule)}` : ''}</span>
-                            </span>
-                            <span className={styles.mvStartIcon}><IconPlus /></span>
-                        </button>
-                    ) : (
-                        <button type="button" disabled aria-disabled="true" className={`${styles.mvBtn} ${styles.mvStartOff}`}>
-                            <IconLock />Alle {maxSongs} Songs im Rennen – wartet, bis einer läuft
-                        </button>
-                    )}
+                    <div className={styles.mvFooterRow}>
+                        {myUnqueuedCount < maxSongs ? (
+                            <button type="button" className={`${styles.mvBtn} ${styles.mvStart}`} onClick={openAddModal}>
+                                <span className={styles.mvStartText}>
+                                    <span className={styles.mvStartTitle}>Song hinzufügen</span>
+                                    <span className={styles.mvStartSub}>{myUnqueuedCount} von {maxSongs} im Rennen{rule ? ` · ${ruleLabel(rule)}` : ''}</span>
+                                </span>
+                                <span className={styles.mvStartIcon}><IconPlus /></span>
+                            </button>
+                        ) : (
+                            <button type="button" disabled aria-disabled="true" className={`${styles.mvBtn} ${styles.mvStartOff}`}>
+                                <IconLock />{maxSongs} von {maxSongs} im Rennen
+                            </button>
+                        )}
+                        <ReactionPad db={db} roomId={roomId} myName={myName} inline />
+                    </div>
                 </div>
             </main>
         )
