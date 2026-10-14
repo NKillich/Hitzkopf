@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { Fragment, useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { getApp } from 'firebase/app'
 import '../../firebase.js'
 import { getAuth, signInAnonymously } from 'firebase/auth'
@@ -7,10 +7,11 @@ import CoverArt from '../../shared/ui/CoverArt'
 import QrCode from '../../shared/ui/QrCode'
 import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
-import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconTrophy, IconExpand, IconShrink } from '../../shared/ui/icons'
+import { IconMoon, IconSun, IconBack, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconTrophy, IconWave, IconLock, IconExpand, IconShrink } from '../../shared/ui/icons'
 import { joinLink } from './links'
-import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextRoundInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, placeOf, currentRoundNo, liveNowPlaying, upcomingQueue, queueOrder, DEFAULT_BATCH, isNew } from './amplifyLogic'
+import { scoreOf, voteCounts, byScore, mmss, nowPosition, nextRoundInMs, ruleLabel, ruleEmoji, currentRoundNo, liveNowPlaying, upcomingQueue, DEFAULT_BATCH, isNew } from './amplifyLogic'
 import ReactionRain from './ReactionRain'
+import { IconArrowUp, IconArrowDown } from './icons'
 import styles from './LiveBoard.module.css'
 
 // Bühne: im Querformat wird das Board für 1600 × 900 gebaut und als Ganzes auf das Fenster skaliert –
@@ -26,23 +27,6 @@ const calcStage = () => {
     const scale = Math.min(W / STAGE_W, H / STAGE_H)
     return { scale, w: Math.round(Math.min(W / scale, STAGE_W_MAX)), h: Math.round(Math.min(H / scale, STAGE_H_MAX)) }
 }
-// Plätze pro Liste auf der Bühne (mehr → automatisch blättern); höhere Bildschirme zeigen mehr
-const rankRowsFor = (stage) => (stage ? 5 + Math.max(0, Math.floor((stage.h - STAGE_H) / 76)) : Infinity)
-const queueRowsFor = (stage) => (stage ? 3 + Math.max(0, Math.floor((stage.h - STAGE_H) / 56)) : 6)
-const PAGE_MS = 8000
-
-/** Blättert eine lange Liste automatisch weiter (Seite 1/3 …) */
-function usePager(count, perPage, enabled) {
-    const pages = enabled ? Math.max(1, Math.ceil(count / perPage)) : 1
-    const [page, setPage] = useState(0)
-    useEffect(() => {
-        if (pages <= 1) return
-        const id = setInterval(() => setPage(p => p + 1), PAGE_MS)
-        return () => clearInterval(id)
-    }, [pages])
-    return { page: page % pages, pages }
-}
-
 const hoursMinutes = (ms) => {
     const min = Math.round((ms || 0) / 60000)
     if (min < 60) return `${min} Min.`
@@ -193,15 +177,8 @@ export default function LiveBoard2({ roomCode, onBack }) {
     const playlist = data?.playlist || []
     const pool = playlist.filter(i => i.queuedRound == null)
     const ranked = [...pool].sort(byScore)
-    const listAll = ranked   // Live-Rangliste: jederzeit abstimmen, die besten N bilden die nächste Runde
-    const rankRows = rankRowsFor(stage)
-    const pager = usePager(listAll.length, rankRows, !!stage)
-    const pageStart = stage ? pager.page * rankRows : 0
-    const visibleList = stage ? listAll.slice(pageStart, pageStart + rankRows) : listAll
     const queueAll = data ? upcomingQueue(data, clock) : []
-    const queueRows = queueRowsFor(stage)
-    const queuePager = usePager(queueAll.length, queueRows, true)
-    const setRowRef = useFlip(visibleList.map(i => i.id).join('|') + '#' + pager.page, stage?.scale || 1)
+    const setRowRef = useFlip(ranked.slice(0, 10).map(i => i.id).join('|'), stage?.scale || 1)
 
     const openCode = (e) => {
         e.preventDefault()
@@ -259,65 +236,44 @@ export default function LiveBoard2({ roomCode, onBack }) {
     const nowPos = nowPosition(now, clock)
     const nowItem = now ? playlist.find(i => i.spotifyId === now.trackId) : null
     const queue = queueAll
-    const maxAbs = Math.max(1, ...pool.map(i => { const c = voteCounts(i); return Math.max(c.up, c.down) }))
     const facts = buildFacts(history, players, pool.length, data)
     const playedIds = new Set(history.map(h => h.spotifyId).filter(Boolean))
     const waiting = !!data.pendingBatch
-    const remaining = queueRemainingMs(data, clock)
     const nextRound = nextRoundInMs(data, clock)
     const rule = data.roundRule
-    const musicOn = !!now?.isPlaying || queue.length > 0
 
-    // Fortschritt bis zur nächsten Runde (0–1): gespielte Zeit der laufenden Runde bis zum Start ihres letzten Songs
-    let progress = null
-    if (round > 0 && nextRound != null && remaining != null) {
-        const order = queueOrder(data)
-        const nowIdx = now ? order.findIndex(i => i.spotifyId === now.trackId) : -1
-        const passed = order.slice(0, Math.max(0, nowIdx)).filter(i => i.queuedRound === round).reduce((s, i) => s + (i.duration || FALLBACK_DURATION), 0)
-        const played = history.filter(h => h.round === round).reduce((s, h) => s + (h.durationMs || FALLBACK_DURATION), 0)
-            + passed + (nowItem ? nowPos : 0)
-        progress = played + nextRound > 0 ? Math.min(1, played / (played + nextRound)) : null
-    }
-
-    // Kopf an Kopf: gleiche Punkte wie ein Nachbar (mit Stimmen) – und an der Grenze zur nächsten Runde
-    const hasVotes = (it) => !!it && Object.values(it.votes || {}).some(v => v !== 0)
-    const tied = (i) => {
-        const s = scoreOf(ranked[i])
-        return [ranked[i - 1], ranked[i + 1]].some(n => n && scoreOf(n) === s && (hasVotes(n) || hasVotes(ranked[i])))
-    }
-    const cutTie = ranked.length > batchSize && scoreOf(ranked[batchSize - 1]) === scoreOf(ranked[batchSize])
-        && (hasVotes(ranked[batchSize]) || hasVotes(ranked[batchSize - 1]))
-
-    // Banner: ruhig, ohne Aufforderung – nur, was gerade passiert
-    let banner
-    if (round === 0) banner = { title: 'Gleich geht’s los', sub: `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen · QR-Code scannen, Songs einreichen und abstimmen` }
-    else if (waiting) banner = { title: `Runde ${round} geht an Spotify`, sub: 'Die besten Songs kommen gleich in die Warteschlange …' }
-    else banner = {
-        title: musicOn ? `Runde ${round} läuft` : 'Die Musik ist durch',
-        sub: pool.length ? `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen – jederzeit abstimmen` : 'Noch keine Songs für die nächste Runde',
-        lines: nextRound != null ? [['Nächste Runde', nextRound > 0 ? `in ${mmss(nextRound)}` : (pool.length ? 'gleich' : 'sobald Songs da sind')]] : []
-    }
+    // Im Voting: die Top 10 – die besten N kommen weiter (grün). Neue Songs dahinter bekommen eine eigene Zeile.
+    const top10 = ranked.slice(0, 10)
+    const newcomers = ranked.slice(10).filter(i => isNew(i, clock)).slice(0, 6)
+    const live = !!now?.isPlaying
+    const emojiOf = (name) => data.players?.[name]?.emoji || '🙂'
+    const cover = (src, seed, by, size) => (
+        <span className={styles.lb2Cover} style={{ width: size, height: size }}>
+            <CoverArt src={src} seed={seed} size={size} radius={Math.round(size * 0.22)} />
+            {by && <span className={styles.lb2Badge} title={`von ${by}`}>{emojiOf(by)}</span>}
+        </span>
+    )
+    const queueShown = queue.slice(0, 4)
 
     return (
-        <div className={`${styles.lbRoot} ${isDark ? theme.dark : theme.light} ${musicOn ? styles.lbLive : styles.lbCollect} ${stage ? styles.lbStageMode : ''}`}>
+        <div className={`${styles.lbRoot} ${isDark ? theme.dark : theme.light} ${stage ? styles.lbStageMode : ''}`}>
             <div className={stage ? styles.lbStage : styles.lbFlow} style={stage ? { width: stage.w, height: stage.h, transform: `translate(-50%, -50%) scale(${stage.scale})` } : undefined}>
             <div className={styles.lbBoard}>
-                <header className={styles.lbTop}>
+                <header className={styles.lb2Top}>
                     {topButtons}
-                    <div className={styles.lbBrand}>
-                        <span className={styles.lbLogo}>Amplify 2.0 <span>Live</span></span>
-                        <span className={styles.lbMeta}>{round > 0 && <><strong className={styles.lbRound}>Runde {round}</strong> · </>}Playlist von {data.host} · <IconUsers size={14} /> {players} dabei</span>
+                    <div className={styles.lb2Brand}>
+                        <span className={styles.lb2Logo}>Amplify <span>Live</span></span>
+                        <span className={styles.lb2Sub}>
+                            <span className={`${styles.lb2Dot} ${live ? styles.lb2DotLive : ''}`} aria-hidden="true" />
+                            Gemeinsame Playlist{live ? ' · Live' : ''} · von {data.host} · <IconUsers size={14} /> {players} dabei
+                        </span>
                     </div>
-                    <div className={`${styles.lbSteps} ${styles.lbStepsOne}`}>
-                        <div className={`${styles.lbStep} ${styles.lbStepOn}`}>
-                            <span className={styles.lbStepLabel}>{round === 0 ? 'Songs sammeln' : `Nächste Runde · die besten ${batchSize}`}</span>
-                            <span className={styles.lbStepBar}>
-                                <span className={progress == null ? styles.lbStepIndeterminate : ''} style={{ width: `${Math.round((progress ?? 0) * 100)}%` }} />
-                            </span>
-                        </div>
-                    </div>
-                    <div className={`${styles.lbJoin} ${styles.lbJoinBig}`}>
-                        <QrCode text={joinLink(code)} size={104} label={`QR-Code zum Mitmachen, Raumcode ${code}`} />
+                    {rule && <span className={styles.lb2Chip}>{ruleEmoji(rule)} {ruleLabel(rule)}</span>}
+                    {round > 0 && nextRound != null && !waiting && (
+                        <span className={styles.lb2Chip}>Nächste Runde <strong>{nextRound > 0 ? mmss(nextRound) : (pool.length ? 'gleich' : 'sobald Songs da sind')}</strong></span>
+                    )}
+                    <div className={styles.lbJoin}>
+                        <QrCode text={joinLink(code)} size={92} label={`QR-Code zum Mitmachen, Raumcode ${code}`} />
                         <span className={styles.lbJoinText}>
                             <span className={styles.lbJoinLabel}>Mitmachen</span>
                             <span className={styles.lbJoinCode}>{code}</span>
@@ -325,114 +281,114 @@ export default function LiveBoard2({ roomCode, onBack }) {
                     </div>
                 </header>
 
-                <section className={`${styles.lbCall} ${banner.urgent ? styles.lbCallUrgent : ''}`} aria-live="polite">
-                    <div className={styles.lbCallText}>
-                        <h1 className={styles.lbCallTitle}>{banner.title}</h1>
-                        <p className={styles.lbCallSub}>
-                            {rule && <span className={styles.lbRule}>{ruleEmoji(rule)} {ruleLabel(rule)}</span>}
-                            {banner.sub}
-                        </p>
-                    </div>
-                    {banner.timer && <span className={styles.lbCallTimer} role="timer">{banner.timer}</span>}
-                    {banner.lines?.length > 0 && (
-                        <div className={styles.lbCallLines}>
-                            {banner.lines.map(([label, value]) => (
-                                <span key={label} className={styles.lbCallLine}><span>{label}</span><strong className={/\d/.test(value) ? undefined : styles.lbCallWord}>{value}</strong></span>
-                            ))}
-                        </div>
-                    )}
-                </section>
-
-                <main className={styles.lbGrid}>
-                    <section className={styles.lbNowCol} aria-label="Läuft gerade">
+                <main className={styles.lb2Grid}>
+                    <div className={styles.lb2Left}>
                         {now ? (
-                            <div className={styles.lbNow}>
-                                <div className={styles.lbNowCover}>
-                                    <CoverArt src={now.imageUrl} seed={now.trackId} size={240} radius={22} />
+                            <section className={styles.lb2Now} aria-label="Läuft gerade">
+                                <div className={styles.lb2NowRow}>
+                                    {cover(now.imageUrl, now.trackId, nowItem?.addedBy, 150)}
+                                    <div className={styles.lb2Text}>
+                                        <span className={styles.lb2NowTag}>{now.isPlaying ? <><IconWave size={16} />Läuft</> : 'Pausiert'}</span>
+                                        <h2 className={styles.lb2NowTitle}>{now.trackName}</h2>
+                                        <span className={styles.lb2NowArtist}>{now.artist}</span>
+                                        {nowItem?.addedBy && <span className={styles.lb2By}>{emojiOf(nowItem.addedBy)} {nowItem.addedBy}</span>}
+                                    </div>
                                 </div>
-                                <div className={styles.lbNowText}>
-                                    <span className={styles.lbKicker}>{now.isPlaying ? 'Läuft gerade' : 'Pausiert'}</span>
-                                    <h2 className={styles.lbNowTitle}>{now.trackName}</h2>
-                                    <p className={styles.lbNowArtist}>{now.artist}</p>
-                                    {nowItem?.addedBy && <p className={styles.lbBy}>eingereicht von <strong>{nowItem.addedBy}</strong></p>}
-                                    <div className={styles.lbBar} aria-hidden="true"><span style={{ width: `${now.durationMs ? Math.min(100, (nowPos / now.durationMs) * 100) : 0}%` }} /></div>
-                                    <div className={styles.lbTimes}><span>{mmss(nowPos)}</span><span>{mmss(now.durationMs)}</span></div>
+                                <div className={styles.lb2Progress}>
+                                    <span>{mmss(nowPos)}</span>
+                                    <span className={styles.lb2Bar} aria-hidden="true"><span style={{ width: `${now.durationMs ? Math.min(100, (nowPos / now.durationMs) * 100) : 0}%` }} /></span>
+                                    <span>{mmss(now.durationMs)}</span>
                                 </div>
-                            </div>
+                            </section>
                         ) : (
-                            <div className={styles.lbNowEmpty}>
+                            <section className={`${styles.lb2Now} ${styles.lb2NowIdle}`}>
                                 <span className={styles.lbEmptyIcon}><IconNote size={28} /></span>
-                                <p className={styles.lbNowEmptyTitle}>{waiting ? 'Gleich geht’s los' : 'Gerade läuft nichts'}</p>
-                                <p className={styles.lbMuted}>{waiting ? 'Die Runde wartet darauf, dass Spotify startet.' : 'Sobald der Host abspielt, erscheint der Song hier.'}</p>
-                            </div>
+                                <p className={styles.lb2NowTitle}>{round === 0 ? 'Gleich geht’s los' : waiting ? 'Die Runde geht an Spotify' : 'Gerade läuft nichts'}</p>
+                                <p className={styles.lbMuted}>{round === 0 ? 'QR-Code scannen, Songs vorschlagen und voten.' : 'Sobald der Host abspielt, erscheint der Song hier.'}</p>
+                            </section>
                         )}
 
-                        <div className={styles.lbSection}>
-                            <h2 className={styles.lbSectionTitle}>Als Nächstes <span>{queue.length}</span>{queuePager.pages > 1 && <span className={styles.lbPage}>Seite {queuePager.page + 1}/{queuePager.pages}</span>}</h2>
-                            {queue.length === 0 ? (
-                                <p className={styles.lbMuted}>Die Warteschlange ist leer – die nächste Runde füllt sie.</p>
-                            ) : (
-                                <ol key={queuePager.page} className={`${styles.lbQueue} ${queuePager.pages > 1 ? styles.lbRankPaged : ''}`}>
-                                    {queue.slice(queuePager.page * queueRows, (queuePager.page + 1) * queueRows).map((item, i) => (
-                                        <li key={item.id} className={styles.lbQueueItem}>
-                                            <span className={styles.lbQueueRank}>{queuePager.page * queueRows + i + 1}</span>
-                                            <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={44} radius={9} />
-                                            <span className={styles.lbText}>
-                                                <span className={styles.lbTitle}>{item.title}</span>
-                                                <span className={styles.lbSub}>{item.artist} · von {item.addedBy}</span>
+                        {queue.length > 0 && (
+                            <section className={styles.lb2Section}>
+                                <div className={styles.lb2Head}>
+                                    <h2 className={styles.lb2HeadTitle}>Als Nächstes</h2>
+                                    <span className={styles.lb2HeadMeta}><IconLock size={18} /></span>
+                                </div>
+                                <ol className={styles.lb2List}>
+                                    {queueShown.map(item => (
+                                        <li key={item.id} className={styles.lb2Row}>
+                                            {cover(item.imageUrl, item.spotifyId || item.id, item.addedBy, 46)}
+                                            <span className={styles.lb2Text}>
+                                                <span className={styles.lb2Title}>{item.title}</span>
+                                                <span className={styles.lb2Artist}>{item.artist}</span>
                                             </span>
+                                            <span className={styles.lb2Time}>{mmss(item.duration)}</span>
                                         </li>
                                     ))}
                                 </ol>
-                            )}
-                        </div>
-                    </section>
+                                {queue.length > queueShown.length && <p className={styles.lb2More}>+ {queue.length - queueShown.length} weitere</p>}
+                            </section>
+                        )}
 
-                    <section className={styles.lbPanel} aria-label="Live-Rangliste">
-                        <div className={styles.lbPanelHead}>
-                            <h2 className={styles.lbPanelTitle}>Im Rennen</h2>
-                            <span className={styles.lbPanelMeta}>
-                                {batchSize === 1 ? 'Der beste Song ist als Nächstes dran' : `Die besten ${batchSize} bilden die nächste Runde`}
-                                {cutTie && <span className={styles.lbTieBanner}>Kopf an Kopf um Platz {batchSize}!</span>}
-                                {pager.pages > 1 && <span className={styles.lbPage}>Seite {pager.page + 1}/{pager.pages}</span>}
-                            </span>
-                        </div>
-                        {listAll.length === 0 ? (
-                            <div className={styles.lbNowEmpty}>
-                                <span className={styles.lbEmptyIcon}><IconNote size={28} /></span>
-                                <p className={styles.lbNowEmptyTitle}>Noch keine Songs</p>
-                                <p className={styles.lbMuted}>Scanne den QR-Code und reich den ersten Song ein.</p>
-                            </div>
-                        ) : (
-                            <ol key={pager.page} className={`${styles.lbRank} ${pager.pages > 1 ? styles.lbRankPaged : ''}`}>
-                                {visibleList.map((item, idx) => {
-                                    const i = pageStart + idx
-                                    const { up, down } = voteCounts(item)
-                                    const score = scoreOf(item)
-                                    const inTop = i < batchSize
-                                    return (
-                                        <li key={item.id} ref={setRowRef(item.id)}
-                                            className={`${styles.lbRankItem} ${inTop ? styles.lbRankTop : ''} ${i === batchSize ? styles.lbRankCut : ''}`}>
-                                            <span className={styles.lbPos}>{placeOf(ranked, i)}</span>
-                                            <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={52} radius={11} />
-                                            <span className={styles.lbText}>
-                                                <span className={styles.lbTitle}>{item.title}</span>
-                                                <span className={styles.lbSub}>{isNew(item, clock) && <span className={styles.lbNew}>✨ NEU</span>}{playedIds.has(item.spotifyId) && <span className={styles.lbPlayed}>Lief schon</span>}{item.artist} · von <strong>{item.addedBy}</strong></span>
-                                                <span className={styles.lbVotes} aria-label={`${up} Daumen hoch, ${down} Daumen runter`}>
-                                                    <span className={styles.lbVoteUp} style={{ width: `${(up / maxAbs) * 50}%` }} />
-                                                    <span className={styles.lbVoteDown} style={{ width: `${(down / maxAbs) * 50}%` }} />
-                                                </span>
-                                            </span>
-                                            {tied(i) && <span className={styles.lbTie}>Kopf an Kopf</span>}
-                                            <span className={styles.lbScoreBox}>
-                                                <span key={score} className={styles.lbScore}>{score > 0 ? '+' : ''}{score}</span>
-                                                <span className={styles.lbCounts}><IconThumbUp size={13} />{up} <IconThumbDown size={13} />{down}</span>
+                        {newcomers.length > 0 && (
+                            <section className={styles.lb2Section}>
+                                <div className={styles.lb2Head}>
+                                    <h2 className={styles.lb2HeadTitle}>✨ Neu im Rennen</h2>
+                                    <span className={styles.lb2HeadMeta}>brauchen noch Stimmen</span>
+                                </div>
+                                <ul className={styles.lb2NewList}>
+                                    {newcomers.map(item => (
+                                        <li key={item.id} className={styles.lb2NewItem}>
+                                            {cover(item.imageUrl, item.spotifyId || item.id, item.addedBy, 38)}
+                                            <span className={styles.lb2Text}>
+                                                <span className={styles.lb2Title}>{item.title}</span>
+                                                <span className={styles.lb2Artist}>{item.artist}</span>
                                             </span>
                                         </li>
+                                    ))}
+                                </ul>
+                            </section>
+                        )}
+                    </div>
+
+                    <section className={styles.lb2Right} aria-label="Im Voting">
+                        <div className={styles.lb2Head}>
+                            <h2 className={styles.lb2HeadTitle}>Im Voting</h2>
+                            <span className={styles.lb2HeadMeta}>{batchSize === 1 ? 'Platz 1 kommt weiter' : `Die besten ${batchSize} kommen weiter`} · {pool.length} {pool.length === 1 ? 'Song' : 'Songs'}</span>
+                        </div>
+                        {top10.length === 0 ? (
+                            <div className={styles.lb2Empty}>
+                                <span className={styles.lbEmptyIcon}><IconNote size={28} /></span>
+                                <p className={styles.lb2NowTitle}>Noch keine Songs</p>
+                                <p className={styles.lbMuted}>Scanne den QR-Code und schlag den ersten Song vor.</p>
+                            </div>
+                        ) : (
+                            <ol className={styles.lb2List}>
+                                {top10.map((item, i) => {
+                                    const { up, down } = voteCounts(item)
+                                    const score = scoreOf(item)
+                                    return (
+                                        <Fragment key={item.id}>
+                                            {i === batchSize && <li className={styles.lb2Cut} aria-hidden="true"><span><IconArrowUp size={16} /></span></li>}
+                                            <li ref={setRowRef(item.id)} className={`${styles.lb2Row} ${i < batchSize ? styles.lb2RowTop : ''}`}>
+                                                <span className={styles.lb2No}>{i + 1}</span>
+                                                {cover(item.imageUrl, item.spotifyId || item.id, item.addedBy, 42)}
+                                                <span className={styles.lb2Text}>
+                                                    <span className={styles.lb2Title}>{item.title}</span>
+                                                    <span className={styles.lb2Artist}>{isNew(item, clock) && <span className={styles.lbNew}>✨ NEU</span>}{playedIds.has(item.spotifyId) && <span className={styles.lbPlayed}>Lief schon</span>}{item.artist}</span>
+                                                </span>
+                                                <span className={styles.lb2Pill} aria-label={`${score} Punkte: ${up}× hoch, ${down}× runter`}>
+                                                    <span className={styles.lb2PillUp}><IconArrowUp size={16} />{up}</span>
+                                                    <strong key={score} className={styles.lb2Score}>{score}</strong>
+                                                    <span className={styles.lb2PillDown}><IconArrowDown size={16} />{down}</span>
+                                                </span>
+                                            </li>
+                                        </Fragment>
                                     )
                                 })}
                             </ol>
                         )}
+                        {ranked.length > 10 && <p className={styles.lb2More}>+ {ranked.length - 10} weitere im Rennen</p>}
                     </section>
                 </main>
 
@@ -472,7 +428,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                     <span className={styles.lbPodiumPlace}>{place}</span>
                                     <CoverArt src={t.imageUrl} seed={t.spotifyId || t.title} size={place === 1 ? (reveal.top.length > 4 ? 160 : 200) : 150} radius={20} />
                                     <span className={styles.lbPodiumTitle}>{t.title}</span>
-                                    <span className={styles.lbPodiumBy}>von <strong>{t.addedBy}</strong></span>
+                                    <span className={styles.lbPodiumBy}>{data.players?.[t.addedBy]?.emoji || '🙂'} <strong>{t.addedBy}</strong></span>
                                     <span className={styles.lbPodiumScore}>{t.score > 0 ? '+' : ''}{t.score} <small>({t.up}× hoch{t.down ? ` · ${t.down}× runter` : ''})</small></span>
                                 </li>
                                 )

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { IconX } from '../../shared/ui/icons'
+import { IconSmile } from './icons'
 import { DEFAULT_EMOJIS, MAX_PER_PACKET, emojisIn, sendReactions } from './reactions'
 import styles from './Amplify2.module.css'
 
@@ -66,7 +67,7 @@ export default function ReactionPad({ db, roomId, myName, inline }) {
             )}
             <button type="button" className={`${styles.mvBtn} ${styles.mvReactToggle}`} onClick={toggle} aria-expanded={open}
                 aria-label={open ? 'Reaktionen schließen' : 'Reaktion aufs Live-Board schicken'} title="Reaktionen fürs Live-Board">
-                {open ? <IconX size={20} /> : <span aria-hidden="true">😀</span>}
+                {open ? <IconX size={20} /> : (inline ? <IconSmile /> : <span aria-hidden="true">😀</span>)}
                 {pop && <span key={pop.key} className={styles.mvReactPop} aria-hidden="true">{pop.emoji}</span>}
             </button>
         </div>

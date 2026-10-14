@@ -285,3 +285,75 @@
 .lbStepsOne { grid-template-columns: minmax(0, 1fr); }
 .lbRankCut::before { content: 'Braucht noch Daumen'; }
 .lbNew { display: inline-flex; align-items: center; height: 18px; margin-right: 6px; padding: 0 7px; border-radius: 9px; background: color-mix(in srgb, #FFD23F 30%, transparent); color: var(--sr-ink); font-size: 11px; font-weight: 800; vertical-align: 1px; }
+
+/* ── Amplify 2.0 Design (wie die App): Läuft-Karte, Als Nächstes, Im Voting Top 10 ── */
+.lbStageMode { background: var(--sr-bg); }
+.lb2Top { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.lb2Brand { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 4px; }
+.lb2Logo { font-family: var(--sr-display); font-size: clamp(28px, 3vw, 40px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.lb2Logo span { color: var(--sr-accent); }
+.lb2Sub { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--sr-muted); }
+.lb2Sub svg { vertical-align: -2px; }
+.lb2Dot { width: 9px; height: 9px; border-radius: 50%; background: var(--sr-muted); flex: none; }
+.lb2DotLive { background: var(--sr-ok); animation: lbPulse 1.6s ease-in-out infinite; }
+.lb2Chip { display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 18px; border-radius: 23px; background: var(--sr-surface); font-size: 17px; font-weight: 700; color: var(--sr-muted); white-space: nowrap; }
+.lb2Chip strong { color: var(--sr-ink); font-family: var(--sr-display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.lb2Grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 22px; }
+.lb2Left { min-height: 0; display: flex; flex-direction: column; gap: 18px; overflow: hidden; }
+.lb2Right { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.lb2Now { flex: none; display: flex; flex-direction: column; gap: 16px; padding: 20px; border-radius: 28px; background: color-mix(in srgb, var(--sr-ok) 9%, var(--sr-surface)); border: 1.5px solid color-mix(in srgb, var(--sr-ok) 28%, transparent); }
+.lb2NowIdle { align-items: center; text-align: center; gap: 8px; background: var(--sr-surface); border-color: transparent; }
+.lb2NowRow { display: flex; align-items: center; gap: 22px; }
+.lb2NowTag { display: inline-flex; align-items: center; gap: 8px; color: var(--sr-ok); font-size: 17px; font-weight: 800; }
+.lbRoot .lb2NowTitle { font-family: var(--sr-display); font-size: 34px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lb2NowArtist { font-size: 20px; color: var(--sr-muted); }
+.lb2By { margin-top: 4px; font-size: 17px; font-weight: 700; }
+.lb2Progress { display: flex; align-items: center; gap: 12px; font-size: 16px; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+.lb2Bar { flex: 1; height: 6px; border-radius: 3px; background: var(--sr-line); overflow: hidden; }
+.lb2Bar > span { display: block; height: 100%; background: var(--sr-ok); transition: width 1s linear; }
+.lb2Cover { position: relative; flex: none; display: inline-block; }
+.lb2Badge { position: absolute; right: -7px; bottom: -7px; min-width: 26px; height: 26px; border-radius: 10px; background: var(--sr-bg); border: 2px solid var(--sr-bg); display: flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1; box-sizing: border-box; }
+.lb2Now .lb2Badge { min-width: 40px; height: 40px; border-radius: 14px; font-size: 24px; right: -10px; bottom: -10px; }
+.lb2Section { min-height: 0; display: flex; flex-direction: column; }
+.lb2Head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 4px 10px; }
+.lbRoot .lb2HeadTitle { font-family: var(--sr-display); font-size: 24px; font-weight: 800; }
+.lb2HeadMeta { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 700; color: var(--sr-muted); }
+.lb2List { display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.lb2Row { display: flex; align-items: center; gap: 14px; min-height: 60px; padding: 7px 14px; box-sizing: border-box; border-radius: 18px; background: var(--sr-surface); border: 1.5px solid transparent; }
+.lb2RowTop { background: color-mix(in srgb, var(--sr-ok) 8%, var(--sr-surface)); border-color: color-mix(in srgb, var(--sr-ok) 26%, transparent); }
+.lb2No { width: 24px; flex: none; text-align: center; font-family: var(--sr-display); font-size: 20px; font-weight: 800; color: var(--sr-muted); }
+.lb2RowTop .lb2No { color: var(--sr-ok); }
+.lb2Text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lb2Title { font-size: 19px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb2Artist { font-size: 15px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb2Time { flex: none; font-size: 16px; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+.lb2Pill { flex: none; display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 14px; border-radius: 22px; background: var(--sr-surface2); font-variant-numeric: tabular-nums; }
+.lb2PillUp, .lb2PillDown { display: inline-flex; align-items: center; gap: 2px; font-size: 15px; font-weight: 700; color: var(--sr-muted); }
+.lb2PillUp { color: color-mix(in srgb, var(--sr-ok) 80%, var(--sr-muted)); }
+.lb2PillDown { color: color-mix(in srgb, var(--sr-accent) 80%, var(--sr-muted)); }
+.lb2Score { min-width: 26px; text-align: center; font-family: var(--sr-display); font-size: 22px; font-weight: 800; animation: lbPop 0.6s ease; }
+.lb2Cut { display: flex; align-items: center; gap: 12px; margin: 2px 6px; color: var(--sr-muted); }
+.lb2Cut::before, .lb2Cut::after { content: ''; flex: 1; border-top: 2px dashed var(--sr-line); }
+.lb2Cut > span { display: flex; }
+.lb2More { margin: 10px 6px 0; font-size: 15px; font-weight: 700; color: var(--sr-muted); }
+.lb2NewList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.lb2NewItem { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 16px; background: var(--sr-surface); border: 1.5px dashed color-mix(in srgb, #FFD23F 45%, transparent); }
+.lb2NewItem .lb2Title { font-size: 16px; }
+.lb2NewItem .lb2Artist { font-size: 13px; }
+.lb2Empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 20px; text-align: center; border-radius: 24px; background: var(--sr-surface); }
+.lbStageMode .lb2Top { flex-wrap: nowrap; }
+@media (max-width: 860px) {
+    .lb2Grid { grid-template-columns: minmax(0, 1fr); }
+    .lb2NowRow { gap: 16px; }
+    .lb2Now .lb2Cover, .lb2Now .lb2Cover > span:first-child { width: 96px !important; height: 96px !important; }
+    .lbRoot .lb2NowTitle { font-size: 26px; }
+    .lb2Chip { height: 40px; font-size: 15px; }
+    .lb2NewList { grid-template-columns: minmax(0, 1fr); }
+}
+/* Bühne: Top 10 müssen ohne Scrollen passen */
+.lbStageMode .lb2Right .lb2List { gap: 5px; }
+.lbStageMode .lb2Right .lb2Row { min-height: 50px; padding: 3px 12px; }
+.lbStageMode .lb2Right .lb2Title { font-size: 18px; }
+.lbStageMode .lb2Right .lb2Pill { height: 38px; }
+.lbStageMode .lb2Right .lb2Head { margin-bottom: 8px; }
+.lbStageMode .lb2Right .lb2Cut { margin: 0 6px; }
