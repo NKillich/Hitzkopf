@@ -9,7 +9,7 @@ import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
 import { IconMoon, IconSun, IconBack, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconWave, IconLock, IconExpand, IconShrink } from '../../shared/ui/icons'
 import { joinLink } from './links'
-import { scoreOf, voteCounts, byScore, mmss, nowPosition, nextSongInMs, ruleLabel, ruleEmoji, currentRoundNo, liveNowPlaying, upcomingQueue, isNew } from './amplifyLogic'
+import { scoreOf, voteCounts, byScore, mmss, nowPosition, nextSongInMs, ruleLabel, ruleEmoji, currentRoundNo, liveNowPlaying, upcomingQueue, isNew, activePoolOf } from './amplifyLogic'
 import ReactionRain from './ReactionRain'
 import { IconArrowUp, IconArrowDown } from './icons'
 import styles from './LiveBoard.module.css'
@@ -158,7 +158,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
     }, [])
 
     const playlist = data?.playlist || []
-    const pool = playlist.filter(i => i.queuedRound == null)
+    const pool = activePoolOf(data)   // pausierte Songs (passen nicht zum Runden-Modus) zeigt das Board nicht
     const ranked = [...pool].sort(byScore)
     const queueAll = data ? upcomingQueue(data, clock) : []
     const setRowRef = useFlip(ranked.slice(0, 10).map(i => i.id).join('|'), stage?.scale || 1)

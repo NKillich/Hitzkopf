@@ -100,12 +100,19 @@ export const isLastSong = (data, now = Date.now()) => {
 
 /** Songs, die noch im Rennen sind (nicht an Spotify übergeben) */
 export const poolOf = (data) => (data?.playlist || []).filter(i => i.queuedRound == null)
+/** Pausiert: Song im Rennen, der nicht zum laufenden Runden-Modus passt (kein Voting, läuft nicht, Stimmen zählen nicht) */
+export const isPaused = (data, item) => item?.queuedRound == null && !!ruleProblem(data?.roundRule, item)
+/** Songs im Rennen, die zum Modus passen – nur die zählen für Platz 1 und fürs Stimmen-Budget */
+export const activePoolOf = (data) => poolOf(data).filter(i => !isPaused(data, i))
+/** Vergebene Stimmen einer Person (1 = hoch, -1 = runter); Stimmen auf pausierten Songs sind gutgeschrieben */
+export const usedVotes = (data, name, value, exceptId = null) =>
+    activePoolOf(data).filter(i => i.id !== exceptId && i.votes?.[name] === value).length
 const playable = (i) => i.source === 'spotify' && !!i.spotifyId && i.type === 'song'
 /** Live-Rangliste: meiste Stimmen (Saldo) zuerst, bei Gleichstand der früher eingereichte Song */
 export const rankedPool = (data) => poolOf(data).sort(byScore)
 /** Wie lange läuft der aktuelle Song noch – so lange kann Platz 1 noch wechseln (null = nichts läuft) */
 export const nextSongInMs = (data, now) => {
-    if (!data || data.pendingBatch || !poolOf(data).some(playable) || upcomingQueue(data, now).length) return null
+    if (!data || data.pendingBatch || !activePoolOf(data).some(playable) || upcomingQueue(data, now).length) return null
     const np = liveNowPlaying(data, now)
     if (!np?.isPlaying || !np.durationMs) return null
     return Math.max(0, np.durationMs - nowPosition(np, now))
@@ -205,7 +212,7 @@ export const ruleProblem = (rule, item) => {
 export const finishRound = (data, now) => {
     const round = (data.votingRound || 0) + 1
     const current = data.playlist || []
-    const ranked = poolOf(data).filter(playable).sort(byScore)
+    const ranked = activePoolOf(data).filter(playable).sort(byScore)
     const next = ranked[0]
     if (!next) return null
     // Noch nicht gesendete Songs (z. B. kein Spotify-Gerät) nicht verlieren
@@ -237,7 +244,7 @@ export const isNew = (item, now) => item?.queuedRound == null && now - (item?.ad
 export const DEFAULT_DROP_BELOW = 3
 export const DEFAULT_DROP_AFTER = 0
 export const dropReason = (data, item, now) => {
-    if (item.queuedRound != null) return null
+    if (item.queuedRound != null || isPaused(data, item)) return null   // pausierte Songs bleiben unangetastet
     const below = data?.dropBelow ?? DEFAULT_DROP_BELOW
     const after = data?.dropAfterMin ?? DEFAULT_DROP_AFTER
     if (below > 0 && scoreOf(item) <= -below) return 'score'
