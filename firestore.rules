@@ -38,6 +38,35 @@ service cloud.firestore {
       }
     }
 
+    // Amplify 2.0: gleiche Regeln, eigene Sammlung (1.0 bleibt unberührt)
+    match /amplify2Lobbies/{lobbyId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && lobbyId.matches('[A-Za-z0-9]{4,10}')
+                    && request.resource.data is map
+                    && request.resource.data.host is string
+                    && request.resource.data.get('hostUid', request.auth.uid) == request.auth.uid;
+      allow update: if request.auth != null
+                    && request.resource.data.get('hostUid', null) == resource.data.get('hostUid', null);
+      allow delete: if request.auth != null
+                    && resource.data.get('hostUid', null) in [null, request.auth.uid];
+
+      // Live-Reaktionen (Emojis fürs Live-Board): kleine Pakete, nur solange die Lobby existiert
+      match /reactions/{reactionId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null
+                      && request.resource.data.keys().hasOnly(['e', 'by', 't'])
+                      && request.resource.data.e is list
+                      && request.resource.data.e.size() > 0
+                      && request.resource.data.e.size() <= 30
+                      && request.resource.data.by is string
+                      && request.resource.data.by.size() <= 40
+                      && request.resource.data.t == request.time
+                      && exists(/databases/$(database)/documents/amplify2Lobbies/$(lobbyId));
+        allow delete: if request.auth != null;
+      }
+    }
+
     // Quiz Royale Lobbies
     match /quizLobbies/{lobbyId} {
       allow read: if request.auth != null;

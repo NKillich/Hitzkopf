@@ -6,14 +6,18 @@ import MusicVoter from './projects/MusicVoter/MusicVoter'
 import QuizGame from './projects/QuizGame/QuizGame'
 import SecondSound from './projects/SecondSound/SecondSound'
 import LiveBoard from './projects/MusicVoter/LiveBoard'
+import Amplify2 from './projects/Amplify2/Amplify2'
+import LiveBoard2 from './projects/Amplify2/LiveBoard'
 import './App.css'
 
 const PROJECT_META = {
     hitzkopf:    { title: 'Hitzkopf',    emoji: '🔥' },
-    musicvoter:  { title: 'Amplify',     emoji: '🎵' },
+    musicvoter:  { title: 'Amplify 1.0', emoji: '🎵' },
+    amplify2:    { title: 'Amplify 2.0', emoji: '🎵' },
     quizroyale:  { title: 'Quiz Royale', emoji: '🧠' },
     secondsound: { title: 'Song raten',  emoji: '🎧' },
     live:        { title: 'Amplify Live', emoji: '📺' },
+    live2:       { title: 'Amplify 2.0 Live', emoji: '📺' },
 }
 
 const setPageMeta = (projectId) => {
@@ -44,6 +48,8 @@ const HASH_MAP = {
     hitzkopf:  'hitzkopf',
     quizroyale:'quizroyale',
     live:      'live',         // #live/RAUMCODE – Live-Board einer Amplify-Playlist
+    amplify2:  'amplify2',     // Amplify 2.0 (Weiterentwicklung; 1.0 bleibt als Backup)
+    live2:     'live2',        // #live2/RAUMCODE – Live-Board 2.0
 }
 const ID_TO_HASH = Object.fromEntries(Object.entries(HASH_MAP).map(([h, id]) => [id, h]))
 
@@ -106,6 +112,14 @@ function App() {
 
             {currentProject === 'live' && (
                 <LiveBoard roomCode={hashParam} onBack={handleBackToHub} />
+            )}
+
+            {currentProject === 'amplify2' && (
+                <Amplify2 onBack={handleBackToHub} joinCode={hashParam} />
+            )}
+
+            {currentProject === 'live2' && (
+                <LiveBoard2 roomCode={hashParam} onBack={handleBackToHub} />
             )}
 
             {currentProject === 'secondsound' && (

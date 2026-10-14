@@ -1,0 +1,421 @@
+/* Amplify im Design von Song raten – Farben aus shared/ui/theme.module.css */
+
+/* ── Basis ─────────────────────────────────────────────────────────────── */
+.mvRoot {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: var(--sr-bg);
+    color: var(--sr-ink);
+    font-family: 'Figtree', system-ui, sans-serif;
+    font-size: 16px;
+    text-align: left;
+    transition: background 0.25s ease;
+}
+.mvRoot .mvApp { position: relative; width: 100%; max-width: 430px; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--sr-bg); }
+/* App.css setzt globale h1-/button-/input-Optik – hier neutralisieren */
+.mvRoot h1,
+.mvRoot h2 { color: inherit; text-shadow: none; margin: 0; font-size: inherit; position: static; letter-spacing: normal; z-index: auto; }
+.mvRoot p,
+.mvRoot ul,
+.mvRoot ol { margin: 0; padding: 0; }
+.mvRoot ul,
+.mvRoot ol { list-style: none; }
+.mvRoot .mvBtn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    width: auto;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    transform: none;
+    overflow: visible;
+    letter-spacing: normal;
+    font: inherit;
+    font-family: inherit;
+    color: inherit;
+    text-align: inherit;
+    cursor: pointer;
+    transition: none;
+}
+.mvRoot .mvBtn::before { display: none; }
+.mvRoot .mvBtn:hover:not(:disabled),
+.mvRoot .mvBtn:active:not(:disabled) { transform: none; box-shadow: none; }
+.mvRoot .mvBtn:disabled { opacity: 1; cursor: default; }
+.mvRoot .mvBtn:focus-visible { outline: 3px solid var(--sr-accent); outline-offset: 2px; }
+
+.mvRoot .mvMain { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-top: 8px; overflow-y: auto; overscroll-behavior: contain; }
+.mvRoot .mvPad { padding-left: 20px; padding-right: 20px; }
+.mvRoot .mvMain.mvPad { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+.mvRoot .mvHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; flex: none; }
+.mvRoot .mvSubHeader { display: flex; align-items: center; gap: 10px; height: 56px; flex: none; }
+.mvRoot .mvSubTitle { flex: 1; min-width: 0; font-family: var(--sr-display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mvRoot .mvIconBtn { width: 44px; height: 44px; flex: none; border-radius: 22px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); }
+.mvRoot .mvTextBtn { height: 44px; padding: 0 14px 0 4px; border-radius: 22px; color: var(--sr-muted); font-size: 16px; font-weight: 600; gap: 2px; }
+.mvRoot .mvScroll { flex: 1; min-height: 0; padding: 6px 20px 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; overscroll-behavior: contain; }
+.mvRoot .mvScrollFix { overflow: hidden; }
+.mvRoot .mvFooter { position: relative; z-index: 2; flex: none; padding: 12px 20px calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--sr-bg); border-top: 1px solid var(--sr-line); display: flex; flex-direction: column; gap: 6px; }
+.mvRoot .mvInfo { flex: none; font-size: 16px; line-height: 1.4; font-weight: 600; }
+.mvRoot .mvFine { font-size: 14px; line-height: 1.45; color: var(--sr-muted); }
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.mvRoot .mvPrimary { height: clamp(54px, 7.4dvh, 62px); width: 100%; flex: none; border-radius: 31px; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 18px; font-weight: 700; gap: 10px; }
+.mvRoot .mvPrimary:disabled { opacity: 0.7; }
+.mvRoot .mvPrimaryOff { height: 56px; width: 100%; flex: none; border-radius: 28px; background: var(--sr-surface2); color: var(--sr-muted); font-size: 17px; font-weight: 700; gap: 10px; }
+.mvRoot .mvSecondary { height: clamp(48px, 6.6dvh, 56px); width: 100%; flex: none; border-radius: 28px; border: 2px solid var(--sr-line); color: var(--sr-ink); font-size: 16px; font-weight: 700; gap: 8px; }
+.mvRoot .mvSecondary:disabled { color: var(--sr-muted); }
+.mvRoot .mvOutline { height: 48px; padding: 0 22px; border-radius: 24px; border: 2px solid var(--sr-ink); color: var(--sr-ink); font-size: 16px; font-weight: 700; gap: 8px; }
+.mvRoot .mvOutline:disabled { border-color: var(--sr-line); color: var(--sr-muted); }
+.mvRoot .mvOutlineSm { height: 38px; padding: 0 14px; border-radius: 19px; font-size: 14px; gap: 6px; flex: none; }
+.mvRoot .mvDangerLink { align-self: center; height: 40px; padding: 0 10px; gap: 6px; color: var(--sr-bad); font-size: 14px; font-weight: 700; }
+.mvRoot .mvBtnRow { display: flex; gap: 10px; }
+.mvRoot .mvBtnRow .mvSecondary { flex: 1; min-width: 0; }
+.mvRoot .mvCloseSm { width: 36px; height: 36px; flex: none; border-radius: 18px; color: var(--sr-ink); margin: -6px -6px -6px 0; }
+
+/* ── Start ─────────────────────────────────────────────────────────────── */
+.mvRoot .mvHomeHero { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: clamp(10px, 2dvh, 18px); }
+.mvRoot .mvEmoji { font-size: clamp(72px, 15dvh, 120px); line-height: 1; }
+.mvRoot .mvHeroTitle { font-family: var(--sr-display); font-size: clamp(40px, 6.6dvh, 58px); line-height: 0.95; letter-spacing: -0.035em; font-weight: 800; }
+.mvRoot .mvLead { margin: 0 auto; font-size: clamp(15px, 2.1dvh, 18px); line-height: 1.45; color: var(--sr-muted); max-width: 340px; }
+.mvRoot .mvStack { display: flex; flex-direction: column; gap: clamp(8px, 1.4dvh, 12px); flex: none; }
+.mvRoot .mvNotice { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 18px; background: var(--sr-accent-soft); }
+.mvRoot .mvNoticeIcon { display: flex; flex: none; margin-top: 1px; color: var(--sr-accent-text); }
+.mvRoot .mvNoticeText { flex: 1; font-size: 15px; line-height: 1.4; font-weight: 600; }
+.mvRoot .mvRejoin { width: 100%; min-height: 64px; justify-content: flex-start; gap: 12px; padding: 8px 14px 8px 18px; border-radius: 20px; background: var(--sr-surface); border: 2px solid var(--sr-ok); text-align: left; }
+.mvRoot .mvLiveDot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--sr-ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--sr-ok) 25%, transparent); animation: mvPulse 1.6s ease-in-out infinite; }
+
+/* ── Namen, Karten, Chips ──────────────────────────────────────────────── */
+.mvRoot .mvNameCard { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 10px; border-radius: 20px; background: var(--sr-surface); }
+.mvRoot .mvAvatar { width: 46px; height: 46px; flex: none; border-radius: 23px; background: var(--sr-surface2); display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.mvRoot .mvLabelSm { font-size: 13px; font-weight: 600; color: var(--sr-muted); }
+.mvRoot .mvCard { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 22px; background: var(--sr-surface); }
+.mvRoot .mvCardHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mvRoot .mvCardTitle { font-family: var(--sr-display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.mvRoot .mvChip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 14px; background: var(--sr-surface2); color: var(--sr-muted); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.mvRoot .mvChipDot { display: none; width: 8px; height: 8px; border-radius: 4px; background: currentColor; }
+.mvRoot .mvChipOk .mvChipDot,
+.mvRoot .mvChipBad .mvChipDot { display: block; }
+.mvRoot .mvChipOk .mvChipDot { background: var(--sr-ok); }
+.mvRoot .mvChipBad .mvChipDot { background: var(--sr-bad); }
+.mvRoot .mvChipOk,
+.mvRoot .mvChipBad { color: var(--sr-ink); }
+.mvRoot .mvCountChip { flex: none; height: 32px; min-width: 52px; padding: 0 10px; border-radius: 16px; background: var(--sr-accent-soft); color: var(--sr-accent-text); font-family: var(--sr-display); font-size: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.mvRoot .mvCountChipFull { background: var(--sr-bad-soft); color: var(--sr-bad); }
+.mvRoot .mvAlert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: var(--sr-bad-soft); }
+.mvRoot .mvAlertIcon { display: flex; flex: none; color: var(--sr-bad); }
+.mvRoot .mvAlertText { font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+
+/* ── Formularfelder ────────────────────────────────────────────────────── */
+.mvRoot .mvField { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.mvRoot .mvLabel { font-size: 14px; font-weight: 600; color: var(--sr-muted); }
+.mvRoot .mvInputWrap { position: relative; }
+.mvRoot .mvInputIcon { position: absolute; left: 16px; top: 14px; display: flex; color: var(--sr-muted); pointer-events: none; }
+.mvRoot .mvInput { width: 100%; height: 48px; padding: 0 46px 0 46px; margin: 0; box-sizing: border-box; border-radius: 24px; border: 2px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-family: inherit; font-size: 16px; font-weight: 500; text-align: left; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; transform: none; transition: none; }
+.mvRoot .mvInput:focus { outline: none; border-color: var(--sr-accent); background: var(--sr-surface); box-shadow: none; transform: none; }
+.mvRoot .mvInput::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+.mvRoot .mvInputClear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 17px; color: var(--sr-muted); }
+.mvRoot .mvInputClear:hover:not(:disabled),
+.mvRoot .mvInputClear:active:not(:disabled) { transform: translateY(-50%); background: var(--sr-surface2); }
+.mvRoot .mvSelect { -webkit-appearance: none; appearance: none; cursor: pointer; padding-right: 44px; background-image: linear-gradient(45deg, transparent 50%, var(--sr-muted) 50%), linear-gradient(135deg, var(--sr-muted) 50%, transparent 50%); background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+.mvRoot .mvSelect:focus { background-image: linear-gradient(45deg, transparent 50%, var(--sr-muted) 50%), linear-gradient(135deg, var(--sr-muted) 50%, transparent 50%); background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+.mvRoot .mvSelectPlain { padding-left: 18px; background-color: var(--sr-bg); }
+.mvRoot .mvSelectPlain:focus { background-color: var(--sr-bg); }
+.mvRoot .mvSelect option { background: var(--sr-surface); color: var(--sr-ink); }
+
+/* ── Listen ────────────────────────────────────────────────────────────── */
+.mvRoot .mvListHead { display: flex; align-items: baseline; justify-content: space-between; flex: none; margin-top: 4px; }
+.mvRoot .mvListTitle { font-size: 15px; font-weight: 700; color: var(--sr-muted); }
+.mvRoot .mvListCount { font-size: 15px; font-weight: 700; color: var(--sr-accent-text); }
+.mvRoot .mvListBox { flex: 1; min-height: 110px; overflow-y: auto; overscroll-behavior: contain; padding: 2px 2px 8px 0; }
+.mvRoot .mvList { display: flex; flex-direction: column; gap: 6px; }
+.mvRoot .mvRow { width: 100%; min-height: 62px; justify-content: flex-start; gap: 12px; padding: 7px 12px 7px 8px; box-sizing: border-box; border-radius: 18px; text-align: left; background: var(--sr-surface); border: 2px solid transparent; }
+.mvRoot .mvRowOn { background: var(--sr-accent-soft); border-color: var(--sr-accent); }
+.mvRoot .mvRowAdded { background: color-mix(in srgb, var(--sr-ok) 12%, var(--sr-surface)); }
+.mvRoot .mvRowText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.mvRoot .mvRowName { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mvRoot .mvRowMeta { font-size: 14px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mvRoot .mvRowEnd { display: flex; flex: none; color: var(--sr-muted); }
+.mvRoot .mvAddMark { width: 32px; height: 32px; flex: none; box-sizing: border-box; border-radius: 16px; border: 2px solid var(--sr-line); color: var(--sr-ink); display: flex; align-items: center; justify-content: center; }
+.mvRoot .mvAddMarkOn { background: var(--sr-ok); border-color: var(--sr-ok); color: var(--sr-on-ok); }
+.mvRoot .mvAddMarkPlain { border: 0; color: var(--sr-muted); }
+.mvRoot .mvHintLine { flex: none; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--sr-accent-text); }
+.mvRoot .mvAlbumHead { flex: none; display: flex; align-items: center; gap: 14px; padding: 10px; border-radius: 20px; background: var(--sr-surface); }
+.mvRoot .mvAlbumTitle { font-family: var(--sr-display); font-size: 19px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.mvRoot .mvSkeletons { display: flex; flex-direction: column; gap: 8px; }
+.mvRoot .mvSkelRow { display: flex; align-items: center; gap: 12px; padding: 8px; box-sizing: border-box; height: 62px; border-radius: 18px; background: var(--sr-surface); }
+.mvRoot .mvSkelCover { width: 46px; height: 46px; flex: none; border-radius: 11px; background: var(--sr-surface2); animation: mvPulse 1.3s ease-in-out infinite; }
+.mvRoot .mvSkelLines { display: flex; flex-direction: column; gap: 8px; }
+.mvRoot .mvSkelLines span { display: block; height: 14px; border-radius: 7px; background: var(--sr-surface2); animation: mvPulse 1.3s ease-in-out infinite; }
+.mvRoot .mvSkelLines span + span { height: 12px; border-radius: 6px; }
+.mvRoot .mvEmpty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 18px 12px; }
+.mvRoot .mvEmptyIcon { width: 52px; height: 52px; border-radius: 26px; background: var(--sr-surface2); color: var(--sr-muted); display: flex; align-items: center; justify-content: center; }
+.mvRoot .mvEmptyIconBad { background: var(--sr-bad-soft); color: var(--sr-bad); }
+.mvRoot .mvEmptyTitle { margin-top: 6px; font-size: 18px; font-weight: 700; }
+.mvRoot .mvEmptyText { font-size: 15px; line-height: 1.45; color: var(--sr-muted); max-width: 290px; }
+.mvRoot .mvEmpty .mvOutline { margin-top: 8px; }
+
+/* ── Raum ──────────────────────────────────────────────────────────────── */
+.mvRoot .mvRoomHeader { gap: 8px; }
+.mvRoot .mvRoomTitle { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.mvRoot .mvRoomTitle .mvSubTitle { flex: none; font-size: 22px; line-height: 1.1; }
+.mvRoot .mvRoomCode { font-size: 12px; font-weight: 700; color: var(--sr-muted); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.mvRoot .mvPhase { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 22px; background: var(--sr-surface); }
+.mvRoot .mvPhaseRow { display: flex; align-items: center; gap: 12px; }
+.mvRoot .mvPhaseDot { width: 12px; height: 12px; flex: none; border-radius: 6px; background: var(--sr-muted); }
+.mvRoot .mvDotCollect { background: var(--sr-accent); }
+.mvRoot .mvDotVote { background: var(--sr-accent); animation: mvPulse 1.3s ease-in-out infinite; }
+.mvRoot .mvDotLive { background: var(--sr-ok); animation: mvPulse 1.6s ease-in-out infinite; }
+.mvRoot .mvPhaseTitle { font-size: 17px; font-weight: 700; }
+.mvRoot .mvPhaseSub { font-size: 14px; line-height: 1.4; color: var(--sr-muted); }
+.mvRoot .mvTimer { flex: none; height: 40px; padding: 0 14px; border-radius: 20px; background: var(--sr-accent); color: var(--sr-on-accent); font-family: var(--sr-display); font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; display: flex; align-items: center; }
+.mvRoot .mvLive { flex: none; height: 28px; padding: 0 10px; border-radius: 14px; background: var(--sr-ok); color: var(--sr-on-ok); font-size: 12px; font-weight: 800; letter-spacing: 0.12em; display: flex; align-items: center; }
+.mvRoot .mvPhaseBtn { width: 100%; height: 46px; }
+
+.mvRoot .mvNow { flex: none; border-radius: 24px; background: var(--sr-card); border: 1px solid var(--sr-card-line); color: var(--sr-card-ink); padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 10px; }
+.mvRoot .mvNowRow { display: flex; align-items: center; gap: 14px; }
+.mvRoot .mvNowLabel { font-size: 11px; font-weight: 800; letter-spacing: 0.14em; opacity: 0.7; }
+.mvRoot .mvNowTitle { font-family: var(--sr-display); font-size: 18px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mvRoot .mvNowArtist { font-size: 14px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mvRoot .mvQueueBtn { flex: none; height: 40px; padding: 0 12px; gap: 6px; border-radius: 20px; border: 1.5px solid var(--sr-card-line); color: var(--sr-card-ink); font-size: 15px; font-weight: 700; }
+.mvRoot .mvQueueBtnOn { background: var(--sr-accent); border-color: var(--sr-accent); color: var(--sr-on-accent); }
+.mvRoot .mvNowBar { height: 6px; border-radius: 3px; background: var(--sr-card-line); overflow: hidden; }
+.mvRoot .mvNowBar span { display: block; height: 100%; border-radius: 3px; background: var(--sr-accent); transition: width 0.9s linear; }
+.mvRoot .mvNowTimes { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.mvRoot .mvQueue { display: flex; flex-direction: column; border-top: 1px solid var(--sr-card-line); padding-top: 6px; }
+.mvRoot .mvQueueItem { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.mvRoot .mvQueueRank { width: 20px; flex: none; text-align: center; font-size: 13px; font-weight: 800; opacity: 0.6; }
+.mvRoot .mvQueueTitle { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mvRoot .mvQueueArtist { font-size: 12px; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.mvRoot .mvSong { display: flex; align-items: center; gap: 12px; min-height: 62px; padding: 7px 8px 7px 8px; box-sizing: border-box; border-radius: 18px; background: var(--sr-surface); border: 2px solid transparent; }
+.mvRoot .mvSongUp { border-color: var(--sr-ok); }
+.mvRoot .mvSongDown { border-color: var(--sr-bad); }
+.mvRoot .mvCoverBox { position: relative; flex: none; }
+.mvRoot .mvRank { position: absolute; left: -4px; top: -4px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 10px; background: var(--sr-ink); color: var(--sr-bg); font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.mvRoot .mvVote { display: flex; align-items: center; gap: 2px; flex: none; }
+.mvRoot .mvVoteBtn { width: 40px; height: 40px; border-radius: 20px; border: 1.5px solid var(--sr-line); color: var(--sr-muted); }
+.mvRoot .mvVoteUpOn { background: var(--sr-ok); border-color: var(--sr-ok); color: var(--sr-on-ok); }
+.mvRoot .mvVoteDownOn { background: var(--sr-bad); border-color: var(--sr-bad); color: var(--sr-on-bad); }
+.mvRoot .mvScore { min-width: 34px; text-align: center; font-family: var(--sr-display); font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mvRoot .mvRemoveBtn { width: 40px; height: 40px; flex: none; border-radius: 20px; color: var(--sr-muted); }
+
+.mvRoot .mvStart { height: 62px; width: 100%; border-radius: 31px; background: var(--sr-accent); color: var(--sr-on-accent); justify-content: space-between; padding: 0 9px 0 26px; text-align: left; }
+.mvRoot .mvStartText { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.mvRoot .mvStartTitle { font-size: 19px; font-weight: 700; }
+.mvRoot .mvStartSub { font-size: 13px; font-weight: 600; opacity: 0.8; }
+.mvRoot .mvStartIcon { width: 44px; height: 44px; border-radius: 22px; background: var(--sr-on-accent); color: var(--sr-accent); display: flex; align-items: center; justify-content: center; }
+.mvRoot .mvStartOff { height: 58px; width: 100%; border: 2px dashed var(--sr-line); border-radius: 29px; background: var(--sr-surface2); color: var(--sr-muted); font-size: 16px; font-weight: 700; gap: 10px; }
+
+/* ── Willkommen (Bottom-Sheet) ─────────────────────────────────────────── */
+.mvRoot .mvSheetTitle { font-family: var(--sr-display); font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.mvRoot .mvSheetText { font-size: 16px; color: var(--sr-muted); }
+.mvRoot .mvSteps { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 10px; }
+.mvRoot .mvStep { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; line-height: 1.4; color: var(--sr-muted); }
+.mvRoot .mvStep strong { display: block; font-size: 16px; color: var(--sr-ink); }
+.mvRoot .mvStepIcon { width: 40px; height: 40px; flex: none; border-radius: 20px; background: var(--sr-accent-soft); color: var(--sr-accent-text); display: flex; align-items: center; justify-content: center; }
+
+/* ── Startseite: Spotify-Status ───────────────────────────────────────── */
+.mvRoot .mvStartOff { height: clamp(54px, 7.4dvh, 62px); }
+.mvRoot .mvStatus { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--sr-muted); margin-top: 2px; }
+.mvRoot .mvStatusDot { width: 8px; height: 8px; border-radius: 50%; background: var(--sr-ok); }
+.mvRoot .mvStatusLink { height: 32px; padding: 0 2px; color: var(--sr-muted); font-size: 13px; font-weight: 600; text-decoration: underline; }
+.mvRoot .mvFineRow { display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 14px; color: var(--sr-muted); text-align: center; }
+
+/* ── Name ──────────────────────────────────────────────────────────────── */
+.mvRoot .mvNameRow { display: flex; align-items: center; gap: 10px; }
+.mvRoot .mvInput.mvInputPlain { flex: 1; min-width: 0; padding: 0 16px; font-weight: 700; }
+.mvRoot .mvInput.mvInputPlain:read-only { background: var(--sr-surface2); border-color: transparent; color: var(--sr-muted); }
+.mvRoot .mvInput.mvInputBad,
+.mvRoot .mvInput.mvInputBad:focus { border-color: var(--sr-bad); }
+.mvRoot .mvFieldHint { font-size: 13px; color: var(--sr-muted); }
+.mvRoot .mvFieldError { font-size: 13px; font-weight: 600; color: var(--sr-bad); }
+
+/* ── Einladung ─────────────────────────────────────────────────────────── */
+.mvRoot .mvInvite { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 22px; background: var(--sr-accent-soft); border: 2px solid var(--sr-accent); }
+.mvRoot .mvInviteRow { display: flex; align-items: center; gap: 12px; }
+.mvRoot .mvInvite .mvLabelSm { color: var(--sr-accent-text); font-weight: 700; }
+
+/* ── Raum: Rolle, Hilfe, Teilen ────────────────────────────────────────── */
+.mvRoot .mvRoomHeader .mvIconBtn { width: 40px; height: 40px; border-radius: 20px; }
+.mvRoot .mvRoomHeader { gap: 6px; }
+.mvRoot .mvRoleBtn { align-self: flex-start; gap: 4px; height: 22px; margin-top: 2px; border-radius: 11px; }
+.mvRoot .mvRole { height: 20px; padding: 0 8px; border-radius: 10px; background: var(--sr-surface2); color: var(--sr-muted); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; display: flex; align-items: center; }
+.mvRoot .mvRoleHost { background: var(--sr-accent-soft); color: var(--sr-accent-text); }
+.mvRoot .mvHelpDot { width: 20px; height: 20px; border-radius: 10px; border: 1.5px solid var(--sr-line); color: var(--sr-muted); display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.mvRoot .mvHelpNow { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 16px; background: var(--sr-bg); font-size: 15px; line-height: 1.45; }
+.mvRoot .mvShareBox { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
+.mvRoot .mvShareText { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.mvRoot .mvShareCode { font-family: var(--sr-display); font-size: 34px; font-weight: 800; letter-spacing: 0.06em; line-height: 1; }
+.mvRoot .mvBoardBox { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 10px 10px 10px 12px; border-radius: 18px; background: var(--sr-bg); }
+.mvRoot .mvBoardIcon { width: 40px; height: 40px; flex: none; border-radius: 20px; background: var(--sr-accent-soft); color: var(--sr-accent-text); display: flex; align-items: center; justify-content: center; }
+.mvRoot a.mvBtn { text-decoration: none; }
+.mvRoot .mvIconBtnSm { width: 38px; height: 38px; flex: none; border-radius: 19px; color: var(--sr-muted); }
+
+/* ── Abstimmung: Budget, Teilnahme ─────────────────────────────────────── */
+.mvRoot .mvVoteStats { display: flex; flex-wrap: wrap; gap: 6px; }
+.mvRoot .mvBudget,
+.mvRoot .mvVoters { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 15px; font-size: 13px; font-weight: 700; }
+.mvRoot .mvBudget { background: var(--sr-accent-soft); color: var(--sr-accent-text); }
+.mvRoot .mvBudgetEmpty { background: var(--sr-surface2); color: var(--sr-muted); }
+.mvRoot .mvVoters { background: var(--sr-surface2); color: var(--sr-ink); }
+.mvRoot .mvVoteBtnOff { opacity: 0.4; }
+.mvRoot .mvPlayedChip { display: inline-flex; align-items: center; height: 18px; margin-right: 6px; padding: 0 7px; border-radius: 9px; background: var(--sr-bad-soft); color: var(--sr-bad); font-size: 11px; font-weight: 800; vertical-align: 1px; }
+.mvRoot .mvRowFlat { background: var(--sr-bg); min-height: 54px; }
+
+/* ── Einstellungen: Schieberegler mit festen Stufen ────────────────────── */
+.mvRoot .mvSliderField { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
+.mvRoot .mvSliderValue { font-size: 16px; font-weight: 700; }
+.mvRoot .mvSlider { -webkit-appearance: none; appearance: none; width: 100%; height: 40px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; transform: none; transition: none; cursor: pointer; }
+.mvRoot .mvSlider:focus { outline: none; background: transparent; border: 0; box-shadow: none; transform: none; }
+.mvRoot .mvSlider::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--sr-accent) 0, var(--sr-accent) var(--pct, 0%), var(--sr-surface2) var(--pct, 0%), var(--sr-surface2) 100%); }
+.mvRoot .mvSlider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: var(--sr-surface); border: 4px solid var(--sr-accent); box-sizing: border-box; }
+.mvRoot .mvSlider::-moz-range-track { height: 8px; border-radius: 4px; background: var(--sr-surface2); }
+.mvRoot .mvSlider::-moz-range-progress { height: 8px; border-radius: 4px; background: var(--sr-accent); }
+.mvRoot .mvSlider::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: var(--sr-surface); border: 4px solid var(--sr-accent); box-sizing: border-box; }
+.mvRoot .mvSlider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 5px var(--sr-accent-soft); }
+.mvRoot .mvSlider:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 5px var(--sr-accent-soft); }
+.mvRoot .mvTicks { position: relative; height: 20px; }
+.mvRoot .mvTicks span { position: absolute; top: 0; transform: translateX(-50%); font-size: 13px; font-weight: 700; color: var(--sr-muted); }
+.mvRoot .mvTicks .mvTickOn { color: var(--sr-ink); }
+
+/* ── Hinweis-Leiste ────────────────────────────────────────────────────── */
+.mvRoot .mvToastSlot { position: absolute; left: 16px; right: 16px; bottom: calc(104px + env(safe-area-inset-bottom, 0px)); z-index: 40; pointer-events: none; }
+.mvRoot .mvToast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 14px; border-radius: 16px; background: var(--sr-ink); color: var(--sr-bg); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); animation: mvToastIn 0.2s ease-out; }
+.mvRoot .mvToastBad { background: var(--sr-bad); color: var(--sr-on-bad); }
+.mvRoot .mvToastIcon { display: flex; flex: none; }
+.mvRoot .mvToastText { flex: 1; font-size: 14px; line-height: 1.4; font-weight: 600; }
+.mvRoot .mvToastClose { width: 36px; height: 36px; flex: none; border-radius: 18px; color: inherit; }
+
+/* ── Hörprobe (eingebetteter Spotify-Player) ───────────────────────────── */
+.mvRoot .mvPreview { position: absolute; left: 12px; right: 12px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 30; height: 80px; border-radius: 14px; overflow: hidden; background: var(--sr-card); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35); }
+.mvRoot .mvPreview iframe { display: block; border: 0; }
+.mvRoot .mvPreviewClose { position: absolute; right: 6px; top: 6px; width: 28px; height: 28px; border-radius: 14px; background: rgba(0, 0, 0, 0.55); color: #fff; }
+.mvRoot .mvWithPreview .mvScroll { padding-bottom: 100px; }
+.mvRoot .mvWithPreview ~ .mvToastSlot { bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
+.mvRoot .mvCoverBtn { position: relative; flex: none; border-radius: 10px; }
+.mvRoot .mvCoverPlay { position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; border-radius: 11px; background: var(--sr-ink); color: var(--sr-bg); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
+.mvRoot .mvCoverBtnOn .mvCoverPlay { background: var(--sr-accent); color: var(--sr-on-accent); }
+
+/* ── Suchergebnisse ────────────────────────────────────────────────────── */
+.mvRoot .mvResult { display: flex; align-items: center; gap: 12px; min-height: 62px; padding: 7px 8px; box-sizing: border-box; border-radius: 18px; background: var(--sr-surface); }
+.mvRoot .mvResultMain { flex: 1; min-width: 0; min-height: 46px; justify-content: space-between; gap: 10px; text-align: left; }
+.mvRoot .mvResultMuted .mvRowName { color: var(--sr-muted); }
+.mvRoot .mvMetaBad { color: var(--sr-bad); }
+.mvRoot .mvRuleBanner { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; background: var(--sr-accent-soft); color: var(--sr-accent-text); font-size: 14px; font-weight: 700; line-height: 1.35; }
+
+/* ── Raum: Zeiten, Teilnehmer, Steuerung ───────────────────────────────── */
+.mvRoot .mvTimes { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; color: var(--sr-muted); }
+.mvRoot .mvTimes strong { color: var(--sr-ink); font-variant-numeric: tabular-nums; }
+.mvRoot .mvPeopleToggle { align-self: flex-start; height: 32px; padding: 0 10px; gap: 6px; border-radius: 16px; background: var(--sr-surface2); font-size: 13px; font-weight: 700; color: var(--sr-ink); }
+.mvRoot .mvPeopleToggle svg { flex: none; }
+.mvRoot .mvPeople { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 0; }
+.mvRoot .mvPerson { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 4px; border-radius: 10px; }
+.mvRoot .mvPersonEmoji { font-size: 20px; width: 28px; text-align: center; flex: none; }
+.mvRoot .mvPersonName { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mvRoot .mvVoted { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--sr-ok); }
+.mvRoot .mvNotVoted { font-size: 12px; font-weight: 600; color: var(--sr-muted); }
+.mvRoot .mvKickBtn { width: 36px; height: 36px; flex: none; border-radius: 18px; color: var(--sr-muted); }
+.mvRoot .mvInlineLink { display: inline; height: auto; padding: 0; color: var(--sr-accent-text); font-size: inherit; font-weight: 700; text-decoration: underline; }
+.mvRoot .mvOutline:disabled { border-style: dashed; opacity: 0.55; }
+.mvRoot .mvDeviceBanner { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 20px; background: var(--sr-bad-soft); border: 2px solid var(--sr-bad); }
+.mvRoot .mvDeviceBanner .mvSecondary { height: 44px; font-size: 15px; background: var(--sr-surface); }
+.mvRoot .mvControls { display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid var(--sr-card-line); }
+.mvRoot .mvCtrlBtn { width: 42px; height: 42px; flex: none; border-radius: 21px; border: 1.5px solid var(--sr-card-line); color: var(--sr-card-ink); }
+.mvRoot .mvVolume { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: 6px; color: var(--sr-card-ink); }
+.mvRoot .mvVolumeSlider { -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 32px; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; transform: none; cursor: pointer; }
+.mvRoot .mvVolumeSlider:focus { outline: none; background: transparent; border: 0; box-shadow: none; transform: none; }
+.mvRoot .mvVolumeSlider::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--sr-accent) 0, var(--sr-accent) var(--pct, 50%), var(--sr-card-line) var(--pct, 50%)); }
+.mvRoot .mvVolumeSlider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: var(--sr-card-ink); }
+.mvRoot .mvVolumeSlider::-moz-range-track { height: 6px; border-radius: 3px; background: var(--sr-card-line); }
+.mvRoot .mvVolumeSlider::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--sr-accent); }
+.mvRoot .mvVolumeSlider::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--sr-card-ink); }
+.mvRoot .mvQueueList { display: flex; flex-direction: column; gap: 4px; }
+.mvRoot .mvQueueList .mvQueueTitle { color: var(--sr-ink); }
+.mvRoot .mvQueueList .mvQueueArtist { color: var(--sr-muted); opacity: 1; }
+.mvRoot .mvExpand { align-self: center; height: 36px; padding: 0 10px; gap: 4px; font-size: 14px; font-weight: 700; color: var(--sr-muted); }
+
+/* ── Abstimmung ────────────────────────────────────────────────────────── */
+.mvRoot .mvRowNameWrap { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.2; }
+.mvRoot .mvSongVoting .mvRowText { gap: 2px; }
+.mvRoot .mvOwnTag { flex: none; padding: 4px 10px; border-radius: 12px; background: var(--sr-surface2); color: var(--sr-muted); font-size: 12px; font-weight: 700; }
+.mvRoot .mvVote { gap: 6px; }
+
+/* ── Gewinner-Enthüllung ───────────────────────────────────────────────── */
+.mvRoot .mvRevealKicker { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sr-accent-text); }
+.mvRoot .mvReveal { display: flex; flex-direction: column-reverse; gap: 8px; margin: 6px 0; }
+.mvRoot .mvRevealItem { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 18px; background: var(--sr-bg); opacity: 0; animation: mvRevealIn 0.55s cubic-bezier(.2, .9, .3, 1.3) forwards; }
+.mvRoot .mvRevealFirst { background: var(--sr-accent-soft); border: 2px solid var(--sr-accent); }
+.mvRoot .mvRevealMine { box-shadow: 0 0 0 3px var(--sr-ok); }
+.mvRoot .mvRevealPlace { width: 28px; flex: none; text-align: center; font-family: var(--sr-display); font-size: 26px; font-weight: 800; color: var(--sr-accent-text); }
+.mvRoot .mvRevealYou { color: var(--sr-ok); }
+.mvRoot .mvRevealScore { flex: none; font-family: var(--sr-display); font-size: 22px; font-weight: 800; }
+@keyframes mvRevealIn { from { opacity: 0; transform: translateY(14px) scale(0.96); } to { opacity: 1; transform: none; } }
+
+/* ── Einstellungen ─────────────────────────────────────────────────────── */
+.mvRoot .mvMenuRow { width: 100%; justify-content: flex-start; gap: 12px; text-align: left; }
+.mvRoot .mvSwitch { width: 46px; height: 28px; flex: none; border-radius: 14px; background: var(--sr-surface2); position: relative; transition: background 0.2s; }
+.mvRoot .mvSwitch span { position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 11px; background: var(--sr-surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 0.2s; }
+.mvRoot .mvSwitchOn { background: var(--sr-accent); }
+.mvRoot .mvSwitchOn span { transform: translateX(18px); }
+.mvRoot .mvPresets { display: flex; flex-direction: column; gap: 8px; }
+.mvRoot .mvPreset { width: 100%; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border-radius: 16px; border: 2px solid var(--sr-line); text-align: left; }
+.mvRoot .mvPresetOn { border-color: var(--sr-accent); background: var(--sr-accent-soft); }
+.mvRoot .mvPresetSub { font-size: 13px; color: var(--sr-muted); }
+.mvRoot .mvSegments { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 20px; background: var(--sr-surface2); }
+.mvRoot .mvSegment { height: 36px; border-radius: 16px; font-size: 13px; font-weight: 700; color: var(--sr-muted); }
+.mvRoot .mvSegmentOn { background: var(--sr-surface); color: var(--sr-ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.mvRoot .mvDecades { display: flex; flex-wrap: wrap; gap: 8px; }
+.mvRoot .mvDecade { height: 40px; padding: 0 16px; border-radius: 20px; border: 2px solid var(--sr-line); font-family: var(--sr-display); font-size: 16px; font-weight: 800; }
+.mvRoot .mvDecadeOn { background: var(--sr-accent); border-color: var(--sr-accent); color: var(--sr-on-accent); }
+.mvRoot .mvLeaveBtn { flex: none; width: 100%; height: 52px; margin-top: 4px; gap: 8px; border-radius: 26px; border: 2px solid var(--sr-bad); color: var(--sr-bad); font-size: 16px; font-weight: 700; }
+.mvRoot .mvCodeInput { font-family: var(--sr-display); font-size: 22px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.mvRoot form.mvField { gap: 8px; }
+
+@keyframes mvPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes mvToastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+    .mvRoot * { animation: none !important; transition: none !important; }
+}
+
+@media (min-width: 600px) and (min-height: 560px) {
+    .mvRoot { background: var(--sr-outer); }
+    .mvRoot .mvApp { height: min(100%, 880px); border-radius: 34px; border: 1px solid var(--sr-line); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35); }
+}
+
+/* ── Reiter Suchen / Meine Playlists, letzter Song, Streak ─────────────── */
+.mvRoot .mvSegments2 { grid-template-columns: repeat(2, minmax(0, 1fr)); flex: none; }
+.mvRoot .mvSegments2 .mvSegment { gap: 6px; height: 40px; font-size: 14px; }
+.mvRoot .mvLastSong { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--sr-surface2); font-size: 14px; font-weight: 700; line-height: 1.35; }
+.mvRoot .mvLastSongUrgent { background: var(--sr-accent); color: var(--sr-on-accent); animation: mvPulse 1.4s ease-in-out infinite; }
+.mvRoot .mvNextRule { margin: 0; padding: 8px 12px; border-radius: 14px; border: 1.5px dashed var(--sr-line); font-size: 13px; font-weight: 700; color: var(--sr-muted); }
+.mvRoot .mvPendingNote { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 10px 14px; border-radius: 14px; background: var(--sr-accent-soft); font-size: 14px; line-height: 1.4; }
+/* Live-Reaktionen */
+.mvRoot .mvReact { position: absolute; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; pointer-events: none; }
+.mvRoot .mvReactRaised { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
+.mvRoot .mvReact > * { pointer-events: auto; }
+.mvRoot .mvReactToggle { position: relative; width: 52px; height: 52px; border-radius: 26px; background: var(--sr-surface); border: 1.5px solid var(--sr-line); color: var(--sr-ink); font-size: 26px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }
+.mvRoot .mvReactBar { width: min(320px, calc(100vw - 32px)); padding: 10px; border-radius: 22px; background: var(--sr-surface); border: 1.5px solid var(--sr-line); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); display: flex; flex-direction: column; gap: 8px; }
+.mvRoot .mvReactRow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.mvRoot .mvReactEmoji { height: 46px; border-radius: 14px; font-size: 28px; line-height: 1; touch-action: manipulation; }
+.mvRoot .mvReactEmoji:active { background: var(--sr-surface2); transform: scale(0.88); }
+.mvRoot .mvReactInput { width: 100%; height: 42px; box-sizing: border-box; margin: 0; padding: 0 14px; border-radius: 21px; border: 1.5px solid var(--sr-line); background: var(--sr-bg); color: var(--sr-ink); font: inherit; font-size: 16px; }
+.mvRoot .mvReactInput:focus { outline: none; border-color: var(--sr-accent); }
+.mvRoot .mvReactPop { position: absolute; left: 50%; top: 0; font-size: 26px; pointer-events: none; animation: mvReactPop 0.7s ease-out forwards; }
+@keyframes mvReactPop { from { transform: translate(-50%, 0) scale(1); opacity: 1; } to { transform: translate(-50%, -60px) scale(1.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .mvRoot .mvReactPop { animation-duration: 0.01s; } }
+.mvRoot .mvStreakNext { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; opacity: 0.8; }
+.mvRoot .mvRevealNote { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--sr-muted); }
+.mvRoot .mvDrawn { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 12px; font-weight: 700; color: var(--sr-muted); }
+.mvRoot .mvStreakChip { margin: 0; align-self: flex-start; padding: 6px 12px; border-radius: 14px; background: color-mix(in srgb, #FF9F1C 22%, transparent); font-size: 13px; font-weight: 800; }

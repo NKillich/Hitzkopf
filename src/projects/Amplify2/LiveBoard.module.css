@@ -1,0 +1,282 @@
+/* Amplify Live – Zuschauer-Board für Tablet/TV. Farben aus shared/ui/theme.module.css */
+.lbRoot {
+    position: fixed;
+    inset: 0;
+    overflow-y: auto;
+    background: var(--sr-bg);
+    color: var(--sr-ink);
+    font-family: 'Figtree', system-ui, sans-serif;
+    font-size: 16px;
+    text-align: left;
+}
+/* App.css setzt globale h1-/button-/input-Optik – hier neutralisieren */
+.lbRoot h1,
+.lbRoot h2 { color: inherit; text-shadow: none; margin: 0; font-size: inherit; position: static; letter-spacing: normal; z-index: auto; }
+.lbRoot p,
+.lbRoot ol { margin: 0; padding: 0; }
+.lbRoot ol { list-style: none; }
+.lbRoot button { position: relative; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: 0; width: auto; min-height: 0; border: 0; box-shadow: none; transform: none; overflow: visible; font: inherit; cursor: pointer; transition: none; }
+.lbRoot button::before { display: none; }
+.lbRoot button:hover:not(:disabled),
+.lbRoot button:active:not(:disabled) { transform: none; box-shadow: none; }
+.lbRoot button:focus-visible { outline: 3px solid var(--sr-accent); outline-offset: 2px; }
+
+.lbBoard { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: clamp(14px, 2vw, 24px); padding: clamp(16px, 2.4vw, 32px); }
+.lbText { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.lbTitle { font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbSub { font-size: 14px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbSub strong { color: var(--sr-ink); font-weight: 700; }
+.lbMuted { font-size: 16px; line-height: 1.45; color: var(--sr-muted); }
+
+/* ── Kopfzeile ─────────────────────────────────────────────────────────── */
+.lbTop { display: flex; align-items: center; gap: clamp(12px, 2vw, 28px); flex-wrap: wrap; }
+.lbTopButtons { display: flex; gap: 8px; }
+.lbRoot .lbIconBtn { width: 40px; height: 40px; border-radius: 20px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); }
+.lbBrand { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; }
+.lbLogo { font-family: var(--sr-display); font-size: clamp(26px, 3vw, 40px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.lbLogo span { color: var(--sr-accent); }
+.lbMeta { display: block; font-size: 15px; color: var(--sr-muted); }
+.lbMeta svg { vertical-align: -2px; }
+.lbPhase { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 8px 0 18px; border-radius: 24px; background: var(--sr-surface); font-size: 17px; font-weight: 700; }
+.lbDot { width: 12px; height: 12px; border-radius: 6px; background: var(--sr-muted); }
+.lbDotCollect { background: var(--sr-accent); }
+.lbDotVote { background: var(--sr-accent); animation: lbPulse 1.2s ease-in-out infinite; }
+.lbDotLive { background: var(--sr-ok); animation: lbPulse 1.6s ease-in-out infinite; }
+.lbTimer { height: 36px; padding: 0 14px; border-radius: 18px; background: var(--sr-accent); color: var(--sr-on-accent); font-family: var(--sr-display); font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; display: flex; align-items: center; }
+.lbPhase:not(:has(.lbTimer)) { padding-right: 18px; }
+.lbJoin { display: flex; align-items: center; gap: 12px; padding: 6px 16px 6px 6px; border-radius: 20px; background: var(--sr-surface); }
+.lbJoinText { display: flex; flex-direction: column; gap: 2px; }
+.lbJoinLabel { font-size: 13px; font-weight: 700; color: var(--sr-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.lbJoinCode { font-family: var(--sr-display); font-size: 26px; font-weight: 800; letter-spacing: 0.06em; }
+
+/* ── Hauptbereich ──────────────────────────────────────────────────────── */
+.lbGrid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(14px, 2vw, 24px); }
+.lbNowCol { min-height: 0; display: flex; flex-direction: column; gap: clamp(14px, 2vw, 24px); }
+.lbNow { display: flex; flex-direction: column; gap: 18px; padding: clamp(16px, 2vw, 24px); border-radius: 30px; background: var(--sr-card); border: 1px solid var(--sr-card-line); color: var(--sr-card-ink); }
+.lbNowCover { width: min(100%, 34vh); align-self: center; }
+.lbNowCover > span { width: 100% !important; height: auto !important; aspect-ratio: 1 / 1; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+.lbNowText { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lbKicker { font-size: 13px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--sr-accent); }
+.lbNowTitle { font-family: var(--sr-display); font-size: clamp(24px, 2.8vw, 38px) !important; font-weight: 800; letter-spacing: -0.02em !important; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lbNowArtist { font-size: clamp(16px, 1.6vw, 20px); opacity: 0.8; }
+.lbBy { font-size: 15px; opacity: 0.75; }
+.lbBy strong { opacity: 1; color: var(--sr-card-ink); }
+.lbBar { height: 8px; margin-top: 8px; border-radius: 4px; background: var(--sr-card-line); overflow: hidden; }
+.lbBar span { display: block; height: 100%; border-radius: 4px; background: var(--sr-accent); transition: width 0.9s linear; }
+.lbTimes { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.lbNowEmpty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 32px 20px; border-radius: 30px; background: var(--sr-surface); }
+.lbNowEmptyTitle { font-size: 20px; font-weight: 700; }
+.lbEmptyIcon { width: 60px; height: 60px; border-radius: 30px; background: var(--sr-surface2); color: var(--sr-muted); display: flex; align-items: center; justify-content: center; }
+
+.lbSection { display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 26px; background: var(--sr-surface); }
+.lbSectionTitle { display: flex; align-items: center; gap: 10px; font-size: 15px !important; font-weight: 800; letter-spacing: 0.1em !important; text-transform: uppercase; color: var(--sr-muted); }
+.lbSectionTitle span { font-family: var(--sr-display); color: var(--sr-accent-text); letter-spacing: 0; }
+.lbSectionTitle .lbPage { margin-left: auto; font-family: inherit; font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--sr-ink); }
+.lbQueue { display: flex; flex-direction: column; gap: 8px; }
+.lbQueueItem { display: flex; align-items: center; gap: 12px; }
+.lbQueueRank { width: 22px; flex: none; text-align: center; font-family: var(--sr-display); font-size: 16px; font-weight: 800; color: var(--sr-muted); }
+.lbMore { padding-left: 34px; font-size: 14px; font-weight: 600; color: var(--sr-muted); }
+
+.lbPanel { min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: clamp(16px, 2vw, 24px); border-radius: 30px; background: var(--sr-surface); }
+.lbPanelHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lbPanelTitle { font-family: var(--sr-display); font-size: clamp(22px, 2.4vw, 32px) !important; font-weight: 800; letter-spacing: -0.02em !important; }
+.lbPanelMeta { font-size: 15px; font-weight: 600; color: var(--sr-muted); }
+.lbRank { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.lbRankItem { display: flex; align-items: center; gap: 14px; padding: 8px 14px 8px 8px; border-radius: 18px; background: var(--sr-bg); border: 2px solid transparent; transition: background 0.3s; }
+.lbRankTop { border-color: color-mix(in srgb, var(--sr-accent) 45%, transparent); }
+.lbRankCut { margin-top: 26px; position: relative; }
+.lbRankCut::before { content: 'Nicht in der Warteschlange'; position: absolute; left: 8px; top: -22px; line-height: 18px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-muted); }
+.lbPos { width: 30px; flex: none; text-align: center; font-family: var(--sr-display); font-size: 22px; font-weight: 800; color: var(--sr-muted); }
+.lbRankTop .lbPos { color: var(--sr-accent-text); }
+.lbRankItem .lbText { flex: 1; }
+.lbVotes { position: relative; display: flex; height: 6px; margin-top: 4px; border-radius: 3px; background: var(--sr-surface2); overflow: hidden; }
+.lbVoteUp { position: absolute; left: 50%; top: 0; bottom: 0; background: var(--sr-ok); transition: width 0.5s ease; }
+.lbVoteDown { position: absolute; right: 50%; top: 0; bottom: 0; background: var(--sr-bad); transition: width 0.5s ease; }
+.lbPlayed { display: inline-flex; align-items: center; height: 18px; margin-right: 6px; padding: 0 7px; border-radius: 9px; background: var(--sr-bad-soft); color: var(--sr-bad); font-size: 11px; font-weight: 800; vertical-align: 1px; }
+.lbScoreBox { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 64px; }
+.lbScore { font-family: var(--sr-display); font-size: 28px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.lbCounts { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; color: var(--sr-muted); }
+
+/* ── Fun Facts ─────────────────────────────────────────────────────────── */
+.lbFacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.lbFact { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 22px; background: var(--sr-surface); min-width: 0; }
+.lbFactHint { background: transparent; border: 2px dashed var(--sr-line); }
+.lbFactHint .lbSub { white-space: normal; }
+.lbFactIcon { width: 44px; height: 44px; flex: none; border-radius: 22px; background: var(--sr-accent-soft); color: var(--sr-accent-text); display: flex; align-items: center; justify-content: center; }
+.lbFactLabel { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-muted); }
+.lbFactValue { font-family: var(--sr-display); font-size: 20px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Ohne Raumcode / Fehler ────────────────────────────────────────────── */
+.lbCenter { position: relative; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; }
+.lbCenter .lbTopButtons { position: absolute; left: 20px; top: 20px; }
+.lbBigEmoji { font-size: 88px; line-height: 1; }
+.lbCenterTitle { font-family: var(--sr-display); font-size: 44px !important; font-weight: 800; letter-spacing: -0.03em !important; }
+.lbCodeForm { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.lbCodeRow { display: flex; gap: 10px; }
+.lbRoot .lbCodeInput { width: 200px; height: 52px; margin: 0; padding: 0 18px; box-sizing: border-box; border-radius: 26px; border: 2px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-family: var(--sr-display); font-size: 22px; font-weight: 800; letter-spacing: 0.1em; text-align: center; box-shadow: none; backdrop-filter: none; transform: none; }
+.lbRoot .lbCodeInput:focus { outline: none; border-color: var(--sr-accent); background: var(--sr-surface); box-shadow: none; transform: none; }
+.lbRoot .lbCodeBtn { height: 52px; padding: 0 24px; border-radius: 26px; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 17px; font-weight: 700; }
+.lbRoot .lbCodeBtn:disabled { background: var(--sr-surface2); color: var(--sr-muted); cursor: default; }
+
+/* ── Phasenfarben: das ganze Board färbt sich passend zur Phase ────────── */
+.lbRoot { --phase: var(--sr-accent); --phase-soft: var(--sr-accent-soft); --on-phase: var(--sr-on-accent); transition: background 0.6s ease; }
+.lbRoot.lbCollect,
+.lbFlash.lbCollect { --phase: var(--sr-accent); --phase-soft: var(--sr-accent-soft); --on-phase: var(--sr-on-accent); }
+.lbRoot.lbVote,
+.lbFlash.lbVote { --phase: #8B6CFF; --phase-soft: rgba(139, 108, 255, 0.18); --on-phase: #0E0822; }
+.lbRoot.lbLive,
+.lbFlash.lbLive { --phase: var(--sr-ok); --phase-soft: color-mix(in srgb, var(--sr-ok) 18%, transparent); --on-phase: var(--sr-on-ok); }
+.lbRoot.lbCollect .lbBoard,
+.lbRoot.lbVote .lbBoard,
+.lbRoot.lbLive .lbBoard { box-shadow: inset 0 0 0 6px var(--phase); transition: box-shadow 0.6s ease; }
+.lbRoot .lbLogo span { color: var(--phase); }
+.lbRoot .lbRankTop { border-color: color-mix(in srgb, var(--phase) 55%, transparent); }
+.lbRoot .lbRankTop .lbPos { color: var(--phase); }
+
+/* ── Phasen-Leiste ─────────────────────────────────────────────────────── */
+.lbSteps { flex: 2; min-width: 320px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.lbStep { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 14px; background: var(--sr-surface); opacity: 0.55; transition: opacity 0.4s, background 0.4s; }
+.lbStepOn { opacity: 1; background: var(--phase-soft); box-shadow: inset 0 0 0 2px var(--phase); }
+.lbStepDone { opacity: 0.8; }
+.lbStepLabel { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbStepNo { width: 20px; height: 20px; flex: none; border-radius: 10px; background: var(--sr-surface2); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+.lbStepOn .lbStepNo { background: var(--phase); color: var(--on-phase); }
+.lbStepBar { position: relative; height: 6px; border-radius: 3px; background: var(--sr-surface2); overflow: hidden; }
+.lbStepBar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--phase); transition: width 1s linear; }
+.lbStepDone .lbStepBar > span { background: var(--sr-muted); }
+.lbStepBar > .lbStepIndeterminate { width: 35% !important; animation: lbSlide 1.8s ease-in-out infinite; }
+@keyframes lbSlide { 0% { left: -35%; } 100% { left: 100%; } }
+
+/* ── Aufforderungs-Banner ──────────────────────────────────────────────── */
+.lbCall { display: flex; align-items: center; gap: clamp(16px, 3vw, 40px); padding: clamp(16px, 2.4vw, 28px) clamp(20px, 3vw, 36px); border-radius: 30px; background: var(--phase); color: var(--on-phase); transition: background 0.6s ease; }
+.lbCallText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.lbRoot .lbCallTitle { font-family: var(--sr-display); font-size: clamp(30px, 4.4vw, 64px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.lbCallSub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: clamp(15px, 1.6vw, 22px); font-weight: 600; opacity: 0.85; }
+.lbRule { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.14); font-weight: 800; }
+.lbCallTimer { flex: none; font-family: var(--sr-display); font-size: clamp(48px, 8vw, 120px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.lbCallUrgent .lbCallTimer { animation: lbBeat 1s ease-in-out infinite; }
+@keyframes lbBeat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+.lbCallLines { flex: none; display: flex; gap: clamp(14px, 2.4vw, 36px); }
+.lbCallLine { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.lbCallLine span { font-size: clamp(13px, 1.2vw, 16px); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.75; }
+.lbCallLine strong { font-family: var(--sr-display); font-size: clamp(30px, 4.6vw, 64px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.lbCallQr { flex: none; }
+
+/* ── Live-Abstimmung: Kopf an Kopf, Punkte-Puls ────────────────────────── */
+.lbTieBanner { display: inline-block; margin-left: 12px; padding: 3px 10px; border-radius: 10px; background: var(--phase); color: var(--on-phase); font-size: 14px; font-weight: 800; animation: lbPulse 1.2s ease-in-out infinite; }
+.lbPanelMeta { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 0; }
+.lbTie { flex: none; padding: 4px 10px; border-radius: 12px; background: var(--phase-soft); color: var(--sr-ink); font-size: 12px; font-weight: 800; white-space: nowrap; }
+.lbRankItem { will-change: transform; }
+.lbScore { display: inline-block; animation: lbPop 0.45s ease-out; }
+@keyframes lbPop { 0% { transform: scale(1.5); color: var(--phase); } 100% { transform: scale(1); } }
+
+/* ── Farbwelle beim Phasenwechsel ──────────────────────────────────────── */
+.lbFlash { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: var(--phase); color: var(--on-phase); pointer-events: none; animation: lbFlash 1.8s ease forwards; }
+.lbFlash span { font-family: var(--sr-display); font-size: clamp(40px, 8vw, 120px); font-weight: 800; letter-spacing: -0.03em; text-align: center; padding: 0 24px; }
+@keyframes lbFlash { 0% { opacity: 0; transform: scale(1.04); } 15% { opacity: 0.96; transform: scale(1); } 70% { opacity: 0.96; } 100% { opacity: 0; } }
+
+/* ── Gewinner-Enthüllung ───────────────────────────────────────────────── */
+.lbReveal { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(5, 6, 8, 0.94); color: #F3F4F6; cursor: pointer; animation: lbFadeIn 0.4s ease; }
+.lbRevealInner { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 1100px; width: 100%; }
+.lbRevealKicker { display: inline-flex; align-items: center; gap: 10px; font-size: clamp(16px, 1.8vw, 24px); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #FFD23F; }
+.lbRoot .lbRevealTitle { font-family: var(--sr-display); font-size: clamp(40px, 6vw, 88px) !important; font-weight: 800; letter-spacing: -0.03em !important; color: #fff; }
+.lbPodium { display: flex; align-items: flex-end; justify-content: center; gap: clamp(14px, 3vw, 40px); margin: 16px 0 0; padding: 0; list-style: none; width: 100%; }
+.lbPodiumItem { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; max-width: 260px; opacity: 0; animation: lbRise 0.8s cubic-bezier(.2, .9, .3, 1.25) forwards; }
+.lbPlace1 { order: 2; }
+.lbPlace2 { order: 1; }
+.lbPlace3 { order: 3; }
+.lbPlace1 > span:nth-child(2) { box-shadow: 0 0 0 6px #FFD23F, 0 24px 60px rgba(255, 210, 63, 0.35); }
+.lbPodiumPlace { font-family: var(--sr-display); font-size: clamp(36px, 4vw, 60px); font-weight: 800; line-height: 1; color: #FFD23F; }
+.lbPlace2 .lbPodiumPlace { color: #D7DBE2; }
+.lbPlace3 .lbPodiumPlace { color: #E0A36B; }
+.lbPodiumTitle { font-family: var(--sr-display); font-size: clamp(18px, 2vw, 28px); font-weight: 800; line-height: 1.15; }
+.lbPodiumBy { font-size: clamp(14px, 1.4vw, 18px); opacity: 0.85; }
+.lbPodiumScore { font-family: var(--sr-display); font-size: clamp(20px, 2.2vw, 32px); font-weight: 800; }
+.lbRevealNote { display: inline-flex; align-items: center; gap: 10px; margin: 6px 0 0; font-size: clamp(16px, 1.6vw, 22px); font-weight: 700; color: #FFD23F; opacity: 0; animation: lbFadeIn 0.6s ease forwards; }
+.lbDrawn { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: 13px; font-weight: 700; opacity: 0.7; }
+.lbPodiumScore small { font-family: 'Figtree', system-ui, sans-serif; font-size: 0.55em; font-weight: 600; opacity: 0.7; }
+@keyframes lbRise { from { opacity: 0; transform: translateY(40px) scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes lbFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 860px) {
+    .lbSteps { order: 4; flex-basis: 100%; min-width: 0; }
+    .lbStep { padding: 6px 8px; }
+    .lbStepLabel { font-size: 12px; gap: 4px; }
+    .lbStepNo { display: none; }
+    .lbCall { flex-wrap: wrap; }
+    .lbCallLines { width: 100%; justify-content: space-between; }
+    .lbCallLine { align-items: flex-start; }
+    .lbPodium { flex-direction: column; align-items: center; }
+    .lbPlace1, .lbPlace2, .lbPlace3 { order: 0; }
+}
+
+@keyframes lbPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) {
+    .lbRoot * { animation: none !important; transition: none !important; }
+}
+
+/* Hochformat / schmale Bildschirme: alles untereinander */
+@media (max-width: 860px) {
+    .lbGrid { grid-template-columns: minmax(0, 1fr); }
+    .lbNowCover { width: min(100%, 260px); }
+    .lbJoin { order: 5; }
+}
+/* Großes Querformat: Board füllt genau den Bildschirm, Listen scrollen innen */
+@media (min-width: 861px) {
+    .lbNow { flex-direction: row; align-items: center; }
+    .lbNowCover { width: min(42%, 24vh); flex: none; }
+}
+
+/* ── Bühne: festes 1600 × 900, als Ganzes auf das Fenster skaliert (siehe LiveBoard.jsx) ── */
+.lbFlow { min-height: 100%; display: flex; flex-direction: column; }
+.lbFlow > .lbBoard { flex: 1; }
+.lbStageMode { overflow: hidden; background: var(--phase); }
+.lbStage { position: absolute; left: 50%; top: 50%; transform-origin: center center; }
+.lbStageMode .lbBoard { height: 100%; min-height: 0; padding: 26px 32px; gap: 18px; background: var(--sr-bg); overflow: hidden; }
+.lbStageMode .lbTop { flex-wrap: nowrap; gap: 24px; }
+.lbStageMode .lbBrand { min-width: 0; }
+.lbStageMode .lbLogo { font-size: 38px; }
+.lbStageMode .lbSteps { min-width: 0; }
+.lbStageMode .lbCall { flex: none; gap: 32px; padding: 20px 34px; }
+.lbStageMode .lbCallTitle { font-size: 54px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbStageMode .lbCallSub { font-size: 20px; }
+.lbStageMode .lbCallTimer { font-size: 104px; }
+.lbStageMode .lbCallLines { gap: 36px; }
+.lbStageMode .lbCallLine span { font-size: 15px; }
+.lbStageMode .lbCallLine strong { font-size: 58px; }
+.lbStageMode .lbGrid { min-height: 0; gap: 20px; }
+.lbStageMode .lbNowCol { min-height: 0; gap: 18px; overflow: hidden; }
+.lbStageMode .lbNow { flex: none; flex-direction: row; align-items: center; padding: 20px; gap: 20px; }
+.lbStageMode .lbNowCover { width: 170px; flex: none; }
+.lbStageMode .lbNowTitle { font-size: 32px !important; }
+.lbStageMode .lbNowArtist { font-size: 18px; }
+.lbStageMode .lbNowEmpty { flex: none; padding: 24px 20px; }
+.lbStageMode .lbSection { flex: 1; min-height: 0; overflow: hidden; padding: 16px 18px; }
+.lbStageMode .lbPanel { min-height: 0; padding: 20px 22px; overflow: hidden; }
+.lbStageMode .lbPanelTitle { font-size: 30px !important; }
+.lbStageMode .lbRank { overflow: hidden; }
+.lbStageMode .lbFacts { flex: none; }
+.lbStageMode .lbFact { padding: 10px 14px; }
+
+/* Automatisches Blättern */
+.lbPage { margin-left: 12px; padding: 3px 10px; border-radius: 10px; background: var(--sr-surface2); color: var(--sr-ink); font-weight: 800; }
+.lbRankPaged { animation: lbPageIn 0.5s ease; }
+@keyframes lbPageIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+
+/* Ein QR-Code: oben rechts, in der Sammelphase größer und hervorgehoben */
+.lbJoinBig { padding: 8px 18px 8px 8px; box-shadow: 0 0 0 3px var(--phase); }
+.lbJoinBig .lbJoinCode { font-size: 30px; }
+/* Letzter Song ohne Nachschub: ganzes Banner pulsiert */
+.lbCallUrgent:not(:has(.lbCallTimer)) { animation: lbPulse 1.4s ease-in-out infinite; }
+.lbRoot .lbCallLine strong.lbCallWord { font-size: 30px; letter-spacing: -0.01em; }
+
+/* Live-Reaktionen: Emojis steigen von unten auf (über dem Board, unter der Gewinner-Enthüllung) */
+.rrLayer { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: none; }
+.rrEmoji { position: absolute; bottom: -14vmin; line-height: 1; opacity: 0; will-change: transform, opacity; animation: rrFly var(--dur, 5s) cubic-bezier(.25, .6, .35, 1) forwards; }
+@keyframes rrFly {
+    0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+    10% { transform: translate(calc(var(--sway) * 0.3), -12vh) scale(1); opacity: 1; }
+    55% { transform: translate(var(--sway), -65vh) scale(1.05); opacity: 1; }
+    100% { transform: translate(calc(var(--sway) * -0.4), -125vh) scale(1); opacity: 0; }
+}
+.lbRound { color: var(--sr-ink); font-weight: 800; }
