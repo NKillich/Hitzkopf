@@ -523,3 +523,17 @@
 .mvRoot .mvBackupNow { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 14px; background: var(--sr-surface2); }
 .mvRoot .mvBackupList { max-height: 320px; overflow-y: auto; }
 .mvRoot .mvCutLine > span { align-items: center; gap: 4px; font-size: 12px; font-weight: 800; }
+
+/* ── Ziffer exakt mittig, Vorzeichen hängt links daneben ── */
+.mvRoot .mvNum { position: relative; display: inline-block; }
+.mvRoot .mvSign { position: absolute; right: 100%; top: 0; padding-right: 1px; }
+
+/* ── Konfetti beim eigenen Nummer-1-Hit ── */
+.mvRoot .mvConfetti { position: fixed; inset: 0; z-index: 80; pointer-events: none; overflow: hidden; }
+.mvRoot .mvConfetti > span { position: absolute; top: -20px; border-radius: 2px; opacity: 0; animation-name: mvConfettiFall; animation-timing-function: cubic-bezier(.25, .6, .4, 1); animation-fill-mode: forwards; }
+@keyframes mvConfettiFall {
+    0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+    85% { opacity: 1; }
+    100% { opacity: 0; transform: translate(var(--drift), 105vh) rotate(var(--spin)); }
+}
+@media (prefers-reduced-motion: reduce) { .mvRoot .mvConfetti { display: none; } }

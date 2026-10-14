@@ -358,3 +358,5 @@
 .lbStageMode .lb2Right .lb2Head { margin-bottom: 8px; }
 .lbStageMode .lb2Right .lb2Cut { margin: 0 6px; }
 .lb2Cut > span { align-items: center; gap: 6px; font-size: 14px; font-weight: 800; }
+.lb2Num { position: relative; display: inline-block; }
+.lb2Sign { position: absolute; right: 100%; top: 0; padding-right: 1px; }
