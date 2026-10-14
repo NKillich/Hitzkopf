@@ -419,3 +419,20 @@
 .mvRoot .mvRevealNote { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--sr-muted); }
 .mvRoot .mvDrawn { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 12px; font-weight: 700; color: var(--sr-muted); }
 .mvRoot .mvStreakChip { margin: 0; align-self: flex-start; padding: 6px 12px; border-radius: 14px; background: color-mix(in srgb, #FF9F1C 22%, transparent); font-size: 13px; font-weight: 800; }
+
+/* ── Amplify 2.0: Live-Rangliste ohne Phasen ── */
+.mvRoot .mvRankNo { width: 22px; flex: none; text-align: center; font-family: var(--sr-display); font-size: 15px; font-weight: 800; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+.mvRoot .mvSongNext { background: var(--sr-accent-soft); }
+.mvRoot .mvSongNext .mvRankNo { color: var(--sr-accent-text); }
+.mvRoot .mvScore { flex: none; min-width: 30px; text-align: center; font-size: 14px; font-weight: 800; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+.mvRoot .mvScorePlus { color: var(--sr-ok); }
+.mvRoot .mvScoreMinus { color: var(--sr-bad); }
+.mvRoot .mvRemoveSm { width: 32px; height: 32px; border-radius: 16px; }
+.mvRoot .mvSongVoting { gap: 8px; }
+
+/* ── Profilbild wählen ── */
+.mvRoot .mvAvatarBtn { cursor: pointer; border: 2px solid var(--sr-line); }
+.mvRoot .mvAvatarBtn:hover { border-color: var(--sr-accent); }
+.mvRoot .mvAvatarGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; padding: 10px; border-radius: 16px; background: var(--sr-surface); }
+.mvRoot .mvAvatarPick { height: 44px; border-radius: 12px; font-size: 24px; border: 2px solid transparent; }
+.mvRoot .mvAvatarPickOn { border-color: var(--sr-accent); background: var(--sr-accent-soft); }

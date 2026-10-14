@@ -7,19 +7,11 @@ import CoverArt from '../../shared/ui/CoverArt'
 import QrCode from '../../shared/ui/QrCode'
 import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
-import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconCheck, IconTrophy, IconExpand, IconShrink, IconDice } from '../../shared/ui/icons'
+import { IconMoon, IconSun, IconBack, IconThumbUp, IconThumbDown, IconUsers, IconNote, IconStar, IconFlame, IconMic, IconClock, IconAlert, IconTrophy, IconExpand, IconShrink } from '../../shared/ui/icons'
 import { joinLink } from './links'
-import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextVotingInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, isLastSong, placeOf, resultNotes, currentRoundNo, pendingLabels, liveNowPlaying, upcomingQueue, queueOrder } from './amplifyLogic'
+import { scoreOf, voteCounts, byScore, mmss, nowPosition, queueRemainingMs, nextRoundInMs, ruleLabel, ruleEmoji, FALLBACK_DURATION, placeOf, currentRoundNo, liveNowPlaying, upcomingQueue, queueOrder, DEFAULT_BATCH } from './amplifyLogic'
 import ReactionRain from './ReactionRain'
 import styles from './LiveBoard.module.css'
-
-const STEPS = [
-    { id: 'songwahl', label: 'Songs einreichen' },
-    { id: 'abstimmung', label: 'Abstimmen' },
-    { id: 'laeuft', label: 'Playlist läuft' }
-]
-const PHASE_CLASS = { songwahl: 'lbCollect', abstimmung: 'lbVote', laeuft: 'lbLive' }
-const FLASH_TEXT = { songwahl: 'Jetzt Songs einreichen!', abstimmung: 'Jetzt abstimmen!', laeuft: 'Die Gewinner laufen!' }
 
 // Bühne: im Querformat wird das Board für 1600 × 900 gebaut und als Ganzes auf das Fenster skaliert –
 // so passt auf jedem Bildschirm (TV, Beamer, Laptop, Tablet quer) alles ohne Scrollen hinein.
@@ -85,7 +77,7 @@ function buildFacts(history, players, pool, data) {
         const [topDj, djCount] = Object.entries(byDj).sort((a, b) => b[1] - a[1])[0] || []
         if (topDj && djCount > 1) facts.push({ icon: <IconUsers size={20} />, label: 'Bester DJ', value: topDj, sub: `${djCount} Songs gelaufen` })
     }
-    const roundsDone = Math.max(0, currentRoundNo(data) - 1)
+    const roundsDone = currentRoundNo(data)
     if (roundsDone > 0 && facts.length < 4) facts.push({ icon: <IconTrophy size={20} />, label: 'Gespielt', value: `${roundsDone} ${roundsDone === 1 ? 'Runde' : 'Runden'}`, sub: 'heute Abend' })
     if (facts.length < 4) facts.push({ icon: <IconUsers size={20} />, label: 'Dabei', value: `${players} ${players === 1 ? 'Person' : 'Leute'}`, sub: null })
     if (facts.length < 4) facts.push({ icon: <IconNote size={20} />, label: 'Im Rennen', value: `${pool} ${pool === 1 ? 'Song' : 'Songs'}`, sub: 'für die nächste Runde' })
@@ -124,9 +116,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
     const [data, setData] = useState(null)
     const [status, setStatus] = useState(roomCode ? 'loading' : 'nocode')   // nocode | loading | ok | missing | error
     const [clock, setClock] = useState(() => Date.now())   // Uhrzeit für Fortschritt und Countdowns
-    const [flash, setFlash] = useState(null)               // kurze Farbwelle beim Phasenwechsel
-    const [reveal, setReveal] = useState(null)             // Gewinner-Enthüllung
-    const lastPhaseRef = useRef(null)
+    const [reveal, setReveal] = useState(null)             // Siegeranimation, wenn eine Runde an Spotify geht
     const seenResultRef = useRef(null)
     const [stage, setStage] = useState(calcStage)
     const [fullscreen, setFullscreen] = useState(() => !!document.fullscreenElement)
@@ -158,10 +148,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                 unsub = onSnapshot(doc(getFirestore(getApp()), 'amplify2Lobbies', code), (snap) => {
                     if (snap.exists() && (snap.data().status ?? 'active') === 'active') {
                         const next = snap.data()
-                        // Phasenwechsel und neue Ergebnisse erkennen (nicht beim ersten Laden)
-                        const phase = next.lobbyPhase || 'songwahl'
-                        if (lastPhaseRef.current && lastPhaseRef.current !== phase) setFlash({ phase, key: Date.now() })
-                        lastPhaseRef.current = phase
+                        // Neue Runde erkennen (nicht beim ersten Laden)
                         const res = next.lastResult
                         if (seenResultRef.current === null) seenResultRef.current = res?.round ?? 0
                         else if (res && res.round !== seenResultRef.current) {
@@ -186,11 +173,6 @@ export default function LiveBoard2({ roomCode, onBack }) {
     }, [])
 
     useEffect(() => {
-        if (!flash) return
-        const id = setTimeout(() => setFlash(null), 1800)
-        return () => clearTimeout(id)
-    }, [flash])
-    useEffect(() => {
         if (!reveal) return
         const id = setTimeout(() => setReveal(null), 15000)
         return () => clearTimeout(id)
@@ -211,9 +193,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
     const playlist = data?.playlist || []
     const pool = playlist.filter(i => i.queuedRound == null)
     const ranked = [...pool].sort(byScore)
-    const phase = data?.lobbyPhase || 'songwahl'
-    const isVoting = phase === 'abstimmung'
-    const listAll = isVoting ? ranked : [...pool].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
+    const listAll = ranked   // Live-Rangliste: jederzeit abstimmen, die besten N bilden die nächste Runde
     const rankRows = rankRowsFor(stage)
     const pager = usePager(listAll.length, rankRows, !!stage)
     const pageStart = stage ? pager.page * rankRows : 0
@@ -221,7 +201,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
     const queueAll = data ? upcomingQueue(data, clock) : []
     const queueRows = queueRowsFor(stage)
     const queuePager = usePager(queueAll.length, queueRows, true)
-    const setRowRef = useFlip(isVoting ? visibleList.map(i => i.id).join('|') + '#' + pager.page : 'off', stage?.scale || 1)
+    const setRowRef = useFlip(visibleList.map(i => i.id).join('|') + '#' + pager.page, stage?.scale || 1)
 
     const openCode = (e) => {
         e.preventDefault()
@@ -272,101 +252,72 @@ export default function LiveBoard2({ roomCode, onBack }) {
 
     const history = data.history || []
     const players = Object.keys(data.players || {}).length
-    const batchSize = data.batchSize || 10
+    const batchSize = data.batchSize || DEFAULT_BATCH
+    const round = currentRoundNo(data)
     // Hochgerechnet, falls das Host-Gerät gerade im Hintergrund ist und keinen Songwechsel meldet
     const now = liveNowPlaying(data, clock)
     const nowPos = nowPosition(now, clock)
     const nowItem = now ? playlist.find(i => i.spotifyId === now.trackId) : null
     const queue = queueAll
     const maxAbs = Math.max(1, ...pool.map(i => { const c = voteCounts(i); return Math.max(c.up, c.down) }))
-    const votingLeft = isVoting && data.phaseEndsAt ? Math.max(0, data.phaseEndsAt - clock) : 0
-    const voters = new Set(pool.flatMap(i => Object.entries(i.votes || {}).filter(([, v]) => v !== 0).map(([n]) => n))).size
-    const totalVotes = pool.reduce((s, i) => s + Object.values(i.votes || {}).filter(v => v !== 0).length, 0)
     const facts = buildFacts(history, players, pool.length, data)
     const playedIds = new Set(history.map(h => h.spotifyId).filter(Boolean))
     const waiting = !!data.pendingBatch
     const remaining = queueRemainingMs(data, clock)
-    const nextVoting = nextVotingInMs(data, clock)
+    const nextRound = nextRoundInMs(data, clock)
     const rule = data.roundRule
+    const musicOn = !!now?.isPlaying || queue.length > 0
 
-    // Fortschritt der aktiven Phase (0–1)
-    // Musik läuft: Gewinner werden übergeben oder laufen schon, während neue Songs gesammelt werden
-    const musicOn = phase === 'laeuft' || (phase === 'songwahl' && remaining != null)
+    // Fortschritt bis zur nächsten Runde (0–1): gespielte Zeit der laufenden Runde bis zum Start ihres letzten Songs
     let progress = null
-    if (isVoting && data.phaseEndsAt) {
-        const start = data.phaseStartedAt || (data.phaseEndsAt - (data.votingDurationSec || 120) * 1000)
-        progress = Math.min(1, Math.max(0, (clock - start) / (data.phaseEndsAt - start)))
-    } else if (phase === 'songwahl' && nextVoting != null && data.phaseStartedAt) {
-        // Einreichen bis zur nächsten automatischen Abstimmung
-        const done = Math.max(0, clock - data.phaseStartedAt)
-        progress = done + nextVoting > 0 ? Math.min(1, done / (done + nextVoting)) : null
-    } else if (phase === 'laeuft' && remaining != null) {
-        const queuedRounds = playlist.filter(i => i.queuedRound != null).map(i => i.queuedRound)
-        const round = queuedRounds.length ? Math.min(...queuedRounds) : null
+    if (round > 0 && nextRound != null && remaining != null) {
         const order = queueOrder(data)
         const nowIdx = now ? order.findIndex(i => i.spotifyId === now.trackId) : -1
-        // schon gelaufen, aber vom Host noch nicht in den Verlauf verschoben
         const passed = order.slice(0, Math.max(0, nowIdx)).filter(i => i.queuedRound === round).reduce((s, i) => s + (i.duration || FALLBACK_DURATION), 0)
         const played = history.filter(h => h.round === round).reduce((s, h) => s + (h.durationMs || FALLBACK_DURATION), 0)
             + passed + (nowItem ? nowPos : 0)
-        progress = played + remaining > 0 ? Math.min(1, played / (played + remaining)) : null
+        progress = played + nextRound > 0 ? Math.min(1, played / (played + nextRound)) : null
     }
 
-    // Kopf an Kopf: gleiche Punkte wie ein Nachbar (mit Stimmen) – und an der Grenze "kommt weiter"
+    // Kopf an Kopf: gleiche Punkte wie ein Nachbar (mit Stimmen) – und an der Grenze zur nächsten Runde
     const hasVotes = (it) => !!it && Object.values(it.votes || {}).some(v => v !== 0)
     const tied = (i) => {
         const s = scoreOf(ranked[i])
         return [ranked[i - 1], ranked[i + 1]].some(n => n && scoreOf(n) === s && (hasVotes(n) || hasVotes(ranked[i])))
     }
-    const cutTie = isVoting && ranked.length > batchSize && scoreOf(ranked[batchSize - 1]) === scoreOf(ranked[batchSize])
+    const cutTie = ranked.length > batchSize && scoreOf(ranked[batchSize - 1]) === scoreOf(ranked[batchSize])
         && (hasVotes(ranked[batchSize]) || hasVotes(ranked[batchSize - 1]))
 
-    // Großes Aufforderungs-Banner
+    // Banner: ruhig, ohne Aufforderung – nur, was gerade passiert
     let banner
-    if (isVoting) {
-        banner = { title: 'Jetzt abstimmen!', timer: votingLeft > 0 ? mmss(votingLeft) : null, urgent: votingLeft > 0 && votingLeft <= 15000, sub: votingLeft > 0 ? `${voters} von ${players} haben abgestimmt · ${totalVotes} ${totalVotes === 1 ? 'Stimme' : 'Stimmen'}` : 'Wird ausgewertet …' }
-    } else if (musicOn) {
-        const lines = [nextVoting != null ? ['Nächste Abstimmung', nextVoting > 0 ? `in ${mmss(nextVoting)}` : (pool.length ? 'gleich' : 'sobald Songs da sind')] : null].filter(Boolean)
-        if (waiting) banner = now?.isPlaying
-            ? { title: 'Die Gewinner stehen fest', sub: 'Sie kommen gleich in die Warteschlange …', lines }
-            : { title: 'Gleich geht’s los', sub: 'Die Gewinner warten auf Spotify …' }
-        else if (isLastSong(data, clock)) banner = pool.length
-            ? { title: 'Bald geht’s weiter', sub: 'Letzter Song – die nächste Runde wird gerade gewählt', lines }
-            : { title: 'Letzter Song!', sub: 'Jetzt Songs für die nächste Runde einreichen – sonst wird’s still', lines, urgent: true }
-        else banner = {
-            title: nextVoting != null && nextVoting > 0 ? 'Jetzt Songs einreichen!' : 'Die Playlist läuft',
-            lines,
-            sub: pool.length ? `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen` : 'Noch keine Songs für die nächste Runde'
-        }
-    } else {
-        banner = { title: 'Jetzt Songs einreichen!', sub: `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen · QR-Code oben rechts scannen und mitmachen` }
+    if (round === 0) banner = { title: 'Gleich geht’s los', sub: `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen · QR-Code scannen, Songs einreichen und abstimmen` }
+    else if (waiting) banner = { title: `Runde ${round} geht an Spotify`, sub: 'Die besten Songs kommen gleich in die Warteschlange …' }
+    else banner = {
+        title: musicOn ? `Runde ${round} läuft` : 'Die Musik ist durch',
+        sub: pool.length ? `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} im Rennen – jederzeit abstimmen` : 'Noch keine Songs für die nächste Runde',
+        lines: nextRound != null ? [['Nächste Runde', nextRound > 0 ? `in ${mmss(nextRound)}` : (pool.length ? 'gleich' : 'sobald Songs da sind')]] : []
     }
 
-    const stepIndex = STEPS.findIndex(s => s.id === phase)
-
     return (
-        <div className={`${styles.lbRoot} ${isDark ? theme.dark : theme.light} ${styles[PHASE_CLASS[phase]]} ${stage ? styles.lbStageMode : ''}`}>
+        <div className={`${styles.lbRoot} ${isDark ? theme.dark : theme.light} ${musicOn ? styles.lbLive : styles.lbCollect} ${stage ? styles.lbStageMode : ''}`}>
             <div className={stage ? styles.lbStage : styles.lbFlow} style={stage ? { width: stage.w, height: stage.h, transform: `translate(-50%, -50%) scale(${stage.scale})` } : undefined}>
             <div className={styles.lbBoard}>
                 <header className={styles.lbTop}>
                     {topButtons}
                     <div className={styles.lbBrand}>
                         <span className={styles.lbLogo}>Amplify 2.0 <span>Live</span></span>
-                        <span className={styles.lbMeta}><strong className={styles.lbRound}>Runde {currentRoundNo(data)}</strong> · Playlist von {data.host} · <IconUsers size={14} /> {players} dabei</span>
+                        <span className={styles.lbMeta}>{round > 0 && <><strong className={styles.lbRound}>Runde {round}</strong> · </>}Playlist von {data.host} · <IconUsers size={14} /> {players} dabei</span>
                     </div>
-                    <ol className={styles.lbSteps} aria-label="Ablauf">
-                        {STEPS.map((s, i) => (
-                            <li key={s.id} className={`${styles.lbStep} ${i === stepIndex ? styles.lbStepOn : ''} ${i < stepIndex ? styles.lbStepDone : ''}`} aria-current={i === stepIndex ? 'step' : undefined}>
-                                <span className={styles.lbStepLabel}>{i < stepIndex ? <IconCheck size={14} /> : <span className={styles.lbStepNo}>{i + 1}</span>}{s.label}</span>
-                                <span className={styles.lbStepBar}>
-                                    <span className={progress == null && i === stepIndex ? styles.lbStepIndeterminate : ''}
-                                        style={{ width: i < stepIndex ? '100%' : i === stepIndex ? `${Math.round((progress ?? 0) * 100)}%` : '0%' }} />
-                                </span>
-                            </li>
-                        ))}
-                    </ol>
-                    <div className={`${styles.lbJoin} ${phase === 'songwahl' ? styles.lbJoinBig : ''}`}>
-                        <QrCode text={joinLink(code)} size={phase === 'songwahl' ? 104 : 76} label={`QR-Code zum Mitmachen, Raumcode ${code}`} />
+                    <div className={`${styles.lbSteps} ${styles.lbStepsOne}`}>
+                        <div className={`${styles.lbStep} ${styles.lbStepOn}`}>
+                            <span className={styles.lbStepLabel}>{round === 0 ? 'Songs sammeln' : `Nächste Runde · die besten ${batchSize}`}</span>
+                            <span className={styles.lbStepBar}>
+                                <span className={progress == null ? styles.lbStepIndeterminate : ''} style={{ width: `${Math.round((progress ?? 0) * 100)}%` }} />
+                            </span>
+                        </div>
+                    </div>
+                    <div className={`${styles.lbJoin} ${styles.lbJoinBig}`}>
+                        <QrCode text={joinLink(code)} size={104} label={`QR-Code zum Mitmachen, Raumcode ${code}`} />
                         <span className={styles.lbJoinText}>
                             <span className={styles.lbJoinLabel}>Mitmachen</span>
                             <span className={styles.lbJoinCode}>{code}</span>
@@ -379,7 +330,6 @@ export default function LiveBoard2({ roomCode, onBack }) {
                         <h1 className={styles.lbCallTitle}>{banner.title}</h1>
                         <p className={styles.lbCallSub}>
                             {rule && <span className={styles.lbRule}>{ruleEmoji(rule)} {ruleLabel(rule)}</span>}
-                            {pendingLabels(data).length > 0 && <span className={styles.lbRule}>Nächste Runde: {pendingLabels(data).join(' · ')}</span>}
                             {banner.sub}
                         </p>
                     </div>
@@ -413,14 +363,14 @@ export default function LiveBoard2({ roomCode, onBack }) {
                             <div className={styles.lbNowEmpty}>
                                 <span className={styles.lbEmptyIcon}><IconNote size={28} /></span>
                                 <p className={styles.lbNowEmptyTitle}>{waiting ? 'Gleich geht’s los' : 'Gerade läuft nichts'}</p>
-                                <p className={styles.lbMuted}>{waiting ? 'Die Gewinner warten darauf, dass Spotify startet.' : 'Sobald der Host abspielt, erscheint der Song hier.'}</p>
+                                <p className={styles.lbMuted}>{waiting ? 'Die Runde wartet darauf, dass Spotify startet.' : 'Sobald der Host abspielt, erscheint der Song hier.'}</p>
                             </div>
                         )}
 
                         <div className={styles.lbSection}>
                             <h2 className={styles.lbSectionTitle}>Als Nächstes <span>{queue.length}</span>{queuePager.pages > 1 && <span className={styles.lbPage}>Seite {queuePager.page + 1}/{queuePager.pages}</span>}</h2>
                             {queue.length === 0 ? (
-                                <p className={styles.lbMuted}>Die Warteschlange ist leer – die nächste Abstimmung füllt sie.</p>
+                                <p className={styles.lbMuted}>Die Warteschlange ist leer – die nächste Runde füllt sie.</p>
                             ) : (
                                 <ol key={queuePager.page} className={`${styles.lbQueue} ${queuePager.pages > 1 ? styles.lbRankPaged : ''}`}>
                                     {queue.slice(queuePager.page * queueRows, (queuePager.page + 1) * queueRows).map((item, i) => (
@@ -431,7 +381,6 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                                 <span className={styles.lbTitle}>{item.title}</span>
                                                 <span className={styles.lbSub}>{item.artist} · von {item.addedBy}</span>
                                             </span>
-                                            {item.queueDrawn && <span className={styles.lbDrawn} title="Gleich viele Stimmen – Reihenfolge ausgelost"><IconDice size={14} />ausgelost</span>}
                                         </li>
                                     ))}
                                 </ol>
@@ -439,11 +388,11 @@ export default function LiveBoard2({ roomCode, onBack }) {
                         </div>
                     </section>
 
-                    <section className={styles.lbPanel} aria-label={isVoting ? 'Live-Abstimmung' : 'Eingereichte Songs'}>
+                    <section className={styles.lbPanel} aria-label="Live-Rangliste">
                         <div className={styles.lbPanelHead}>
-                            <h2 className={styles.lbPanelTitle}>{isVoting ? 'Live-Abstimmung' : 'Im Rennen für die nächste Runde'}</h2>
+                            <h2 className={styles.lbPanelTitle}>Im Rennen</h2>
                             <span className={styles.lbPanelMeta}>
-                                {isVoting ? `Top ${batchSize} kommen in die Warteschlange` : `${pool.length} ${pool.length === 1 ? 'Song' : 'Songs'} eingereicht`}
+                                {batchSize === 1 ? 'Der beste Song ist als Nächstes dran' : `Die besten ${batchSize} bilden die nächste Runde`}
                                 {cutTie && <span className={styles.lbTieBanner}>Kopf an Kopf um Platz {batchSize}!</span>}
                                 {pager.pages > 1 && <span className={styles.lbPage}>Seite {pager.page + 1}/{pager.pages}</span>}
                             </span>
@@ -460,29 +409,25 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                     const i = pageStart + idx
                                     const { up, down } = voteCounts(item)
                                     const score = scoreOf(item)
-                                    const inTop = isVoting && i < batchSize
+                                    const inTop = i < batchSize
                                     return (
-                                        <li key={item.id} ref={isVoting ? setRowRef(item.id) : undefined}
-                                            className={`${styles.lbRankItem} ${inTop ? styles.lbRankTop : ''} ${isVoting && i === batchSize ? styles.lbRankCut : ''}`}>
-                                            {isVoting && <span className={styles.lbPos}>{placeOf(ranked, i)}</span>}
+                                        <li key={item.id} ref={setRowRef(item.id)}
+                                            className={`${styles.lbRankItem} ${inTop ? styles.lbRankTop : ''} ${i === batchSize ? styles.lbRankCut : ''}`}>
+                                            <span className={styles.lbPos}>{placeOf(ranked, i)}</span>
                                             <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={52} radius={11} />
                                             <span className={styles.lbText}>
                                                 <span className={styles.lbTitle}>{item.title}</span>
                                                 <span className={styles.lbSub}>{playedIds.has(item.spotifyId) && <span className={styles.lbPlayed}>Lief schon</span>}{item.artist} · von <strong>{item.addedBy}</strong></span>
-                                                {isVoting && (
-                                                    <span className={styles.lbVotes} aria-label={`${up} Daumen hoch, ${down} Daumen runter`}>
-                                                        <span className={styles.lbVoteUp} style={{ width: `${(up / maxAbs) * 50}%` }} />
-                                                        <span className={styles.lbVoteDown} style={{ width: `${(down / maxAbs) * 50}%` }} />
-                                                    </span>
-                                                )}
-                                            </span>
-                                            {isVoting && tied(i) && <span className={styles.lbTie}>Kopf an Kopf</span>}
-                                            {isVoting && (
-                                                <span className={styles.lbScoreBox}>
-                                                    <span key={score} className={styles.lbScore}>{score > 0 ? '+' : ''}{score}</span>
-                                                    <span className={styles.lbCounts}><IconThumbUp size={13} />{up} <IconThumbDown size={13} />{down}</span>
+                                                <span className={styles.lbVotes} aria-label={`${up} Daumen hoch, ${down} Daumen runter`}>
+                                                    <span className={styles.lbVoteUp} style={{ width: `${(up / maxAbs) * 50}%` }} />
+                                                    <span className={styles.lbVoteDown} style={{ width: `${(down / maxAbs) * 50}%` }} />
                                                 </span>
-                                            )}
+                                            </span>
+                                            {tied(i) && <span className={styles.lbTie}>Kopf an Kopf</span>}
+                                            <span className={styles.lbScoreBox}>
+                                                <span key={score} className={styles.lbScore}>{score > 0 ? '+' : ''}{score}</span>
+                                                <span className={styles.lbCounts}><IconThumbUp size={13} />{up} <IconThumbDown size={13} />{down}</span>
+                                            </span>
                                         </li>
                                     )
                                 })}
@@ -514,16 +459,10 @@ export default function LiveBoard2({ roomCode, onBack }) {
 
             <ReactionRain code={code} />
 
-            {flash && (
-                <div key={flash.key} className={`${styles.lbFlash} ${styles[PHASE_CLASS[flash.phase]]}`} aria-hidden="true">
-                    <span>{FLASH_TEXT[flash.phase]}</span>
-                </div>
-            )}
-
             {reveal && (
-                <div className={styles.lbReveal} role="dialog" aria-label={`Runde ${reveal.round}: die Gewinner`} onClick={() => setReveal(null)}>
+                <div className={styles.lbReveal} role="dialog" aria-label={`Runde ${reveal.round} geht an Spotify`} onClick={() => setReveal(null)}>
                     <div className={styles.lbRevealInner}>
-                        <span className={styles.lbRevealKicker}><IconTrophy size={26} />Runde {reveal.round} ist entschieden</span>
+                        <span className={styles.lbRevealKicker}><IconTrophy size={26} />Runde {reveal.round} geht an Spotify</span>
                         <h2 className={styles.lbRevealTitle}>Die Gewinner</h2>
                         <ol className={styles.lbPodium}>
                             {reveal.top.map((t, i) => {
@@ -539,7 +478,6 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                 )
                             })}
                         </ol>
-                        {resultNotes(reveal).map(n => <p key={n} className={styles.lbRevealNote} style={{ animationDelay: `${0.8 + reveal.top.length * 1.1}s` }}><IconDice size={22} />{n}</p>)}
                     </div>
                 </div>
             )}

@@ -25,3 +25,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Lokale Claude-Einstellungen (z. B. Dev-Server für die Vorschau)
+.claude/

@@ -5,18 +5,11 @@ export const DEFAULT_UP = 3
 export const DEFAULT_DOWN = 1            // ein Daumen runter: Interaktion ohne gezieltes Abschießen
 export const FALLBACK_DURATION = 210000  // falls Spotify keine Länge geliefert hat
 
-// Drei Vorgaben statt vieler Regler (Feinheiten unter "Erweitert")
-// Ziel: alle ~20 Min. eine Abstimmung, und mehr eingereichte Songs als Plätze (sonst ist Abstimmen sinnlos)
-export const PRESETS = [
-    { id: 'schnell', label: 'Schnell', sub: '4 Songs pro Runde (≈ 15 Min.) · 60 s abstimmen · 2 pro Person', values: { batchSize: 4, votingDurationSec: 60, maxSongsPerPerson: 2, preQueueVotingMinutes: 2 } },
-    { id: 'normal', label: 'Normal', sub: '6 Songs pro Runde (≈ 20 Min.) · 90 s abstimmen · 3 pro Person', values: { batchSize: 6, votingDurationSec: 90, maxSongsPerPerson: 3, preQueueVotingMinutes: 3 } },
-    { id: 'lang', label: 'Lange Party', sub: '10 Songs pro Runde (≈ 35 Min.) · 2 Min. abstimmen · 4 pro Person', values: { batchSize: 10, votingDurationSec: 120, maxSongsPerPerson: 4, preQueueVotingMinutes: 4 } }
-]
-export const DEFAULT_PRESET = PRESETS[1]
-export const activePresetId = (data) => {
-    const p = PRESETS.find(pr => Object.entries(pr.values).every(([k, v]) => (data?.[k] ?? DEFAULT_PRESET.values[k]) === v))
-    return p ? p.id : 'custom'
-}
+// Asynchron: keine Phasen. Die besten N Songs (eine "Runde") gehen an Spotify, sobald der letzte Song der
+// vorherigen Runde startet – dazwischen wird jederzeit eingereicht und abgestimmt.
+export const DEFAULT_BATCH = 3
+export const DEFAULT_MAX_SONGS = 3
+export const BATCH_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 export const scoreOf = (item) => Object.values(item?.votes || {}).reduce((s, v) => s + v, 0)
 export const voteCounts = (item) => {
@@ -26,19 +19,6 @@ export const voteCounts = (item) => {
 export const byScore = (a, b) => (scoreOf(b) - scoreOf(a)) || ((a.addedAt || 0) - (b.addedAt || 0))
 /** Plätze wie im Sport: gleiche Stimmen = gleicher Platz, danach geht es mit der echten Position weiter (1, 1, 1, 4) */
 export const placeOf = (sorted, i) => 1 + sorted.findIndex(x => scoreOf(x) === scoreOf(sorted[i]))
-const ORDINAL = { 1: 'erste', 2: 'zweite', 3: 'dritte' }
-const signed = (n) => `${n > 0 ? '+' : ''}${n}`
-/** Hinweise zur Auswertung: geteilte Plätze (Reihenfolge ausgelost) und Los an der Grenze */
-export const resultNotes = (res) => {
-    const notes = []
-    const counts = {}
-    ;(res?.top || []).forEach(t => { if (t.place) counts[t.place] = (counts[t.place] || 0) + 1 })
-    Object.entries(counts).filter(([, c]) => c > 1).forEach(([p, c]) => notes.push(`${c} ${ORDINAL[p] || `${p}.`} Plätze – die Reihenfolge wurde ausgelost`))
-    const l = res?.lottery
-    if (l) notes.push(`${l.won} von ${l.tied} Songs mit ${signed(l.score)} ${l.won === 1 ? 'ist' : 'sind'} per Los weitergekommen`)
-    return notes
-}
-
 // Namen vergleichen ohne Groß-/Kleinschreibung ("DizzyCapybara" = "dizzycapybara")
 export const cleanName = (s) => String(s || '').replace(/\s+/g, ' ').trim()
 export const nameKey = (s) => cleanName(s).toLocaleLowerCase('de')
@@ -56,14 +36,6 @@ const artistKey = (a) => String(a || '').split(',')[0].trim().toLowerCase()
 export const sameSong = (a, b) => (!!a.spotifyId && a.spotifyId === b.spotifyId) || a.id === b.id
 export const similarSong = (a, b) => sameSong(a, b)
     || (!!normalizeTitle(a.title) && normalizeTitle(a.title) === normalizeTitle(b.title) && artistKey(a.artist) === artistKey(b.artist))
-
-// Stabile, aber pro Person/Runde gemischte Reihenfolge (kein Vorteil für den zuerst eingereichten Song)
-const hash = (str) => {
-    let h = 2166136261
-    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) }
-    return h >>> 0
-}
-export const seededOrder = (items, seed) => [...items].sort((a, b) => hash(seed + a.id) - hash(seed + b.id))
 
 // ── Zeiten ───────────────────────────────────────────────────────────────────
 export const nowPosition = (np, now) => (np
@@ -128,19 +100,35 @@ export const isLastSong = (data, now = Date.now()) => {
     return !!np && order.length > 0 && order[order.length - 1].spotifyId === np.trackId
 }
 
+/** Songs, die noch im Rennen sind (nicht an Spotify übergeben) */
+export const poolOf = (data) => (data?.playlist || []).filter(i => i.queuedRound == null)
+const playable = (i) => i.source === 'spotify' && !!i.spotifyId && i.type === 'song'
+/** Live-Rangliste: meiste Stimmen (Saldo) zuerst, bei Gleichstand der früher eingereichte Song */
+export const rankedPool = (data) => poolOf(data).sort(byScore)
+
 /**
- * Wann startet die nächste Abstimmung automatisch? (null = gerade nicht absehbar)
- * Wenn nur noch die eingestellte Zeit Musik übrig ist – spätestens aber, sobald der letzte Song beginnt.
+ * Wann geht die nächste Runde an Spotify? (null = gerade nicht absehbar)
+ * Sobald der letzte Song der laufenden Runde startet – so bleibt eine Songlänge Puffer.
  */
-export const nextVotingInMs = (data, now) => {
-    if (!data || data.lobbyPhase === 'abstimmung' || data.pendingBatch) return null
+export const nextRoundInMs = (data, now) => {
+    if (!data || data.pendingBatch) return null
     const rem = queueRemainingMs(data, now)
     if (rem == null) return null
     const queued = queueOrder(data)
     const last = queued[queued.length - 1]
     const np = liveNowPlaying(data, now)
-    const lastDur = last ? (last.spotifyId === np?.trackId && np?.durationMs) || last.duration || FALLBACK_DURATION : 0
-    return Math.max(0, rem - Math.max((data.preQueueVotingMinutes || 1) * 60000, lastDur))
+    if (last && last.spotifyId === np?.trackId) return 0
+    return Math.max(0, rem - (last?.duration || FALLBACK_DURATION))
+}
+
+/**
+ * Ist die nächste Runde fällig? Ab der 2. Runde automatisch: der letzte Song der Warteschlange läuft
+ * (oder sie ist schon leer) und es gibt Songs im Rennen. Die erste Runde startet der Host.
+ */
+export const roundDue = (data, now) => {
+    if (!data || data.pendingBatch || !(data.votingRound > 0)) return false
+    if (!poolOf(data).some(playable)) return false
+    return queueOrder(data).length === 0 || upcomingQueue(data, now).length === 0
 }
 
 // ── Streak: Runden in Folge mit einem eigenen Song auf Platz 1 (Gleichstand zählt) – nur Belohnung, keine Strafe ──
@@ -166,7 +154,7 @@ export const limitsFor = (data, name, defaults) => {
     const b = streakBonus(data, name)
     const up = data?.upvotesPerPerson ?? defaults.up
     return {
-        maxSongs: (data?.maxSongsPerPerson || defaults.maxSongs) + b.songs,
+        maxSongs: (data?.maxSongsPerPerson || defaults.maxSongs || DEFAULT_MAX_SONGS) + b.songs,
         up: up === UNLIMITED ? UNLIMITED : up + b.up,
         down: data?.downvotesPerPerson ?? defaults.down,
         bonus: b
@@ -196,34 +184,8 @@ export const ruleHint = (rule) => {
     if (rule.type === 'keyword') return `Nur Songs mit „${rule.word}“ im Titel`
     return null
 }
-// ── Vorgemerkte Einstellungen ──
-// Strengere Regeln (Runden-Modus, niedrigeres Song-Limit) gelten ab der nächsten Runde, sobald schon Songs eingereicht
-// sind – sonst passten eingereichte Songs plötzlich nicht mehr. Lockerungen gelten sofort. finishRound übernimmt sie.
-const sameRule = (a, b) => JSON.stringify(a || null) === JSON.stringify(b || null)
-export const splitConfigChange = (data, changes, defaultMaxSongs) => {
-    const hasPool = (data?.playlist || []).some(i => i.queuedRound == null)
-    const now = {}, later = {}
-    Object.entries(changes).forEach(([k, v]) => {
-        const stricter = hasPool && (
-            (k === 'roundRule' && v != null && !sameRule(v, data.roundRule))
-            || (k === 'maxSongsPerPerson' && v < (data.maxSongsPerPerson ?? defaultMaxSongs)))
-        ;(stricter ? later : now)[k] = v
-    })
-    return { now, later }
-}
-/** Was ab der nächsten Runde gilt, als lesbare Liste */
-export const pendingLabels = (data) => {
-    const p = data?.pendingConfig || {}
-    const out = []
-    if ('roundRule' in p) out.push(p.roundRule ? `${ruleEmoji(p.roundRule)} ${ruleLabel(p.roundRule)}` : 'Freie Runde')
-    if ('maxSongsPerPerson' in p) out.push(`max. ${p.maxSongsPerPerson} ${p.maxSongsPerPerson === 1 ? 'Song' : 'Songs'} pro Person`)
-    return out
-}
-/** Laufende Runde (fürs Board): während Abstimmung/Übergabe die gerade gewählte, sonst die, für die gesammelt wird */
-export const currentRoundNo = (data) => {
-    const r = data?.votingRound || 0
-    return ['abstimmung', 'laeuft'].includes(data?.lobbyPhase) ? Math.max(1, r) : r + 1
-}
+/** Laufende Runde (0 = noch keine an Spotify übergeben) */
+export const currentRoundNo = (data) => data?.votingRound || 0
 
 export const ruleEmoji = (rule) => ({ artist: '🎤', decade: '📼', keyword: '🔤' }[rule?.type] || '')
 
@@ -255,77 +217,40 @@ export const ruleProblem = (rule, item) => {
 
 // ── Runde auswerten ──────────────────────────────────────────────────────────
 /**
- * Beendet eine Runde: Gewinner (oder alle, wenn es nicht mehr Songs als Plätze gibt) kommen in die
- * Warteschlange, der Rest wandert in die "Zweite Chance". Liefert die Felder fürs Firestore-Update.
+ * Schließt eine Runde ab: Die besten N Songs der Live-Rangliste kommen in die Warteschlange (in dieser
+ * Reihenfolge), alle anderen bleiben mit ihren Stimmen im Rennen. Liefert die Felder fürs Firestore-Update.
  */
-export const finishRound = (data, now, { voted }) => {
-    const batchSize = data.batchSize || 10
-    const round = voted ? (data.votingRound || 0) : (data.votingRound || 0) + 1
+export const finishRound = (data, now) => {
+    const batchSize = data.batchSize || DEFAULT_BATCH
+    const round = (data.votingRound || 0) + 1
     const current = data.playlist || []
     const pool = current.filter(i => i.queuedRound == null)
-    // Meiste Stimmen (Saldo) zuerst; bei Gleichstand entscheidet der Zufall – auch darüber, wer an der Grenze reinkommt.
-    // Einmal hier gewürfelt und als queuePos gespeichert, damit alle Geräte und Spotify dieselbe Reihenfolge haben.
-    const shuffled = pool.filter(i => i.source === 'spotify' && i.spotifyId && i.type === 'song')
-    for (let k = shuffled.length - 1; k > 0; k--) {
-        const j = Math.floor(Math.random() * (k + 1));
-        [shuffled[k], shuffled[j]] = [shuffled[j], shuffled[k]]
-    }
-    const playable = shuffled.sort((a, b) => scoreOf(b) - scoreOf(a))   // stabil: Zufall bleibt innerhalb gleicher Stimmen
-    const selected = voted ? playable.slice(0, batchSize) : playable
+    const ranked = pool.filter(playable).sort(byScore)
+    const selected = ranked.slice(0, batchSize)
+    if (!selected.length) return null
     const selectedIds = selected.map(i => i.spotifyId)
-    // Reihenfolge ausgelost? (ein anderer Gewinner hat gleich viele Stimmen)
-    const drawn = new Set(selected.filter(i => selected.some(o => o !== i && scoreOf(o) === scoreOf(i))).map(i => i.spotifyId))
-    const notChosen = pool.filter(i => !selectedIds.includes(i.spotifyId))
-    const leftovers = {}
-    notChosen.forEach(i => {
-        const owner = i.addedBy || '?'
-        if (!leftovers[owner]) leftovers[owner] = []
-        leftovers[owner].push({ ...i, votes: {} })
-    })
     // Noch nicht gesendete Gewinner einer früheren Runde (z. B. kein Spotify-Gerät) nicht verlieren
     const pendingIds = data.pendingBatch?.spotifyIds || []
-    const batchIds = [...pendingIds, ...selectedIds.filter(id => !pendingIds.includes(id))]
     const update = {
-        playlist: current.filter(i => !notChosen.includes(i)).map(i => (selectedIds.includes(i.spotifyId) ? { ...i, queuedRound: round, queuePos: selectedIds.indexOf(i.spotifyId), queueDrawn: drawn.has(i.spotifyId) } : i)),
-        leftovers,
-        // "laeuft" nur, bis die Gewinner bei Spotify sind – danach (oder ohne Gewinner) wieder Songs einreichen
-        lobbyPhase: batchIds.length ? 'laeuft' : 'songwahl',
-        phaseEndsAt: null,
-        phaseStartedAt: batchIds.length ? null : now,
+        playlist: current.map(i => (selectedIds.includes(i.spotifyId) && i.queuedRound == null ? { ...i, queuedRound: round, queuePos: selectedIds.indexOf(i.spotifyId) } : i)),
         votingRound: round,
-        pendingBatch: batchIds.length ? { round, spotifyIds: batchIds } : null,
-        queueStartedAt: null,
-        queueTotalDurationMs: null,
-        // Vorgemerkte Regeln gelten ab jetzt
-        ...(data.pendingConfig || {}),
-        pendingConfig: null
+        pendingBatch: { round, spotifyIds: [...pendingIds, ...selectedIds.filter(id => !pendingIds.includes(id))] }
     }
-    if (voted) {
-        // Platz-1-Hit: ein eigener Song auf Platz 1 (auch geteilt) mit mehr Daumen hoch als runter.
-        // Wer Songs in der Runde hatte, aber keinen Hit, verliert die Streak; wer nichts eingereicht hat, behält sie.
-        const topScore = playable.length ? scoreOf(playable[0]) : 0
-        const hitters = new Set(topScore > 0 ? playable.filter(i => scoreOf(i) === topScore).map(i => i.addedBy).filter(Boolean) : [])
-        const streaks = { ...(data.streaks || {}) }
-        new Set(pool.map(i => i.addedBy).filter(Boolean)).forEach(owner => {
-            const prev = streaks[owner] || { current: 0, best: 0 }
-            const current = hitters.has(owner) ? (prev.current || 0) + 1 : 0
-            streaks[owner] = { current, best: Math.max(prev.best || 0, current) }
-        })
-        update.streaks = streaks
-    }
-    if (voted && selected.length) {
-        // Podest: alle Gewinner auf Platz 1–3 (bei Gleichstand auch mehr als drei)
-        const top = selected.map((i, k) => ({ i, place: placeOf(playable, k) })).filter(x => x.place <= 3)
-        // Gleichstand an der Grenze: nur ein Teil der gleichauf liegenden Songs kam per Los weiter
-        let lottery = null
-        if (playable.length > selected.length && scoreOf(playable[selected.length - 1]) === scoreOf(playable[selected.length])) {
-            const score = scoreOf(playable[selected.length])
-            lottery = { score, place: placeOf(playable, selected.length), tied: playable.filter(i => scoreOf(i) === score).length, won: selected.filter(i => scoreOf(i) === score).length }
-        }
-        update.lastResult = {
-            round, at: now, total: playable.length, lottery,
-            top: top.map(({ i, place }) => ({ ...voteCounts(i), place, score: scoreOf(i), title: i.title || '', artist: i.artist || '', imageUrl: i.imageUrl || null, addedBy: i.addedBy || '', spotifyId: i.spotifyId }))
-        }
+    // Platz-1-Hit: ein eigener Song auf Platz 1 (auch geteilt) mit mehr Daumen hoch als runter.
+    // Wer Songs im Rennen hatte, aber keinen Hit, verliert die Streak; wer nichts eingereicht hat, behält sie.
+    const topScore = scoreOf(selected[0])
+    const hitters = new Set(topScore > 0 ? ranked.filter(i => scoreOf(i) === topScore).map(i => i.addedBy).filter(Boolean) : [])
+    const streaks = { ...(data.streaks || {}) }
+    new Set(pool.map(i => i.addedBy).filter(Boolean)).forEach(owner => {
+        const prev = streaks[owner] || { current: 0, best: 0 }
+        const cur = hitters.has(owner) ? (prev.current || 0) + 1 : 0
+        streaks[owner] = { current: cur, best: Math.max(prev.best || 0, cur) }
+    })
+    update.streaks = streaks
+    // Siegeranimation: alle Songs der Runde mit Platz (Gleichstand = gleicher Platz)
+    update.lastResult = {
+        round, at: now, total: ranked.length,
+        top: selected.map((i, k) => ({ ...voteCounts(i), place: placeOf(ranked, k), score: scoreOf(i), title: i.title || '', artist: i.artist || '', imageUrl: i.imageUrl || null, addedBy: i.addedBy || '', spotifyId: i.spotifyId }))
     }
     return update
 }
