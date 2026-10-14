@@ -254,3 +254,31 @@ export const finishRound = (data, now) => {
     }
     return update
 }
+
+// ── Rennen: NEU-Markierung und Ladenhüter ────────────────────────────────────
+export const NEW_MS = 10 * 60000   // so lange gilt ein Song als neu (✨ NEU)
+export const isNew = (item, now) => item?.queuedRound == null && now - (item?.addedAt || 0) < NEW_MS
+
+// Ladenhüter: Songs, die zu weit im Minus stehen oder zu lange nicht hochkommen, fliegen raus (Platz wird frei).
+// dropBelow = ab diesem Minus raus (0 = aus), dropAfterMin = nach so vielen Minuten im Rennen raus (0 = aus)
+export const DEFAULT_DROP_BELOW = 3
+export const DEFAULT_DROP_AFTER = 0
+export const dropReason = (data, item, now) => {
+    if (item.queuedRound != null) return null
+    const below = data?.dropBelow ?? DEFAULT_DROP_BELOW
+    const after = data?.dropAfterMin ?? DEFAULT_DROP_AFTER
+    if (below > 0 && scoreOf(item) <= -below) return 'score'
+    if (after > 0 && now - (item.addedAt || now) >= after * 60000) return 'time'
+    return null
+}
+export const staleItems = (data, now) => poolOf(data).filter(i => dropReason(data, i, now))
+/** Felder fürs Firestore-Update: Ladenhüter raus, kurz vermerkt (für den Hinweis an die Person) */
+export const dropUpdate = (data, now, items) => {
+    if (!items.length) return null
+    const ids = new Set(items.map(i => i.id))
+    const entries = items.map(i => ({ id: i.id, title: i.title || '', addedBy: i.addedBy || '', reason: dropReason(data, i, now) || 'score', score: scoreOf(i), at: now }))
+    return {
+        playlist: (data.playlist || []).filter(i => !ids.has(i.id)),
+        dropped: [...(data.dropped || []), ...entries].slice(-20)
+    }
+}
