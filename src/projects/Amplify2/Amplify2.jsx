@@ -21,7 +21,8 @@ import {
     UNLIMITED, DEFAULT_UP, DEFAULT_DOWN, DEFAULT_BATCH, DEFAULT_MAX_SONGS, BATCH_OPTIONS, byScore, scoreOf, placeOf,
     cleanName, nameKey, sameSong, similarSong, mmss, nowPosition, nextRoundInMs, roundDue,
     DECADES, decadeLabel, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
-    limitsFor, streakOf, STREAK_LEVELS, liveNowPlaying, upcomingQueue, queueOrder, voteCounts
+    limitsFor, streakOf, STREAK_LEVELS, liveNowPlaying, upcomingQueue, queueOrder, voteCounts,
+    isNew, staleItems, dropUpdate, DEFAULT_DROP_BELOW, DEFAULT_DROP_AFTER
 } from './amplifyLogic'
 import ReactionPad from './ReactionPad'
 import { deleteReactions } from './reactions'
@@ -67,6 +68,12 @@ const ROOM_SETTINGS = [
     { id: 'maxSongsPerPerson', label: 'Songs pro Person', fallback: DEFAULT_MAX_SONGS, options: [1, 2, 3, 4, 5, 10], tick: String, text: (v) => `Jeder hat bis zu ${v} ${v === 1 ? 'Song' : 'Songs'} gleichzeitig im Rennen` },
     { id: 'upvotesPerPerson', label: 'Daumen hoch pro Person', fallback: DEFAULT_UP, options: [1, 2, 3, 5, 10, UNLIMITED], tick: (v) => (v === UNLIMITED ? '∞' : String(v)), text: (v) => thumbsText(v, 'Daumen hoch') },
     { id: 'downvotesPerPerson', label: 'Daumen runter pro Person', fallback: DEFAULT_DOWN, options: [0, 1, 2, 3, 5, UNLIMITED], tick: (v) => (v === UNLIMITED ? '∞' : String(v)), text: (v) => thumbsText(v, 'Daumen runter') }
+]
+
+// Ladenhüter: Songs, die nicht ankommen, fliegen raus – sonst blockieren sie Song-Limits und Daumen
+const DROP_SETTINGS = [
+    { id: 'dropBelow', label: 'Raus bei zu vielen Daumen runter', fallback: DEFAULT_DROP_BELOW, options: [0, 2, 3, 4, 5], tick: (v) => (v === 0 ? 'aus' : `−${v}`), text: (v) => (v === 0 ? 'Aus – kein Song fliegt wegen Stimmen raus' : `Ein Song fliegt raus, sobald er bei −${v} steht`) },
+    { id: 'dropAfterMin', label: 'Raus nach Zeit im Rennen', fallback: DEFAULT_DROP_AFTER, options: [0, 30, 45, 60, 90, 120], tick: (v) => (v === 0 ? 'aus' : `${v}m`), text: (v) => (v === 0 ? 'Aus – Songs bleiben, bis sie laufen' : `Wer nach ${v} Minuten noch nicht dran war, fliegt raus`) }
 ]
 
 const LIMIT_DEFAULTS = { maxSongs: DEFAULT_MAX_SONGS, up: DEFAULT_UP, down: DEFAULT_DOWN }
@@ -307,6 +314,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 maxSongsPerPerson: DEFAULT_MAX_SONGS,
                 upvotesPerPerson: DEFAULT_UP,
                 downvotesPerPerson: DEFAULT_DOWN,
+                dropBelow: DEFAULT_DROP_BELOW,
+                dropAfterMin: DEFAULT_DROP_AFTER,
+                dropped: [],
                 roundRule: null,
                 streakEnabled: false,
                 streaks: {},
@@ -685,14 +695,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     if (limit !== UNLIMITED && used >= limit) return { blocked: { limit, what: newVote === 1 ? 'Daumen hoch' : 'Daumen runter' } }
                 }
 
-                return {
-                    update: {
-                        playlist: currentPlaylist.map(item =>
-                            item.id === itemId ? { ...item, votes: { ...item.votes, [myName]: newVote } } : item
-                        )
-                    }
-                }
+                const next = { ...data, playlist: currentPlaylist.map(item =>
+                    item.id === itemId ? { ...item, votes: { ...item.votes, [myName]: newVote } } : item
+                ) }
+                // Zu weit im Minus → Ladenhüter fliegt sofort raus (die Daumen darauf werden wieder frei)
+                const stale = staleItems(next, Date.now()).filter(i => i.id === itemId)
+                return { update: dropUpdate(next, Date.now(), stale) || { playlist: next.playlist }, dropped: stale.length > 0 }
             })
+            if (res?.dropped) showToast('Der Song ist als Ladenhüter rausgeflogen – dein Daumen ist wieder frei.')
             if (res?.own) showToast('Für deine eigenen Songs kannst du nicht abstimmen.', 'bad')
             if (res?.blocked) {
                 const { limit, what } = res.blocked
@@ -887,6 +897,51 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const rawNowPlaying = lobbyData?.nowPlaying            // so, wie der Host es zuletzt gemeldet hat
     const nowPlaying = liveNowPlaying(lobbyData, clock)    // für die Anzeige hochgerechnet, falls der Host im Hintergrund ist
     const nowPlayingPositionMs = nowPosition(nowPlaying, clock)
+
+    // Eigener Song als Ladenhüter rausgeflogen → leiser Hinweis (nur, was nach dem Öffnen passiert ist)
+    useEffect(() => {
+        const list = lobbyData?.dropped
+        if (!list || !roomId) return
+        const key = `a2_seen_drop_${roomId}`
+        const seen = sessionStorage.getItem(key)
+        const latest = Math.max(0, ...list.map(d => d.at || 0))
+        sessionStorage.setItem(key, String(latest))
+        if (seen == null) return
+        const mine = list.filter(d => d.at > Number(seen) && d.addedBy === myNameRef.current)
+        if (mine.length) showToast(mine.length === 1
+            ? `„${mine[0].title}“ ist rausgeflogen – ${mine[0].reason === 'time' ? 'zu lange nicht drangekommen' : 'zu viele Daumen runter'}. Du hast wieder Platz für einen Song.`
+            : `${mine.length} Songs von dir sind als Ladenhüter rausgeflogen. Du hast wieder Platz.`)
+    }, [lobbyData?.dropped, roomId, showToast])
+
+    // Eigener Song rutscht in die nächste Runde (oder raus) → leiser Hinweis, erst wenn der Platz ~20 s hält,
+    // höchstens einmal pro Richtung und Runde (sonst nervt ein Song, der zwischen zwei Plätzen pendelt)
+    const topWatchRef = useRef(new Map())   // id → { inTop, since, told, toldRound: { in, out } }
+    useEffect(() => {
+        if (!lobbyData) return
+        const n = lobbyData.batchSize || DEFAULT_BATCH
+        const ranked = (lobbyData.playlist || []).filter(i => i.queuedRound == null).sort(byScore)
+        const round = lobbyData.votingRound || 0
+        const watch = topWatchRef.current
+        const now = Date.now()
+        const mine = new Set()
+        ranked.forEach((item, idx) => {
+            if (item.addedBy !== myName) return
+            mine.add(item.id)
+            const inTop = idx < n
+            const w = watch.get(item.id)
+            if (!w) { watch.set(item.id, { inTop, since: now, told: inTop, toldRound: {} }); return }   // Ausgangslage, kein Hinweis
+            if (w.inTop !== inTop) { w.inTop = inTop; w.since = now }
+            const dir = inTop ? 'in' : 'out'
+            if (w.told !== inTop && now - w.since >= 20000 && w.toldRound[dir] !== round) {
+                w.told = inTop
+                w.toldRound[dir] = round
+                showToast(inTop
+                    ? `🎉 „${item.title}“ ist ${n === 1 ? 'auf Platz 1' : `in den Top ${n}`} – läuft mit der nächsten Runde!`
+                    : `„${item.title}“ ist aus den Top ${n} gerutscht – noch ein paar Daumen hoch, und es klappt.`)
+            }
+        })
+        watch.forEach((_, id) => { if (!mine.has(id)) watch.delete(id) })   // gelaufen, entfernt oder rausgeflogen
+    }, [clock, lobbyData, myName, showToast])
 
     // Siegeranimation auf dem Handy: nur, wenn ein eigener Song in der Runde ist (positives Feedback, keine
     // Unterbrechung für alle anderen – die sehen sie auf dem Live-Board). Einmal pro Runde und Gerät.
@@ -1200,6 +1255,13 @@ const Amplify2 = ({ onBack, joinCode }) => {
         if (!db || !roomId) return
         const id = setInterval(async () => {
             const data = latestLobbyRef.current
+            // Ladenhüter nach Zeit (oder nach geänderter Einstellung) aufräumen – die Transaktion prüft erneut
+            if (data && staleItems(data, Date.now()).length) {
+                mutateLobby(roomId, (d) => {
+                    const update = dropUpdate(d, Date.now(), staleItems(d, Date.now()))
+                    return update ? { update } : null
+                }).catch(() => { /* nächster Takt versucht es erneut */ })
+            }
             if (!roundDue(data, Date.now())) { dueSinceRef.current = null; return }
             if (!isHost) {
                 dueSinceRef.current ??= Date.now()
@@ -1217,7 +1279,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
             }
         }, 3000)
         return () => clearInterval(id)
-    }, [isHost, db, roomId, startRound])
+    }, [isHost, db, roomId, startRound, mutateLobby])
 
     // ─── Runden-Modus: Künstlersuche ─────────────────────────────────────────
     useEffect(() => {
@@ -1971,6 +2033,21 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
                         {isHost && (
                             <section className={styles.mvCard}>
+                                <div className={styles.mvCardHead}>
+                                    <h2 className={styles.mvCardTitle}>Ladenhüter</h2>
+                                </div>
+                                <p className={styles.mvFine}>Songs, die nicht ankommen, fliegen raus – so werden Plätze und Daumen wieder frei. Die Person bekommt einen kurzen Hinweis.</p>
+                                {DROP_SETTINGS.map(s => (
+                                    <StepSlider key={s.id} id={`mv-${s.id}`} label={s.label} options={s.options}
+                                        value={lobbyData[s.id] ?? s.fallback}
+                                        onChange={(v) => updateLobbyConfig({ [s.id]: v })}
+                                        valueText={s.text} tickText={s.tick} />
+                                ))}
+                            </section>
+                        )}
+
+                        {isHost && (
+                            <section className={styles.mvCard}>
                                 <button type="button" className={`${styles.mvBtn} ${styles.mvMenuRow}`} onClick={() => updateLobbyConfig({ streakEnabled: !lobbyData.streakEnabled })} aria-pressed={!!lobbyData.streakEnabled}>
                                     <span className={styles.mvBoardIcon} aria-hidden="true">🔥</span>
                                     <span className={styles.mvRowText}>
@@ -2240,7 +2317,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                         {previewBtn(item)}
                                         <span className={styles.mvRowText}>
                                             <span className={`${styles.mvRowName} ${styles.mvRowNameWrap}`}>{item.title}</span>
-                                            <span className={styles.mvRowMeta}>{played && playedChip}{item.artist} · von {own ? 'dir' : item.addedBy}</span>
+                                            <span className={styles.mvRowMeta}>{isNew(item, clock) && <span className={styles.mvNewChip} title="Gerade eingereicht – braucht noch Stimmen">✨ NEU</span>}{played && playedChip}{item.artist} · von {own ? 'dir' : item.addedBy}</span>
                                         </span>
                                         <span className={`${styles.mvScore} ${score > 0 ? styles.mvScorePlus : ''} ${score < 0 ? styles.mvScoreMinus : ''}`}
                                             title={`${up}× hoch · ${down}× runter`} aria-label={`${score} Punkte`}>{score > 0 ? '+' : ''}{score}</span>
