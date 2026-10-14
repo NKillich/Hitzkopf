@@ -523,6 +523,9 @@
 .mvRoot .mvBackupNow { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 14px; background: var(--sr-surface2); }
 .mvRoot .mvBackupList { max-height: 320px; overflow-y: auto; }
 .mvRoot .mvCutLine > span { align-items: center; gap: 4px; font-size: 12px; font-weight: 800; }
+/* Runden-Modus: unpassende Songs pausieren (ausgegraut, kein Voting) */
+.mvRoot .mvTrackPaused { opacity: 0.45; filter: grayscale(0.8); }
+.mvRoot .mvPausedEmpty { padding: 14px 12px; text-align: center; font-size: 14px; color: var(--sr-muted); }
 
 /* ── Ziffer exakt mittig, Vorzeichen hängt links daneben ── */
 .mvRoot .mvNum { position: relative; display: inline-block; }

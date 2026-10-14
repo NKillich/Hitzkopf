@@ -22,7 +22,7 @@ import {
     cleanName, nameKey, sameSong, similarSong, mmss, nowPosition, isEarnedHit,
     DECADES, decadeLabel, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
     limitsFor, streakOf, STREAK_LEVELS, liveNowPlaying, upcomingQueue, queueOrder, voteCounts,
-    isNew, staleItems, dropUpdate, DEFAULT_DROP_BELOW, DEFAULT_DROP_AFTER
+    isNew, staleItems, dropUpdate, DEFAULT_DROP_BELOW, DEFAULT_DROP_AFTER, poolOf, isPaused, activePoolOf, usedVotes
 } from './amplifyLogic'
 import ReactionPad from './ReactionPad'
 import Confetti from './Confetti'
@@ -627,7 +627,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
             const res = await mutateLobby(roomId, (data) => {
                 const current = data.playlist || []
                 const maxSongs = limitsFor(data, myName, LIMIT_DEFAULTS).maxSongs
-                let free = maxSongs - current.filter(p => p.addedBy === myName && p.queuedRound == null).length
+                let free = maxSongs - activePoolOf(data).filter(p => p.addedBy === myName).length   // pausierte zählen nicht
                 const toAdd = []
                 let duplicates = 0
                 let limitHit = false
@@ -684,6 +684,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 const target = currentPlaylist.find(i => i.id === itemId)
                 if (!target || target.queuedRound != null) return null
                 if (target.addedBy === myName) return { own: true }
+                if (isPaused(data, target)) return { paused: true }
                 const currentVote = target.votes?.[myName] || 0
                 const wanted = voteType === 'up' ? 1 : -1
                 const newVote = currentVote === wanted ? 0 : wanted
@@ -691,7 +692,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 if (newVote !== 0) {
                     const lim = limitsFor(data, myName, LIMIT_DEFAULTS)
                     const limit = newVote === 1 ? lim.up : lim.down
-                    const used = currentPlaylist.filter(i => i.queuedRound == null && i.id !== itemId && i.votes?.[myName] === newVote).length
+                    const used = usedVotes(data, myName, newVote, itemId)
                     if (limit !== UNLIMITED && used >= limit) return { blocked: { limit, what: newVote === 1 ? 'Daumen hoch' : 'Daumen runter' } }
                 }
 
@@ -704,6 +705,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
             })
             if (res?.dropped) showToast('Der Song ist als Ladenhüter rausgeflogen – dein Daumen ist wieder frei.')
             if (res?.own) showToast('Für deine eigenen Songs kannst du nicht abstimmen.', 'bad')
+            if (res?.paused) showToast('Der Song ist pausiert – er passt nicht zur aktuellen Runde.', 'bad')
             if (res?.blocked) {
                 const { limit, what } = res.blocked
                 showToast(limit === 0
@@ -1049,7 +1051,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     const onBackup = !!backup?.uri && state?.contextUri === backup.uri
                     const ended = !isPlaying && (!trackId || progress.moved || (state.durationMs && state.positionMs >= state.durationMs - 3000))
                     const foreign = isPlaying && !!trackId && !ours && !onBackup
-                    const hasSongs = (data.playlist || []).some(i => i.queuedRound == null && i.spotifyId && i.type === 'song')
+                    const hasSongs = activePoolOf(data).some(i => i.spotifyId && i.type === 'song')   // pausierte zählen nicht
                     if (hasSongs) {
                         const mode = ended ? 'now' : (isPlaying && remainingRef.current <= LOCK_BEFORE_END_MS) ? 'end' : foreign ? 'skip' : null
                         if (mode) {
@@ -1274,6 +1276,21 @@ const Amplify2 = ({ onBack, joinCode }) => {
         return () => { document.removeEventListener('visibilitychange', onVisible); lock?.release?.() }
     }, [isHost, currentScreen])
 
+    // Runden-Modus gestartet/beendet → Hinweis an alle (nicht beim ersten Laden der Lobby)
+    const ruleKeyRef = useRef(undefined)
+    const ruleKey = lobbyData ? JSON.stringify(lobbyData.roundRule || null) : undefined
+    useEffect(() => {
+        if (ruleKey === undefined) { ruleKeyRef.current = undefined; return }   // keine Lobby → nächste startet neu
+        const prev = ruleKeyRef.current
+        ruleKeyRef.current = ruleKey
+        if (prev === undefined || prev === ruleKey) return
+        const data = latestLobbyRef.current
+        const r = data?.roundRule
+        if (!r) { showToast('🎉 Freie Runde – alle Songs sind wieder dabei.'); return }
+        const paused = poolOf(data).filter(i => isPaused(data, i)).length
+        showToast(`${ruleEmoji(r)} ${ruleLabel(r)}! ${ruleHint(r)} – schlag passende vor.${paused ? ` ${paused === 1 ? 'Ein Song pausiert' : `${paused} Songs pausieren`} bis zum Ende der Runde.` : ''}`)
+    }, [ruleKey, showToast])
+
     // Ladenhüter nach Zeit (oder nach geänderter Einstellung) aufräumen – jedes Gerät, die Transaktion prüft erneut
     useEffect(() => {
         if (!db || !roomId) return
@@ -1302,7 +1319,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     const setRoundRule = async (rule) => {
         await updateLobbyConfig({ roundRule: rule })
-        showToast(rule ? `${ruleEmoji(rule)} ${ruleLabel(rule)} – gilt für alle neuen Songs.` : 'Freie Runde – alle Songs erlaubt.')
         setArtistQuery('')
         setArtistResults([])
         setKeywordDraft('')
@@ -1391,10 +1407,13 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const streakBonusActive = myLimits.bonus.active
     const rule = lobbyData?.roundRule || null
     const round = lobbyData?.votingRound || 0
-    const myUnqueuedCount = playlist.filter(p => p.addedBy === myName && p.queuedRound == null).length
+    // Pausierte Songs (passen nicht zum Runden-Modus) zählen weder fürs Song-Limit noch fürs Stimmen-Budget
     const poolItems = sortedPlaylist.filter(i => i.queuedRound == null)   // Live-Rangliste
-    const myUpUsed = poolItems.filter(i => i.votes?.[myName] === 1).length
-    const myDownUsed = poolItems.filter(i => i.votes?.[myName] === -1).length
+    const activeItems = poolItems.filter(i => !isPaused(lobbyData, i))
+    const pausedItems = poolItems.filter(i => isPaused(lobbyData, i))
+    const myUnqueuedCount = activeItems.filter(p => p.addedBy === myName).length
+    const myUpUsed = lobbyData ? usedVotes(lobbyData, myName, 1) : 0
+    const myDownUsed = lobbyData ? usedVotes(lobbyData, myName, -1) : 0
     const players = Object.entries(lobbyData?.players || {})
         .map(([name, p]) => ({ name, emoji: p?.emoji || '🙂' }))
         .sort((a, b) => (a.name === lobbyData?.host ? -1 : b.name === lobbyData?.host ? 1 : a.name.localeCompare(b.name, 'de')))
@@ -2161,7 +2180,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <h2 className={styles.mvCardTitle}>Runden-Modus</h2>
                                     {rule && <span className={`${styles.mvChip} ${styles.mvChipOk}`}>{ruleEmoji(rule)} aktiv</span>}
                                 </div>
-                                <p className={styles.mvFine}>{rule ? `Jetzt: ${ruleLabel(rule)} – ${ruleHint(rule)}.` : 'Jetzt: freie Runde – alle Songs erlaubt.'} Ein neuer Modus gilt sofort für alle neuen Songs.</p>
+                                <p className={styles.mvFine}>{rule ? `Jetzt: ${ruleLabel(rule)} – ${ruleHint(rule)}.` : 'Jetzt: freie Runde – alle Songs erlaubt.'} Songs, die nicht passen, pausieren bis zum Ende der Runde – ihre Stimmen sind solange gutgeschrieben.</p>
                                 <div className={styles.mvSegments} role="tablist" aria-label="Modus">
                                     {[[null, 'Frei'], ['artist', 'Künstler'], ['decade', 'Jahrzehnt'], ['keyword', 'Stichwort']].map(([id, label]) => (
                                         <button key={label} type="button" role="tab" aria-selected={currentRuleTab === id}
@@ -2233,7 +2252,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
         const full = myUnqueuedCount >= maxSongs
         const onBackup = showNow && !nowItem && !!lobbyData.backupPlaylist?.uri && nowPlaying.contextUri === lobbyData.backupPlaylist.uri
         // Grün = kommt sicher weiter: die besten N mit Saldo ≥ +1 (sie stehen durch die Sortierung immer oben)
-        const greenCount = poolItems.length ? 1 : 0   // Platz 1 läuft als Nächstes
+        const greenCount = activeItems.length ? 1 : 0   // Platz 1 läuft als Nächstes
         const byName = (name) => (name === myName ? 'du' : name)
         const scoreNum = (n) => <span className={styles.mvNum}>{n < 0 && <span className={styles.mvSign}>−</span>}{Math.abs(n)}</span>
 
@@ -2338,7 +2357,11 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             </div>
                         ) : (
                             <ol className={styles.mvPlaylist}>
-                                {poolItems.map((item, idx) => {
+                                {activeItems.length === 0 && (
+                                    <li className={styles.mvPausedEmpty}>Noch kein passender Song im Voting – schlag unten einen vor.</li>
+                                )}
+                                {[...activeItems, ...pausedItems].map((item, idx) => {
+                                    const paused = idx >= activeItems.length
                                     const myVote = item.votes?.[myName] || 0
                                     const own = item.addedBy === myName
                                     const canRemove = isHost || own
@@ -2354,16 +2377,19 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     )
                                     return (
                                         <Fragment key={item.id}>
-                                            {idx === 1 && <li className={styles.mvCutLine}><span><IconArrowUp size={14} />Platz 1 läuft als Nächstes</span></li>}
-                                            <li className={`${styles.mvTrack} ${top ? styles.mvTrackTop : ''}`}>
-                                                <span className={styles.mvTrackNo}>{idx + 1}</span>
+                                            {idx === 1 && !paused && <li className={styles.mvCutLine}><span><IconArrowUp size={14} />Platz 1 läuft als Nächstes</span></li>}
+                                            {paused && idx === activeItems.length && rule && (
+                                                <li className={styles.mvCutLine}><span>Pausiert – passt nicht zur {ruleLabel(rule)}</span></li>
+                                            )}
+                                            <li className={`${styles.mvTrack} ${top ? styles.mvTrackTop : ''} ${paused ? styles.mvTrackPaused : ''}`}>
+                                                <span className={styles.mvTrackNo}>{paused ? '' : idx + 1}</span>
                                                 {coverWithBadge(item.imageUrl, item.spotifyId || item.id, item.addedBy)}
                                                 {canRemove ? (
                                                     <button type="button" className={`${styles.mvBtn} ${styles.mvTrackText}`} onClick={() => setConfirm({ kind: 'remove', item })} aria-label={`${item.title} – entfernen?`}>{text}</button>
                                                 ) : (
                                                     <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>{text}</span>
                                                 )}
-                                                {own ? (
+                                                {own || paused ? (
                                                     <span className={styles.mvScoreOnly} title={`${up}× hoch · ${down}× runter`} aria-label={`${score} Punkte`}>{scoreNum(score)}</span>
                                                 ) : (
                                                     <span className={styles.mvPill} role="group" aria-label={`Abstimmen für ${item.title}`}>
