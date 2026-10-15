@@ -178,6 +178,25 @@ export const currentRoundNo = (data) => data?.votingRound || 0
 
 export const ruleEmoji = (rule) => ({ artist: '🎤', decade: '📼', keyword: '🔤' }[rule?.type] || '')
 
+/** Genre-Filter der Suche: deutscher Name → Spotify-Genre (Spotify ordnet Genres Künstlern zu, nicht Songs) */
+export const SEARCH_GENRES = [
+    { key: 'rock', label: 'Rock', q: 'rock' },
+    { key: 'pop', label: 'Pop', q: 'pop' },
+    { key: 'hiphop', label: 'Hip-Hop', q: 'hip hop' },
+    { key: 'deutschrap', label: 'Deutschrap', q: 'german hip hop' },
+    { key: 'schlager', label: 'Schlager', q: 'schlager' },
+    { key: 'dance', label: 'Dance', q: 'dance' },
+    { key: 'elektro', label: 'Elektro', q: 'edm' },
+    { key: 'metal', label: 'Metal', q: 'metal' },
+    { key: 'indie', label: 'Indie', q: 'indie' },
+    { key: 'punk', label: 'Punk', q: 'punk' },
+    { key: 'rnb', label: 'R&B', q: 'r&b' },
+    { key: 'soul', label: 'Soul & Funk', q: 'soul' },
+    { key: 'reggae', label: 'Reggae', q: 'reggae' },
+    { key: 'country', label: 'Country', q: 'country' },
+    { key: 'jazz', label: 'Jazz', q: 'jazz' }
+]
+
 /** Suchanfrage passend zum Modus (Spotify-Filter) */
 export const ruleSearchQuery = (rule, q) => {
     if (rule?.type === 'artist') return `${q} artist:"${rule.artistName}"`
