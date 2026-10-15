@@ -6,6 +6,7 @@ die Seite neu (1–2 Minuten).
 
 Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song raten“), `MusicVoter` (= Amplify 1.0),
 `Amplify2` (= Amplify 2.0). Startseite: `src/components/ProjectHub.jsx`, Routing per Hash in `src/App.jsx`.
+**Schwerpunkt: Amplify 2.0 und Song raten.** Hitzkopf ist auf Eis – keine Updates nötig, auch wenn es nicht mehr läuft.
 
 ## Arbeitsweise
 
@@ -68,5 +69,7 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
 - Suche: höchstens 10 Treffer pro Anfrage.
 
 ## Technisches
+- Firebase-Funktionen (`functions/`): Node 22, `firebase-functions` 7 – Import immer `require('firebase-functions/v1')`
+  (der Standard-Import ist seit Version 6 die 2. Generation mit anderer Schreibweise). Veröffentlichen nur am PC des Users.
 - Die Arbeitskopie unter Windows hat CRLF (autocrlf): vor mehrzeiligen Ersetzungen per Skript Dateien auf LF bringen.
 - `gh` unter Windows nur per vollem Pfad: `& "C:\Program Files\GitHub CLI\gh.exe"`; PR-Text per `--body-file`.

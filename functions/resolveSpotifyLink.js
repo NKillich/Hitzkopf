@@ -1,4 +1,4 @@
-const functions = require('firebase-functions');
+const functions = require('firebase-functions/v1');
 
 // Spotify-Kurzlinks (spotify.link/…, spotify.app.link/…) auflösen.
 // Im Browser geht das nicht (CORS blockiert die Weiterleitung), deshalb hier.
