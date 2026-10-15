@@ -503,6 +503,10 @@
 .mvRoot .mvPillDownOn:hover { color: var(--sr-on-accent); }
 .mvRoot .mvPillOff { opacity: 0.35; }
 .mvRoot .mvPillScore { min-width: 22px; text-align: center; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mvRoot .mvPillGap { width: 38px; height: 38px; flex: none; }
+/* Lange drücken zum Entfernen: keine Textauswahl/kein Systemmenü, Zeile drückt sich langsam ein */
+.mvRoot .mvTrackHold { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: transform 0.2s ease; }
+.mvRoot .mvTrackHold.mvPressing { transform: scale(0.97); transition: transform 0.5s ease; }
 .mvRoot .mvScoreOnly { flex: none; min-width: 46px; text-align: center; font-size: 17px; font-weight: 800; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
 .mvRoot .mvSuggest { flex: 1; min-width: 0; height: 60px; border-radius: 30px; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 18px; font-weight: 800; gap: 10px; justify-content: center; }
 .mvRoot .mvSuggest:disabled { background: var(--sr-surface); color: var(--sr-muted); border: 1.5px solid var(--sr-line); cursor: not-allowed; }

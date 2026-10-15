@@ -1556,6 +1556,46 @@ const Amplify2 = ({ onBack, joinCode }) => {
     )
 
     // Hilfe-Text: Rolle + wie es läuft
+    // Lange drücken (0,5 s) → „Song entfernen?“ von unten. Host: jeder Song, sonst nur eigene.
+    // Bewegt sich der Finger (Scrollen), bricht es ab; Knöpfe in der Zeile lösen es nicht aus.
+    const pressRef = useRef(null)
+    const cancelPress = () => {
+        const p = pressRef.current
+        if (!p) return
+        clearTimeout(p.timer)
+        p.el.classList.remove(styles.mvPressing)
+        pressRef.current = null
+    }
+    useEffect(() => () => clearTimeout(pressRef.current?.timer), [])
+    const longPressRemove = (item) => ({
+        onPointerDown: (e) => {
+            if ((e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('button')) return
+            cancelPress()
+            const el = e.currentTarget
+            el.classList.add(styles.mvPressing)
+            pressRef.current = {
+                el, x: e.clientX, y: e.clientY,
+                timer: setTimeout(() => {
+                    cancelPress()
+                    navigator.vibrate?.(15)
+                    // Der Klick beim Loslassen würde sonst auf dem Hintergrund des neuen Sheets landen und es schließen
+                    const swallow = (ev) => { ev.preventDefault(); ev.stopPropagation() }
+                    window.addEventListener('click', swallow, { capture: true, once: true })
+                    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 800)
+                    setConfirm({ kind: 'remove', item })
+                }, 500)
+            }
+        },
+        onPointerMove: (e) => {
+            const p = pressRef.current
+            if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) cancelPress()
+        },
+        onPointerUp: cancelPress,
+        onPointerCancel: cancelPress,
+        onPointerLeave: cancelPress,
+        onContextMenu: (e) => e.preventDefault()
+    })
+
     const helpText = (() => {
         const up = voteLimits.up === UNLIMITED ? 'beliebig viele' : voteLimits.up
         const down = voteLimits.down === UNLIMITED ? 'beliebig viele' : voteLimits.down
@@ -1565,12 +1605,12 @@ const Amplify2 = ({ onBack, joinCode }) => {
             role: 'Du bist Host',
             intro: 'Du hast die Playlist erstellt. Die Songs laufen über dein Spotify – lass die App am besten offen.',
             now: round === 0 ? `${how} Die erste Runde startest du selbst, danach geht es automatisch weiter.` : how,
-            extra: 'Teilen lädt Gäste ein und öffnet das Live-Board. In den Einstellungen findest du Gerät, Runden-Modus und Teilnehmer-Optionen.'
+            extra: 'Einen Song entfernst du, indem du ihn lange gedrückt hältst – eigene auch über 🗑. Teilen lädt Gäste ein und öffnet das Live-Board. In den Einstellungen findest du Gerät, Runden-Modus und Teilnehmer-Optionen.'
         }
         return {
             role: 'Du bist Gast',
             intro: 'Du schlägst Songs vor und stimmst nebenbei ab. Der Host spielt die besten Songs über Spotify.',
-            now: `${how} Für eigene Songs kannst du nicht stimmen.`,
+            now: `${how} Für eigene Songs kannst du nicht stimmen – dafür entfernst du sie mit 🗑 oder indem du sie lange gedrückt hältst.`,
             extra: `Tippe auf ein Cover für eine Hörprobe.${lobbyData?.streakEnabled ? ' Streak ist an: Läuft dein Song mit mindestens einer Stimme hoch, ist das ein Nummer-1-Hit – und du bekommst einen Bonus.' : ''}`
         }
     })()
@@ -2446,14 +2486,18 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                             {paused && idx === activeItems.length && rule && (
                                                 <li className={styles.mvCutLine}><span>Pausiert – passt nicht zur {ruleLabel(rule)}</span></li>
                                             )}
-                                            <li ref={setRowRef(item.id)} className={`${styles.mvTrack} ${top ? styles.mvTrackTop : ''} ${paused ? styles.mvTrackPaused : ''}`}>
+                                            <li ref={setRowRef(item.id)} className={`${styles.mvTrack} ${top ? styles.mvTrackTop : ''} ${paused ? styles.mvTrackPaused : ''} ${canRemove ? styles.mvTrackHold : ''}`}
+                                                {...(canRemove ? longPressRemove(item) : {})}>
                                                 {songCover(item.imageUrl, item.spotifyId || item.id)}
-                                                {canRemove ? (
-                                                    <button type="button" className={`${styles.mvBtn} ${styles.mvTrackText}`} onClick={() => setConfirm({ kind: 'remove', item })} aria-label={`${item.title} – entfernen?`}>{text}</button>
-                                                ) : (
-                                                    <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>{text}</span>
-                                                )}
-                                                {own || paused ? (
+                                                <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>{text}</span>
+                                                {own ? (
+                                                    // Eigener Song: statt Pfeilen die Punktzahl und ein Mülleimer (dort, wo sonst ↓ ist)
+                                                    <span className={styles.mvPill}>
+                                                        <span className={styles.mvPillGap} aria-hidden="true" />
+                                                        <span className={styles.mvPillScore} title={`${up}× hoch · ${down}× runter`} aria-label={`${score} Punkte`}>{scoreNum(score)}</span>
+                                                        <button type="button" className={`${styles.mvBtn} ${styles.mvPillBtn}`} onClick={() => setConfirm({ kind: 'remove', item })} aria-label={`${item.title} entfernen`}><IconTrash size={18} /></button>
+                                                    </span>
+                                                ) : paused ? (
                                                     <span className={styles.mvScoreOnly} title={`${up}× hoch · ${down}× runter`} aria-label={`${score} Punkte`}>{scoreNum(score)}</span>
                                                 ) : (
                                                     <span className={styles.mvPill} role="group" aria-label={`Abstimmen für ${item.title}`}>
