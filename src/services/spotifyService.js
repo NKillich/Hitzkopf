@@ -66,6 +66,24 @@ export const trackToSong = (track) => ({
     addedAt: Date.now()
 })
 
+/** Spotify-Album → Album-Eintrag, wie ihn die Suche liefert (Amplify: antippen öffnet die Songliste) */
+const albumToItem = (album) => ({
+    id: `spotify_album_${album.id}`,
+    spotifyId: album.id,
+    title: album.name,
+    artist: (album.artists || []).map(a => a.name).join(', '),
+    type: 'album',
+    source: 'spotify',
+    spotifyUrl: album.external_urls?.spotify || null,
+    imageUrl: album.images?.[0]?.url || null,
+    releaseDate: album.release_date,
+    releaseYear: parseInt(album.release_date, 10) || null,
+    artistIds: (album.artists || []).map(a => a.id),
+    totalTracks: album.total_tracks,
+    votes: {},
+    addedAt: Date.now()
+})
+
 class SpotifyService {
     constructor() {
         this.clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
@@ -1350,13 +1368,46 @@ class SpotifyService {
         return trackToSong(await this.getTrack(trackId))
     }
 
-    /** Künstler per ID (Name für „Mehr von …“) */
+    /** Künstler per ID (für geteilte Künstler-Links) */
     async getArtist(artistId) {
         await this.ensureValidToken()
         const res = await fetch(`${SPOTIFY_API_BASE}/artists/${artistId}`, { headers: { 'Authorization': `Bearer ${this.accessToken}` } })
         if (!res.ok) throw new Error('Künstler nicht gefunden')
         const a = await res.json()
-        return { id: a.id, name: a.name }
+        return { id: a.id, name: a.name, imageUrl: a.images?.[0]?.url || null }
+    }
+
+    /**
+     * Eine Seite der Suche (max. 10 pro Typ) inkl. Künstler – Amplify 2.0 (Filter, „Mehr laden“).
+     * Returns { tracks, artists, albums, tracksTotal, tracksNext }
+     */
+    async searchPage(query, offset = 0, types = 'track,artist,album') {
+        await this.ensureValidToken()
+        const params = new URLSearchParams({ q: query, type: types, limit: '10', offset: String(offset) })
+        const res = await fetch(`${SPOTIFY_API_BASE}/search?${params}`, { headers: { 'Authorization': `Bearer ${this.accessToken}` } })
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            const e = new Error(`Spotify Search Fehler (${res.status}): ${err.error?.message || 'Unbekannter Fehler'}`)
+            e.code = 'SEARCH_FAILED'
+            throw e
+        }
+        const data = await res.json()
+        return {
+            tracks: (data.tracks?.items || []).filter(Boolean).map(trackToSong),
+            artists: (data.artists?.items || []).filter(Boolean).map(a => ({ id: a.id, name: a.name, imageUrl: a.images?.[0]?.url || null })),
+            albums: (data.albums?.items || []).filter(Boolean).map(albumToItem),
+            tracksTotal: data.tracks?.total ?? 0,
+            tracksNext: !!data.tracks?.next
+        }
+    }
+
+    /** Alben und Singles eines Künstlers (für die Künstler-Seite) */
+    async getArtistAlbums(artistId) {
+        await this.ensureValidToken()
+        const res = await fetch(`${SPOTIFY_API_BASE}/artists/${artistId}/albums?include_groups=album,single&limit=10`, { headers: { 'Authorization': `Bearer ${this.accessToken}` } })
+        if (!res.ok) throw new Error('Alben nicht verfügbar')
+        const data = await res.json()
+        return (data.items || []).filter(Boolean).map(albumToItem)
     }
 
     /**

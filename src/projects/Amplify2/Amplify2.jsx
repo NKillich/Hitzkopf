@@ -20,7 +20,7 @@ import { joinLink, boardLink } from './links'
 import {
     UNLIMITED, DEFAULT_UP, DEFAULT_DOWN, DEFAULT_MAX_SONGS, LOCK_BEFORE_END_MS, byScore, scoreOf,
     cleanName, nameKey, sameSong, similarSong, mmss, nowPosition, isEarnedHit,
-    DECADES, decadeLabel, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
+    DECADES, decadeLabel, SEARCH_GENRES, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
     limitsFor, streakOf, STREAK_LEVELS, liveNowPlaying, upcomingQueue, queueOrder, voteCounts,
     staleItems, dropUpdate, DEFAULT_DROP_BELOW, DEFAULT_DROP_AFTER, poolOf, isPaused, activePoolOf, usedVotes
 } from './amplifyLogic'
@@ -824,7 +824,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
     // Song → sofort hinzufügen (mit „Rückgängig“), Album → Songliste, Künstler → Suche, Playlist → geht nicht.
     const [linkBusy, setLinkBusy] = useState(false)
     const [clipOffer, setClipOffer] = useState(null)   // Android: Link in der Zwischenablage beim Zurückkommen
-    const [linkHintOpen, setLinkHintOpen] = useState(() => { try { return !localStorage.getItem('a2_link_hint_seen') } catch { return true } })
     const lastClipRef = useRef((() => { try { return sessionStorage.getItem('a2_last_clip') || '' } catch { return '' } })())
     const rememberClip = (text) => {
         lastClipRef.current = text
@@ -862,7 +861,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
             else if (r.kind === 'unresolved') showToast('Diesen Spotify-Link konnte Amplify nicht öffnen. Kopier ihn nochmal oder such den Song.', 'bad')
             else if (r.kind === 'playlist') showToast('Playlists gibt Spotify leider nicht heraus – teile einzelne Songs oder ein Album.', 'bad')
             else if (r.kind === 'album') await handleOpenAlbum({ spotifyId: r.id, title: '', artist: '' })
-            else if (r.kind === 'artist') { setSearchQuery(r.artist.name); showToast(`Songs von ${r.artist.name}`) }
+            else if (r.kind === 'artist') openArtist(r.artist)
             else {
                 const item = r.item
                 const existing = (latestLobbyRef.current?.playlist || []).find(p => sameSong(p, item))
@@ -872,10 +871,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     setAddedInModalIds(prev => new Set(prev).add(item.id).add(item.spotifyId))
                     showToast(`„${item.title}“ hinzugefügt`, 'info', { label: 'Rückgängig', run: () => undoLinkAdd(item) })
                 }
-            }
-            if (r.kind !== 'none') {
-                setLinkHintOpen(false)
-                try { localStorage.setItem('a2_link_hint_seen', '1') } catch { /* egal */ }
             }
         } catch (e) {
             console.error('Spotify-Link fehlgeschlagen:', e)
@@ -919,46 +914,163 @@ const Amplify2 = ({ onBack, joinCode }) => {
         return () => { cancelled = true; document.removeEventListener('visibilitychange', check); window.removeEventListener('focus', check) }
     }, [showAddModal])
 
-    // Reiter in „Song vorschlagen“ und Jahrzehnt-Filter aus „Inspiration“ (Runden-Modus geht vor)
-    const [addTab, setAddTab] = useState('search')       // 'search' | 'inspiration'
-    const [decadeFilter, setDecadeFilter] = useState(null)
+    // ─── Suche mit Filtern (Genre, Jahrzehnt) ────────────────────────────────
+    // Mit Suchwort: normale Spotify-Reihenfolge (bester Treffer zuerst), „Mehr laden“ blättert weiter.
+    // Nur Filter (oder Jahrzehnt-Runde), kein Wort: zufällige Seiten aus den beliebtesten ~150 Treffern, jede Seite
+    // gemischt – „Mehr laden“ bringt weitere 10 ohne Dopplungen. Runden-Modus geht vor (sperrt den passenden Filter).
+    const [genreFilter, setGenreFilter] = useState(null)      // Schlüssel aus SEARCH_GENRES
+    const [decadeFilter, setDecadeFilter] = useState(null)    // z. B. 1990
+    const [filterSheet, setFilterSheet] = useState(null)      // 'genre' | 'decade' | null
+    const [showMine, setShowMine] = useState(false)           // „♥ Deine Songs“ statt Suchtreffern
     const [songMemory, setSongMemory] = useState([])
-    const searchRule = lobbyData?.roundRule || (decadeFilter ? { type: 'decade', from: decadeFilter } : null)
+    const [searchArtists, setSearchArtists] = useState([])
+    const [searchAlbums, setSearchAlbums] = useState([])
+    const [searchMore, setSearchMore] = useState(null)        // null | { random, query, offsets } | { random: false, query, offset }
+    const [loadingMore, setLoadingMore] = useState(false)
+    const [artistView, setArtistView] = useState(null)        // Künstler-Seite: { artist, tracks, albums, more, loading, error }
+    const searchRunRef = useRef(0)
+
+    const roundRule = lobbyData?.roundRule || null
+    const effGenre = roundRule?.type === 'artist' ? null : genreFilter
+    const effDecade = roundRule?.type === 'decade' ? null : decadeFilter
+    const filterKey = `${effGenre || ''}|${effDecade || ''}`
+    const buildSearchQuery = (q) => {
+        const g = SEARCH_GENRES.find(x => x.key === effGenre)
+        const parts = [q, g && `genre:"${g.q}"`, effDecade && `year:${effDecade}-${effDecade + 9}`].filter(Boolean)
+        return ruleSearchQuery(roundRule, parts.join(' ')).trim()
+    }
+    const randomSearch = (q) => !q && (!!effGenre || !!effDecade || roundRule?.type === 'decade')
+    const searchable = (q) => q.length >= 2 || randomSearch(q)
+    const RANDOM_SPAN = 150   // Zufall nur unter den beliebtesten Treffern – sonst kommen völlig unbekannte Songs
+    const shuffled = (list) => {
+        const a = [...list]
+        for (let k = a.length - 1; k > 0; k--) { const r = Math.floor(Math.random() * (k + 1)); [a[k], a[r]] = [a[r], a[k]] }
+        return a
+    }
+    // Nächste zufällige Seite: nimmt Offsets aus der gemischten Liste, bis neue Songs kommen
+    const fetchRandomPage = async (query, offsets, seen) => {
+        let rest = [...offsets]
+        while (rest.length) {
+            const offset = rest.shift()
+            const res = await spotifyService.searchPage(query, offset, 'track')
+            rest = rest.filter(o => o < Math.min(res.tracksTotal, RANDOM_SPAN))
+            const items = shuffled(res.tracks.filter(t => !seen.has(t.spotifyId)))
+            if (items.length) return { items, rest }
+        }
+        return { items: [], rest: [] }
+    }
 
     const handleSpotifySearch = async () => {
         const q = searchQuery.trim()
-        if (!q && searchRule?.type !== 'decade') return
-
+        if (!searchable(q)) return
+        const run = ++searchRunRef.current
         setIsSearching(true)
         setSearchError(null)
-
         try {
-            const results = await spotifyService.search(ruleSearchQuery(searchRule, q).trim(), 10)
-            setSearchResults(results)
-            if (results.length === 0) log('Keine Ergebnisse für:', q)
+            const query = buildSearchQuery(q)
+            if (randomSearch(q)) {
+                const offsets = shuffled(Array.from({ length: RANDOM_SPAN / 10 }, (_, k) => k * 10))
+                const { items, rest } = await fetchRandomPage(query, offsets, new Set())
+                if (run !== searchRunRef.current) return
+                setSearchResults(items)
+                setSearchArtists([])
+                setSearchAlbums([])
+                setSearchMore(rest.length ? { random: true, query, offsets: rest } : null)
+            } else {
+                const res = await spotifyService.searchPage(query, 0)
+                if (run !== searchRunRef.current) return
+                setSearchResults(res.tracks)
+                setSearchArtists(res.artists.slice(0, 4))
+                setSearchAlbums(res.albums.slice(0, 5))
+                setSearchMore(res.tracksNext ? { random: false, query, offset: 10 } : null)
+                if (!res.tracks.length) log('Keine Ergebnisse für:', query)
+            }
         } catch (error) {
+            if (run !== searchRunRef.current) return
             console.error('Spotify Suche fehlgeschlagen:', error)
             setSearchError(error.message?.includes('Failed to get')
                 ? 'Spotify ist gerade nicht erreichbar (Zugangsdaten). Bitte später nochmal versuchen.'
                 : 'Prüf deine Internetverbindung und versuch es gleich nochmal.')
             setSearchResults([])
+            setSearchArtists([])
+            setSearchAlbums([])
+            setSearchMore(null)
         } finally {
-            setSearchedQuery(q)
-            setIsSearching(false)
+            if (run === searchRunRef.current) {
+                setSearchedQuery(`${q}|${filterKey}`)
+                setIsSearching(false)
+            }
         }
     }
 
-    // Jahrzehnt-Runde: ohne Suchwort gleich die beliebtesten Songs des Jahrzehnts zeigen
-    const searchable = (q) => q.length >= 2 || (q.length === 0 && searchRule?.type === 'decade')
+    // „Mehr laden“ unter der Songliste
+    const loadMoreResults = async () => {
+        if (!searchMore || loadingMore) return
+        const run = searchRunRef.current
+        setLoadingMore(true)
+        try {
+            const seen = new Set(searchResults.map(t => t.spotifyId))
+            if (searchMore.random) {
+                const { items, rest } = await fetchRandomPage(searchMore.query, searchMore.offsets, seen)
+                if (run !== searchRunRef.current) return
+                setSearchResults(prev => [...prev, ...items])
+                setSearchMore(rest.length ? { ...searchMore, offsets: rest } : null)
+            } else {
+                const res = await spotifyService.searchPage(searchMore.query, searchMore.offset, 'track')
+                if (run !== searchRunRef.current) return
+                setSearchResults(prev => [...prev, ...res.tracks.filter(t => !seen.has(t.spotifyId))])
+                setSearchMore(res.tracksNext ? { ...searchMore, offset: searchMore.offset + 10 } : null)
+            }
+        } catch {
+            showToast('Weitere Songs konnten nicht geladen werden. Bitte nochmal versuchen.', 'bad')
+        } finally {
+            setLoadingMore(false)
+        }
+    }
 
-    // Suche startet automatisch kurz nach dem Tippen
+    // Suche startet automatisch kurz nach dem Tippen bzw. nach dem Ändern eines Filters
     useEffect(() => {
         if (!showAddModal) return
-        if (!searchable(searchQuery.trim())) { setSearchResults([]); setSearchError(null); return }
+        if (!searchable(searchQuery.trim())) { setSearchResults([]); setSearchArtists([]); setSearchAlbums([]); setSearchMore(null); setSearchError(null); return }
         const id = setTimeout(() => handleSpotifySearch(), 500)
         return () => clearTimeout(id)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchQuery, showAddModal, searchRule?.type, searchRule?.artistId, searchRule?.from])
+    }, [searchQuery, showAddModal, filterKey, roundRule?.type, roundRule?.artistId, roundRule?.from, roundRule?.word])
+
+    // Künstler-Seite: beliebteste Songs (Suche nach dem Künstler, nur seine eigenen) + Alben/Singles
+    const openArtist = async (artist) => {
+        setArtistView({ artist, tracks: [], albums: [], more: null, loading: true, error: null })
+        const query = `artist:"${artist.name}"`
+        try {
+            const [res, albums] = await Promise.all([
+                spotifyService.searchPage(query, 0, 'track'),
+                spotifyService.getArtistAlbums(artist.id).catch(() => [])
+            ])
+            setArtistView(v => (v?.artist.id === artist.id
+                ? { ...v, tracks: res.tracks.filter(t => t.artistIds.includes(artist.id)), albums, more: res.tracksNext ? { query, offset: 10 } : null, loading: false }
+                : v))
+        } catch {
+            setArtistView(v => (v?.artist.id === artist.id ? { ...v, loading: false, error: 'Die Songs konnten nicht geladen werden.' } : v))
+        }
+    }
+    const loadMoreArtist = async () => {
+        const v = artistView
+        if (!v?.more || loadingMore) return
+        setLoadingMore(true)
+        try {
+            const res = await spotifyService.searchPage(v.more.query, v.more.offset, 'track')
+            setArtistView(cur => {
+                if (cur?.artist.id !== v.artist.id) return cur
+                const seen = new Set(cur.tracks.map(t => t.spotifyId))
+                const fresh = res.tracks.filter(t => t.artistIds.includes(v.artist.id) && !seen.has(t.spotifyId))
+                return { ...cur, tracks: [...cur.tracks, ...fresh], more: res.tracksNext ? { ...v.more, offset: v.more.offset + 10 } : null }
+            })
+        } catch {
+            showToast('Weitere Songs konnten nicht geladen werden.', 'bad')
+        } finally {
+            setLoadingMore(false)
+        }
+    }
 
     const openAddModal = () => {
         setAddedInModalIds(new Set())
@@ -977,7 +1089,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
         setSearchQuery('')
         setSearchedQuery('')
         setSearchError(null)
-        setDecadeFilter(null)
+        setSearchMore(null)
+        setArtistView(null)
+        setShowMine(false)
         setShowAddModal(false)
     }
 
@@ -2085,13 +2199,16 @@ const Amplify2 = ({ onBack, joinCode }) => {
         // ── Song hinzufügen ──
         if (showAddModal) {
             const q = searchQuery.trim()
+            const searchKey = `${q}|${filterKey}`
             let view
             if (albumTracks) view = 'album'
             else if (isLoadingAlbum) view = 'loading'
+            else if (artistView) view = 'artist'
+            else if (showMine) view = 'mine'
             else if (!searchable(q)) view = 'prompt'
             else if (searchError && !isSearching) view = 'error'
-            else if (isSearching || searchedQuery !== q) view = searchResults.length ? 'ok' : 'loading'
-            else view = searchResults.length ? 'ok' : 'empty'
+            else if (isSearching || searchedQuery !== searchKey) view = searchResults.length ? 'ok' : 'loading'
+            else view = searchResults.length || searchArtists.length || searchAlbums.length ? 'ok' : 'empty'
             const limitReached = myUnqueuedCount >= maxSongs
 
             const songRow = (item) => {
@@ -2139,54 +2256,44 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 )
             }
 
-            // Reiter „Inspiration“: zuerst deine Songs (auf diesem Gerät), dann Mehr von … und Jahrzehnte – alles ohne Login
-            const inspirationContent = () => {
-                const added = songMemory.filter(e => e.added).map(memoryToSong)
-                const liked = songMemory.filter(e => e.liked && !e.added).map(memoryToSong)
-                // Künstler aus Warteschlange und „Läuft“ – die häufigsten zuerst
-                const counts = new Map()
-                for (const name of [...playlist.map(i => i.artist), nowPlaying?.artist]) {
-                    const first = String(name || '').split(',')[0].trim()
-                    if (first) counts.set(first, (counts.get(first) || 0) + 1)
-                }
-                const artists = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([n]) => n)
-                const searchFor = (q, decade = null) => { setDecadeFilter(decade); setSearchQuery(q); setAddTab('search') }
-                const section = (title, items) => items.length > 0 && (
-                    <section className={styles.mvInspoSection}>
-                        <h3 className={styles.mvInspoTitle}>{title}</h3>
-                        <ul className={styles.mvList}>{items.slice(0, 30).map(songRow)}</ul>
-                    </section>
+            const genreLabel = SEARCH_GENRES.find(g => g.key === effGenre)?.label
+            const listTitle = (t) => <h3 className={styles.mvListTitle}>{t}</h3>
+            const moreButton = (onClick, hasMore) => hasMore && (
+                <button type="button" className={`${styles.mvBtn} ${styles.mvMoreBtn}`} onClick={onClick} disabled={loadingMore}>
+                    {loadingMore ? <IconWave size={16} /> : <IconPlus size={16} />}Mehr laden
+                </button>
+            )
+            // Spotify nur noch als dezenter Weg, wenn die Suche nicht reicht
+            const spotifyHint = (
+                <p className={styles.mvSpotifyHint}>
+                    Nicht dabei?{' '}
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvTextLink}`} onClick={pasteFromClipboard} disabled={linkBusy}>Link aus Spotify einfügen</button>
+                    {' · '}
+                    <a className={styles.mvTextLink} href={LIKED_SONGS_URL} target="_blank" rel="noopener noreferrer">♥ Lieblingssongs in Spotify</a>
+                </p>
+            )
+            // „♥ Deine Songs“: auf diesem Gerät gemerkt (vorgeschlagen / hochgevotet), filterbar übers Suchfeld
+            const mineContent = () => {
+                const f = q.toLocaleLowerCase('de')
+                const match = (e) => !f || `${e.title} ${e.artist}`.toLocaleLowerCase('de').includes(f)
+                const added = songMemory.filter(e => e.added && match(e)).map(memoryToSong)
+                const liked = songMemory.filter(e => e.liked && !e.added && match(e)).map(memoryToSong)
+                if (!added.length && !liked.length) return (
+                    <p className={styles.mvFine}>{songMemory.length ? `Nichts zu „${q}“ in deinen Songs.` : 'Hier sammeln sich deine Songs – alles, was du vorschlägst oder hochvotest, merkt sich Amplify auf diesem Handy.'}</p>
                 )
                 return (
-                    <div className={styles.mvListBox}>
-                        {section('Von dir vorgeschlagen', added)}
-                        {section('Gefiel dir', liked)}
-                        {!added.length && !liked.length && (
-                            <p className={styles.mvFine}>Hier sammeln sich deine Songs – alles, was du vorschlägst oder hochvotest, merkt sich Amplify auf diesem Handy. Beim nächsten Mal bist du so mit einem Tipp dabei.</p>
-                        )}
-                        {artists.length > 0 && (
-                            <section className={styles.mvInspoSection}>
-                                <h3 className={styles.mvInspoTitle}>Mehr von …</h3>
-                                <div className={styles.mvChips}>
-                                    {artists.map(a => <button key={a} type="button" className={`${styles.mvBtn} ${styles.mvChipBtn}`} onClick={() => searchFor(a)}>{a}</button>)}
-                                </div>
-                            </section>
-                        )}
-                        {!rule && (
-                            <section className={styles.mvInspoSection}>
-                                <h3 className={styles.mvInspoTitle}>Jahrzehnte</h3>
-                                <div className={styles.mvChips}>
-                                    {DECADES.map(d => <button key={d} type="button" className={`${styles.mvBtn} ${styles.mvChipBtn}`} onClick={() => searchFor('', d)}>📼 {decadeLabel(d)}</button>)}
-                                </div>
-                            </section>
-                        )}
-                    </div>
+                    <>
+                        {added.length > 0 && <section className={styles.mvListSection}>{listTitle('Von dir vorgeschlagen')}<ul className={styles.mvList}>{added.slice(0, 50).map(songRow)}</ul></section>}
+                        {liked.length > 0 && <section className={styles.mvListSection}>{listTitle('Gefiel dir')}<ul className={styles.mvList}>{liked.slice(0, 50).map(songRow)}</ul></section>}
+                    </>
                 )
             }
+            const backFromView = () => (albumTracks ? setAlbumTracks(null) : artistView ? setArtistView(null) : closeAddModal())
+            const headerTitle = albumTracks ? 'Album' : artistView ? 'Künstler' : 'Song vorschlagen'
 
             return shell(
                 <main className={`${styles.mvMain} ${previewId ? styles.mvWithPreview : ''}`}>
-                    {subHeader(albumTracks ? 'Album' : 'Song vorschlagen', () => (albumTracks ? setAlbumTracks(null) : closeAddModal()),
+                    {subHeader(headerTitle, backFromView,
                         <span className={`${styles.mvCountChip} ${limitReached ? styles.mvCountChipFull : ''}`} aria-label={`Deine Songs: ${myUnqueuedCount} von ${maxSongs}`}>{myUnqueuedCount}/{maxSongs}</span>
                     )}
                     <div className={`${styles.mvScroll} ${styles.mvScrollFix}`}>
@@ -2197,6 +2304,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 <span className={styles.mvRowText}>
                                     <span className={styles.mvAlbumTitle}>{albumTracks.album.title}</span>
                                     <span className={styles.mvRowMeta}>{albumTracks.album.artist} · {albumTracks.tracks.length} Songs</span>
+                                </span>
+                            </section>
+                        ) : artistView ? (
+                            <section className={styles.mvAlbumHead}>
+                                <CoverArt src={artistView.artist.imageUrl} seed={artistView.artist.id} size={64} radius={32} />
+                                <span className={styles.mvRowText}>
+                                    <span className={styles.mvAlbumTitle}>{artistView.artist.name}</span>
+                                    <span className={styles.mvRowMeta}>Beliebte Songs und Alben</span>
                                 </span>
                             </section>
                         ) : (<>
@@ -2211,35 +2326,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtnSm}`} onClick={() => setClipOffer(null)} aria-label="Nicht hinzufügen"><IconX size={16} /></button>
                                 </div>
                             )}
-                            <section className={styles.mvLinkBox} aria-label="Songs aus Spotify holen">
-                                <div className={styles.mvLinkRow}>
-                                    <a className={`${styles.mvBtn} ${styles.mvLinkBtn}`} href={LIKED_SONGS_URL} target="_blank" rel="noopener noreferrer">
-                                        <span className={styles.mvLinkHeart} aria-hidden="true">♥</span>Lieblingssongs in Spotify
-                                    </a>
-                                    <button type="button" className={`${styles.mvBtn} ${styles.mvLinkBtn} ${styles.mvLinkPaste}`} onClick={pasteFromClipboard} disabled={linkBusy}>
-                                        {linkBusy ? <IconWave size={18} /> : <IconCopy size={18} />}Einfügen
-                                    </button>
-                                </div>
-                                <button type="button" className={`${styles.mvBtn} ${styles.mvLinkHelp}`} onClick={() => setLinkHintOpen(o => !o)} aria-expanded={linkHintOpen}>
-                                    <IconInfo size={14} />So holst du Songs aus Spotify<IconChevron open={linkHintOpen} />
-                                </button>
-                                {linkHintOpen && (
-                                    <ol className={styles.mvLinkSteps}>
-                                        <li>In Spotify beim Song auf <strong>⋯</strong> → <strong>Teilen</strong> → <strong>Link kopieren</strong></li>
-                                        <li>Zurück zu Amplify wechseln</li>
-                                        <li><strong>Einfügen</strong> tippen – fertig. Geht auch mit Alben.</li>
-                                    </ol>
-                                )}
-                            </section>
-                            <div className={`${styles.mvSegments} ${styles.mvSegments2}`} role="tablist" aria-label="Songs finden">
-                                {[['search', 'Suche', <IconSearch key="i" size={16} />], ['inspiration', 'Inspiration', <span key="i" aria-hidden="true">✨</span>]].map(([id, label, icon]) => (
-                                    <button key={id} type="button" role="tab" aria-selected={addTab === id}
-                                        className={`${styles.mvBtn} ${styles.mvSegment} ${addTab === id ? styles.mvSegmentOn : ''}`}
-                                        onClick={() => setAddTab(id)}>{icon}{label}</button>
-                                ))}
-                            </div>
-                            {addTab === 'search' && <div className={styles.mvField}>
-                                <label htmlFor="mv-search" className={styles.mvLabel}>{rule?.type === 'artist' ? `Oder Song von ${rule.artistName} suchen` : 'Oder Song bzw. Album suchen'}</label>
+                            <div className={styles.mvField}>
                                 <div className={styles.mvInputWrap}>
                                     <span className={styles.mvInputIcon}><IconSearch /></span>
                                     <input
@@ -2253,7 +2340,8 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                             if (looksLikeSpotifyLink(e.target.value)) { setSearchQuery(''); addFromLink(e.target.value) } else setSearchQuery(e.target.value)
                                         }}
                                         onKeyDown={(e) => { if (e.key === 'Enter') handleSpotifySearch() }}
-                                        placeholder="Titel, Band, Album oder Link"
+                                        placeholder={showMine ? 'In deinen Songs suchen' : rule?.type === 'artist' ? `Song von ${rule.artistName}` : 'Titel, Band oder Album'}
+                                        aria-label="Songs suchen"
                                         autoComplete="off"
                                         autoFocus
                                     />
@@ -2264,34 +2352,74 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                         </button>
                                     )}
                                 </div>
-                            {decadeFilter && !rule && (
-                                    <button type="button" className={`${styles.mvBtn} ${styles.mvFilterChip}`} onClick={() => setDecadeFilter(null)} aria-label={`Filter ${decadeLabel(decadeFilter)} entfernen`}>
-                                        📼 {decadeLabel(decadeFilter)}<IconX size={14} />
+                                <div className={styles.mvFilterRow} role="group" aria-label="Filter">
+                                    {roundRule?.type !== 'artist' && (
+                                        <button type="button" className={`${styles.mvBtn} ${styles.mvFilterBtn} ${effGenre && !showMine ? styles.mvFilterBtnOn : ''}`} onClick={() => setFilterSheet('genre')} aria-haspopup="dialog">
+                                            {genreLabel || 'Genre'}<IconChevron open={false} />
+                                        </button>
+                                    )}
+                                    {roundRule?.type !== 'decade' && (
+                                        <button type="button" className={`${styles.mvBtn} ${styles.mvFilterBtn} ${effDecade && !showMine ? styles.mvFilterBtnOn : ''}`} onClick={() => setFilterSheet('decade')} aria-haspopup="dialog">
+                                            {effDecade ? decadeLabel(effDecade) : 'Jahrzehnt'}<IconChevron open={false} />
+                                        </button>
+                                    )}
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvFilterBtn} ${showMine ? styles.mvFilterBtnOn : ''}`} onClick={() => { setSongMemory(loadSongMemory()); setShowMine(m => !m) }} aria-pressed={showMine}>
+                                        ♥ Deine Songs
                                     </button>
-                                )}
-                            </div>}
+                                </div>
+                            </div>
                         </>)}
 
                         {limitReached && (
                             <p className={styles.mvHintLine}>Du hast {maxSongs} Songs im Rennen – sobald einer läuft, ist wieder Platz.</p>
                         )}
 
-                        {addTab === 'inspiration' && !albumTracks ? inspirationContent() : <div className={styles.mvListBox}>
+                        <div className={styles.mvListBox}>
                             {view === 'album' && <ul className={styles.mvList}>{albumTracks.tracks.map(songRow)}</ul>}
-                            {view === 'ok' && <ul className={styles.mvList}>{searchResults.map(songRow)}</ul>}
+                            {view === 'artist' && (artistView.loading ? skeletons('Künstler wird geladen') : artistView.error ? (
+                                <p className={styles.mvFine}>{artistView.error}</p>
+                            ) : (<>
+                                {artistView.tracks.length > 0 && <section className={styles.mvListSection}>{listTitle('Beliebte Songs')}<ul className={styles.mvList}>{artistView.tracks.map(songRow)}</ul>{moreButton(loadMoreArtist, !!artistView.more)}</section>}
+                                {artistView.albums.length > 0 && <section className={styles.mvListSection}>{listTitle('Alben & Singles')}<ul className={styles.mvList}>{artistView.albums.map(songRow)}</ul></section>}
+                                {!artistView.tracks.length && !artistView.albums.length && <p className={styles.mvFine}>Zu diesem Künstler hat Spotify gerade nichts geliefert.</p>}
+                            </>))}
+                            {view === 'mine' && mineContent()}
+                            {view === 'ok' && (<>
+                                {searchArtists.length > 0 && (
+                                    <section className={styles.mvListSection}>
+                                        {listTitle('Künstler')}
+                                        <div className={styles.mvArtistRow}>
+                                            {searchArtists.map(a => (
+                                                <button key={a.id} type="button" className={`${styles.mvBtn} ${styles.mvArtistBtn}`} onClick={() => openArtist(a)}>
+                                                    <CoverArt src={a.imageUrl} seed={a.id} size={56} radius={28} />
+                                                    <span className={styles.mvArtistName}>{a.name}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
+                                {searchResults.length > 0 && (
+                                    <section className={styles.mvListSection}>
+                                        {listTitle(randomSearch(q) ? `Zufällig: ${[genreLabel, effDecade && decadeLabel(effDecade)].filter(Boolean).join(' · ') || 'beliebte Songs'}` : 'Songs')}
+                                        <ul className={styles.mvList}>{searchResults.map(songRow)}</ul>
+                                        {moreButton(loadMoreResults, !!searchMore)}
+                                    </section>
+                                )}
+                                {searchAlbums.length > 0 && <section className={styles.mvListSection}>{listTitle('Alben')}<ul className={styles.mvList}>{searchAlbums.map(songRow)}</ul></section>}
+                            </>)}
                             {view === 'loading' && skeletons(isLoadingAlbum ? 'Wird geladen' : 'Spotify wird durchsucht')}
                             {view === 'prompt' && (
                                 <div className={styles.mvEmpty}>
                                     <span className={styles.mvEmptyIcon}><IconSearch size={24} /></span>
                                     <p className={styles.mvEmptyTitle}>Was soll laufen?</p>
-                                    <p className={styles.mvEmptyText}>Hol dir Songs aus Spotify (oben) oder such hier. Tippe auf einen Song, um ihn vorzuschlagen – aufs Cover für eine Hörprobe.</p>
+                                    <p className={styles.mvEmptyText}>Such nach Titel, Band oder Album – oder wähl Genre und Jahrzehnt, dann zeigt Amplify passende Songs zum Stöbern.</p>
                                 </div>
                             )}
                             {view === 'empty' && (
                                 <div className={styles.mvEmpty}>
                                     <span className={styles.mvEmptyIcon}><IconSearch size={24} /></span>
                                     <p className={styles.mvEmptyTitle}>Nichts gefunden</p>
-                                    <p className={styles.mvEmptyText}>Zu „{q}“ gibt es {rule ? 'in dieser Runde ' : ''}keine Treffer. Versuch einen anderen Begriff.</p>
+                                    <p className={styles.mvEmptyText}>{q ? `Zu „${q}“` : 'Dazu'} gibt es {rule || effGenre || effDecade ? 'mit diesen Filtern ' : ''}keine Treffer. Versuch etwas anderes.</p>
                                 </div>
                             )}
                             {view === 'error' && (
@@ -2302,11 +2430,30 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={handleSpotifySearch}><IconRetry />Erneut versuchen</button>
                                 </div>
                             )}
-                        </div>}
+                            {!albumTracks && view !== 'loading' && spotifyHint}
+                        </div>
                     </div>
                     <div className={styles.mvFooter}>
                         <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={closeAddModal}>Fertig</button>
                     </div>
+
+                    <BottomSheet open={!!filterSheet} onClose={() => setFilterSheet(null)} labelledBy="mv-filter-title">
+                        <h2 id="mv-filter-title" className={styles.mvSheetTitle}>{filterSheet === 'genre' ? 'Genre' : 'Jahrzehnt'}</h2>
+                        <div className={styles.mvSheetOptions}>
+                            {(filterSheet === 'genre'
+                                ? [[null, 'Alle Genres'], ...SEARCH_GENRES.map(g => [g.key, g.label])]
+                                : [[null, 'Alle Jahrzehnte'], ...DECADES.map(d => [d, decadeLabel(d)])]
+                            ).map(([value, label]) => {
+                                const on = (filterSheet === 'genre' ? genreFilter : decadeFilter) === value
+                                return (
+                                    <button key={label} type="button" className={`${styles.mvBtn} ${styles.mvSheetOption} ${on ? styles.mvSheetOptionOn : ''}`} aria-pressed={on}
+                                        onClick={() => { if (filterSheet === 'genre') setGenreFilter(value); else setDecadeFilter(value); setShowMine(false); setFilterSheet(null) }}>
+                                        {label}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </BottomSheet>
                 </main>
             )
         }

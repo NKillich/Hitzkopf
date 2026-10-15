@@ -558,23 +558,25 @@
 .mvRoot .mvSwipeIconAdd, .mvRoot .mvSwipeIconDone { width: 36px; height: 36px; border-radius: 18px; align-items: center; justify-content: center; background: color-mix(in srgb, var(--sr-surface) 25%, transparent); }
 .mvRoot .mvSwipeIconAdd { display: flex; }
 
-/* Song vorschlagen: Songs aus Spotify holen (Lieblingssongs öffnen, Link einfügen) */
-.mvRoot .mvLinkBox { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 20px; background: var(--sr-surface); }
-.mvRoot .mvLinkRow { display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px; }
-.mvRoot .mvLinkBtn { min-height: 48px; padding: 0 12px; gap: 8px; border-radius: 24px; font-size: 15px; font-weight: 700; text-decoration: none; background: var(--sr-surface2); color: var(--sr-ink); }
-.mvRoot .mvLinkPaste { background: var(--sr-accent); color: var(--sr-on-accent); }
-.mvRoot .mvLinkHeart { color: #1DB954; font-size: 18px; line-height: 1; }
-.mvRoot .mvLinkHelp { align-self: flex-start; gap: 6px; padding: 2px 4px; font-size: 13px; font-weight: 700; color: var(--sr-muted); background: none; }
-.mvRoot .mvLinkSteps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.4; color: var(--sr-muted); }
-.mvRoot .mvLinkSteps strong { color: var(--sr-ink); }
 .mvRoot .mvClipOffer { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border-radius: 18px; background: color-mix(in srgb, var(--sr-ok) 14%, var(--sr-surface)); border: 1.5px solid color-mix(in srgb, var(--sr-ok) 35%, transparent); }
 .mvRoot .mvClipIcon { font-size: 22px; flex: none; }
 .mvRoot .mvClipAdd { flex: none; height: 40px; padding: 0 14px; border-radius: 20px; background: var(--sr-ok); color: var(--sr-on-ok); font-weight: 800; font-size: 14px; }
 .mvRoot .mvToastAction { flex: none; height: 36px; padding: 0 12px; border-radius: 18px; font-weight: 800; font-size: 14px; color: inherit; background: color-mix(in srgb, currentColor 14%, transparent); }
 
-/* Song vorschlagen → Reiter „Inspiration“ */
-.mvRoot .mvInspoSection { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-.mvRoot .mvInspoTitle { margin: 0 2px; font-size: 14px; font-weight: 800; color: var(--sr-muted); }
-.mvRoot .mvChips { display: flex; flex-wrap: wrap; gap: 8px; }
-.mvRoot .mvChipBtn { height: 38px; padding: 0 14px; border-radius: 19px; background: var(--sr-surface); color: var(--sr-ink); font-size: 14px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mvRoot .mvFilterChip { align-self: flex-start; gap: 6px; height: 34px; padding: 0 12px; border-radius: 17px; background: var(--sr-accent-soft); color: var(--sr-accent-text); font-size: 14px; font-weight: 800; }
+/* Song vorschlagen: Suche mit Filtern, Künstler, „Mehr laden“, Spotify als dezenter Link */
+.mvRoot .mvFilterRow { display: flex; gap: 8px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+.mvRoot .mvFilterRow::-webkit-scrollbar { display: none; }
+.mvRoot .mvFilterBtn { flex: none; height: 38px; padding: 0 12px 0 14px; gap: 4px; border-radius: 19px; background: var(--sr-surface); border: 1.5px solid var(--sr-line); color: var(--sr-ink); font-size: 14px; font-weight: 700; }
+.mvRoot .mvFilterBtnOn { background: var(--sr-accent-soft); border-color: var(--sr-accent); color: var(--sr-accent-text); }
+.mvRoot .mvListSection { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.mvRoot .mvListTitle { margin: 0 2px; font-size: 14px; font-weight: 800; color: var(--sr-muted); }
+.mvRoot .mvMoreBtn { align-self: center; gap: 6px; height: 42px; padding: 0 18px; border-radius: 21px; background: var(--sr-surface); color: var(--sr-ink); font-size: 14px; font-weight: 800; }
+.mvRoot .mvArtistRow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mvRoot .mvArtistBtn { flex-direction: column; gap: 6px; padding: 6px 2px; background: none; color: var(--sr-ink); min-width: 0; }
+.mvRoot .mvArtistName { max-width: 100%; font-size: 13px; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mvRoot .mvSpotifyHint { margin: 4px 2px 8px; text-align: center; font-size: 13px; line-height: 1.6; color: var(--sr-muted); }
+.mvRoot .mvTextLink { display: inline; padding: 0; background: none; color: var(--sr-accent-text); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.mvRoot .mvSheetTitle { margin: 0 0 4px; font-family: var(--sr-display); font-size: 24px; font-weight: 800; }
+.mvRoot .mvSheetOptions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mvRoot .mvSheetOption { height: 48px; border-radius: 16px; background: var(--sr-surface2); color: var(--sr-ink); font-size: 15px; font-weight: 700; }
+.mvRoot .mvSheetOptionOn { background: var(--sr-accent); color: var(--sr-on-accent); }
