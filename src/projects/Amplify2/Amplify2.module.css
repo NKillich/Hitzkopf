@@ -571,3 +571,10 @@
 .mvRoot .mvClipIcon { font-size: 22px; flex: none; }
 .mvRoot .mvClipAdd { flex: none; height: 40px; padding: 0 14px; border-radius: 20px; background: var(--sr-ok); color: var(--sr-on-ok); font-weight: 800; font-size: 14px; }
 .mvRoot .mvToastAction { flex: none; height: 36px; padding: 0 12px; border-radius: 18px; font-weight: 800; font-size: 14px; color: inherit; background: color-mix(in srgb, currentColor 14%, transparent); }
+
+/* Song vorschlagen → Reiter „Inspiration“ */
+.mvRoot .mvInspoSection { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.mvRoot .mvInspoTitle { margin: 0 2px; font-size: 14px; font-weight: 800; color: var(--sr-muted); }
+.mvRoot .mvChips { display: flex; flex-wrap: wrap; gap: 8px; }
+.mvRoot .mvChipBtn { height: 38px; padding: 0 14px; border-radius: 19px; background: var(--sr-surface); color: var(--sr-ink); font-size: 14px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mvRoot .mvFilterChip { align-self: flex-start; gap: 6px; height: 34px; padding: 0 12px; border-radius: 17px; background: var(--sr-accent-soft); color: var(--sr-accent-text); font-size: 14px; font-weight: 800; }

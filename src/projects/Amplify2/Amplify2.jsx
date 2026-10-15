@@ -28,6 +28,7 @@ import ReactionPad from './ReactionPad'
 import Marquee from './Marquee'
 import SwipeRow from './SwipeRow'
 import { parseSpotifyLink, looksLikeSpotifyLink, LIKED_SONGS_URL } from './spotifyLinks'
+import { loadSongMemory, rememberSong, memoryToSong } from './songMemory'
 import useFlip from './useFlip'
 import Confetti from './Confetti'
 import { IconArrowUp, IconArrowDown } from './icons'
@@ -681,6 +682,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
     // Einen Song einreichen – true, wenn der Song danach (von dir) in der Playlist ist
     const addToPlaylist = async (item) => {
         const res = await addManyToPlaylist([item])
+        if (res.added) rememberSong(item, 'added')
         if (res.added || res.duplicates) return true
         if (res.error) showToast(res.error, 'bad')
         else if (res.similar) showToast(`Ein sehr ähnlicher Song ist schon drin: „${res.similar.title}“ von ${res.similar.addedBy === myName ? 'dir' : res.similar.addedBy}.`, 'bad')
@@ -747,6 +749,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 const stale = staleItems(next, Date.now()).filter(i => i.id === itemId)
                 return { update: dropUpdate(next, Date.now(), stale) || { playlist: next.playlist }, dropped: stale.length > 0 }
             })
+            if (res?.update && optimistic === 1 && item) rememberSong(item, 'liked')
             if (res?.dropped) showToast('Der Song ist als Ladenhüter rausgeflogen – dein Daumen ist wieder frei.')
             if (res?.own) showToast('Für deine eigenen Songs kannst du nicht abstimmen.', 'bad')
             if (res?.paused) showToast('Der Song ist pausiert – er passt nicht zur aktuellen Runde.', 'bad')
@@ -916,15 +919,21 @@ const Amplify2 = ({ onBack, joinCode }) => {
         return () => { cancelled = true; document.removeEventListener('visibilitychange', check); window.removeEventListener('focus', check) }
     }, [showAddModal])
 
+    // Reiter in „Song vorschlagen“ und Jahrzehnt-Filter aus „Inspiration“ (Runden-Modus geht vor)
+    const [addTab, setAddTab] = useState('search')       // 'search' | 'inspiration'
+    const [decadeFilter, setDecadeFilter] = useState(null)
+    const [songMemory, setSongMemory] = useState([])
+    const searchRule = lobbyData?.roundRule || (decadeFilter ? { type: 'decade', from: decadeFilter } : null)
+
     const handleSpotifySearch = async () => {
         const q = searchQuery.trim()
-        if (!q && lobbyData?.roundRule?.type !== 'decade') return
+        if (!q && searchRule?.type !== 'decade') return
 
         setIsSearching(true)
         setSearchError(null)
 
         try {
-            const results = await spotifyService.search(ruleSearchQuery(lobbyData?.roundRule, q).trim(), 10)
+            const results = await spotifyService.search(ruleSearchQuery(searchRule, q).trim(), 10)
             setSearchResults(results)
             if (results.length === 0) log('Keine Ergebnisse für:', q)
         } catch (error) {
@@ -940,7 +949,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
     }
 
     // Jahrzehnt-Runde: ohne Suchwort gleich die beliebtesten Songs des Jahrzehnts zeigen
-    const searchable = (q) => q.length >= 2 || (q.length === 0 && lobbyData?.roundRule?.type === 'decade')
+    const searchable = (q) => q.length >= 2 || (q.length === 0 && searchRule?.type === 'decade')
 
     // Suche startet automatisch kurz nach dem Tippen
     useEffect(() => {
@@ -949,10 +958,11 @@ const Amplify2 = ({ onBack, joinCode }) => {
         const id = setTimeout(() => handleSpotifySearch(), 500)
         return () => clearTimeout(id)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchQuery, showAddModal, lobbyData?.roundRule?.type, lobbyData?.roundRule?.artistId, lobbyData?.roundRule?.from])
+    }, [searchQuery, showAddModal, searchRule?.type, searchRule?.artistId, searchRule?.from])
 
     const openAddModal = () => {
         setAddedInModalIds(new Set())
+        setSongMemory(loadSongMemory())
         // Runden-Modus: Suche gleich passend vorausfüllen (Jahrzehnt: Treffer erscheinen auch ohne Suchwort)
         const r = lobbyData?.roundRule
         if (!searchQuery.trim() && r?.type === 'artist') setSearchQuery(r.artistName)
@@ -967,6 +977,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
         setSearchQuery('')
         setSearchedQuery('')
         setSearchError(null)
+        setDecadeFilter(null)
         setShowAddModal(false)
     }
 
@@ -2128,6 +2139,51 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 )
             }
 
+            // Reiter „Inspiration“: zuerst deine Songs (auf diesem Gerät), dann Mehr von … und Jahrzehnte – alles ohne Login
+            const inspirationContent = () => {
+                const added = songMemory.filter(e => e.added).map(memoryToSong)
+                const liked = songMemory.filter(e => e.liked && !e.added).map(memoryToSong)
+                // Künstler aus Warteschlange und „Läuft“ – die häufigsten zuerst
+                const counts = new Map()
+                for (const name of [...playlist.map(i => i.artist), nowPlaying?.artist]) {
+                    const first = String(name || '').split(',')[0].trim()
+                    if (first) counts.set(first, (counts.get(first) || 0) + 1)
+                }
+                const artists = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([n]) => n)
+                const searchFor = (q, decade = null) => { setDecadeFilter(decade); setSearchQuery(q); setAddTab('search') }
+                const section = (title, items) => items.length > 0 && (
+                    <section className={styles.mvInspoSection}>
+                        <h3 className={styles.mvInspoTitle}>{title}</h3>
+                        <ul className={styles.mvList}>{items.slice(0, 30).map(songRow)}</ul>
+                    </section>
+                )
+                return (
+                    <div className={styles.mvListBox}>
+                        {section('Von dir vorgeschlagen', added)}
+                        {section('Gefiel dir', liked)}
+                        {!added.length && !liked.length && (
+                            <p className={styles.mvFine}>Hier sammeln sich deine Songs – alles, was du vorschlägst oder hochvotest, merkt sich Amplify auf diesem Handy. Beim nächsten Mal bist du so mit einem Tipp dabei.</p>
+                        )}
+                        {artists.length > 0 && (
+                            <section className={styles.mvInspoSection}>
+                                <h3 className={styles.mvInspoTitle}>Mehr von …</h3>
+                                <div className={styles.mvChips}>
+                                    {artists.map(a => <button key={a} type="button" className={`${styles.mvBtn} ${styles.mvChipBtn}`} onClick={() => searchFor(a)}>{a}</button>)}
+                                </div>
+                            </section>
+                        )}
+                        {!rule && (
+                            <section className={styles.mvInspoSection}>
+                                <h3 className={styles.mvInspoTitle}>Jahrzehnte</h3>
+                                <div className={styles.mvChips}>
+                                    {DECADES.map(d => <button key={d} type="button" className={`${styles.mvBtn} ${styles.mvChipBtn}`} onClick={() => searchFor('', d)}>📼 {decadeLabel(d)}</button>)}
+                                </div>
+                            </section>
+                        )}
+                    </div>
+                )
+            }
+
             return shell(
                 <main className={`${styles.mvMain} ${previewId ? styles.mvWithPreview : ''}`}>
                     {subHeader(albumTracks ? 'Album' : 'Song vorschlagen', () => (albumTracks ? setAlbumTracks(null) : closeAddModal()),
@@ -2175,7 +2231,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     </ol>
                                 )}
                             </section>
-                            <div className={styles.mvField}>
+                            <div className={`${styles.mvSegments} ${styles.mvSegments2}`} role="tablist" aria-label="Songs finden">
+                                {[['search', 'Suche', <IconSearch key="i" size={16} />], ['inspiration', 'Inspiration', <span key="i" aria-hidden="true">✨</span>]].map(([id, label, icon]) => (
+                                    <button key={id} type="button" role="tab" aria-selected={addTab === id}
+                                        className={`${styles.mvBtn} ${styles.mvSegment} ${addTab === id ? styles.mvSegmentOn : ''}`}
+                                        onClick={() => setAddTab(id)}>{icon}{label}</button>
+                                ))}
+                            </div>
+                            {addTab === 'search' && <div className={styles.mvField}>
                                 <label htmlFor="mv-search" className={styles.mvLabel}>{rule?.type === 'artist' ? `Oder Song von ${rule.artistName} suchen` : 'Oder Song bzw. Album suchen'}</label>
                                 <div className={styles.mvInputWrap}>
                                     <span className={styles.mvInputIcon}><IconSearch /></span>
@@ -2201,14 +2264,19 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                         </button>
                                     )}
                                 </div>
-                            </div>
+                            {decadeFilter && !rule && (
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvFilterChip}`} onClick={() => setDecadeFilter(null)} aria-label={`Filter ${decadeLabel(decadeFilter)} entfernen`}>
+                                        📼 {decadeLabel(decadeFilter)}<IconX size={14} />
+                                    </button>
+                                )}
+                            </div>}
                         </>)}
 
                         {limitReached && (
                             <p className={styles.mvHintLine}>Du hast {maxSongs} Songs im Rennen – sobald einer läuft, ist wieder Platz.</p>
                         )}
 
-                        <div className={styles.mvListBox}>
+                        {addTab === 'inspiration' && !albumTracks ? inspirationContent() : <div className={styles.mvListBox}>
                             {view === 'album' && <ul className={styles.mvList}>{albumTracks.tracks.map(songRow)}</ul>}
                             {view === 'ok' && <ul className={styles.mvList}>{searchResults.map(songRow)}</ul>}
                             {view === 'loading' && skeletons(isLoadingAlbum ? 'Wird geladen' : 'Spotify wird durchsucht')}
@@ -2234,7 +2302,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={handleSpotifySearch}><IconRetry />Erneut versuchen</button>
                                 </div>
                             )}
-                        </div>
+                        </div>}
                     </div>
                     <div className={styles.mvFooter}>
                         <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={closeAddModal}>Fertig</button>
