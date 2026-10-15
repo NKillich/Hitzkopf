@@ -15,6 +15,3 @@ export const parseSpotifyLink = (text) => {
 
 /** Sieht der Text nach einem Spotify-Link aus? (für das Suchfeld) */
 export const looksLikeSpotifyLink = (text) => !!parseSpotifyLink(text)
-
-// Spotify-App direkt in den Lieblingssongs öffnen (Universal Link: App, falls installiert – sonst Web-Player)
-export const LIKED_SONGS_URL = 'https://open.spotify.com/collection/tracks'
