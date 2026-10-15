@@ -62,6 +62,7 @@ export const trackToSong = (track) => ({
     previewUrl: track.preview_url || null,
     imageUrl: track.album?.images?.[0]?.url || null,
     duration: track.duration_ms,
+    popularity: typeof track.popularity === 'number' ? track.popularity : null,   // 0–100 (falls Spotify ihn liefert)
     votes: {},
     addedAt: Date.now()
 })
@@ -1383,7 +1384,8 @@ class SpotifyService {
      */
     async searchPage(query, offset = 0, types = 'track,artist,album') {
         await this.ensureValidToken()
-        const params = new URLSearchParams({ q: query, type: types, limit: '10', offset: String(offset) })
+        // market=DE: nur in Deutschland verfügbare Songs
+        const params = new URLSearchParams({ q: query, type: types, limit: '10', offset: String(offset), market: 'DE' })
         const res = await fetch(`${SPOTIFY_API_BASE}/search?${params}`, { headers: { 'Authorization': `Bearer ${this.accessToken}` } })
         if (!res.ok) {
             const err = await res.json().catch(() => ({}))
