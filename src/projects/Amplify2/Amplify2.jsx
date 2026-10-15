@@ -27,6 +27,7 @@ import {
 import ReactionPad from './ReactionPad'
 import Marquee from './Marquee'
 import SwipeRow from './SwipeRow'
+import { parseSpotifyLink, looksLikeSpotifyLink, LIKED_SONGS_URL } from './spotifyLinks'
 import useFlip from './useFlip'
 import Confetti from './Confetti'
 import { IconArrowUp, IconArrowDown } from './icons'
@@ -170,11 +171,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     // Album-Track-Ansicht im Suchmodal
     const [albumTracks, setAlbumTracks] = useState(null) // { album, tracks }
-    // „Meine Playlists“ (braucht Spotify-Login – Gäste nur mit freigeschaltetem Konto)
-    const [addTab, setAddTab] = useState('search')         // 'search' | 'mine'
-    const [myLists, setMyLists] = useState(null)           // null | { loading, error, notRegistered, list }
-    const [mineView, setMineView] = useState(null)         // null | { key, name, imageUrl, items, total, loading, error, needsScope }
-    const [mineFilter, setMineFilter] = useState('')
     const [isLoadingAlbum, setIsLoadingAlbum] = useState(false)
     const [streakInfoOpen, setStreakInfoOpen] = useState(false)
 
@@ -191,7 +187,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
     // Oberfläche
     const { isDark, toggleTheme } = useTheme()
     const [roomView, setRoomView] = useState('main')         // main | settings
-    const [toast, setToast] = useState(null)                 // { text, tone: 'info' | 'bad' }
+    const [toast, setToast] = useState(null)                 // { text, tone: 'info' | 'bad', action?: { label, run } }
     const [startNotice, setStartNotice] = useState(null)     // Hinweis auf der Startseite (z. B. Playlist geschlossen)
     const [confirm, setConfirm] = useState(null)             // { kind: 'leave' | 'remove' | 'endVoting' | 'kick', item?, name? }
     const [confirmBusy, setConfirmBusy] = useState(false)
@@ -222,10 +218,10 @@ const Amplify2 = ({ onBack, joinCode }) => {
     useLayoutEffect(() => { latestLobbyRef.current = lobbyData })
     const [showWelcomePopup, setShowWelcomePopup] = useState(false)
 
-    const showToast = useCallback((text, tone = 'info') => {
+    const showToast = useCallback((text, tone = 'info', action = null) => {
         clearTimeout(toastTimerRef.current)
-        setToast({ text, tone })
-        toastTimerRef.current = setTimeout(() => setToast(null), 5500)
+        setToast({ text, tone, action })
+        toastTimerRef.current = setTimeout(() => setToast(null), action ? 7000 : 5500)
     }, [])
     useEffect(() => () => { clearTimeout(toastTimerRef.current); clearTimeout(volumeTimerRef.current) }, [])
 
@@ -788,52 +784,13 @@ const Amplify2 = ({ onBack, joinCode }) => {
     }
 
     // Album-Tracks laden
-    // ─── Meine Playlists: eigene/gemeinsame Playlists + Lieblingssongs (fremde liefert Spotify nicht) ───
-    const MINE_MAX = 1000   // so viele Songs pro Liste höchstens laden (zum Filtern reicht das)
-    const loadMyLists = async () => {
-        setMyLists({ loading: true, error: null, notRegistered: false, list: [] })
-        try {
-            const [profile, lists] = await Promise.all([spotifyService.getUserProfile(), spotifyService.getMyPlaylists(50)])
-            const own = lists.filter(pl => pl.collaborative || (profile?.id && pl.ownerId === profile.id))
-            setMyLists({ loading: false, error: null, notRegistered: false, list: own })
-        } catch (e) {
-            setMyLists({ loading: false, error: e.message || 'Deine Playlists konnten nicht geladen werden.', notRegistered: e.status === 403, list: [] })
-        }
-    }
-    const mineRunRef = useRef(0)
-    const openMineList = async (kind, pl) => {
-        const run = ++mineRunRef.current
-        const key = kind === 'liked' ? 'liked' : pl.id
-        setMineFilter('')
-        if (kind === 'liked' && !spotifyService.hasScope('user-library-read')) {
-            setMineView({ key, name: 'Lieblingssongs', imageUrl: null, items: [], total: 0, loading: false, error: null, needsScope: true })
-            return
-        }
-        setMineView({ key, name: kind === 'liked' ? 'Lieblingssongs' : pl.name, imageUrl: pl?.imageUrl || null, items: [], total: 0, loading: true, error: null, needsScope: false })
-        const page = (offset) => (kind === 'liked' ? spotifyService.getLikedSongs(offset) : spotifyService.getPlaylistSongs(pl.id, offset))
-        try {
-            let offset = 0
-            let all = []
-            while (offset != null && all.length < MINE_MAX) {
-                const res = await page(offset)
-                if (run !== mineRunRef.current) return   // inzwischen andere Liste geöffnet
-                all = [...all, ...res.items]
-                offset = res.next
-                setMineView(v => (v?.key === key ? { ...v, items: all, total: res.total, loading: offset != null && all.length < MINE_MAX } : v))
-            }
-        } catch (e) {
-            if (run !== mineRunRef.current) return
-            const msg = e.status === 403
-                ? (kind === 'liked' ? 'Spotify gibt deine Lieblingssongs gerade nicht heraus. Verbinde Spotify einmal neu.' : 'Spotify gibt die Songs dieser Playlist nicht heraus – das klappt nur bei eigenen Playlists.')
-                : (e.message || 'Die Songs konnten nicht geladen werden.')
-            setMineView(v => (v?.key === key ? { ...v, loading: false, error: msg } : v))
-        }
-    }
-
     const handleOpenAlbum = async (album) => {
         setIsLoadingAlbum(true)
         try {
             const data = await spotifyService.getAlbum(album.spotifyId)
+            if (!album.title) {
+                album = { ...album, title: data.name, artist: data.artists?.map(a => a.name).join(', ') || '', imageUrl: data.images?.[0]?.url || null }
+            }
             const releaseYear = parseInt(data.release_date, 10) || album.releaseYear || null
             const tracks = (data.tracks?.items || []).map(t => ({
                 id: `spotify_track_${t.id}`,
@@ -860,6 +817,105 @@ const Amplify2 = ({ onBack, joinCode }) => {
     }
 
     // Spotify-Suche (mit Filter des Runden-Modus)
+    // ─── Songs aus Spotify holen: „Teilen → Link kopieren“, zurück, „Einfügen“ (oder Link ins Suchfeld) ─────
+    // Song → sofort hinzufügen (mit „Rückgängig“), Album → Songliste, Künstler → Suche, Playlist → geht nicht.
+    const [linkBusy, setLinkBusy] = useState(false)
+    const [clipOffer, setClipOffer] = useState(null)   // Android: Link in der Zwischenablage beim Zurückkommen
+    const [linkHintOpen, setLinkHintOpen] = useState(() => { try { return !localStorage.getItem('a2_link_hint_seen') } catch { return true } })
+    const lastClipRef = useRef((() => { try { return sessionStorage.getItem('a2_last_clip') || '' } catch { return '' } })())
+    const rememberClip = (text) => {
+        lastClipRef.current = text
+        try { sessionStorage.setItem('a2_last_clip', text) } catch { /* egal */ }
+    }
+    // Link → was ist es? { kind: 'none' | 'unresolved' | 'playlist' | 'track' | 'album' | 'artist', … }
+    const readSpotifyLink = async (text) => {
+        let link = parseSpotifyLink(text)
+        if (!link) return { kind: 'none' }
+        if (link.short) {
+            const long = await spotifyService.resolveShortLink(link.short).catch(() => null)
+            link = long ? parseSpotifyLink(long) : null
+            if (!link || link.short) return { kind: 'unresolved' }
+        }
+        if (link.type === 'track') return { kind: 'track', item: await spotifyService.getSongById(link.id) }
+        if (link.type === 'album') return { kind: 'album', id: link.id }
+        if (link.type === 'artist') return { kind: 'artist', artist: await spotifyService.getArtist(link.id) }
+        return { kind: 'playlist' }
+    }
+    const undoLinkAdd = async (item) => {
+        const mine = (latestLobbyRef.current?.playlist || []).find(p => sameSong(p, item) && p.addedBy === myName && p.queuedRound == null)
+        if (!mine) return
+        await handleRemoveItem(mine.id)
+        setAddedInModalIds(prev => { const next = new Set(prev); next.delete(item.id); next.delete(item.spotifyId); return next })
+        showToast(`„${item.title}“ wieder entfernt.`)
+    }
+    const addFromLink = async (text) => {
+        if (linkBusy) return
+        setLinkBusy(true)
+        setClipOffer(null)
+        rememberClip(text)
+        try {
+            const r = await readSpotifyLink(text)
+            if (r.kind === 'none') showToast('Da ist kein Spotify-Link. In Spotify beim Song: ⋯ → Teilen → Link kopieren.', 'bad')
+            else if (r.kind === 'unresolved') showToast('Diesen Spotify-Link konnte Amplify nicht öffnen. Kopier ihn nochmal oder such den Song.', 'bad')
+            else if (r.kind === 'playlist') showToast('Playlists gibt Spotify leider nicht heraus – teile einzelne Songs oder ein Album.', 'bad')
+            else if (r.kind === 'album') await handleOpenAlbum({ spotifyId: r.id, title: '', artist: '' })
+            else if (r.kind === 'artist') { setSearchQuery(r.artist.name); showToast(`Songs von ${r.artist.name}`) }
+            else {
+                const item = r.item
+                const existing = (latestLobbyRef.current?.playlist || []).find(p => sameSong(p, item))
+                if (existing) {
+                    showToast(existing.addedBy === myName ? `„${item.title}“ hast du schon drin.` : `„${item.title}“ ist schon drin – von ${existing.addedBy}.`, 'bad')
+                } else if (await addToPlaylist(item)) {
+                    setAddedInModalIds(prev => new Set(prev).add(item.id).add(item.spotifyId))
+                    showToast(`„${item.title}“ hinzugefügt`, 'info', { label: 'Rückgängig', run: () => undoLinkAdd(item) })
+                }
+            }
+            if (r.kind !== 'none') {
+                setLinkHintOpen(false)
+                try { localStorage.setItem('a2_link_hint_seen', '1') } catch { /* egal */ }
+            }
+        } catch (e) {
+            console.error('Spotify-Link fehlgeschlagen:', e)
+            showToast('Der Song konnte gerade nicht geladen werden. Bitte nochmal versuchen.', 'bad')
+        } finally {
+            setLinkBusy(false)
+        }
+    }
+    const pasteFromClipboard = async () => {
+        let text = null
+        try { text = await navigator.clipboard.readText() } catch { text = null }
+        if (text == null) {
+            showToast('Einfügen ging nicht automatisch – halte ins Suchfeld gedrückt und wähle „Einfügen“.', 'bad')
+            searchInputRef.current?.focus()
+            return
+        }
+        await addFromLink(text)
+    }
+    // Android/Chrome: Darf Amplify die Zwischenablage lesen (einmal erlaubt), bietet es beim Zurückkommen aus Spotify
+    // einen neu kopierten Link direkt an. iPhone erlaubt das nicht – dort bleibt der Knopf „Einfügen“.
+    useEffect(() => {
+        if (!showAddModal) return
+        let cancelled = false
+        const check = async () => {
+            if (document.visibilityState !== 'visible') return
+            try {
+                const perm = await navigator.permissions?.query({ name: 'clipboard-read' })
+                if (perm?.state !== 'granted') return
+                const text = await navigator.clipboard.readText()
+                if (cancelled || !text || text === lastClipRef.current || !parseSpotifyLink(text)) return
+                rememberClip(text)
+                const r = await readSpotifyLink(text)
+                if (cancelled) return
+                if (r.kind === 'track') setClipOffer({ text, title: r.item.title, artist: r.item.artist })
+                else if (r.kind === 'album') setClipOffer({ text, title: 'Album aus Spotify', artist: 'Songliste öffnen' })
+            } catch { /* nicht erlaubt oder nicht unterstützt */ }
+        }
+        check()
+        document.addEventListener('visibilitychange', check)
+        window.addEventListener('focus', check)
+        return () => { cancelled = true; document.removeEventListener('visibilitychange', check); window.removeEventListener('focus', check) }
+    }, [showAddModal])
+
     const handleSpotifySearch = async () => {
         const q = searchQuery.trim()
         if (!q && lobbyData?.roundRule?.type !== 'decade') return
@@ -1204,12 +1260,11 @@ const Amplify2 = ({ onBack, joinCode }) => {
         return () => clearInterval(interval)
     }, [isHost, spotifyConnected])
 
-    const handleSpotifyConnect = async ({ backToMine = false } = {}) => {
+    const handleSpotifyConnect = async () => {
         try {
-            if (backToMine) sessionStorage.setItem('a2_after_login', 'mine')
             sessionStorage.setItem('spotify_return_to', 'amplify2')
             try {
-                const session = Object.fromEntries(['a2_roomId', 'a2_name', 'a2_emoji', 'a2_after_login'].map(k => [k, sessionStorage.getItem(k)]))
+                const session = Object.fromEntries(['a2_roomId', 'a2_name', 'a2_emoji'].map(k => [k, sessionStorage.getItem(k)]))
                 localStorage.setItem(A2_LOGIN_BACKUP, JSON.stringify({ session, at: Date.now() }))
             } catch { /* egal – dann nur im selben Tab */ }
             const url = await spotifyService.getAuthUrlWithPKCE()
@@ -1424,21 +1479,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
         }, 3000)
         return () => clearInterval(id)
     }, [db, roomId, mutateLobby])
-
-    // Zurück vom Spotify-Login (aus „Meine Playlists“ gestartet) → Fenster gleich wieder dort öffnen
-    useEffect(() => {
-        if (currentScreen !== 'room' || !spotifyConnected || !lobbyData) return
-        if (sessionStorage.getItem('a2_after_login') !== 'mine') return
-        sessionStorage.removeItem('a2_after_login')
-        setAddTab('mine')
-        setMyLists(null)
-        setMineView(null)
-        setShowAddModal(true)
-    }, [currentScreen, spotifyConnected, lobbyData])
-    // Reiter „Meine Playlists“ geöffnet → Playlists einmal laden
-    useEffect(() => {
-        if (showAddModal && addTab === 'mine' && spotifyConnected && !myLists) loadMyLists()
-    }, [showAddModal, addTab, spotifyConnected, myLists])
 
     // ─── Runden-Modus: Künstlersuche ─────────────────────────────────────────
     useEffect(() => {
@@ -1716,6 +1756,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
                         <div className={`${styles.mvToast} ${toast.tone === 'bad' ? styles.mvToastBad : ''}`}>
                             <span className={styles.mvToastIcon}>{toast.tone === 'bad' ? <IconAlert size={20} /> : <IconInfo />}</span>
                             <span className={styles.mvToastText}>{toast.text}</span>
+                            {toast.action && (
+                                <button type="button" className={`${styles.mvBtn} ${styles.mvToastAction}`} onClick={() => { setToast(null); toast.action.run() }}>{toast.action.label}</button>
+                            )}
                             <button type="button" className={`${styles.mvBtn} ${styles.mvToastClose}`} onClick={() => setToast(null)} aria-label="Hinweis schließen"><IconX size={16} /></button>
                         </div>
                     )}
@@ -2085,100 +2128,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 )
             }
 
-            // Reiter „Meine Playlists“: Login → Liste (♥ Lieblingssongs ganz oben) → Songs einer Liste (filterbar)
-            const mineContent = () => {
-                if (!spotifyConnected) return (
-                    <div className={styles.mvEmpty}>
-                        <span className={styles.mvEmptyIcon}><IconQueue size={24} /></span>
-                        <p className={styles.mvEmptyTitle}>Deine Playlists durchsuchen</p>
-                        <p className={styles.mvEmptyText}>Verbinde dein Spotify-Konto, dann findest du hier deine eigenen Playlists und Lieblingssongs. Das geht nur mit einem freigeschalteten Konto – frag den Host. Bleib dabei im selben Browser.</p>
-                        <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => handleSpotifyConnect({ backToMine: true })}><IconNote size={20} />Mit Spotify verbinden</button>
-                    </div>
-                )
-                if (mineView) {
-                    const f = mineFilter.trim().toLocaleLowerCase('de')
-                    const items = f ? mineView.items.filter(i => `${i.title} ${i.artist} ${i.album}`.toLocaleLowerCase('de').includes(f)) : mineView.items
-                    return (
-                        <>
-                            <div className={styles.mvMineHead}>
-                                <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtnSm}`} onClick={() => setMineView(null)} aria-label="Zurück zu deinen Playlists"><IconBack size={18} /></button>
-                                {mineView.key === 'liked'
-                                    ? <span className={styles.mvLikedCover} aria-hidden="true">♥</span>
-                                    : <CoverArt src={mineView.imageUrl} seed={mineView.key} size={44} radius={10} />}
-                                <span className={styles.mvRowText}>
-                                    <span className={styles.mvRowName}>{mineView.name}</span>
-                                    <span className={styles.mvRowMeta}>{mineView.loading ? `Lädt … ${mineView.items.length ? `${mineView.items.length} Songs` : ''}` : `${mineView.items.length} Songs`}</span>
-                                </span>
-                            </div>
-                            {mineView.items.length > 8 && (
-                                <div className={styles.mvInputWrap}>
-                                    <span className={styles.mvInputIcon}><IconSearch /></span>
-                                    <input type="search" className={styles.mvInput} value={mineFilter} onChange={(e) => setMineFilter(e.target.value)}
-                                        placeholder="Titel, Interpret oder Album" aria-label="In dieser Liste filtern" autoComplete="off" />
-                                </div>
-                            )}
-                            <div className={styles.mvListBox}>
-                                {mineView.needsScope ? (
-                                    <div className={styles.mvEmpty}>
-                                        <span className={styles.mvEmptyIcon}>♥</span>
-                                        <p className={styles.mvEmptyTitle}>Einmal neu verbinden</p>
-                                        <p className={styles.mvEmptyText}>Für deine Lieblingssongs braucht Amplify eine zusätzliche Erlaubnis von Spotify.</p>
-                                        <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={() => handleSpotifyConnect({ backToMine: true })}><IconNote size={18} />Spotify neu verbinden</button>
-                                    </div>
-                                ) : mineView.error ? (
-                                    <div className={styles.mvEmpty} role="alert">
-                                        <span className={`${styles.mvEmptyIcon} ${styles.mvEmptyIconBad}`}><IconAlert size={24} /></span>
-                                        <p className={styles.mvEmptyText}>{mineView.error}</p>
-                                    </div>
-                                ) : items.length ? (
-                                    <ul className={styles.mvList}>{items.map(songRow)}</ul>
-                                ) : mineView.loading ? skeletons('Songs werden geladen') : (
-                                    <p className={styles.mvFine}>{f ? `Nichts zu „${mineFilter.trim()}“ in dieser Liste.` : 'Diese Liste ist leer.'}</p>
-                                )}
-                            </div>
-                        </>
-                    )
-                }
-                if (!myLists || myLists.loading) return <div className={styles.mvListBox}>{skeletons('Deine Playlists werden geladen')}</div>
-                if (myLists.error) return (
-                    <div className={styles.mvEmpty} role="alert">
-                        <span className={`${styles.mvEmptyIcon} ${styles.mvEmptyIconBad}`}><IconAlert size={24} /></span>
-                        <p className={styles.mvEmptyTitle}>{myLists.notRegistered ? 'Konto nicht freigeschaltet' : 'Laden fehlgeschlagen'}</p>
-                        <p className={styles.mvEmptyText}>{myLists.notRegistered ? 'Dein Spotify-Konto ist für Amplify noch nicht freigeschaltet – frag den Host. Suchen kannst du trotzdem im Reiter „Suche“.' : myLists.error}</p>
-                        {!myLists.notRegistered && <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={loadMyLists}><IconRetry />Erneut versuchen</button>}
-                    </div>
-                )
-                return (
-                    <div className={styles.mvListBox}>
-                        <ul className={styles.mvList}>
-                            <li>
-                                <button type="button" className={`${styles.mvBtn} ${styles.mvRow}`} onClick={() => openMineList('liked')}>
-                                    <span className={styles.mvLikedCover} aria-hidden="true">♥</span>
-                                    <span className={styles.mvRowText}>
-                                        <span className={styles.mvRowName}>Lieblingssongs</span>
-                                        <span className={styles.mvRowMeta}>Deine mit ♥ markierten Songs</span>
-                                    </span>
-                                    <IconNext />
-                                </button>
-                            </li>
-                            {myLists.list.map(pl => (
-                                <li key={pl.id}>
-                                    <button type="button" className={`${styles.mvBtn} ${styles.mvRow}`} onClick={() => openMineList('playlist', pl)}>
-                                        <CoverArt src={pl.imageUrl} seed={pl.id} size={46} radius={10} />
-                                        <span className={styles.mvRowText}>
-                                            <span className={styles.mvRowName}>{pl.name}</span>
-                                            <span className={styles.mvRowMeta}>{pl.trackCount ? `${pl.trackCount} Songs` : 'Playlist'}{pl.collaborative ? ' · gemeinsam' : ''}</span>
-                                        </span>
-                                        <IconNext />
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                        <p className={styles.mvFine}>Playlists, denen du nur folgst, gibt Spotify nicht heraus – hier stehen deine eigenen und gemeinsamen.</p>
-                    </div>
-                )
-            }
-
             return shell(
                 <main className={`${styles.mvMain} ${previewId ? styles.mvWithPreview : ''}`}>
                     {subHeader(albumTracks ? 'Album' : 'Song vorschlagen', () => (albumTracks ? setAlbumTracks(null) : closeAddModal()),
@@ -2195,15 +2144,39 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 </span>
                             </section>
                         ) : (<>
-                            <div className={`${styles.mvSegments} ${styles.mvSegments2}`} role="tablist" aria-label="Songs finden">
-                                {[['search', 'Suche', <IconSearch key="i" size={16} />], ['mine', 'Meine Playlists', <IconQueue key="i" size={16} />]].map(([id, label, icon]) => (
-                                    <button key={id} type="button" role="tab" aria-selected={addTab === id}
-                                        className={`${styles.mvBtn} ${styles.mvSegment} ${addTab === id ? styles.mvSegmentOn : ''}`}
-                                        onClick={() => setAddTab(id)}>{icon}{label}</button>
-                                ))}
-                            </div>
-                            {addTab === 'search' && <div className={styles.mvField}>
-                                <label htmlFor="mv-search" className={styles.mvLabel}>{rule?.type === 'artist' ? `Song von ${rule.artistName} suchen` : 'Song oder Album suchen'}</label>
+                            {clipOffer && (
+                                <div className={styles.mvClipOffer} role="status">
+                                    <span className={styles.mvClipIcon} aria-hidden="true">🎵</span>
+                                    <span className={styles.mvRowText}>
+                                        <span className={styles.mvRowName}>{clipOffer.title}</span>
+                                        <span className={styles.mvRowMeta}>{clipOffer.artist} · aus Spotify kopiert</span>
+                                    </span>
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvClipAdd}`} onClick={() => addFromLink(clipOffer.text)} disabled={linkBusy}>Hinzufügen</button>
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtnSm}`} onClick={() => setClipOffer(null)} aria-label="Nicht hinzufügen"><IconX size={16} /></button>
+                                </div>
+                            )}
+                            <section className={styles.mvLinkBox} aria-label="Songs aus Spotify holen">
+                                <div className={styles.mvLinkRow}>
+                                    <a className={`${styles.mvBtn} ${styles.mvLinkBtn}`} href={LIKED_SONGS_URL} target="_blank" rel="noopener noreferrer">
+                                        <span className={styles.mvLinkHeart} aria-hidden="true">♥</span>Lieblingssongs in Spotify
+                                    </a>
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvLinkBtn} ${styles.mvLinkPaste}`} onClick={pasteFromClipboard} disabled={linkBusy}>
+                                        {linkBusy ? <IconWave size={18} /> : <IconCopy size={18} />}Einfügen
+                                    </button>
+                                </div>
+                                <button type="button" className={`${styles.mvBtn} ${styles.mvLinkHelp}`} onClick={() => setLinkHintOpen(o => !o)} aria-expanded={linkHintOpen}>
+                                    <IconInfo size={14} />So holst du Songs aus Spotify<IconChevron open={linkHintOpen} />
+                                </button>
+                                {linkHintOpen && (
+                                    <ol className={styles.mvLinkSteps}>
+                                        <li>In Spotify beim Song auf <strong>⋯</strong> → <strong>Teilen</strong> → <strong>Link kopieren</strong></li>
+                                        <li>Zurück zu Amplify wechseln</li>
+                                        <li><strong>Einfügen</strong> tippen – fertig. Geht auch mit Alben.</li>
+                                    </ol>
+                                )}
+                            </section>
+                            <div className={styles.mvField}>
+                                <label htmlFor="mv-search" className={styles.mvLabel}>{rule?.type === 'artist' ? `Oder Song von ${rule.artistName} suchen` : 'Oder Song bzw. Album suchen'}</label>
                                 <div className={styles.mvInputWrap}>
                                     <span className={styles.mvInputIcon}><IconSearch /></span>
                                     <input
@@ -2212,9 +2185,12 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                         type="search"
                                         className={styles.mvInput}
                                         value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        onChange={(e) => {
+                                            // Spotify-Link eingefügt → direkt übernehmen statt danach zu suchen
+                                            if (looksLikeSpotifyLink(e.target.value)) { setSearchQuery(''); addFromLink(e.target.value) } else setSearchQuery(e.target.value)
+                                        }}
                                         onKeyDown={(e) => { if (e.key === 'Enter') handleSpotifySearch() }}
-                                        placeholder="z. B. Titel, Band oder Album"
+                                        placeholder="Titel, Band, Album oder Link"
                                         autoComplete="off"
                                         autoFocus
                                     />
@@ -2225,14 +2201,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                         </button>
                                     )}
                                 </div>
-                            </div>}
+                            </div>
                         </>)}
 
                         {limitReached && (
                             <p className={styles.mvHintLine}>Du hast {maxSongs} Songs im Rennen – sobald einer läuft, ist wieder Platz.</p>
                         )}
 
-                        {addTab === 'mine' && !albumTracks ? mineContent() : <div className={styles.mvListBox}>
+                        <div className={styles.mvListBox}>
                             {view === 'album' && <ul className={styles.mvList}>{albumTracks.tracks.map(songRow)}</ul>}
                             {view === 'ok' && <ul className={styles.mvList}>{searchResults.map(songRow)}</ul>}
                             {view === 'loading' && skeletons(isLoadingAlbum ? 'Wird geladen' : 'Spotify wird durchsucht')}
@@ -2240,7 +2216,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 <div className={styles.mvEmpty}>
                                     <span className={styles.mvEmptyIcon}><IconSearch size={24} /></span>
                                     <p className={styles.mvEmptyTitle}>Was soll laufen?</p>
-                                    <p className={styles.mvEmptyText}>Such nach einem Song oder Album. Tippe auf einen Song, um ihn vorzuschlagen – aufs Cover für eine Hörprobe.</p>
+                                    <p className={styles.mvEmptyText}>Hol dir Songs aus Spotify (oben) oder such hier. Tippe auf einen Song, um ihn vorzuschlagen – aufs Cover für eine Hörprobe.</p>
                                 </div>
                             )}
                             {view === 'empty' && (
@@ -2258,7 +2234,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={handleSpotifySearch}><IconRetry />Erneut versuchen</button>
                                 </div>
                             )}
-                        </div>}
+                        </div>
                     </div>
                     <div className={styles.mvFooter}>
                         <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={closeAddModal}>Fertig</button>
