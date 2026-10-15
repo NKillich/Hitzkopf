@@ -157,6 +157,11 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     // Album-Track-Ansicht im Suchmodal
     const [albumTracks, setAlbumTracks] = useState(null) // { album, tracks }
+    // „Meine Playlists“ (braucht Spotify-Login – Gäste nur mit freigeschaltetem Konto)
+    const [addTab, setAddTab] = useState('search')         // 'search' | 'mine'
+    const [myLists, setMyLists] = useState(null)           // null | { loading, error, notRegistered, list }
+    const [mineView, setMineView] = useState(null)         // null | { key, name, imageUrl, items, total, loading, error, needsScope }
+    const [mineFilter, setMineFilter] = useState('')
     const [isLoadingAlbum, setIsLoadingAlbum] = useState(false)
     const [streakInfoOpen, setStreakInfoOpen] = useState(false)
 
@@ -769,6 +774,48 @@ const Amplify2 = ({ onBack, joinCode }) => {
     }
 
     // Album-Tracks laden
+    // ─── Meine Playlists: eigene/gemeinsame Playlists + Lieblingssongs (fremde liefert Spotify nicht) ───
+    const MINE_MAX = 1000   // so viele Songs pro Liste höchstens laden (zum Filtern reicht das)
+    const loadMyLists = async () => {
+        setMyLists({ loading: true, error: null, notRegistered: false, list: [] })
+        try {
+            const [profile, lists] = await Promise.all([spotifyService.getUserProfile(), spotifyService.getMyPlaylists(50)])
+            const own = lists.filter(pl => pl.collaborative || (profile?.id && pl.ownerId === profile.id))
+            setMyLists({ loading: false, error: null, notRegistered: false, list: own })
+        } catch (e) {
+            setMyLists({ loading: false, error: e.message || 'Deine Playlists konnten nicht geladen werden.', notRegistered: e.status === 403, list: [] })
+        }
+    }
+    const mineRunRef = useRef(0)
+    const openMineList = async (kind, pl) => {
+        const run = ++mineRunRef.current
+        const key = kind === 'liked' ? 'liked' : pl.id
+        setMineFilter('')
+        if (kind === 'liked' && !spotifyService.hasScope('user-library-read')) {
+            setMineView({ key, name: 'Lieblingssongs', imageUrl: null, items: [], total: 0, loading: false, error: null, needsScope: true })
+            return
+        }
+        setMineView({ key, name: kind === 'liked' ? 'Lieblingssongs' : pl.name, imageUrl: pl?.imageUrl || null, items: [], total: 0, loading: true, error: null, needsScope: false })
+        const page = (offset) => (kind === 'liked' ? spotifyService.getLikedSongs(offset) : spotifyService.getPlaylistSongs(pl.id, offset))
+        try {
+            let offset = 0
+            let all = []
+            while (offset != null && all.length < MINE_MAX) {
+                const res = await page(offset)
+                if (run !== mineRunRef.current) return   // inzwischen andere Liste geöffnet
+                all = [...all, ...res.items]
+                offset = res.next
+                setMineView(v => (v?.key === key ? { ...v, items: all, total: res.total, loading: offset != null && all.length < MINE_MAX } : v))
+            }
+        } catch (e) {
+            if (run !== mineRunRef.current) return
+            const msg = e.status === 403
+                ? (kind === 'liked' ? 'Spotify gibt deine Lieblingssongs gerade nicht heraus. Verbinde Spotify einmal neu.' : 'Spotify gibt die Songs dieser Playlist nicht heraus – das klappt nur bei eigenen Playlists.')
+                : (e.message || 'Die Songs konnten nicht geladen werden.')
+            setMineView(v => (v?.key === key ? { ...v, loading: false, error: msg } : v))
+        }
+    }
+
     const handleOpenAlbum = async (album) => {
         setIsLoadingAlbum(true)
         try {
@@ -1143,8 +1190,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
         return () => clearInterval(interval)
     }, [isHost, spotifyConnected])
 
-    const handleSpotifyConnect = async () => {
+    const handleSpotifyConnect = async ({ backToMine = false } = {}) => {
         try {
+            if (backToMine) sessionStorage.setItem('a2_after_login', 'mine')
             sessionStorage.setItem('spotify_return_to', 'amplify2')
             const url = await spotifyService.getAuthUrlWithPKCE()
             window.location.href = url
@@ -1358,6 +1406,21 @@ const Amplify2 = ({ onBack, joinCode }) => {
         }, 3000)
         return () => clearInterval(id)
     }, [db, roomId, mutateLobby])
+
+    // Zurück vom Spotify-Login (aus „Meine Playlists“ gestartet) → Fenster gleich wieder dort öffnen
+    useEffect(() => {
+        if (currentScreen !== 'room' || !spotifyConnected || !lobbyData) return
+        if (sessionStorage.getItem('a2_after_login') !== 'mine') return
+        sessionStorage.removeItem('a2_after_login')
+        setAddTab('mine')
+        setMyLists(null)
+        setMineView(null)
+        setShowAddModal(true)
+    }, [currentScreen, spotifyConnected, lobbyData])
+    // Reiter „Meine Playlists“ geöffnet → Playlists einmal laden
+    useEffect(() => {
+        if (showAddModal && addTab === 'mine' && spotifyConnected && !myLists) loadMyLists()
+    }, [showAddModal, addTab, spotifyConnected, myLists])
 
     // ─── Runden-Modus: Künstlersuche ─────────────────────────────────────────
     useEffect(() => {
@@ -2004,6 +2067,100 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 )
             }
 
+            // Reiter „Meine Playlists“: Login → Liste (♥ Lieblingssongs ganz oben) → Songs einer Liste (filterbar)
+            const mineContent = () => {
+                if (!spotifyConnected) return (
+                    <div className={styles.mvEmpty}>
+                        <span className={styles.mvEmptyIcon}><IconQueue size={24} /></span>
+                        <p className={styles.mvEmptyTitle}>Deine Playlists durchsuchen</p>
+                        <p className={styles.mvEmptyText}>Verbinde dein Spotify-Konto, dann findest du hier deine eigenen Playlists und Lieblingssongs. Das geht nur mit einem freigeschalteten Konto – frag den Host. Bleib dabei im selben Browser.</p>
+                        <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => handleSpotifyConnect({ backToMine: true })}><IconNote size={20} />Mit Spotify verbinden</button>
+                    </div>
+                )
+                if (mineView) {
+                    const f = mineFilter.trim().toLocaleLowerCase('de')
+                    const items = f ? mineView.items.filter(i => `${i.title} ${i.artist} ${i.album}`.toLocaleLowerCase('de').includes(f)) : mineView.items
+                    return (
+                        <>
+                            <div className={styles.mvMineHead}>
+                                <button type="button" className={`${styles.mvBtn} ${styles.mvIconBtnSm}`} onClick={() => setMineView(null)} aria-label="Zurück zu deinen Playlists"><IconBack size={18} /></button>
+                                {mineView.key === 'liked'
+                                    ? <span className={styles.mvLikedCover} aria-hidden="true">♥</span>
+                                    : <CoverArt src={mineView.imageUrl} seed={mineView.key} size={44} radius={10} />}
+                                <span className={styles.mvRowText}>
+                                    <span className={styles.mvRowName}>{mineView.name}</span>
+                                    <span className={styles.mvRowMeta}>{mineView.loading ? `Lädt … ${mineView.items.length ? `${mineView.items.length} Songs` : ''}` : `${mineView.items.length} Songs`}</span>
+                                </span>
+                            </div>
+                            {mineView.items.length > 8 && (
+                                <div className={styles.mvInputWrap}>
+                                    <span className={styles.mvInputIcon}><IconSearch /></span>
+                                    <input type="search" className={styles.mvInput} value={mineFilter} onChange={(e) => setMineFilter(e.target.value)}
+                                        placeholder="Titel, Interpret oder Album" aria-label="In dieser Liste filtern" autoComplete="off" />
+                                </div>
+                            )}
+                            <div className={styles.mvListBox}>
+                                {mineView.needsScope ? (
+                                    <div className={styles.mvEmpty}>
+                                        <span className={styles.mvEmptyIcon}>♥</span>
+                                        <p className={styles.mvEmptyTitle}>Einmal neu verbinden</p>
+                                        <p className={styles.mvEmptyText}>Für deine Lieblingssongs braucht Amplify eine zusätzliche Erlaubnis von Spotify.</p>
+                                        <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={() => handleSpotifyConnect({ backToMine: true })}><IconNote size={18} />Spotify neu verbinden</button>
+                                    </div>
+                                ) : mineView.error ? (
+                                    <div className={styles.mvEmpty} role="alert">
+                                        <span className={`${styles.mvEmptyIcon} ${styles.mvEmptyIconBad}`}><IconAlert size={24} /></span>
+                                        <p className={styles.mvEmptyText}>{mineView.error}</p>
+                                    </div>
+                                ) : items.length ? (
+                                    <ul className={styles.mvList}>{items.map(songRow)}</ul>
+                                ) : mineView.loading ? skeletons('Songs werden geladen') : (
+                                    <p className={styles.mvFine}>{f ? `Nichts zu „${mineFilter.trim()}“ in dieser Liste.` : 'Diese Liste ist leer.'}</p>
+                                )}
+                            </div>
+                        </>
+                    )
+                }
+                if (!myLists || myLists.loading) return <div className={styles.mvListBox}>{skeletons('Deine Playlists werden geladen')}</div>
+                if (myLists.error) return (
+                    <div className={styles.mvEmpty} role="alert">
+                        <span className={`${styles.mvEmptyIcon} ${styles.mvEmptyIconBad}`}><IconAlert size={24} /></span>
+                        <p className={styles.mvEmptyTitle}>{myLists.notRegistered ? 'Konto nicht freigeschaltet' : 'Laden fehlgeschlagen'}</p>
+                        <p className={styles.mvEmptyText}>{myLists.notRegistered ? 'Dein Spotify-Konto ist für Amplify noch nicht freigeschaltet – frag den Host. Suchen kannst du trotzdem im Reiter „Suche“.' : myLists.error}</p>
+                        {!myLists.notRegistered && <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={loadMyLists}><IconRetry />Erneut versuchen</button>}
+                    </div>
+                )
+                return (
+                    <div className={styles.mvListBox}>
+                        <ul className={styles.mvList}>
+                            <li>
+                                <button type="button" className={`${styles.mvBtn} ${styles.mvRow}`} onClick={() => openMineList('liked')}>
+                                    <span className={styles.mvLikedCover} aria-hidden="true">♥</span>
+                                    <span className={styles.mvRowText}>
+                                        <span className={styles.mvRowName}>Lieblingssongs</span>
+                                        <span className={styles.mvRowMeta}>Deine mit ♥ markierten Songs</span>
+                                    </span>
+                                    <IconNext />
+                                </button>
+                            </li>
+                            {myLists.list.map(pl => (
+                                <li key={pl.id}>
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvRow}`} onClick={() => openMineList('playlist', pl)}>
+                                        <CoverArt src={pl.imageUrl} seed={pl.id} size={46} radius={10} />
+                                        <span className={styles.mvRowText}>
+                                            <span className={styles.mvRowName}>{pl.name}</span>
+                                            <span className={styles.mvRowMeta}>{pl.trackCount ? `${pl.trackCount} Songs` : 'Playlist'}{pl.collaborative ? ' · gemeinsam' : ''}</span>
+                                        </span>
+                                        <IconNext />
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                        <p className={styles.mvFine}>Playlists, denen du nur folgst, gibt Spotify nicht heraus – hier stehen deine eigenen und gemeinsamen.</p>
+                    </div>
+                )
+            }
+
             return shell(
                 <main className={`${styles.mvMain} ${previewId ? styles.mvWithPreview : ''}`}>
                     {subHeader(albumTracks ? 'Album' : 'Song vorschlagen', () => (albumTracks ? setAlbumTracks(null) : closeAddModal()),
@@ -2019,8 +2176,15 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <span className={styles.mvRowMeta}>{albumTracks.album.artist} · {albumTracks.tracks.length} Songs</span>
                                 </span>
                             </section>
-                        ) : (
-                            <div className={styles.mvField}>
+                        ) : (<>
+                            <div className={`${styles.mvSegments} ${styles.mvSegments2}`} role="tablist" aria-label="Songs finden">
+                                {[['search', 'Suche', <IconSearch key="i" size={16} />], ['mine', 'Meine Playlists', <IconQueue key="i" size={16} />]].map(([id, label, icon]) => (
+                                    <button key={id} type="button" role="tab" aria-selected={addTab === id}
+                                        className={`${styles.mvBtn} ${styles.mvSegment} ${addTab === id ? styles.mvSegmentOn : ''}`}
+                                        onClick={() => setAddTab(id)}>{icon}{label}</button>
+                                ))}
+                            </div>
+                            {addTab === 'search' && <div className={styles.mvField}>
                                 <label htmlFor="mv-search" className={styles.mvLabel}>{rule?.type === 'artist' ? `Song von ${rule.artistName} suchen` : 'Song oder Album suchen'}</label>
                                 <div className={styles.mvInputWrap}>
                                     <span className={styles.mvInputIcon}><IconSearch /></span>
@@ -2043,14 +2207,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                         </button>
                                     )}
                                 </div>
-                            </div>
-                        )}
+                            </div>}
+                        </>)}
 
                         {limitReached && (
                             <p className={styles.mvHintLine}>Du hast {maxSongs} Songs im Rennen – sobald einer läuft, ist wieder Platz.</p>
                         )}
 
-                        <div className={styles.mvListBox}>
+                        {addTab === 'mine' && !albumTracks ? mineContent() : <div className={styles.mvListBox}>
                             {view === 'album' && <ul className={styles.mvList}>{albumTracks.tracks.map(songRow)}</ul>}
                             {view === 'ok' && <ul className={styles.mvList}>{searchResults.map(songRow)}</ul>}
                             {view === 'loading' && skeletons(isLoadingAlbum ? 'Wird geladen' : 'Spotify wird durchsucht')}
@@ -2076,7 +2240,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={handleSpotifySearch}><IconRetry />Erneut versuchen</button>
                                 </div>
                             )}
-                        </div>
+                        </div>}
                     </div>
                     <div className={styles.mvFooter}>
                         <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={closeAddModal}>Fertig</button>
