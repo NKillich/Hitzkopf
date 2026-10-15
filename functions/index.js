@@ -1,8 +1,10 @@
-const functions = require('firebase-functions');
+const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 admin.initializeApp();
 
 const db = admin.firestore();
+
+// v1-API (firebase-functions/v1): seit firebase-functions 6 ist der Standard-Import die 2. Generation
 
 // Spotify Token-Proxy (Amplify / Song raten)
 exports.spotifyToken = require('./spotifyToken').spotifyToken;

@@ -1,4 +1,4 @@
-const functions = require('firebase-functions');
+const functions = require('firebase-functions/v1');
 
 // Token-Proxy fuer Spotify (Client-Credentials-Flow).
 // Das Client Secret liegt nur hier (Secret Manager) und nie im Browser-Bundle.
