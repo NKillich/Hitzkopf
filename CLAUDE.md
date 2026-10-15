@@ -39,10 +39,11 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
 - Verdienter Nummer-1-Hit = Song lief mit mindestens einer Stimme hoch → Toast + Konfetti beim Einreichenden, Streak +1.
 - Ladenhüter (`dropBelow`, `dropAfterMin`), ✨ NEU (10 Min.), Runden-Modi (Künstler/Jahrzehnt/Stichwort), Live-Board
   mit Top 10, Live-Emoji-Reaktionen.
-- „Song vorschlagen“: Suche (Titel/Band/Album) mit Filtern **Genre** (`SEARCH_GENRES`, Spotify-Genres hängen am Künstler)
-  und **Jahrzehnt**; Genre ohne Wort → Top-30-Künstler des Genres, je Laden 5 zufällig, von jedem 2 seiner Top-5-Songs im
-  Jahrzehnt (reine Filter-Suchen liefern bei Spotify nur Unbekanntes); nur Jahrzehnt → Hinweis „Wähl ein Genre dazu“ (`market=DE`).
-  Künstler-Seite, „♥ Deine Songs“ (Gedächtnis pro Gerät, `localStorage` `a2_song_memory`), Spotify-Link einfügen als Rückfallebene.
+- „Song hinzufügen“: Suche (Titel/Band/Album) mit Filtern **Genre** und **Jahrzehnt**. Mit Suchwort zählt nur das Jahrzehnt.
+  Ohne Wort kommen bekannte Songs aus **Last.fm-Hitlisten** (Firebase-Funktion `lastfmTop`, Tags in `SEARCH_GENRES`):
+  Genre + Jahrzehnt → Top-Künstler des Genres, je 2 ihrer Top-5-Songs im Jahrzehnt (Spotify); nur Genre / nur Jahrzehnt →
+  Top-Songs des Tags, bei Spotify gesucht. Spotifys eigene Genres sind zu unsauber. Künstler-Seite, „♥ Deine Songs“
+  (Gedächtnis pro Gerät, `localStorage` `a2_song_memory`), Spotify-Link einfügen als Rückfallebene.
 - Logik ohne React in `amplifyLogic.js` (App und Board nutzen dieselben Funktionen).
 
 ### Fallstricke (haben schon Bugs verursacht)
@@ -64,6 +65,8 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
   `spotifyToken`). Eigene Songs holen Gäste per „Teilen → Link kopieren“ aus der Spotify-App und „Einfügen“ in Amplify 2.0;
   Kurzlinks (`spotify.link/…`) löst die Firebase-Funktion `resolveSpotifyLink` auf (veröffentlichen am PC:
   `firebase deploy --only functions:resolveSpotifyLink`).
+- Last.fm: API-Schlüssel nur als Firebase-Secret `LASTFM_API_KEY` (nie in den Code/Chat), Hinweis „Hitlisten: Last.fm“ unter
+  der Liste ist Pflicht. Last.fm ist aus der Cloud-Umgebung nicht erreichbar – Echttest nur live.
 - **Bestehende Client-ID nicht löschen/neu anlegen:** Für neue Client-IDs gilt sofort eine kleinere Endpunkt-Liste
   (für bestehende ist das vorerst verschoben).
 - Songs fremder/öffentlicher (auch nur gefolgter) Playlists liefert die API nicht (403); seit Feb. 2026

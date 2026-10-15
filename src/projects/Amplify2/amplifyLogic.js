@@ -178,23 +178,23 @@ export const currentRoundNo = (data) => data?.votingRound || 0
 
 export const ruleEmoji = (rule) => ({ artist: '🎤', decade: '📼', keyword: '🔤' }[rule?.type] || '')
 
-/** Genre-Filter der Suche: deutscher Name → Spotify-Genre (Spotify ordnet Genres Künstlern zu, nicht Songs) */
+/** Genre-Filter der Suche: deutscher Name → Last.fm-Tag (Hitlisten; Spotifys eigene Genres sind zu unsauber) */
 export const SEARCH_GENRES = [
-    { key: 'rock', label: 'Rock', q: 'rock' },
-    { key: 'pop', label: 'Pop', q: 'pop' },
-    { key: 'hiphop', label: 'Hip-Hop', q: 'hip hop' },
-    { key: 'deutschrap', label: 'Deutschrap', q: 'german hip hop' },
-    { key: 'schlager', label: 'Schlager', q: 'schlager' },
-    { key: 'dance', label: 'Dance', q: 'dance' },
-    { key: 'elektro', label: 'Elektro', q: 'edm' },
-    { key: 'metal', label: 'Metal', q: 'metal' },
-    { key: 'indie', label: 'Indie', q: 'indie' },
-    { key: 'punk', label: 'Punk', q: 'punk' },
-    { key: 'rnb', label: 'R&B', q: 'r&b' },
-    { key: 'soul', label: 'Soul & Funk', q: 'soul' },
-    { key: 'reggae', label: 'Reggae', q: 'reggae' },
-    { key: 'country', label: 'Country', q: 'country' },
-    { key: 'jazz', label: 'Jazz', q: 'jazz' }
+    { key: 'rock', label: 'Rock', tag: 'rock' },
+    { key: 'pop', label: 'Pop', tag: 'pop' },
+    { key: 'hiphop', label: 'Hip-Hop', tag: 'hip-hop' },
+    { key: 'deutschrap', label: 'Deutschrap', tag: 'deutschrap' },
+    { key: 'schlager', label: 'Schlager', tag: 'schlager' },
+    { key: 'dance', label: 'Dance', tag: 'dance' },
+    { key: 'elektro', label: 'Elektro', tag: 'electronic' },
+    { key: 'metal', label: 'Metal', tag: 'metal' },
+    { key: 'indie', label: 'Indie', tag: 'indie' },
+    { key: 'punk', label: 'Punk', tag: 'punk' },
+    { key: 'rnb', label: 'R&B', tag: 'rnb' },
+    { key: 'soul', label: 'Soul & Funk', tag: 'soul' },
+    { key: 'reggae', label: 'Reggae', tag: 'reggae' },
+    { key: 'country', label: 'Country', tag: 'country' },
+    { key: 'jazz', label: 'Jazz', tag: 'jazz' }
 ]
 
 /** Suchanfrage passend zum Modus (Spotify-Filter) */
