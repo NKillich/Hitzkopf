@@ -438,7 +438,6 @@
 .mvRoot .mvAvatarPickOn { border-color: var(--sr-accent); background: var(--sr-accent-soft); }
 
 /* ── NEU-Markierung ── */
-.mvRoot .mvNewChip { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 8px; background: color-mix(in srgb, #FFD23F 30%, transparent); color: var(--sr-ink); font-size: 11px; font-weight: 800; letter-spacing: 0.02em; vertical-align: 1px; }
 
 /* ── Amplify 2.0 minimal: eine durchgehende Playlist ── */
 .mvRoot .mvRoomName { flex: 1; min-width: 0; }
@@ -470,8 +469,6 @@
 .mvRoot .mvRoomDot { width: 7px; height: 7px; border-radius: 50%; background: var(--sr-muted); flex: none; }
 .mvRoot .mvRoomDotLive { background: var(--sr-ok); }
 .mvRoot .mvCoverWrap { position: relative; flex: none; display: inline-block; }
-.mvRoot .mvBadge { position: absolute; right: -6px; bottom: -6px; width: 24px; height: 24px; border-radius: 9px; background: var(--sr-bg); border: 2px solid var(--sr-bg); display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1; box-sizing: border-box; }
-.mvRoot .mvBadgeOwn { border-color: var(--sr-ok); }
 .mvRoot .mvNowCard { padding: 14px 14px 12px; border-radius: 22px; background: color-mix(in srgb, var(--sr-ok) 9%, var(--sr-surface)); border: 1.5px solid color-mix(in srgb, var(--sr-ok) 28%, transparent); display: flex; flex-direction: column; gap: 12px; }
 .mvRoot .mvNowCardRow { display: flex; align-items: center; gap: 14px; }
 .mvRoot .mvNowTag { display: inline-flex; align-items: center; gap: 6px; color: var(--sr-ok); font-size: 13px; font-weight: 800; }
@@ -485,14 +482,13 @@
 .mvRoot .mvSecHead { display: flex; align-items: center; justify-content: space-between; margin: 6px 2px 8px; }
 .mvRoot .mvSecTitle { margin: 0; font-family: var(--sr-display); font-size: 17px; font-weight: 800; }
 .mvRoot .mvSecMeta { display: inline-flex; align-items: center; gap: 10px; color: var(--sr-muted); font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mvRoot .mvFreeLabel { font-size: 13px; font-weight: 700; color: var(--sr-muted); }
 .mvRoot .mvFreeUp, .mvRoot .mvFreeDown { display: inline-flex; align-items: center; gap: 2px; }
 .mvRoot .mvFreeUp { color: var(--sr-ok); }
 .mvRoot .mvFreeDown { color: var(--sr-accent); }
 .mvRoot .mvFreeEmpty { opacity: 0.4; }
 .mvRoot .mvTrack { min-height: 72px; padding: 8px 10px; gap: 12px; border-radius: 18px; border: 1.5px solid transparent; }
 .mvRoot .mvTrackTop { background: color-mix(in srgb, var(--sr-ok) 8%, var(--sr-surface)); border-color: color-mix(in srgb, var(--sr-ok) 26%, transparent); }
-.mvRoot .mvTrackNo { width: 18px; flex: none; text-align: center; font-size: 15px; font-weight: 800; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
-.mvRoot .mvTrackTop .mvTrackNo { color: var(--sr-ok); }
 .mvRoot .mvTrack .mvRowName { font-size: 17px; }
 .mvRoot .mvTrackTime { flex: none; font-size: 14px; color: var(--sr-muted); font-variant-numeric: tabular-nums; padding-right: 4px; }
 .mvRoot .mvCutLine { display: flex; align-items: center; gap: 10px; margin: 6px 4px; color: var(--sr-muted); }
@@ -541,3 +537,9 @@
     100% { opacity: 0; transform: translate(var(--drift), 105vh) rotate(var(--spin)); }
 }
 @media (prefers-reduced-motion: reduce) { .mvRoot .mvConfetti { display: none; } }
+
+/* Namensfeld: leuchtet, solange es leer ist; wackelt, wenn man ohne Namen weiter will */
+.mvRoot .mvInputAttn { border-color: var(--sr-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sr-accent) 25%, transparent); }
+.mvRoot .mvShake { animation: mvShake 0.4s ease-in-out; }
+@keyframes mvShake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+@media (prefers-reduced-motion: reduce) { .mvRoot .mvShake { animation: none; } }

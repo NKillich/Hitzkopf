@@ -22,9 +22,11 @@ import {
     cleanName, nameKey, sameSong, similarSong, mmss, nowPosition, isEarnedHit,
     DECADES, decadeLabel, ruleLabel, ruleHint, ruleEmoji, ruleSearchQuery, ruleProblem, finishRound,
     limitsFor, streakOf, STREAK_LEVELS, liveNowPlaying, upcomingQueue, queueOrder, voteCounts,
-    isNew, staleItems, dropUpdate, DEFAULT_DROP_BELOW, DEFAULT_DROP_AFTER, poolOf, isPaused, activePoolOf, usedVotes
+    staleItems, dropUpdate, DEFAULT_DROP_BELOW, DEFAULT_DROP_AFTER, poolOf, isPaused, activePoolOf, usedVotes
 } from './amplifyLogic'
 import ReactionPad from './ReactionPad'
+import Marquee from './Marquee'
+import useFlip from './useFlip'
 import Confetti from './Confetti'
 import { IconArrowUp, IconArrowDown } from './icons'
 import { deleteReactions } from './reactions'
@@ -78,6 +80,7 @@ const DROP_SETTINGS = [
 ]
 
 const LIMIT_DEFAULTS = { maxSongs: DEFAULT_MAX_SONGS, up: DEFAULT_UP, down: DEFAULT_DOWN }
+const VOTE_MOVE_DELAY = 700   // ms: nach der eigenen Stimme erst die Farbe, dann rückt der Song an seinen Platz
 
 // Spotify-Fehler in verständliche Sätze übersetzen
 const friendlySpotifyError = (e) => {
@@ -675,8 +678,33 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     // Vote für einen Song – jederzeit. Ein Daumen steckt im Song und kommt zurück, sobald der Song an Spotify
     // geht oder rausfliegt (gezählt werden nur Songs im Rennen). Keine Stimmen für eigene Songs, als Transaktion.
+    // Eigene Stimme: Farbe sofort (vor der Bestätigung), die Reihenfolge bleibt noch kurz stehen und gleitet dann
+    const [pendingVotes, setPendingVotes] = useState({})   // itemId → 1 | -1 | 0, bis Firestore bestätigt
+    const [heldOrder, setHeldOrder] = useState(null)       // ids in der Reihenfolge vor dem Klick
+    const holdTimerRef = useRef(null)
+    const holdOrder = (ids) => {
+        clearTimeout(holdTimerRef.current)
+        setHeldOrder(prev => prev || ids)
+    }
+    const releaseOrder = () => {
+        clearTimeout(holdTimerRef.current)
+        holdTimerRef.current = setTimeout(() => setHeldOrder(null), VOTE_MOVE_DELAY)
+    }
+    useEffect(() => () => clearTimeout(holdTimerRef.current), [])
+
+    // Namensfeld: ohne Namen auf „Beitreten“/„Erstellen“ getippt → Hinweis
+    const [nameNudged, setNameNudged] = useState(false)
+    const nameInputRef = useRef(null)
+
     const handleVote = async (itemId, voteType) => {
         if (!db || !roomId || !myName) return
+        const item = (lobbyData?.playlist || []).find(i => i.id === itemId)
+        const before = item ? (pendingVotes[itemId] ?? (item.votes?.[myName] || 0)) : 0
+        const wantedNow = voteType === 'up' ? 1 : -1
+        const optimistic = before === wantedNow ? 0 : wantedNow
+        const free = optimistic === 1 ? upLeft : optimistic === -1 ? downLeft : true
+        if (item && free) setPendingVotes(p => ({ ...p, [itemId]: optimistic }))
+        holdOrder(displayIds)
 
         try {
             const res = await mutateLobby(roomId, (data) => {
@@ -717,6 +745,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
         } catch (error) {
             console.error('Fehler beim Voten:', error)
             showToast('Deine Stimme konnte nicht gespeichert werden. Bitte nochmal tippen.', 'bad')
+        } finally {
+            setPendingVotes(p => { const n = { ...p }; delete n[itemId]; return n })
+            releaseOrder()
         }
     }
 
@@ -1436,6 +1467,15 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const myUnqueuedCount = activeItems.filter(p => p.addedBy === myName).length
     const myUpUsed = lobbyData ? usedVotes(lobbyData, myName, 1) : 0
     const myDownUsed = lobbyData ? usedVotes(lobbyData, myName, -1) : 0
+    const upLeft = voteLimits.up === UNLIMITED || voteLimits.up - myUpUsed > 0
+    const downLeft = voteLimits.down === UNLIMITED || voteLimits.down - myDownUsed > 0
+    // Kurz nach der eigenen Stimme bleibt die alte Reihenfolge stehen (neue Songs hinten dran)
+    if (heldOrder) {
+        const pos = new Map(heldOrder.map((id, i) => [id, i]))
+        activeItems.sort((a, b) => (pos.get(a.id) ?? Infinity) - (pos.get(b.id) ?? Infinity))
+    }
+    const displayIds = activeItems.map(i => i.id)
+    const setRowRef = useFlip(displayIds.join('|'))
     const players = Object.entries(lobbyData?.players || {})
         .map(([name, p]) => ({ name, emoji: p?.emoji || '🙂' }))
         .sort((a, b) => (a.name === lobbyData?.host ? -1 : b.name === lobbyData?.host ? 1 : a.name.localeCompare(b.name, 'de')))
@@ -1507,12 +1547,11 @@ const Amplify2 = ({ onBack, joinCode }) => {
         ) : <CoverArt src={item.imageUrl} seed={item.spotifyId || item.id} size={46} radius={10} />
     )
 
-    // Cover mit dem Emoji der Person, die den Song vorgeschlagen hat (eigener Song: grüner Ring)
+    // Cover ohne Abzeichen (ein 🔥 auf dem Cover sah aus wie „heißer Song“) – das Emoji steht beim Namen
     const emojiOf = (name) => lobbyData?.players?.[name]?.emoji || '🙂'
-    const coverWithBadge = (src, seed, by, size = 52) => (
+    const songCover = (src, seed, size = 52) => (
         <span className={styles.mvCoverWrap} style={{ width: size, height: size }}>
             <CoverArt src={src} seed={seed} size={size} radius={Math.round(size * 0.22)} />
-            {by && <span className={`${styles.mvBadge} ${by === myName ? styles.mvBadgeOwn : ''}`} title={by === myName ? 'Dein Song' : `von ${by}`}>{emojiOf(by)}</span>}
         </span>
     )
 
@@ -1638,6 +1677,17 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     const nameError = roomId ? null : nameProblem(nameDraft)
     const nameEmpty = !roomId && !cleanName(nameDraft)   // leer: noch kein roter Fehler, aber kein Weiter
+    // Ohne Namen weiter getippt → Feld wackelt kurz, bekommt den Fokus und sagt, was fehlt
+    const nudgeName = () => {
+        setNameNudged(true)
+        const el = nameInputRef.current
+        if (!el) return
+        el.classList.remove(styles.mvShake)
+        void el.offsetWidth   // Animation neu starten
+        el.classList.add(styles.mvShake)
+        el.focus()
+    }
+    const nameBlocks = !!nameError && !nameEmpty   // leerer Name sperrt nicht – der Klick zeigt aufs Feld
     const nameField = (
         <div className={styles.mvField}>
             <label htmlFor="mv-name" className={styles.mvLabel}>Dein Name</label>
@@ -1648,7 +1698,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     <button type="button" className={`${styles.mvBtn} ${styles.mvAvatar} ${styles.mvAvatarBtn}`} onClick={() => setAvatarOpen(o => !o)}
                         aria-expanded={avatarOpen} aria-controls="mv-avatars" aria-label={`Profilbild ${myEmoji} – tippen zum Ändern`} title="Profilbild ändern">{myEmoji}</button>
                 )}
-                <input id="mv-name" type="text" className={`${styles.mvInput} ${styles.mvInputPlain} ${nameError && !nameEmpty ? styles.mvInputBad : ''}`}
+                <input id="mv-name" ref={nameInputRef} type="text" className={`${styles.mvInput} ${styles.mvInputPlain} ${nameError && !nameEmpty ? styles.mvInputBad : ''} ${nameEmpty ? styles.mvInputAttn : ''}`}
                     value={roomId ? myName : nameDraft}
                     onChange={(e) => setNameDraft(e.target.value)}
                     readOnly={!!roomId} maxLength={24} autoComplete="nickname" spellCheck={false}
@@ -1664,10 +1714,12 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     ))}
                 </div>
             )}
-            <p id="mv-name-hint" className={nameError && !nameEmpty ? styles.mvFieldError : styles.mvFieldHint}>
+            <p id="mv-name-hint" className={(nameError && !nameEmpty) || (nameEmpty && nameNudged) ? styles.mvFieldError : styles.mvFieldHint}>
                 {roomId
                     ? 'Du bist gerade in einer Playlist – dein Name bleibt dort gleich.'
-                    : nameEmpty
+                    : nameEmpty && nameNudged
+                        ? 'Gib zuerst deinen Namen ein.'
+                        : nameEmpty
                         ? 'So sehen dich die anderen – auch auf dem Live-Board. Tipp aufs Bild, um es zu ändern.'
                         : (nameError || 'So sehen dich die anderen – auch auf dem Live-Board.')}
             </p>
@@ -1774,7 +1826,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     )}
                 </div>
                 <div className={styles.mvFooter}>
-                    <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={handleCreateLobby} disabled={creating || !db || !!nameError || !spotifyConnected}>
+                    <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => (nameEmpty ? nudgeName() : handleCreateLobby())} disabled={creating || !db || nameBlocks || !spotifyConnected}>
                         {creating ? 'Wird erstellt …' : 'Playlist erstellen'}
                     </button>
                 </div>
@@ -1809,7 +1861,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <span className={styles.mvRowMeta}>{validInvite.playerCount} dabei · {validInvite.songCount} Songs · Code {validInvite.code}</span>
                                 </span>
                             </div>
-                            <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => handleJoinLobby(validInvite.code)} disabled={!!busyAction || !!nameError}>
+                            <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => (nameEmpty ? nudgeName() : handleJoinLobby(validInvite.code))} disabled={!!busyAction || nameBlocks}>
                                 {busyAction === validInvite.code ? 'Tritt bei …' : 'Beitreten'}
                             </button>
                         </section>
@@ -1826,7 +1878,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                         </button>
                     )}
 
-                    <form className={styles.mvField} onSubmit={(e) => { e.preventDefault(); handleJoinLobby(code) }}>
+                    <form className={styles.mvField} onSubmit={(e) => { e.preventDefault(); if (nameEmpty) nudgeName(); else handleJoinLobby(code) }}>
                         <label htmlFor="mv-code" className={styles.mvLabel}>{validInvite ? 'Oder anderen Raumcode eingeben' : 'Raumcode'}</label>
                         <div className={styles.mvNameRow}>
                             <input id="mv-code" type="text" className={`${styles.mvInput} ${styles.mvInputPlain} ${styles.mvCodeInput}`}
@@ -1834,7 +1886,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 placeholder="z. B. 3RUCTD" maxLength={10} autoComplete="off" autoCapitalize="characters" spellCheck={false} inputMode="text" />
                         </div>
                         <p className={styles.mvFieldHint}>Den Code zeigt der Host unter „Teilen“ – oder einfach seinen QR-Code scannen.</p>
-                        <button type="submit" className={`${styles.mvBtn} ${CODE_RE.test(code) && !nameError ? styles.mvPrimary : styles.mvPrimaryOff}`} disabled={!CODE_RE.test(code) || !!nameError || !!busyAction}>
+                        <button type="submit" className={`${styles.mvBtn} ${CODE_RE.test(code) && !nameBlocks ? styles.mvPrimary : styles.mvPrimaryOff}`} disabled={!CODE_RE.test(code) || nameBlocks || !!busyAction}>
                             {joining ? 'Tritt bei …' : 'Beitreten'}
                         </button>
                     </form>
@@ -2264,8 +2316,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
         const downAllowed = voteLimits.down !== 0
         const upFree = voteLimits.up === UNLIMITED ? null : Math.max(0, voteLimits.up - myUpUsed)
         const downFree = voteLimits.down === UNLIMITED ? null : Math.max(0, voteLimits.down - myDownUsed)
-        const upLeft = upFree === null || upFree > 0
-        const downLeft = downFree === null || downFree > 0
         const progressPct = nowPlaying?.durationMs ? Math.min(100, (nowPlayingPositionMs / nowPlaying.durationMs) * 100) : 0
         // Ein fremder Song (z. B. Spotify-Autoplay), der rechnerisch zu Ende ist, bleibt sonst bei 4:42 / 4:42 stehen
         const showNow = !!nowPlaying && !(nowPlaying.isPlaying && nowPlaying.durationMs && nowPlayingPositionMs >= nowPlaying.durationMs)
@@ -2277,7 +2327,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
         // Steht Platz 1 schon fest (bei Spotify angestellt), bleibt er mit Schloss oben in der Liste – keine eigene Sektion
         const lockedCount = queueItems.length
         const greenCount = !lockedCount && activeItems.length ? 1 : 0   // Platz 1 läuft als Nächstes
-        const byName = (name) => (name === myName ? 'du' : name)
+        const byName = (name) => `${emojiOf(name)} ${name === myName ? 'du' : name}`
         const scoreNum = (n) => <span className={styles.mvNum}>{n < 0 && <span className={styles.mvSign}>−</span>}{Math.abs(n)}</span>
 
         return shell(
@@ -2318,11 +2368,11 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     {showNow && (
                         <section className={styles.mvNowCard} aria-label="Läuft gerade">
                             <div className={styles.mvNowCardRow}>
-                                {coverWithBadge(nowPlaying.imageUrl, nowPlaying.trackId, nowItem?.addedBy, 76)}
+                                {songCover(nowPlaying.imageUrl, nowPlaying.trackId, 76)}
                                 <div className={styles.mvRowText}>
                                     <span className={styles.mvNowTag}>{nowPlaying.isPlaying ? <><IconWave size={14} />Läuft</> : <><IconPause size={12} />Pausiert</>}</span>
-                                    <span className={styles.mvNowCardTitle}>{nowPlaying.trackName}</span>
-                                    <span className={styles.mvRowMeta}>{nowPlaying.artist}</span>
+                                    <Marquee className={styles.mvNowCardTitle}>{nowPlaying.trackName}</Marquee>
+                                    <Marquee className={styles.mvRowMeta}>{nowPlaying.artist}</Marquee>
                                     {nowItem?.addedBy && <span className={styles.mvByLine}>{byName(nowItem.addedBy)}</span>}
                                     {onBackup && <span className={styles.mvByLine}>🎵 Backup-Playlist</span>}
                                 </div>
@@ -2346,7 +2396,8 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     <section aria-label="Im Voting">
                         <div className={styles.mvSecHead}>
                             <h2 className={styles.mvSecTitle}>Im Voting</h2>
-                            <span className={styles.mvSecMeta} aria-label={`Freie Stimmen: ${upFree ?? 'unbegrenzt'} hoch${downAllowed ? `, ${downFree ?? 'unbegrenzt'} runter` : ''}`}>
+                            <span className={styles.mvSecMeta} aria-label={`Verfügbare Votes: ${upFree ?? 'unbegrenzt'} hoch${downAllowed ? `, ${downFree ?? 'unbegrenzt'} runter` : ''}`}>
+                                <span className={styles.mvFreeLabel}>Verfügbare Votes:</span>
                                 <span className={`${styles.mvFreeUp} ${upLeft ? '' : styles.mvFreeEmpty}`}><IconArrowUp size={15} />{upFree ?? '∞'}</span>
                                 {downAllowed && <span className={`${styles.mvFreeDown} ${downLeft ? '' : styles.mvFreeEmpty}`}><IconArrowDown size={15} />{downFree ?? '∞'}</span>}
                             </span>
@@ -2359,13 +2410,12 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             </div>
                         ) : (
                             <ol className={styles.mvPlaylist}>
-                                {queueItems.map((item, idx) => (
+                                {queueItems.map(item => (
                                     <li key={item.id} className={`${styles.mvTrack} ${styles.mvTrackTop}`}>
-                                        <span className={styles.mvTrackNo}>{idx + 1}</span>
-                                        {coverWithBadge(item.imageUrl, item.spotifyId || item.id, item.addedBy)}
+                                        {songCover(item.imageUrl, item.spotifyId || item.id)}
                                         <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>
-                                            <span className={styles.mvRowName}>{item.title}</span>
-                                            <span className={styles.mvRowMeta}>{item.artist}</span>
+                                            <Marquee className={styles.mvRowName}>{item.title}</Marquee>
+                                            <Marquee className={styles.mvRowMeta}>{item.artist}</Marquee>
                                             <span className={styles.mvByLine}>{byName(item.addedBy)}</span>
                                         </span>
                                         <span className={styles.mvLocked} title="Steht fest – ist schon bei Spotify" aria-label="Steht fest"><IconLock size={18} /></span>
@@ -2377,7 +2427,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 )}
                                 {[...activeItems, ...pausedItems].map((item, idx) => {
                                     const paused = idx >= activeItems.length
-                                    const myVote = item.votes?.[myName] || 0
+                                    const myVote = pendingVotes[item.id] ?? (item.votes?.[myName] || 0)
                                     const own = item.addedBy === myName
                                     const canRemove = isHost || own
                                     const score = scoreOf(item)
@@ -2385,8 +2435,8 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     const top = idx < greenCount
                                     const text = (
                                         <>
-                                            <span className={styles.mvRowName}>{item.title}</span>
-                                            <span className={styles.mvRowMeta}>{isNew(item, clock) && <span className={styles.mvNewChip} title="Gerade vorgeschlagen – braucht noch Stimmen">✨ NEU</span>}{wasPlayed(item) && playedChip}{item.artist}</span>
+                                            <Marquee className={styles.mvRowName}>{item.title}</Marquee>
+                                            <Marquee className={styles.mvRowMeta}>{wasPlayed(item) && playedChip}{item.artist}</Marquee>
                                             <span className={styles.mvByLine}>{byName(item.addedBy)}</span>
                                         </>
                                     )
@@ -2396,9 +2446,8 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                             {paused && idx === activeItems.length && rule && (
                                                 <li className={styles.mvCutLine}><span>Pausiert – passt nicht zur {ruleLabel(rule)}</span></li>
                                             )}
-                                            <li className={`${styles.mvTrack} ${top ? styles.mvTrackTop : ''} ${paused ? styles.mvTrackPaused : ''}`}>
-                                                <span className={styles.mvTrackNo}>{paused ? '' : lockedCount + idx + 1}</span>
-                                                {coverWithBadge(item.imageUrl, item.spotifyId || item.id, item.addedBy)}
+                                            <li ref={setRowRef(item.id)} className={`${styles.mvTrack} ${top ? styles.mvTrackTop : ''} ${paused ? styles.mvTrackPaused : ''}`}>
+                                                {songCover(item.imageUrl, item.spotifyId || item.id)}
                                                 {canRemove ? (
                                                     <button type="button" className={`${styles.mvBtn} ${styles.mvTrackText}`} onClick={() => setConfirm({ kind: 'remove', item })} aria-label={`${item.title} – entfernen?`}>{text}</button>
                                                 ) : (

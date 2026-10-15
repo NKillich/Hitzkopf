@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { getApp } from 'firebase/app'
 import '../../firebase.js'
 import { getAuth, signInAnonymously } from 'firebase/auth'
@@ -11,6 +11,7 @@ import { IconMoon, IconSun, IconBack, IconUsers, IconNote, IconStar, IconFlame, 
 import { joinLink } from './links'
 import { scoreOf, voteCounts, byScore, mmss, nowPosition, nextSongInMs, ruleLabel, ruleEmoji, currentRoundNo, liveNowPlaying, upcomingQueue, isNew, activePoolOf } from './amplifyLogic'
 import ReactionRain from './ReactionRain'
+import useFlip from './useFlip'
 import { IconArrowUp, IconArrowDown } from './icons'
 import styles from './LiveBoard.module.css'
 
@@ -64,31 +65,6 @@ function buildFacts(history, players, pool, data) {
     if (facts.length < 4) facts.push({ icon: <IconUsers size={20} />, label: 'Dabei', value: `${players} ${players === 1 ? 'Person' : 'Leute'}`, sub: null })
     if (facts.length < 4) facts.push({ icon: <IconNote size={20} />, label: 'Im Rennen', value: `${pool} ${pool === 1 ? 'Song' : 'Songs'}`, sub: 'für die nächste Runde' })
     return facts.slice(0, 4)
-}
-
-/** Platzwechsel weich animieren (FLIP): alte Position merken, neue messen, Differenz zurückgleiten lassen */
-function useFlip(orderKey, scale = 1) {
-    const nodes = useRef(new Map())
-    const lastTops = useRef(new Map())
-    useLayoutEffect(() => {
-        const tops = new Map()
-        nodes.current.forEach((el, k) => tops.set(k, el.getBoundingClientRect().top))
-        tops.forEach((top, k) => {
-            const before = lastTops.current.get(k)
-            const el = nodes.current.get(k)
-            if (before == null || !el || Math.abs(before - top) < 1) return
-            el.style.transition = 'none'
-            // Auf der skalierten Bühne sind gemessene Pixel größer/kleiner als die inneren
-            el.style.transform = `translateY(${(before - top) / scale}px)`
-            requestAnimationFrame(() => {
-                el.style.transition = 'transform 0.6s cubic-bezier(.2, .8, .2, 1)'
-                el.style.transform = ''
-            })
-        })
-        lastTops.current = tops
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [orderKey])
-    return (key) => (el) => { if (el) nodes.current.set(key, el); else nodes.current.delete(key) }
 }
 
 export default function LiveBoard2({ roomCode, onBack }) {
@@ -229,12 +205,13 @@ export default function LiveBoard2({ roomCode, onBack }) {
     const newcomers = ranked.slice(10).filter(i => isNew(i, clock)).slice(0, 6)
     const live = !!now?.isPlaying
     const emojiOf = (name) => data.players?.[name]?.emoji || '🙂'
-    const cover = (src, seed, by, size) => (
+    // Cover ohne Abzeichen – das Emoji der Person steht beim Namen (wie in der App)
+    const cover = (src, seed, size) => (
         <span className={styles.lb2Cover} style={{ width: size, height: size }}>
             <CoverArt src={src} seed={seed} size={size} radius={Math.round(size * 0.22)} />
-            {by && <span className={styles.lb2Badge} title={`von ${by}`}>{emojiOf(by)}</span>}
         </span>
     )
+    const by = (name) => (name ? ` · ${emojiOf(name)} ${name}` : '')
     const queueShown = queue.slice(0, 4)
     // Grün = kommt sicher weiter: die besten N mit Saldo ≥ +1
     const greenCount = ranked.length ? 1 : 0   // Platz 1 läuft als Nächstes
@@ -269,7 +246,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                         {now ? (
                             <section className={styles.lb2Now} aria-label="Läuft gerade">
                                 <div className={styles.lb2NowRow}>
-                                    {cover(now.imageUrl, now.trackId, nowItem?.addedBy, 150)}
+                                    {cover(now.imageUrl, now.trackId, 150)}
                                     <div className={styles.lb2Text}>
                                         <span className={styles.lb2NowTag}>{now.isPlaying ? <><IconWave size={16} />Läuft</> : 'Pausiert'}</span>
                                         <h2 className={styles.lb2NowTitle}>{now.trackName}</h2>
@@ -301,10 +278,10 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                 <ol className={styles.lb2List}>
                                     {queueShown.map(item => (
                                         <li key={item.id} className={styles.lb2Row}>
-                                            {cover(item.imageUrl, item.spotifyId || item.id, item.addedBy, 46)}
+                                            {cover(item.imageUrl, item.spotifyId || item.id, 46)}
                                             <span className={styles.lb2Text}>
                                                 <span className={styles.lb2Title}>{item.title}</span>
-                                                <span className={styles.lb2Artist}>{item.artist} · {item.addedBy}</span>
+                                                <span className={styles.lb2Artist}>{item.artist}{by(item.addedBy)}</span>
                                             </span>
                                             <span className={styles.lb2Time}>{mmss(item.duration)}</span>
                                         </li>
@@ -323,10 +300,10 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                 <ul className={styles.lb2NewList}>
                                     {newcomers.map(item => (
                                         <li key={item.id} className={styles.lb2NewItem}>
-                                            {cover(item.imageUrl, item.spotifyId || item.id, item.addedBy, 38)}
+                                            {cover(item.imageUrl, item.spotifyId || item.id, 38)}
                                             <span className={styles.lb2Text}>
                                                 <span className={styles.lb2Title}>{item.title}</span>
-                                                <span className={styles.lb2Artist}>{item.artist}</span>
+                                                <span className={styles.lb2Artist}>{item.artist}{by(item.addedBy)}</span>
                                             </span>
                                         </li>
                                     ))}
@@ -356,10 +333,10 @@ export default function LiveBoard2({ roomCode, onBack }) {
                                             {i === 1 && <li className={styles.lb2Cut}><span><IconArrowUp size={16} />Platz 1 läuft als Nächstes</span></li>}
                                             <li ref={setRowRef(item.id)} className={`${styles.lb2Row} ${i < greenCount ? styles.lb2RowTop : ''}`}>
                                                 <span className={styles.lb2No}>{i + 1}</span>
-                                                {cover(item.imageUrl, item.spotifyId || item.id, item.addedBy, 42)}
+                                                {cover(item.imageUrl, item.spotifyId || item.id, 42)}
                                                 <span className={styles.lb2Text}>
                                                     <span className={styles.lb2Title}>{item.title}</span>
-                                                    <span className={styles.lb2Artist}>{isNew(item, clock) && <span className={styles.lbNew}>✨ NEU</span>}{playedIds.has(item.spotifyId) && <span className={styles.lbPlayed}>Lief schon</span>}{item.artist} · {item.addedBy}</span>
+                                                    <span className={styles.lb2Artist}>{isNew(item, clock) && <span className={styles.lbNew}>✨ NEU</span>}{playedIds.has(item.spotifyId) && <span className={styles.lbPlayed}>Lief schon</span>}{item.artist}{by(item.addedBy)}</span>
                                                 </span>
                                                 <span className={styles.lb2Pill} aria-label={`${score} Punkte: ${up}× hoch, ${down}× runter`}>
                                                     <span className={styles.lb2PillUp}><IconArrowUp size={16} />{up}</span>
