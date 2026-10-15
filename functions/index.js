@@ -6,6 +6,7 @@ const db = admin.firestore();
 
 // Spotify Token-Proxy (Amplify / Song raten)
 exports.spotifyToken = require('./spotifyToken').spotifyToken;
+exports.resolveSpotifyLink = require('./resolveSpotifyLink').resolveSpotifyLink;
 
 // Fragekategorien - vollständig aus src/data/questionCategories.js kopiert
 const { questionCategories, getAllQuestions } = require('./questionCategories');

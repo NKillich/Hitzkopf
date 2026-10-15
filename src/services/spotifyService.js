@@ -47,8 +47,8 @@ try {
     }
 } catch { /* ohne Speicher (privater Modus) geht es nur im selben Tab */ }
 
-/** Spotify-Track → Song-Objekt, wie es Suche und Playlists liefern (Amplify) */
-const trackToSong = (track) => ({
+/** Spotify-Track → Song-Objekt, wie es die Suche liefert (Amplify) */
+export const trackToSong = (track) => ({
     id: `spotify_track_${track.id}`,
     spotifyId: track.id,
     title: track.name,
@@ -145,8 +145,7 @@ class SpotifyService {
             'user-modify-playback-state',
             'user-read-playback-state',
             'playlist-read-private',
-            'playlist-read-collaborative',
-            'user-library-read'   // Lieblingssongs (Amplify 2.0 „Meine Playlists“)
+            'playlist-read-collaborative'
         ].join(' ')
 
         const params = new URLSearchParams({
@@ -1346,36 +1345,30 @@ class SpotifyService {
         }
     }
 
+    /** Ein Song per ID als Song-Objekt (für geteilte Spotify-Links) */
+    async getSongById(trackId) {
+        return trackToSong(await this.getTrack(trackId))
+    }
+
+    /** Künstler per ID (Name für „Mehr von …“) */
+    async getArtist(artistId) {
+        await this.ensureValidToken()
+        const res = await fetch(`${SPOTIFY_API_BASE}/artists/${artistId}`, { headers: { 'Authorization': `Bearer ${this.accessToken}` } })
+        if (!res.ok) throw new Error('Künstler nicht gefunden')
+        const a = await res.json()
+        return { id: a.id, name: a.name }
+    }
+
     /**
-     * Songs einer Playlist seitenweise (seit Feb 2026 /playlists/{id}/items – nur eigene oder gemeinsame Playlists,
-     * fremde liefert Spotify nicht: 403). Returns { items: [Song wie bei search()], next: offset | null, total }
+     * Kurzlink (spotify.link/…) auflösen – geht nur serverseitig (Firebase-Funktion resolveSpotifyLink),
+     * im Browser blockiert CORS die Weiterleitung. Returns die lange open.spotify.com-Adresse.
      */
-    async getPlaylistSongs(playlistId, offset = 0, limit = 100) {
-        return this._userTrackPage(`${SPOTIFY_API_BASE}/playlists/${playlistId}/items?limit=${Math.min(limit, 100)}&offset=${offset}`, offset)
-    }
-
-    /** Lieblingssongs (♥) des eingeloggten Nutzers seitenweise – braucht den Scope user-library-read */
-    async getLikedSongs(offset = 0, limit = 50) {
-        return this._userTrackPage(`${SPOTIFY_API_BASE}/me/tracks?limit=${Math.min(limit, 50)}&offset=${offset}`, offset)
-    }
-
-    async _userTrackPage(url, offset) {
-        const token = await this.getStoredUserToken()
-        if (!token) throw new Error('Nicht mit Spotify verbunden.')
-        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}))
-            const e = new Error(err.error?.message || `Spotify-Fehler (HTTP ${res.status})`)
-            e.status = res.status
-            throw e
-        }
-        const data = await res.json()
-        const entries = data.items || []
-        const items = entries
-            .map(entry => entry?.item || entry?.track)   // neue API: item, alte: track
-            .filter(t => t?.id && t.type !== 'episode' && !t.is_local)
-            .map(trackToSong)
-        return { items, next: data.next ? offset + entries.length : null, total: data.total ?? items.length }
+    async resolveShortLink(url) {
+        const auth = getAuth(getApp())
+        await auth.authStateReady()
+        if (!auth.currentUser) await signInAnonymously(auth)
+        const { data } = await httpsCallable(getFunctions(getApp()), 'resolveSpotifyLink')({ url })
+        return data?.url || null
     }
 
     /**

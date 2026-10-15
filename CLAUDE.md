@@ -55,8 +55,10 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
 - App im Entwicklermodus (Regeln seit 9. März 2026): nur **max. 5 freigeschaltete Konten** pro Client-ID (inkl. Entwickler),
   Spotify Premium nötig, nur **eine** Client-ID pro Entwickler – alle Spiele teilen sich diese 5 Plätze. Freischalten:
   developer.spotify.com/dashboard → App → Settings → User Management (Name + E-Mail des Spotify-Kontos).
-- Login ist nur für den Host Pflicht. Gäste brauchen ihn nur für Amplify 2.0 „Meine Playlists“ (eigene Playlists +
-  Lieblingssongs, Scope `user-library-read`); nicht freigeschaltete Konten bekommen 403. Die normale Suche geht ohne Login.
+- Login ist nur für den Host Pflicht – Gäste loggen sich nie ein (Suche läuft über den App-Token der Firebase-Funktion
+  `spotifyToken`). Eigene Songs holen Gäste per „Teilen → Link kopieren“ aus der Spotify-App und „Einfügen“ in Amplify 2.0;
+  Kurzlinks (`spotify.link/…`) löst die Firebase-Funktion `resolveSpotifyLink` auf (veröffentlichen am PC:
+  `firebase deploy --only functions:resolveSpotifyLink`).
 - **Bestehende Client-ID nicht löschen/neu anlegen:** Für neue Client-IDs gilt sofort eine kleinere Endpunkt-Liste
   (für bestehende ist das vorerst verschoben).
 - Songs fremder/öffentlicher (auch nur gefolgter) Playlists liefert die API nicht (403); seit Feb. 2026

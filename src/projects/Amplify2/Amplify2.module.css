@@ -558,7 +558,16 @@
 .mvRoot .mvSwipeIconAdd, .mvRoot .mvSwipeIconDone { width: 36px; height: 36px; border-radius: 18px; align-items: center; justify-content: center; background: color-mix(in srgb, var(--sr-surface) 25%, transparent); }
 .mvRoot .mvSwipeIconAdd { display: flex; }
 
-/* Song vorschlagen → „Meine Playlists“ */
-.mvRoot .mvMineHead { display: flex; align-items: center; gap: 12px; }
-.mvRoot .mvLikedCover { width: 46px; height: 46px; flex: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff; background: linear-gradient(135deg, #4B2BD8, #9AD1C4); }
-.mvRoot .mvMineHead .mvLikedCover { width: 44px; height: 44px; }
+/* Song vorschlagen: Songs aus Spotify holen (Lieblingssongs öffnen, Link einfügen) */
+.mvRoot .mvLinkBox { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 20px; background: var(--sr-surface); }
+.mvRoot .mvLinkRow { display: grid; grid-template-columns: 1.5fr 1fr; gap: 8px; }
+.mvRoot .mvLinkBtn { min-height: 48px; padding: 0 12px; gap: 8px; border-radius: 24px; font-size: 15px; font-weight: 700; text-decoration: none; background: var(--sr-surface2); color: var(--sr-ink); }
+.mvRoot .mvLinkPaste { background: var(--sr-accent); color: var(--sr-on-accent); }
+.mvRoot .mvLinkHeart { color: #1DB954; font-size: 18px; line-height: 1; }
+.mvRoot .mvLinkHelp { align-self: flex-start; gap: 6px; padding: 2px 4px; font-size: 13px; font-weight: 700; color: var(--sr-muted); background: none; }
+.mvRoot .mvLinkSteps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.4; color: var(--sr-muted); }
+.mvRoot .mvLinkSteps strong { color: var(--sr-ink); }
+.mvRoot .mvClipOffer { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border-radius: 18px; background: color-mix(in srgb, var(--sr-ok) 14%, var(--sr-surface)); border: 1.5px solid color-mix(in srgb, var(--sr-ok) 35%, transparent); }
+.mvRoot .mvClipIcon { font-size: 22px; flex: none; }
+.mvRoot .mvClipAdd { flex: none; height: 40px; padding: 0 14px; border-radius: 20px; background: var(--sr-ok); color: var(--sr-on-ok); font-weight: 800; font-size: 14px; }
+.mvRoot .mvToastAction { flex: none; height: 36px; padding: 0 12px; border-radius: 18px; font-weight: 800; font-size: 14px; color: inherit; background: color-mix(in srgb, currentColor 14%, transparent); }
