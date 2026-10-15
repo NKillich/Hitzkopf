@@ -27,12 +27,11 @@ import {
 import ReactionPad from './ReactionPad'
 import Marquee from './Marquee'
 import SwipeRow from './SwipeRow'
-import { parseSpotifyLink, looksLikeSpotifyLink, LIKED_SONGS_URL } from './spotifyLinks'
-import { loadSongMemory, rememberSong, memoryToSong } from './songMemory'
+import { parseSpotifyLink, looksLikeSpotifyLink } from './spotifyLinks'
 import { lastfmTop, lastfmDecadeTag } from './lastfm'
 import useFlip from './useFlip'
 import Confetti from './Confetti'
-import { IconArrowUp, IconArrowDown } from './icons'
+import { IconArrowUp, IconArrowDown, IconSpotify } from './icons'
 import { deleteReactions } from './reactions'
 import styles from './Amplify2.module.css'
 
@@ -683,7 +682,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
     // Einen Song einreichen – true, wenn der Song danach (von dir) in der Playlist ist
     const addToPlaylist = async (item) => {
         const res = await addManyToPlaylist([item])
-        if (res.added) rememberSong(item, 'added')
         if (res.added || res.duplicates) return true
         if (res.error) showToast(res.error, 'bad')
         else if (res.similar) showToast(`Ein sehr ähnlicher Song ist schon drin: „${res.similar.title}“ von ${res.similar.addedBy === myName ? 'dir' : res.similar.addedBy}.`, 'bad')
@@ -750,7 +748,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 const stale = staleItems(next, Date.now()).filter(i => i.id === itemId)
                 return { update: dropUpdate(next, Date.now(), stale) || { playlist: next.playlist }, dropped: stale.length > 0 }
             })
-            if (res?.update && optimistic === 1 && item) rememberSong(item, 'liked')
             if (res?.dropped) showToast('Der Song ist als Ladenhüter rausgeflogen – dein Daumen ist wieder frei.')
             if (res?.own) showToast('Für deine eigenen Songs kannst du nicht abstimmen.', 'bad')
             if (res?.paused) showToast('Der Song ist pausiert – er passt nicht zur aktuellen Runde.', 'bad')
@@ -825,6 +822,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
     // Song → sofort hinzufügen (mit „Rückgängig“), Album → Songliste, Künstler → Suche, Playlist → geht nicht.
     const [linkBusy, setLinkBusy] = useState(false)
     const [clipOffer, setClipOffer] = useState(null)   // Android: Link in der Zwischenablage beim Zurückkommen
+    const [linkDraft, setLinkDraft] = useState('')     // Feld „Link aus Spotify einfügen“ unten
     const lastClipRef = useRef((() => { try { return sessionStorage.getItem('a2_last_clip') || '' } catch { return '' } })())
     const rememberClip = (text) => {
         lastClipRef.current = text
@@ -880,18 +878,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
             setLinkBusy(false)
         }
     }
-    const pasteFromClipboard = async () => {
-        let text = null
-        try { text = await navigator.clipboard.readText() } catch { text = null }
-        if (text == null) {
-            showToast('Einfügen ging nicht automatisch – halte ins Suchfeld gedrückt und wähle „Einfügen“.', 'bad')
-            searchInputRef.current?.focus()
-            return
-        }
-        await addFromLink(text)
-    }
+
     // Android/Chrome: Darf Amplify die Zwischenablage lesen (einmal erlaubt), bietet es beim Zurückkommen aus Spotify
-    // einen neu kopierten Link direkt an. iPhone erlaubt das nicht – dort bleibt der Knopf „Einfügen“.
+    // einen neu kopierten Link direkt an. iPhone erlaubt das nicht – dort fügt man den Link unten ins Feld ein.
     useEffect(() => {
         if (!showAddModal) return
         let cancelled = false
@@ -922,8 +911,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const [genreFilter, setGenreFilter] = useState(null)      // Schlüssel aus SEARCH_GENRES
     const [decadeFilter, setDecadeFilter] = useState(null)    // z. B. 1990
     const [filterSheet, setFilterSheet] = useState(null)      // 'genre' | 'decade' | null
-    const [showMine, setShowMine] = useState(false)           // „♥ Deine Songs“ statt Suchtreffern
-    const [songMemory, setSongMemory] = useState([])
     const [searchArtists, setSearchArtists] = useState([])
     const [searchAlbums, setSearchAlbums] = useState([])
     const [searchMore, setSearchMore] = useState(null)        // null | { random: true, artists | tracks, seen } | { random: false, query, offset }
@@ -1127,7 +1114,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     const openAddModal = () => {
         setAddedInModalIds(new Set())
-        setSongMemory(loadSongMemory())
         // Runden-Modus: Suche gleich passend vorausfüllen (Jahrzehnt: Treffer erscheinen auch ohne Suchwort)
         const r = lobbyData?.roundRule
         if (!searchQuery.trim() && r?.type === 'artist') setSearchQuery(r.artistName)
@@ -1144,7 +1130,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
         setSearchError(null)
         setSearchMore(null)
         setArtistView(null)
-        setShowMine(false)
         setShowAddModal(false)
     }
 
@@ -1905,13 +1890,13 @@ const Amplify2 = ({ onBack, joinCode }) => {
             role: 'Du bist Host',
             intro: 'Du hast die Playlist erstellt. Die Songs laufen über dein Spotify – lass die App am besten offen.',
             now: round === 0 ? `${how} Die erste Runde startest du selbst, danach geht es automatisch weiter.` : how,
-            extra: 'Einen Song entfernst du, indem du ihn lange gedrückt hältst – eigene auch über 🗑. Teilen lädt Gäste ein und öffnet das Live-Board. In den Einstellungen findest du Gerät, Runden-Modus und Teilnehmer-Optionen.'
+            extra: 'Einen Song entfernst du, indem du ihn lange gedrückt hältst – eigene auch über 🗑. Teilen lädt Gäste ein und öffnet das Live-Board. In den Einstellungen findest du Gerät, Runden-Modus und Teilnehmer-Optionen. Hitlisten beim Stöbern: Last.fm.'
         }
         return {
             role: 'Du bist Gast',
             intro: 'Du schlägst Songs vor und stimmst nebenbei ab. Der Host spielt die besten Songs über Spotify.',
             now: `${how} Für eigene Songs kannst du nicht stimmen – dafür entfernst du sie mit 🗑 oder indem du sie lange gedrückt hältst.`,
-            extra: `Tippe auf ein Cover für eine Hörprobe.${lobbyData?.streakEnabled ? ' Streak ist an: Läuft dein Song mit mindestens einer Stimme hoch, ist das ein Nummer-1-Hit – und du bekommst einen Bonus.' : ''}`
+            extra: `Tippe auf ein Cover für eine Hörprobe.${lobbyData?.streakEnabled ? ' Streak ist an: Läuft dein Song mit mindestens einer Stimme hoch, ist das ein Nummer-1-Hit – und du bekommst einen Bonus.' : ''} Hitlisten beim Stöbern: Last.fm.`
         }
     })()
 
@@ -2257,10 +2242,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
             if (albumTracks) view = 'album'
             else if (isLoadingAlbum) view = 'loading'
             else if (artistView) view = 'artist'
-            else if (showMine) view = 'mine'
             else if (!searchable(q)) view = 'prompt'
             else if (searchError && !isSearching) view = 'error'
-            else if (isSearching || searchedQuery !== searchKey) view = searchResults.length ? 'ok' : 'loading'
+            else if (isSearching || searchedQuery !== searchKey) view = 'loading'   // neue Suche → alte Liste sofort weg
             else view = searchResults.length || searchArtists.length || searchAlbums.length ? 'ok' : 'empty'
             const limitReached = myUnqueuedCount >= maxSongs
 
@@ -2316,31 +2300,25 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     {loadingMore ? <IconWave size={16} /> : <IconPlus size={16} />}Mehr laden
                 </button>
             )
-            // Spotify nur noch als dezenter Weg, wenn die Suche nicht reicht
-            const spotifyHint = (
-                <p className={styles.mvSpotifyHint}>
-                    Nicht dabei?{' '}
-                    <button type="button" className={`${styles.mvBtn} ${styles.mvTextLink}`} onClick={pasteFromClipboard} disabled={linkBusy}>Link aus Spotify einfügen</button>
-                    {' · '}
-                    <a className={styles.mvTextLink} href={LIKED_SONGS_URL} target="_blank" rel="noopener noreferrer">♥ Lieblingssongs in Spotify</a>
-                </p>
+            // Unten: Link aus Spotify einfügen (Feld) + runder Knopf, der die Spotify-App öffnet
+            const linkPaste = (
+                <section className={styles.mvLinkPaste} aria-labelledby="mv-link-title">
+                    <h3 id="mv-link-title" className={styles.mvListTitle}>Nicht dabei? Hier Link aus Spotify einfügen:</h3>
+                    <div className={styles.mvFooterRow}>
+                        <input type="text" className={`${styles.mvInput} ${styles.mvLinkInput}`} value={linkDraft} disabled={linkBusy}
+                            placeholder={linkBusy ? 'Song wird geladen …' : 'Spotify-Link hier einfügen'} aria-labelledby="mv-link-title"
+                            autoComplete="off" spellCheck={false} inputMode="url"
+                            onChange={(e) => {
+                                const v = e.target.value
+                                if (looksLikeSpotifyLink(v)) { setLinkDraft(''); addFromLink(v) } else setLinkDraft(v)
+                            }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && linkDraft.trim()) { addFromLink(linkDraft); setLinkDraft('') } }} />
+                        <a className={`${styles.mvBtn} ${styles.mvSpotifyBtn}`} href="https://open.spotify.com" target="_blank" rel="noopener noreferrer" aria-label="Spotify öffnen">
+                            <IconSpotify size={26} />
+                        </a>
+                    </div>
+                </section>
             )
-            // „♥ Deine Songs“: auf diesem Gerät gemerkt (vorgeschlagen / hochgevotet), filterbar übers Suchfeld
-            const mineContent = () => {
-                const f = q.toLocaleLowerCase('de')
-                const match = (e) => !f || `${e.title} ${e.artist}`.toLocaleLowerCase('de').includes(f)
-                const added = songMemory.filter(e => e.added && match(e)).map(memoryToSong)
-                const liked = songMemory.filter(e => e.liked && !e.added && match(e)).map(memoryToSong)
-                if (!added.length && !liked.length) return (
-                    <p className={styles.mvFine}>{songMemory.length ? `Nichts zu „${q}“ in deinen Songs.` : 'Hier sammeln sich deine Songs – alles, was du vorschlägst oder hochvotest, merkt sich Amplify auf diesem Handy.'}</p>
-                )
-                return (
-                    <>
-                        {added.length > 0 && <section className={styles.mvListSection}>{listTitle('Von dir vorgeschlagen')}<ul className={styles.mvList}>{added.slice(0, 50).map(songRow)}</ul></section>}
-                        {liked.length > 0 && <section className={styles.mvListSection}>{listTitle('Gefiel dir')}<ul className={styles.mvList}>{liked.slice(0, 50).map(songRow)}</ul></section>}
-                    </>
-                )
-            }
             const backFromView = () => (albumTracks ? setAlbumTracks(null) : artistView ? setArtistView(null) : closeAddModal())
             const headerTitle = albumTracks ? 'Album' : artistView ? 'Künstler' : 'Song hinzufügen'
 
@@ -2393,7 +2371,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                             if (looksLikeSpotifyLink(e.target.value)) { setSearchQuery(''); addFromLink(e.target.value) } else setSearchQuery(e.target.value)
                                         }}
                                         onKeyDown={(e) => { if (e.key === 'Enter') handleSpotifySearch() }}
-                                        placeholder={showMine ? 'In deinen Songs suchen' : rule?.type === 'artist' ? `Song von ${rule.artistName}` : 'Titel, Band oder Album'}
+                                        placeholder={rule?.type === 'artist' ? `Song von ${rule.artistName}` : 'Titel, Band oder Album'}
                                         aria-label="Songs suchen"
                                         autoComplete="off"
                                         autoFocus
@@ -2407,20 +2385,17 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 </div>
                                 <div className={styles.mvFilterRow} role="group" aria-label="Filter">
                                     {roundRule?.type !== 'artist' && (
-                                        <button type="button" className={`${styles.mvBtn} ${styles.mvFilterBtn} ${effGenre && !showMine ? styles.mvFilterBtnOn : ''}`} onClick={() => setFilterSheet('genre')} aria-haspopup="dialog">
+                                        <button type="button" className={`${styles.mvBtn} ${styles.mvFilterBtn} ${effGenre ? styles.mvFilterBtnOn : ''}`} onClick={() => setFilterSheet('genre')} aria-haspopup="dialog">
                                             {genreLabel || 'Genre'}<IconChevron open={false} />
                                         </button>
                                     )}
                                     {roundRule?.type !== 'decade' && (
-                                        <button type="button" className={`${styles.mvBtn} ${styles.mvFilterBtn} ${effDecade && !showMine ? styles.mvFilterBtnOn : ''}`} onClick={() => setFilterSheet('decade')} aria-haspopup="dialog">
+                                        <button type="button" className={`${styles.mvBtn} ${styles.mvFilterBtn} ${effDecade ? styles.mvFilterBtnOn : ''}`} onClick={() => setFilterSheet('decade')} aria-haspopup="dialog">
                                             {effDecade ? decadeLabel(effDecade) : 'Jahrzehnt'}<IconChevron open={false} />
                                         </button>
                                     )}
-                                    <button type="button" className={`${styles.mvBtn} ${styles.mvFilterBtn} ${showMine ? styles.mvFilterBtnOn : ''}`} onClick={() => { setSongMemory(loadSongMemory()); setShowMine(m => !m) }} aria-pressed={showMine}>
-                                        ♥ Deine Songs
-                                    </button>
                                 </div>
-                                {q && effGenre && !showMine && <p className={styles.mvFilterNote}>Mit Suchwort zählt nur das Jahrzehnt – das Genre gilt fürs Stöbern ohne Suchwort.</p>}
+                                {q && effGenre && <p className={styles.mvFilterNote}>Mit Suchwort zählt nur das Jahrzehnt – das Genre gilt fürs Stöbern ohne Suchwort.</p>}
                             </div>
                         </>)}
 
@@ -2437,7 +2412,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 {artistView.albums.length > 0 && <section className={styles.mvListSection}>{listTitle('Alben & Singles')}<ul className={styles.mvList}>{artistView.albums.map(songRow)}</ul></section>}
                                 {!artistView.tracks.length && !artistView.albums.length && <p className={styles.mvFine}>Zu diesem Künstler hat Spotify gerade nichts geliefert.</p>}
                             </>))}
-                            {view === 'mine' && mineContent()}
                             {view === 'ok' && (<>
                                 {searchArtists.length > 0 && (
                                     <section className={styles.mvListSection}>
@@ -2457,12 +2431,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                         {listTitle(randomSearch(q) ? `Bekannte Songs: ${[genreLabel, decadeFrom && decadeLabel(decadeFrom)].filter(Boolean).join(' · ')}` : 'Songs')}
                                         <ul className={styles.mvList}>{searchResults.map(songRow)}</ul>
                                         {moreButton(loadMoreResults, !!searchMore)}
-                                        {randomSearch(q) && <p className={styles.mvSource}>Hitlisten: <a href="https://www.last.fm" target="_blank" rel="noopener noreferrer">Last.fm</a></p>}
                                     </section>
                                 )}
                                 {searchAlbums.length > 0 && <section className={styles.mvListSection}>{listTitle('Alben')}<ul className={styles.mvList}>{searchAlbums.map(songRow)}</ul></section>}
                             </>)}
-                            {view === 'loading' && skeletons(isLoadingAlbum ? 'Wird geladen' : 'Spotify wird durchsucht')}
+                            {view === 'loading' && (<>
+                                <p className={styles.mvLoadingText} role="status"><IconWave size={16} />{isLoadingAlbum ? 'Album wird geladen …' : randomSearch(q) ? 'Bekannte Songs werden gesucht …' : 'Spotify wird durchsucht …'}</p>
+                                {skeletons('Wird geladen')}
+                            </>)}
                             {view === 'prompt' && (
                                 <div className={styles.mvEmpty}>
                                     <span className={styles.mvEmptyIcon}><IconSearch size={24} /></span>
@@ -2485,7 +2461,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={handleSpotifySearch}><IconRetry />Erneut versuchen</button>
                                 </div>
                             )}
-                            {!albumTracks && view !== 'loading' && spotifyHint}
+                            {!albumTracks && !artistView && linkPaste}
                         </div>
                     </div>
                     <div className={styles.mvFooter}>
@@ -2502,7 +2478,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 const on = (filterSheet === 'genre' ? genreFilter : decadeFilter) === value
                                 return (
                                     <button key={label} type="button" className={`${styles.mvBtn} ${styles.mvSheetOption} ${on ? styles.mvSheetOptionOn : ''}`} aria-pressed={on}
-                                        onClick={() => { if (filterSheet === 'genre') setGenreFilter(value); else setDecadeFilter(value); setShowMine(false); setFilterSheet(null) }}>
+                                        onClick={() => { if (filterSheet === 'genre') setGenreFilter(value); else setDecadeFilter(value); setFilterSheet(null) }}>
                                         {label}
                                     </button>
                                 )
