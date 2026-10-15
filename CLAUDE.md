@@ -40,7 +40,7 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
 - Ladenhüter (`dropBelow`, `dropAfterMin`), ✨ NEU (10 Min.), Runden-Modi (Künstler/Jahrzehnt/Stichwort), Live-Board
   mit Top 10, Live-Emoji-Reaktionen.
 - „Song vorschlagen“: Suche (Titel/Band/Album) mit Filtern **Genre** (`SEARCH_GENRES`, Spotify-Genres hängen am Künstler)
-  und **Jahrzehnt**; nur Filter ohne Wort → zufällige Seiten aus den beliebtesten ~150 Treffern, „Mehr laden“ ohne Dopplungen.
+  und **Jahrzehnt**; nur Filter ohne Wort → je 50 Treffer nach Beliebtheit sortiert, Top 20 gemischt, „Mehr laden“ in Zehnerblöcken (`market=DE`).
   Künstler-Seite, „♥ Deine Songs“ (Gedächtnis pro Gerät, `localStorage` `a2_song_memory`), Spotify-Link einfügen als Rückfallebene.
 - Logik ohne React in `amplifyLogic.js` (App und Board nutzen dieselben Funktionen).
 
