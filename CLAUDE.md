@@ -52,8 +52,15 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
   nur das Gerät mit `hostUid` darf die Lobby löschen. Test-Lobbys deshalb ohne `hostUid` anlegen.
 
 ## Spotify-Grenzen (Stand Okt. 2026)
-- App im Entwicklermodus: nur max. 25 freigeschaltete Konten können sich einloggen – Login ist nur für den Host Pflicht.
-- Songs fremder/öffentlicher Playlists liefert die API nicht (403); seit Feb. 2026 `/playlists/{id}/items` statt `/tracks`.
+- App im Entwicklermodus (Regeln seit 9. März 2026): nur **max. 5 freigeschaltete Konten** pro Client-ID (inkl. Entwickler),
+  Spotify Premium nötig, nur **eine** Client-ID pro Entwickler – alle Spiele teilen sich diese 5 Plätze. Freischalten:
+  developer.spotify.com/dashboard → App → Settings → User Management (Name + E-Mail des Spotify-Kontos).
+- Login ist nur für den Host Pflicht. Gäste brauchen ihn nur für Amplify 2.0 „Meine Playlists“ (eigene Playlists +
+  Lieblingssongs, Scope `user-library-read`); nicht freigeschaltete Konten bekommen 403. Die normale Suche geht ohne Login.
+- **Bestehende Client-ID nicht löschen/neu anlegen:** Für neue Client-IDs gilt sofort eine kleinere Endpunkt-Liste
+  (für bestehende ist das vorerst verschoben).
+- Songs fremder/öffentlicher (auch nur gefolgter) Playlists liefert die API nicht (403); seit Feb. 2026
+  `/playlists/{id}/items` statt `/tracks` (Einträge evtl. `item` statt `track` – der Code liest beides).
   Abspielen einer Playlist per `context_uri` funktioniert.
 - `preview_url` ist leer → Hörprobe über den eingebetteten Player (`open.spotify.com/embed/track/<id>`).
 - Suche: höchstens 10 Treffer pro Anfrage.
