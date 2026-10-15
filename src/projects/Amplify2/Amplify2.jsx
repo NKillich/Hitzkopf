@@ -1160,18 +1160,20 @@ const Amplify2 = ({ onBack, joinCode }) => {
     // angestellt – der laufende Song spielt zu Ende. Vorher Abgleich, damit nichts doppelt landet (nicht während
     // der Backup-Playlist: deren eigene nächste Songs stehen auch in der Liste).
     const pushToSpotify = async (ids, device) => {
-        if (!ids.length) return
+        if (!ids.length) return false
         let inSpotify = []
         const onBackup = !!lobbyData?.backupPlaylist?.uri && rawNowPlaying?.contextUri === lobbyData.backupPlaylist.uri
         if (!onBackup) { try { inSpotify = await spotifyService.getQueueIds() } catch { /* ohne Abgleich weiter */ } }
         let rest = ids
-        if (!rawNowPlaying?.isPlaying) {
+        const startNow = !rawNowPlaying?.isPlaying
+        if (startNow) {
             await spotifyService.playOnDevice([`spotify:track:${ids[0]}`], device)
             rest = ids.slice(1)
         }
         for (const id of rest) {
             if (!inSpotify.includes(id)) await spotifyService.addToQueue(`spotify:track:${id}`, device)
         }
+        return startNow   // true = läuft schon direkt, nichts mehr zu überspringen
     }
     // Übergabe geschafft – die Runde liegt bei Spotify
     const handedOver = () => ({ pendingBatch: null })
@@ -1220,8 +1222,26 @@ const Amplify2 = ({ onBack, joinCode }) => {
         }
     }
 
+    // Überspringen: Steht noch nichts von uns bei Spotify an (Platz 1 wird sonst erst 5 s vor Songende festgelegt),
+    // würde Spotify einfach weiterspielen (Backup-Playlist/Autoplay). Dann zuerst Platz 1 festlegen und anstellen –
+    // übersprungen wird nach der Übergabe (applyPendingBatch).
     const handleSkip = async () => {
-        try { await spotifyService.skipNext() } catch (e) { showToast(friendlySpotifyError(e), 'bad') }
+        try {
+            const data = latestLobbyRef.current
+            const queued = data ? upcomingQueue(data, Date.now()).length > 0 : true
+            const hasSongs = !!data && activePoolOf(data).some(i => i.spotifyId && i.type === 'song')
+            if (data?.pendingBatch) { skipAfterPushRef.current = true; return }   // Übergabe läuft schon
+            if (!queued && hasSongs) {
+                skipAfterPushRef.current = true
+                const res = await lockNextSong(data.votingRound || 0)
+                if (res?.update) return
+                skipAfterPushRef.current = false   // nichts festgelegt (z. B. gerade schon passiert) → normal springen
+            }
+            await spotifyService.skipNext()
+        } catch (e) {
+            skipAfterPushRef.current = false
+            showToast(friendlySpotifyError(e), 'bad')
+        }
     }
 
     const handleVolume = (v) => {
@@ -1243,10 +1263,12 @@ const Amplify2 = ({ onBack, joinCode }) => {
             batchSendingRef.current = true
             try {
                 const device = await pickDevice()
-                await pushToSpotify(pending.spotifyIds, device)
+                const started = await pushToSpotify(pending.spotifyIds, device)
                 if (skipAfterPushRef.current) {
                     skipAfterPushRef.current = false
-                    try { await spotifyService.skipNext() } catch { /* dann läuft er nach dem fremden Song */ }
+                    if (!started) {
+                        try { await spotifyService.skipNext() } catch { /* dann läuft er nach dem laufenden Song */ }
+                    }
                 }
                 setSpotifyError(null)
                 setDeviceProblem(null)
@@ -2252,7 +2274,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
         const full = myUnqueuedCount >= maxSongs
         const onBackup = showNow && !nowItem && !!lobbyData.backupPlaylist?.uri && nowPlaying.contextUri === lobbyData.backupPlaylist.uri
         // Grün = kommt sicher weiter: die besten N mit Saldo ≥ +1 (sie stehen durch die Sortierung immer oben)
-        const greenCount = activeItems.length ? 1 : 0   // Platz 1 läuft als Nächstes
+        // Steht Platz 1 schon fest (bei Spotify angestellt), bleibt er mit Schloss oben in der Liste – keine eigene Sektion
+        const lockedCount = queueItems.length
+        const greenCount = !lockedCount && activeItems.length ? 1 : 0   // Platz 1 läuft als Nächstes
         const byName = (name) => (name === myName ? 'du' : name)
         const scoreNum = (n) => <span className={styles.mvNum}>{n < 0 && <span className={styles.mvSign}>−</span>}{Math.abs(n)}</span>
 
@@ -2319,28 +2343,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
                         </section>
                     )}
 
-                    {queueItems.length > 0 && (
-                        <section aria-label="Als Nächstes">
-                            <div className={styles.mvSecHead}>
-                                <h2 className={styles.mvSecTitle}>Als Nächstes</h2>
-                                <span className={styles.mvSecMeta} title="Steht fest – ist schon bei Spotify"><IconLock size={16} /></span>
-                            </div>
-                            <ol className={styles.mvPlaylist}>
-                                {queueItems.map(item => (
-                                    <li key={item.id} className={styles.mvTrack}>
-                                        {coverWithBadge(item.imageUrl, item.spotifyId || item.id, item.addedBy)}
-                                        <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>
-                                            <span className={styles.mvRowName}>{item.title}</span>
-                                            <span className={styles.mvRowMeta}>{item.artist}</span>
-                                            <span className={styles.mvByLine}>{byName(item.addedBy)}</span>
-                                        </span>
-                                        <span className={styles.mvTrackTime}>{mmss(item.duration)}</span>
-                                    </li>
-                                ))}
-                            </ol>
-                        </section>
-                    )}
-
                     <section aria-label="Im Voting">
                         <div className={styles.mvSecHead}>
                             <h2 className={styles.mvSecTitle}>Im Voting</h2>
@@ -2349,7 +2351,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 {downAllowed && <span className={`${styles.mvFreeDown} ${downLeft ? '' : styles.mvFreeEmpty}`}><IconArrowDown size={15} />{downFree ?? '∞'}</span>}
                             </span>
                         </div>
-                        {poolItems.length === 0 ? (
+                        {poolItems.length === 0 && lockedCount === 0 ? (
                             <div className={styles.mvEmpty}>
                                 <span className={styles.mvEmptyIcon}><IconNote size={24} /></span>
                                 <p className={styles.mvEmptyTitle}>Noch keine Songs im Voting</p>
@@ -2357,8 +2359,21 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             </div>
                         ) : (
                             <ol className={styles.mvPlaylist}>
+                                {queueItems.map((item, idx) => (
+                                    <li key={item.id} className={`${styles.mvTrack} ${styles.mvTrackTop}`}>
+                                        <span className={styles.mvTrackNo}>{idx + 1}</span>
+                                        {coverWithBadge(item.imageUrl, item.spotifyId || item.id, item.addedBy)}
+                                        <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>
+                                            <span className={styles.mvRowName}>{item.title}</span>
+                                            <span className={styles.mvRowMeta}>{item.artist}</span>
+                                            <span className={styles.mvByLine}>{byName(item.addedBy)}</span>
+                                        </span>
+                                        <span className={styles.mvLocked} title="Steht fest – ist schon bei Spotify" aria-label="Steht fest"><IconLock size={18} /></span>
+                                    </li>
+                                ))}
+                                {lockedCount > 0 && <li className={styles.mvCutLine}><span><IconArrowUp size={14} />Platz 1 läuft als Nächstes</span></li>}
                                 {activeItems.length === 0 && (
-                                    <li className={styles.mvPausedEmpty}>Noch kein passender Song im Voting – schlag unten einen vor.</li>
+                                    <li className={styles.mvPausedEmpty}>{pausedItems.length ? 'Noch kein passender Song im Voting – schlag unten einen vor.' : 'Noch kein weiterer Song im Voting – schlag unten einen vor.'}</li>
                                 )}
                                 {[...activeItems, ...pausedItems].map((item, idx) => {
                                     const paused = idx >= activeItems.length
@@ -2377,12 +2392,12 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     )
                                     return (
                                         <Fragment key={item.id}>
-                                            {idx === 1 && !paused && <li className={styles.mvCutLine}><span><IconArrowUp size={14} />Platz 1 läuft als Nächstes</span></li>}
+                                            {idx === 1 && !paused && !lockedCount && <li className={styles.mvCutLine}><span><IconArrowUp size={14} />Platz 1 läuft als Nächstes</span></li>}
                                             {paused && idx === activeItems.length && rule && (
                                                 <li className={styles.mvCutLine}><span>Pausiert – passt nicht zur {ruleLabel(rule)}</span></li>
                                             )}
                                             <li className={`${styles.mvTrack} ${top ? styles.mvTrackTop : ''} ${paused ? styles.mvTrackPaused : ''}`}>
-                                                <span className={styles.mvTrackNo}>{paused ? '' : idx + 1}</span>
+                                                <span className={styles.mvTrackNo}>{paused ? '' : lockedCount + idx + 1}</span>
                                                 {coverWithBadge(item.imageUrl, item.spotifyId || item.id, item.addedBy)}
                                                 {canRemove ? (
                                                     <button type="button" className={`${styles.mvBtn} ${styles.mvTrackText}`} onClick={() => setConfirm({ kind: 'remove', item })} aria-label={`${item.title} – entfernen?`}>{text}</button>
