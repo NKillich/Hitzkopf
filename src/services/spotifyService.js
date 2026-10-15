@@ -32,6 +32,21 @@ const STORAGE_KEYS = {
     RETURN_TO: 'spotify_return_to'
 }
 
+// Öffnet sich der Spotify-Login in einem neuen Tab, ist dessen sessionStorage leer (Code-Verifier und Rücksprung-
+// ziel fehlen). Darum vor dem Login kurz in localStorage sichern und beim Laden mit ?code=… zurückholen.
+const LOGIN_BACKUP = 'spotify_login_backup'
+const LOGIN_BACKUP_MAX_AGE = 15 * 60000
+try {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('code')) {
+        const backup = JSON.parse(localStorage.getItem(LOGIN_BACKUP) || 'null')
+        if (backup && Date.now() - backup.at < LOGIN_BACKUP_MAX_AGE && !sessionStorage.getItem(STORAGE_KEYS.PKCE_VERIFIER)) {
+            sessionStorage.setItem(STORAGE_KEYS.PKCE_VERIFIER, backup.verifier)
+            if (backup.returnTo && !sessionStorage.getItem(STORAGE_KEYS.RETURN_TO)) sessionStorage.setItem(STORAGE_KEYS.RETURN_TO, backup.returnTo)
+        }
+        localStorage.removeItem(LOGIN_BACKUP)
+    }
+} catch { /* ohne Speicher (privater Modus) geht es nur im selben Tab */ }
+
 /** Spotify-Track → Song-Objekt, wie es Suche und Playlists liefern (Amplify) */
 const trackToSong = (track) => ({
     id: `spotify_track_${track.id}`,
@@ -107,7 +122,8 @@ class SpotifyService {
 
     /**
      * Login-URL für Host (PKCE, mit Streaming-Scopes für Web Playback)
-     * Speichert code_verifier in sessionStorage. Vor Redirect sessionStorage.setItem('spotify_return_to', 'musicvoter') setzen.
+     * Speichert code_verifier in sessionStorage (plus kurze Sicherung für einen neuen Tab).
+     * Vor dem Aufruf sessionStorage.setItem('spotify_return_to', 'musicvoter') setzen.
      */
     async getAuthUrlWithPKCE() {
         if (!this.clientId) throw new Error('Spotify Client ID fehlt')
@@ -117,6 +133,9 @@ class SpotifyService {
 
         if (typeof sessionStorage !== 'undefined') {
             sessionStorage.setItem(STORAGE_KEYS.PKCE_VERIFIER, codeVerifier)
+            try {
+                localStorage.setItem(LOGIN_BACKUP, JSON.stringify({ verifier: codeVerifier, returnTo: sessionStorage.getItem(STORAGE_KEYS.RETURN_TO), at: Date.now() }))
+            } catch { /* egal – dann nur im selben Tab */ }
         }
 
         const scopes = [

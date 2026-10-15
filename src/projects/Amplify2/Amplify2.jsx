@@ -38,6 +38,19 @@ const AVATARS = [
     '😎', '🤩', '🥳', '😜', '🤠', '👽', '🤖', '👻', '🦄', '🐶', '🐱', '🦊', '🐻', '🐼', '🐸',
     '🐵', '🦁', '🐯', '🐙', '🦖', '🎸', '🎤', '🎧', '🥁', '🎷', '🕺', '💃', '🍕', '🍹', '🔥'
 ]
+// Spotify-Login in neuem Tab zurück (?code=…): Raum, Name und Profilbild aus der kurzen Sicherung übernehmen,
+// sonst landet man auf der Startseite. Der Wiedereintritt klappt im selben Browser (gleiche Geräte-Kennung).
+const A2_LOGIN_BACKUP = 'a2_login_backup'
+try {
+    if (new URLSearchParams(window.location.search).has('code')) {
+        const backup = JSON.parse(localStorage.getItem(A2_LOGIN_BACKUP) || 'null')
+        if (backup && Date.now() - backup.at < 15 * 60000 && !sessionStorage.getItem('a2_roomId')) {
+            for (const [key, value] of Object.entries(backup.session || {})) if (value) sessionStorage.setItem(key, value)
+        }
+        localStorage.removeItem(A2_LOGIN_BACKUP)
+    }
+} catch { /* ohne Speicher geht es nur im selben Tab */ }
+
 const getStoredName = () => sessionStorage.getItem('a2_name') || ''
 const getOrCreateEmoji = () => {
     const stored = sessionStorage.getItem('a2_emoji')
@@ -247,7 +260,8 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     console.error('Spotify Callback Fehler:', e)
                     if (!cancelled) showToast('Spotify konnte nicht verbunden werden: ' + (e.message || 'Unbekannter Fehler'), 'bad')
                 } finally {
-                    if (!cancelled) spotifyService.isUserLoggedIn().then(setSpotifyConnected)
+                    // Auch nach „cancelled“ (StrictMode im Dev-Modus): nur dieser Lauf hat den Code getauscht
+                    spotifyService.isUserLoggedIn().then(setSpotifyConnected)
                 }
             })()
             return () => { cancelled = true }
@@ -1194,6 +1208,10 @@ const Amplify2 = ({ onBack, joinCode }) => {
         try {
             if (backToMine) sessionStorage.setItem('a2_after_login', 'mine')
             sessionStorage.setItem('spotify_return_to', 'amplify2')
+            try {
+                const session = Object.fromEntries(['a2_roomId', 'a2_name', 'a2_emoji', 'a2_after_login'].map(k => [k, sessionStorage.getItem(k)]))
+                localStorage.setItem(A2_LOGIN_BACKUP, JSON.stringify({ session, at: Date.now() }))
+            } catch { /* egal – dann nur im selben Tab */ }
             const url = await spotifyService.getAuthUrlWithPKCE()
             window.location.href = url
         } catch (e) {
