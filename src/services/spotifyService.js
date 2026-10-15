@@ -32,6 +32,25 @@ const STORAGE_KEYS = {
     RETURN_TO: 'spotify_return_to'
 }
 
+/** Spotify-Track → Song-Objekt, wie es Suche und Playlists liefern (Amplify) */
+const trackToSong = (track) => ({
+    id: `spotify_track_${track.id}`,
+    spotifyId: track.id,
+    title: track.name,
+    artist: (track.artists || []).map(a => a.name).join(', '),
+    artistIds: (track.artists || []).map(a => a.id).filter(Boolean),
+    album: track.album?.name || '',
+    releaseYear: parseInt(track.album?.release_date, 10) || null,
+    type: 'song',
+    source: 'spotify',
+    spotifyUrl: track.external_urls?.spotify || null,
+    previewUrl: track.preview_url || null,
+    imageUrl: track.album?.images?.[0]?.url || null,
+    duration: track.duration_ms,
+    votes: {},
+    addedAt: Date.now()
+})
+
 class SpotifyService {
     constructor() {
         this.clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
@@ -107,7 +126,8 @@ class SpotifyService {
             'user-modify-playback-state',
             'user-read-playback-state',
             'playlist-read-private',
-            'playlist-read-collaborative'
+            'playlist-read-collaborative',
+            'user-library-read'   // Lieblingssongs (Amplify 2.0 „Meine Playlists“)
         ].join(' ')
 
         const params = new URLSearchParams({
@@ -408,23 +428,7 @@ class SpotifyService {
 
             const data = await response.json()
             
-            const tracks = (data.tracks?.items || []).map(track => ({
-                id: `spotify_track_${track.id}`,
-                spotifyId: track.id,
-                title: track.name,
-                artist: track.artists.map(a => a.name).join(', '),
-                artistIds: track.artists.map(a => a.id),
-                album: track.album.name,
-                releaseYear: parseInt(track.album.release_date, 10) || null,
-                type: 'song',
-                source: 'spotify',
-                spotifyUrl: track.external_urls.spotify,
-                previewUrl: track.preview_url,
-                imageUrl: track.album.images[0]?.url,
-                duration: track.duration_ms,
-                votes: {},
-                addedAt: Date.now()
-            }))
+            const tracks = (data.tracks?.items || []).map(trackToSong)
 
             const albums = (data.albums?.items || []).map(album => ({
                 id: `spotify_album_${album.id}`,
@@ -1255,13 +1259,17 @@ class SpotifyService {
             const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}))
-                throw new Error(err.error?.message || 'Eigene Playlists konnten nicht geladen werden.')
+                const e = new Error(err.error?.message || 'Eigene Playlists konnten nicht geladen werden.')
+                e.status = res.status   // 403 = Konto im Entwicklermodus nicht freigeschaltet
+                throw e
             }
             const data = await res.json()
             const page = (data.items || []).filter(Boolean).map(pl => ({
                 id: pl.id,
                 name: pl.name,
                 owner: pl.owner?.display_name || pl.owner?.id || '',
+                ownerId: pl.owner?.id || null,
+                collaborative: !!pl.collaborative,
                 imageUrl: pl.images?.[0]?.url || null,
                 // Seit Feb 2026: items statt tracks, und nur für eigene/gemeinsame Playlists vorhanden
                 trackCount: pl.items?.total ?? pl.tracks?.total ?? 0,
@@ -1320,66 +1328,35 @@ class SpotifyService {
     }
 
     /**
-     * Lädt alle Tracks einer Playlist (mit Pagination).
-     * Versucht zuerst den User-Token; fällt bei 401/403 auf Client Credentials zurück
-     * (funktioniert für öffentliche Playlists ohne Playlist-Scope).
+     * Songs einer Playlist seitenweise (seit Feb 2026 /playlists/{id}/items – nur eigene oder gemeinsame Playlists,
+     * fremde liefert Spotify nicht: 403). Returns { items: [Song wie bei search()], next: offset | null, total }
      */
-    async getPlaylistTracks(playlistId) {
-        const userToken = await this.getStoredUserToken()
+    async getPlaylistSongs(playlistId, offset = 0, limit = 100) {
+        return this._userTrackPage(`${SPOTIFY_API_BASE}/playlists/${playlistId}/items?limit=${Math.min(limit, 100)}&offset=${offset}`, offset)
+    }
 
-        let activeToken = userToken
-        if (!activeToken) {
-            await this.ensureValidToken()
-            activeToken = this.accessToken
+    /** Lieblingssongs (♥) des eingeloggten Nutzers seitenweise – braucht den Scope user-library-read */
+    async getLikedSongs(offset = 0, limit = 50) {
+        return this._userTrackPage(`${SPOTIFY_API_BASE}/me/tracks?limit=${Math.min(limit, 50)}&offset=${offset}`, offset)
+    }
+
+    async _userTrackPage(url, offset) {
+        const token = await this.getStoredUserToken()
+        if (!token) throw new Error('Nicht mit Spotify verbunden.')
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            const e = new Error(err.error?.message || `Spotify-Fehler (HTTP ${res.status})`)
+            e.status = res.status
+            throw e
         }
-        if (!activeToken) throw new Error('Nicht mit Spotify verbunden.')
-
-        const tokenType = activeToken === userToken ? 'User-Token' : 'Client-Credentials'
-        log(`[SpotifyService] getPlaylistTracks "${playlistId}" | Token-Typ: ${tokenType}`)
-
-        const fetchPage = async (url, token) => {
-            log(`[SpotifyService] GET ${url.replace(SPOTIFY_API_BASE, '')}`)
-            return fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
-        }
-
-        let tracks = []
-        // Kein market=from_token – funktioniert nicht mit Client-Credentials und blockiert manche öffentlichen Playlists
-        let url = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks?limit=100`
-
-        while (url) {
-            let res = await fetchPage(url, activeToken)
-            log(`[SpotifyService] Response: ${res.status} ${res.statusText}`)
-
-            if (!res.ok) {
-                const errText = await res.text().catch(() => '')
-                console.error(`[SpotifyService] getPlaylistTracks FEHLER ${res.status}:`, errText)
-                let errMsg = 'Zugriff verweigert'
-                try { errMsg = JSON.parse(errText)?.error?.message || errMsg } catch {}
-                throw new Error(`Playlist-Tracks Fehler (HTTP ${res.status}): ${errMsg}`)
-            }
-
-            const data = await res.json()
-            const pageTracks = (data.items || [])
-                .filter(item => item?.track?.uri && item?.track?.type !== 'episode')
-                .map(item => ({
-                    id: item.track.id,
-                    name: item.track.name,
-                    artist: item.track.artists?.map(a => a.name).join(', ') || '',
-                    album: item.track.album?.name || '',
-                    albumImage: item.track.album?.images?.[0]?.url || null,
-                    uri: item.track.uri,
-                    durationMs: item.track.duration_ms ?? null,
-                    artistIds: item.track.artists?.map(a => a.id).filter(Boolean) || [],
-                    releaseYear: parseInt(item.track.album?.release_date, 10) || null
-                }))
-
-            log(`[SpotifyService] Seite geladen: ${pageTracks.length} Tracks (gesamt: ${tracks.length + pageTracks.length})`)
-            tracks = [...tracks, ...pageTracks]
-            url = data.next || null
-        }
-
-        log(`[SpotifyService] ✓ getPlaylistTracks fertig: ${tracks.length} Tracks total`)
-        return tracks
+        const data = await res.json()
+        const entries = data.items || []
+        const items = entries
+            .map(entry => entry?.item || entry?.track)   // neue API: item, alte: track
+            .filter(t => t?.id && t.type !== 'episode' && !t.is_local)
+            .map(trackToSong)
+        return { items, next: data.next ? offset + entries.length : null, total: data.total ?? items.length }
     }
 
     /**
