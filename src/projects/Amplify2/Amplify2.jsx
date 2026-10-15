@@ -26,6 +26,7 @@ import {
 } from './amplifyLogic'
 import ReactionPad from './ReactionPad'
 import Marquee from './Marquee'
+import SwipeRow from './SwipeRow'
 import useFlip from './useFlip'
 import Confetti from './Confetti'
 import { IconArrowUp, IconArrowDown } from './icons'
@@ -1976,8 +1977,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 else if (takenByOther) meta = existing.queuedRound != null ? 'Schon in der Warteschlange' : `Schon drin · von ${existing.addedBy}`
                 else if (mine) meta = removable ? 'Von dir eingereicht · nochmal tippen zum Entfernen' : 'Von dir eingereicht'
                 else if (problem) meta = problem
+                // Nach rechts wischen = hinzufügen (wie das ➕); gesperrte Treffer federn zurück und sagen warum
+                const swipeMode = isAlbum || mine ? 'off' : (existing || blocked) ? 'blocked' : 'add'
+                const blockedReason = limitReached && !existing && !problem
+                    ? `Du hast schon ${maxSongs} Songs drin – sobald einer läuft, ist wieder Platz.`
+                    : meta
                 return (
-                    <li key={item.id} className={`${styles.mvResult} ${mine ? styles.mvRowAdded : ''} ${takenByOther || problem ? styles.mvResultMuted : ''}`}>
+                    <SwipeRow key={item.id} mode={swipeMode} onAdd={() => handleAddItem(item)} onBlocked={() => showToast(blockedReason, 'bad')}
+                        className={`${styles.mvResult} ${mine ? styles.mvRowAdded : ''} ${takenByOther || problem ? styles.mvResultMuted : ''}`}>
                         {previewBtn(item)}
                         <button type="button"
                             className={`${styles.mvBtn} ${styles.mvResultMain}`}
@@ -1993,7 +2000,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 {isAlbum ? <IconNext /> : (adding ? <IconWave size={16} /> : (mine ? <IconCheck size={16} /> : (takenByOther ? <IconUsers size={16} /> : (blocked ? <IconLock size={16} /> : <IconPlus size={18} />))))}
                             </span>
                         </button>
-                    </li>
+                    </SwipeRow>
                 )
             }
 
@@ -2184,7 +2191,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <h2 className={styles.mvCardTitle}>Backup-Playlist</h2>
                                     {lobbyData.backupPlaylist?.uri && <span className={`${styles.mvChip} ${styles.mvChipOk}`}>aktiv</span>}
                                 </div>
-                                <p className={styles.mvFine}>Läuft, wenn kein Song im Voting ist. Kommt ein neuer Song dazu, spielt er nach dem laufenden Backup-Song.</p>
+                                <p className={styles.mvFine}>Läuft, wenn kein Song in der Warteschlange ist. Kommt ein neuer Song dazu, spielt er nach dem laufenden Backup-Song.</p>
                                 {lobbyData.backupPlaylist?.uri && (
                                     <div className={styles.mvBackupNow}>
                                         <CoverArt src={lobbyData.backupPlaylist.imageUrl} seed={lobbyData.backupPlaylist.uri} size={46} radius={10} />
@@ -2352,7 +2359,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
             )
         }
 
-        // ── Playlist: Läuft → Als Nächstes (fest) → Im Voting (die besten N kommen weiter) ──
+        // ── Playlist: Läuft → Warteschlange (Platz 1 über der gestrichelten Linie läuft als Nächstes) ──
         const downAllowed = voteLimits.down !== 0
         const upFree = voteLimits.up === UNLIMITED ? null : Math.max(0, voteLimits.up - myUpUsed)
         const downFree = voteLimits.down === UNLIMITED ? null : Math.max(0, voteLimits.down - myDownUsed)
@@ -2366,7 +2373,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
         // Grün = kommt sicher weiter: die besten N mit Saldo ≥ +1 (sie stehen durch die Sortierung immer oben)
         // Steht Platz 1 schon fest (bei Spotify angestellt), bleibt er mit Schloss oben in der Liste – keine eigene Sektion
         const lockedCount = queueItems.length
-        const greenCount = !lockedCount && activeItems.length ? 1 : 0   // Platz 1 läuft als Nächstes
         const byName = (name) => `${emojiOf(name)} ${name === myName ? 'du' : name}`
         const scoreNum = (n) => <span className={styles.mvNum}>{n < 0 && <span className={styles.mvSign}>−</span>}{Math.abs(n)}</span>
 
@@ -2400,7 +2406,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             <IconPlay size={18} />Backup-Playlist starten
                         </button>
                     ) : (
-                        <p className={styles.mvHintLine}>Die Musik startet mit dem ersten Song im Voting. Tipp: Wähl in den Einstellungen eine Backup-Playlist – die läuft, solange keiner da ist.</p>
+                        <p className={styles.mvHintLine}>Die Musik startet mit dem ersten Song in der Warteschlange. Tipp: Wähl in den Einstellungen eine Backup-Playlist – die läuft, solange keiner da ist.</p>
                     ))}
                     {rule && <p className={styles.mvRuleBanner}><span aria-hidden="true">{ruleEmoji(rule)}</span>{ruleLabel(rule)} · {ruleHint(rule)}</p>}
                     {streakBonusActive && <p className={styles.mvStreakChip}>🔥 {myLimits.bonus.streak} Nummer-1-{myLimits.bonus.streak === 1 ? 'Hit' : 'Hits'} – Bonus: {myLimits.bonus.label}</p>}
@@ -2433,9 +2439,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
                         </section>
                     )}
 
-                    <section aria-label="Im Voting">
+                    <section aria-label="Warteschlange">
                         <div className={styles.mvSecHead}>
-                            <h2 className={styles.mvSecTitle}>Im Voting</h2>
+                            <h2 className={styles.mvSecTitle}>Warteschlange</h2>
                             <span className={styles.mvSecMeta} aria-label={`Verfügbare Votes: ${upFree ?? 'unbegrenzt'} hoch${downAllowed ? `, ${downFree ?? 'unbegrenzt'} runter` : ''}`}>
                                 <span className={styles.mvFreeLabel}>Verfügbare Votes:</span>
                                 <span className={`${styles.mvFreeUp} ${upLeft ? '' : styles.mvFreeEmpty}`}><IconArrowUp size={15} />{upFree ?? '∞'}</span>
@@ -2445,13 +2451,13 @@ const Amplify2 = ({ onBack, joinCode }) => {
                         {poolItems.length === 0 && lockedCount === 0 ? (
                             <div className={styles.mvEmpty}>
                                 <span className={styles.mvEmptyIcon}><IconNote size={24} /></span>
-                                <p className={styles.mvEmptyTitle}>Noch keine Songs im Voting</p>
+                                <p className={styles.mvEmptyTitle}>Noch keine Songs in der Warteschlange</p>
                                 <p className={styles.mvEmptyText}>Schlag unten den ersten vor.</p>
                             </div>
                         ) : (
                             <ol className={styles.mvPlaylist}>
                                 {queueItems.map(item => (
-                                    <li key={item.id} className={`${styles.mvTrack} ${styles.mvTrackTop}`}>
+                                    <li key={item.id} className={styles.mvTrack}>
                                         {songCover(item.imageUrl, item.spotifyId || item.id)}
                                         <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>
                                             <Marquee className={styles.mvRowName}>{item.title}</Marquee>
@@ -2463,7 +2469,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 ))}
                                 {lockedCount > 0 && <li className={styles.mvCutLine}><span><IconArrowUp size={14} />Platz 1 läuft als Nächstes</span></li>}
                                 {activeItems.length === 0 && (
-                                    <li className={styles.mvPausedEmpty}>{pausedItems.length ? 'Noch kein passender Song im Voting – schlag unten einen vor.' : 'Noch kein weiterer Song im Voting – schlag unten einen vor.'}</li>
+                                    <li className={styles.mvPausedEmpty}>{pausedItems.length ? 'Noch kein passender Song in der Warteschlange – schlag unten einen vor.' : 'Noch kein weiterer Song in der Warteschlange – schlag unten einen vor.'}</li>
                                 )}
                                 {[...activeItems, ...pausedItems].map((item, idx) => {
                                     const paused = idx >= activeItems.length
@@ -2472,7 +2478,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     const canRemove = isHost || own
                                     const score = scoreOf(item)
                                     const { up, down } = voteCounts(item)
-                                    const top = idx < greenCount
                                     const text = (
                                         <>
                                             <Marquee className={styles.mvRowName}>{item.title}</Marquee>
@@ -2486,7 +2491,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                             {paused && idx === activeItems.length && rule && (
                                                 <li className={styles.mvCutLine}><span>Pausiert – passt nicht zur {ruleLabel(rule)}</span></li>
                                             )}
-                                            <li ref={setRowRef(item.id)} className={`${styles.mvTrack} ${top ? styles.mvTrackTop : ''} ${paused ? styles.mvTrackPaused : ''} ${canRemove ? styles.mvTrackHold : ''}`}
+                                            <li ref={setRowRef(item.id)} className={`${styles.mvTrack} ${paused ? styles.mvTrackPaused : ''} ${canRemove ? styles.mvTrackHold : ''}`}
                                                 {...(canRemove ? longPressRemove(item) : {})}>
                                                 {songCover(item.imageUrl, item.spotifyId || item.id)}
                                                 <span className={`${styles.mvRowText} ${styles.mvTrackText}`}>{text}</span>
