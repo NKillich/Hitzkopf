@@ -488,7 +488,6 @@
 .mvRoot .mvFreeDown { color: var(--sr-accent); }
 .mvRoot .mvFreeEmpty { opacity: 0.4; }
 .mvRoot .mvTrack { min-height: 72px; padding: 8px 10px; gap: 12px; border-radius: 18px; border: 1.5px solid transparent; }
-.mvRoot .mvTrackTop { background: color-mix(in srgb, var(--sr-ok) 8%, var(--sr-surface)); border-color: color-mix(in srgb, var(--sr-ok) 26%, transparent); }
 .mvRoot .mvTrack .mvRowName { font-size: 17px; }
 .mvRoot .mvTrackTime { flex: none; font-size: 14px; color: var(--sr-muted); font-variant-numeric: tabular-nums; padding-right: 4px; }
 .mvRoot .mvCutLine { display: flex; align-items: center; gap: 10px; margin: 6px 4px; color: var(--sr-muted); }
@@ -525,7 +524,7 @@
 .mvRoot .mvCutLine > span { align-items: center; gap: 4px; font-size: 12px; font-weight: 800; }
 /* Runden-Modus: unpassende Songs pausieren (ausgegraut, kein Voting) */
 .mvRoot .mvTrackPaused { opacity: 0.45; filter: grayscale(0.8); }
-.mvRoot .mvLocked { flex: none; width: 44px; display: flex; justify-content: center; color: var(--sr-ok); }
+.mvRoot .mvLocked { flex: none; width: 44px; display: flex; justify-content: center; color: var(--sr-muted); }
 .mvRoot .mvPausedEmpty { padding: 14px 12px; text-align: center; font-size: 14px; color: var(--sr-muted); }
 
 /* ── Ziffer exakt mittig, Vorzeichen hängt links daneben ── */
@@ -547,3 +546,14 @@
 .mvRoot .mvShake { animation: mvShake 0.4s ease-in-out; }
 @keyframes mvShake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
 @media (prefers-reduced-motion: reduce) { .mvRoot .mvShake { animation: none; } }
+
+/* Suchtreffer: nach rechts wischen = hinzufügen (grüner Streifen, ab der Schwelle ✓ statt ➕) */
+.mvRoot .mvSwipe { position: relative; overflow: hidden; border-radius: 18px; list-style: none; }
+.mvRoot .mvSwipe > .mvResult { position: relative; z-index: 1; }
+.mvRoot .mvSwipeBg { position: absolute; inset: 0; display: flex; align-items: center; padding-left: 22px; background: color-mix(in srgb, var(--sr-ok) 35%, var(--sr-surface)); color: var(--sr-ink); opacity: 0; transition: opacity 0.15s, background 0.15s; }
+.mvRoot .mvSwipeIconDone { display: none; }
+.mvRoot .mvSwipeArmed .mvSwipeBg { background: var(--sr-ok); color: var(--sr-on-ok); }
+.mvRoot .mvSwipeArmed .mvSwipeIconAdd { display: none; }
+.mvRoot .mvSwipeArmed .mvSwipeIconDone { display: flex; }
+.mvRoot .mvSwipeIconAdd, .mvRoot .mvSwipeIconDone { width: 36px; height: 36px; border-radius: 18px; align-items: center; justify-content: center; background: color-mix(in srgb, var(--sr-surface) 25%, transparent); }
+.mvRoot .mvSwipeIconAdd { display: flex; }
