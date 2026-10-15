@@ -916,8 +916,8 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     // ─── Suche mit Filtern (Genre, Jahrzehnt) ────────────────────────────────
     // Mit Suchwort: normale Spotify-Reihenfolge (bester Treffer zuerst), „Mehr laden“ blättert weiter.
-    // Nur Filter (oder Jahrzehnt-Runde), kein Wort: die beliebtesten Treffer zuerst, in gemischter Reihenfolge
-    // (siehe fetchPopularBatch). Runden-Modus geht vor (sperrt den passenden Filter).
+    // Genre ohne Wort: bekannte Songs über die bekannten Künstler des Genres (siehe fetchGenreArtists).
+    // Nur Jahrzehnt ohne Genre: Hinweis „Wähl ein Genre dazu“. Runden-Modus geht vor (sperrt den passenden Filter).
     const [genreFilter, setGenreFilter] = useState(null)      // Schlüssel aus SEARCH_GENRES
     const [decadeFilter, setDecadeFilter] = useState(null)    // z. B. 1990
     const [filterSheet, setFilterSheet] = useState(null)      // 'genre' | 'decade' | null
@@ -925,7 +925,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const [songMemory, setSongMemory] = useState([])
     const [searchArtists, setSearchArtists] = useState([])
     const [searchAlbums, setSearchAlbums] = useState([])
-    const [searchMore, setSearchMore] = useState(null)        // null | { random, query, offsets } | { random: false, query, offset }
+    const [searchMore, setSearchMore] = useState(null)        // null | { random: true, artists, seen } | { random: false, query, offset }
     const [loadingMore, setLoadingMore] = useState(false)
     const [artistView, setArtistView] = useState(null)        // Künstler-Seite: { artist, tracks, albums, more, loading, error }
     const searchRunRef = useRef(0)
@@ -939,38 +939,49 @@ const Amplify2 = ({ onBack, joinCode }) => {
         const parts = [q, g && `genre:"${g.q}"`, effDecade && `year:${effDecade}-${effDecade + 9}`].filter(Boolean)
         return ruleSearchQuery(roundRule, parts.join(' ')).trim()
     }
-    const randomSearch = (q) => !q && (!!effGenre || !!effDecade || roundRule?.type === 'decade')
+    const randomSearch = (q) => !q && !!effGenre
+    const needsGenre = (q) => !q && !effGenre && roundRule?.type !== 'artist' && (!!effDecade || roundRule?.type === 'decade')
     const searchable = (q) => q.length >= 2 || randomSearch(q)
-    // Nur Filter: Spotify sortiert dann nicht nach Beliebtheit. Darum je 50 Treffer holen, nach Beliebtheit sortieren
-    // und als Warteschlange aufbauen – die Top 20 gemischt, danach in Zehnerblöcken gemischt. Wird der Vorrat knapp,
-    // kommen die nächsten 50 (bis Platz 200) dazu und alles wird neu sortiert. Ohne Beliebtheitswert: nur gemischt.
-    const POPULAR_BATCH = 50
-    const POPULAR_MAX = 200
+    // Bei einer Suche nur mit Filtern liefert Spotify einen beliebigen Ausschnitt (viel Unbekanntes). Die Künstler-
+    // suche mit Genre-Filter bringt dagegen die großen Namen zuerst, und die Songs eines Künstlers im Jahrzehnt
+    // kommen mit seinen Hits zuerst. Also: Top-30-Künstler des Genres, je Laden 5 davon zufällig, von jedem 2 seiner
+    // Top-5-Songs im Jahrzehnt – gemischt. „Mehr laden“ nimmt die nächsten Künstler; Künstler ohne Songs fallen weg.
+    const ARTIST_POOL_PAGES = 3      // 3 × 10 Künstler
+    const ARTISTS_PER_LOAD = 5
+    const SONGS_PER_ARTIST = 2
     const shuffled = (list) => {
         const a = [...list]
         for (let k = a.length - 1; k > 0; k--) { const r = Math.floor(Math.random() * (k + 1)); [a[k], a[r]] = [a[r], a[k]] }
         return a
     }
-    // 50 neue Treffer ab start (ohne schon gesehene)
-    const fetchPopularBatch = async (query, start, seen) => {
-        const pages = await Promise.all(Array.from({ length: POPULAR_BATCH / 10 }, (_, k) =>
-            spotifyService.searchPage(query, start + k * 10, 'track').catch(() => null)))
-        const ok = pages.filter(Boolean)
-        if (!ok.length) throw new Error('Spotify-Suche fehlgeschlagen')
-        const tracks = []
-        for (const t of ok.flatMap(p => p.tracks)) {
-            if (!seen.has(t.spotifyId)) { seen.add(t.spotifyId); tracks.push(t) }
-        }
-        const total = Math.min(ok[0].tracksTotal, POPULAR_MAX)
-        return { tracks, nextOffset: start + POPULAR_BATCH < total ? start + POPULAR_BATCH : null }
+    const fetchGenreArtists = async (genre) => {
+        const pages = await Promise.all(Array.from({ length: ARTIST_POOL_PAGES }, (_, k) =>
+            spotifyService.searchPage(`genre:"${genre.q}"`, k * 10, 'artist').catch(() => null)))
+        if (!pages.some(Boolean)) throw new Error('Spotify-Suche fehlgeschlagen')
+        const byId = new Map()
+        for (const a of pages.filter(Boolean).flatMap(p => p.artists)) if (!byId.has(a.id)) byId.set(a.id, a)
+        return [...byId.values()]
     }
-    // Warteschlange: nach Beliebtheit sortiert, erster Block (20 bzw. 10) und danach Zehnerblöcke jeweils gemischt
-    const popularQueue = (tracks, firstBlock) => {
-        const ranked = tracks.some(t => t.popularity > 0)
-        const sorted = ranked ? [...tracks].sort((a, b) => (b.popularity || 0) - (a.popularity || 0)) : shuffled(tracks)
-        const queue = shuffled(sorted.slice(0, firstBlock))
-        for (let k = firstBlock; k < sorted.length; k += 10) queue.push(...shuffled(sorted.slice(k, k + 10)))
-        return queue
+    // Nächste Künstler abarbeiten, bis mindestens 8 neue Songs da sind (oder keine Künstler mehr übrig)
+    const songsFromArtists = async (artists, seen) => {
+        let rest = [...artists]
+        let songs = []
+        while (rest.length && songs.length < 8) {
+            const batch = rest.slice(0, ARTISTS_PER_LOAD)
+            rest = rest.slice(ARTISTS_PER_LOAD)
+            const lists = await Promise.all(batch.map(a => {
+                const q = ruleSearchQuery(roundRule, [`artist:"${a.name}"`, effDecade && `year:${effDecade}-${effDecade + 9}`].filter(Boolean).join(' ')).trim()
+                return spotifyService.searchPage(q, 0, 'track')
+                    .then(r => r.tracks.filter(t => t.artistIds.includes(a.id)))
+                    .catch(() => [])
+            }))
+            for (const list of lists) {
+                const picks = shuffled(list.slice(0, 5).filter(t => !seen.has(t.spotifyId))).slice(0, SONGS_PER_ARTIST)
+                picks.forEach(t => seen.add(t.spotifyId))
+                songs = [...songs, ...picks]
+            }
+        }
+        return { songs: shuffled(songs), rest }
     }
 
     const handleSpotifySearch = async () => {
@@ -983,15 +994,13 @@ const Amplify2 = ({ onBack, joinCode }) => {
             const query = buildSearchQuery(q)
             if (randomSearch(q)) {
                 const seen = new Set()
-                const { tracks, nextOffset } = await fetchPopularBatch(query, 0, seen)
-                if (!tracks.some(t => t.popularity > 0)) console.warn('Spotify liefert keinen Beliebtheitswert – Treffer nur gemischt')
-                const queue = popularQueue(tracks, 20)
+                const artists = shuffled(await fetchGenreArtists(SEARCH_GENRES.find(g => g.key === effGenre)))
+                const { songs, rest } = await songsFromArtists(artists, seen)
                 if (run !== searchRunRef.current) return
-                setSearchResults(queue.slice(0, 10))
+                setSearchResults(songs)
                 setSearchArtists([])
                 setSearchAlbums([])
-                const rest = queue.slice(10)
-                setSearchMore(rest.length || nextOffset != null ? { random: true, query, queue: rest, nextOffset, seen } : null)
+                setSearchMore(rest.length ? { random: true, artists: rest, seen } : null)
             } else {
                 const res = await spotifyService.searchPage(query, 0)
                 if (run !== searchRunRef.current) return
@@ -1027,18 +1036,10 @@ const Amplify2 = ({ onBack, joinCode }) => {
         try {
             const seen = new Set(searchResults.map(t => t.spotifyId))
             if (searchMore.random) {
-                let { queue, nextOffset } = searchMore
-                // Vorrat knapp → nächste 50 dazu und Rest + Neue gemeinsam neu nach Beliebtheit sortieren
-                if (queue.length < 30 && nextOffset != null) {
-                    const batch = await fetchPopularBatch(searchMore.query, nextOffset, searchMore.seen)
-                    queue = popularQueue([...queue, ...batch.tracks], 10)
-                    nextOffset = batch.nextOffset
-                }
+                const { songs, rest } = await songsFromArtists(searchMore.artists, searchMore.seen)
                 if (run !== searchRunRef.current) return
-                const items = queue.slice(0, 10).filter(t => !seen.has(t.spotifyId))
-                setSearchResults(prev => [...prev, ...items])
-                const rest = queue.slice(10)
-                setSearchMore(rest.length || nextOffset != null ? { ...searchMore, queue: rest, nextOffset } : null)
+                setSearchResults(prev => [...prev, ...songs.filter(t => !seen.has(t.spotifyId))])
+                setSearchMore(rest.length ? { ...searchMore, artists: rest } : null)
             } else {
                 const res = await spotifyService.searchPage(searchMore.query, searchMore.offset, 'track')
                 if (run !== searchRunRef.current) return
@@ -2229,6 +2230,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
             else if (isLoadingAlbum) view = 'loading'
             else if (artistView) view = 'artist'
             else if (showMine) view = 'mine'
+            else if (needsGenre(q)) view = 'needGenre'
             else if (!searchable(q)) view = 'prompt'
             else if (searchError && !isSearching) view = 'error'
             else if (isSearching || searchedQuery !== searchKey) view = searchResults.length ? 'ok' : 'loading'
@@ -2424,7 +2426,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 )}
                                 {searchResults.length > 0 && (
                                     <section className={styles.mvListSection}>
-                                        {listTitle(randomSearch(q) ? `Zufällig: ${[genreLabel, effDecade && decadeLabel(effDecade)].filter(Boolean).join(' · ') || 'beliebte Songs'}` : 'Songs')}
+                                        {listTitle(randomSearch(q) ? `Bekannte Songs: ${[genreLabel, (effDecade || (roundRule?.type === 'decade' && roundRule.from)) && decadeLabel(effDecade || roundRule.from)].filter(Boolean).join(' · ')}` : 'Songs')}
                                         <ul className={styles.mvList}>{searchResults.map(songRow)}</ul>
                                         {moreButton(loadMoreResults, !!searchMore)}
                                     </section>
@@ -2432,6 +2434,14 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 {searchAlbums.length > 0 && <section className={styles.mvListSection}>{listTitle('Alben')}<ul className={styles.mvList}>{searchAlbums.map(songRow)}</ul></section>}
                             </>)}
                             {view === 'loading' && skeletons(isLoadingAlbum ? 'Wird geladen' : 'Spotify wird durchsucht')}
+                            {view === 'needGenre' && (
+                                <div className={styles.mvEmpty}>
+                                    <span className={styles.mvEmptyIcon}><IconSearch size={24} /></span>
+                                    <p className={styles.mvEmptyTitle}>Wähl ein Genre dazu</p>
+                                    <p className={styles.mvEmptyText}>Mit Genre zeigt Amplify bekannte Songs aus {decadeLabel(effDecade || roundRule?.from)}n zum Stöbern – oder such nach Titel, Band oder Album.</p>
+                                    <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={() => setFilterSheet('genre')}>Genre wählen</button>
+                                </div>
+                            )}
                             {view === 'prompt' && (
                                 <div className={styles.mvEmpty}>
                                     <span className={styles.mvEmptyIcon}><IconSearch size={24} /></span>
