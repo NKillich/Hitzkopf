@@ -2151,7 +2151,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             {rule(songs, <IconNote size={18} />)}
                             {rule(ups, <IconThumbUp size={18} />)}
                             {moreRules && (<>
-                                {rule(downs, <IconThumbDown size={18} />)}
+                                {rule(downs, <IconThumbDown size={18} />, 'Daumen runter')}
                                 {rule(dropBelow, <IconTrash size={18} />, 'Raus ab Minus')}
                                 {rule(dropAfter, <IconClock size={18} />, 'Raus nach Zeit')}
                                 <button type="button" className={`${styles.mvBtn} ${ss.ruleRow} ${ss.ruleToggle}`} onClick={() => setCreateRules(r => ({ ...r, streakEnabled: !r.streakEnabled }))} aria-pressed={createRules.streakEnabled}>
