@@ -344,3 +344,38 @@
 
 /* Statistik zurücksetzen */
 .srRoot .srResetBtn { width: 100%; height: 52px; border-radius: 26px; border: 2px solid var(--sr-bad); color: var(--sr-bad); font-size: 16px; font-weight: 700; }
+
+/* ─── Spiel: Zeitleiste statt Kacheln ─────────────────────────────────── */
+.srRoot .srGameHead { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; align-items: center; gap: 12px; height: auto; margin-top: 8px; }
+.srRoot .srHeadBtn { width: 56px; height: 56px; border-radius: 28px; }
+.srRoot .srGameHead .srProgressBox { margin-top: 0; gap: 10px; }
+.srRoot .srGameHead .srSongNo { font-family: var(--sr-display); font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+.srRoot .srSegPast { background: var(--sr-muted); opacity: 0.55; }
+.srRoot .srPoints { width: 56px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); display: flex; align-items: baseline; justify-content: center; gap: 3px; padding-top: 16px; font-family: var(--sr-display); font-size: 20px; font-weight: 800; line-height: 1; }
+.srRoot .srPoints small { font-size: 12px; font-weight: 700; color: var(--sr-muted); }
+
+.srRoot .srStage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.srRoot .srStage .srCardGame { margin: 0 auto; }
+.srRoot .srTitleArea { width: 100%; }
+
+.srRoot .srTimeline { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; flex: none; margin-top: 8px; }
+.srRoot .srTlPart { display: flex; flex-direction: column; gap: 8px; }
+.srRoot .srTlBar { position: relative; display: block; height: 10px; box-sizing: border-box; border-radius: 5px; background: var(--sr-surface2); overflow: hidden; }
+.srRoot .srTlLocked { background: transparent; border: 1.5px dashed var(--sr-line); }
+.srRoot .srTlFill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--sr-accent); }
+.srRoot .srTlLabel { align-self: flex-end; font-size: 13px; font-weight: 700; color: var(--sr-muted); }
+.srRoot .srTlLabelNow { color: var(--sr-ink); font-weight: 800; }
+
+.srRoot .srControls { display: flex; align-items: center; justify-content: space-between; flex: none; margin: clamp(14px, 3dvh, 26px) 4px clamp(14px, 2.6dvh, 22px); }
+.srRoot .srCtrlSide { width: 64px; height: 64px; flex: none; border-radius: 32px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); }
+.srRoot .srCtrlMore { width: auto; min-width: 72px; padding: 0 14px; font-family: var(--sr-display); font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.srRoot .srCtrlSide:disabled { color: var(--sr-muted); opacity: 0.5; cursor: default; }
+.srRoot .srCtrlPlay { width: 84px; height: 84px; flex: none; border-radius: 42px; background: var(--sr-accent); color: var(--sr-on-accent); }
+.srRoot .srCtrlPlay:disabled { opacity: 0.6; cursor: default; }
+
+.srRoot .srGameFoot { flex: none; margin: 0 -20px; padding: clamp(12px, 2dvh, 18px) 20px 0; border-top: 1px solid var(--sr-line); }
+.srRoot .srSolve { width: 100%; height: 64px; border-radius: 32px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-size: 18px; font-weight: 700; gap: 10px; }
+.srRoot .srSolve:disabled { color: var(--sr-muted); cursor: default; }
+.srRoot .srGameFoot .srRateNo { height: 64px; border-radius: 32px; border: 1.5px solid var(--sr-line); font-size: 16px; }
+.srRoot .srGameFoot .srRateOk { height: 64px; border-radius: 32px; border: none; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 16px; }
+.srRoot .srGameFoot .srRateNo svg, .srRoot .srGameFoot .srRateOk svg { color: inherit; }
