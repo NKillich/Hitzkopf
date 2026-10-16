@@ -580,6 +580,5 @@
 .mvRoot .mvSheetOptionOn { background: var(--sr-accent); color: var(--sr-on-accent); }
 .mvRoot .mvFilterNote { margin: 6px 2px 0; font-size: 12px; color: var(--sr-muted); }
 .mvRoot .mvLoadingText { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 4px 0 10px; font-size: 14px; font-weight: 700; color: var(--sr-muted); }
-.mvRoot .mvLinkPaste { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; padding-top: 14px; border-top: 1px solid var(--sr-line); }
-.mvRoot .mvLinkInput { flex: 1; min-width: 0; height: 56px; border-radius: 28px; padding: 0 18px; }
-.mvRoot .mvSpotifyBtn { flex: none; width: 56px; height: 56px; border-radius: 28px; background: var(--sr-surface); border: 1.5px solid var(--sr-line); display: flex; align-items: center; justify-content: center; }
+.mvRoot .mvSearchGrow { flex: 1; min-width: 0; }
+.mvRoot .mvSpotifyBtn { flex: none; width: 48px; height: 48px; border-radius: 24px; background: var(--sr-surface); border: 1.5px solid var(--sr-line); display: flex; align-items: center; justify-content: center; }

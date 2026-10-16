@@ -42,8 +42,8 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
 - „Song hinzufügen“: Suche (Titel/Band/Album) mit Filtern **Genre** und **Jahrzehnt**. Mit Suchwort zählt nur das Jahrzehnt.
   Ohne Wort kommen bekannte Songs aus **Last.fm-Hitlisten** (Firebase-Funktion `lastfmTop`, Tags in `SEARCH_GENRES`):
   Genre + Jahrzehnt → Top-Künstler des Genres, je 2 ihrer Top-5-Songs im Jahrzehnt (Spotify); nur Genre / nur Jahrzehnt →
-  Top-Songs des Tags, bei Spotify gesucht. Spotifys eigene Genres sind zu unsauber. Künstler-Seite; unten Feld
-  „Nicht dabei? Hier Link aus Spotify einfügen“ + Knopf „Spotify öffnen“.
+  Top-Songs des Tags, bei Spotify gesucht. Spotifys eigene Genres sind zu unsauber. Künstler-Seite; ein Suchfeld für
+  Titel/Band/Album oder Spotify-Link (Link → Song sofort hinzugefügt), daneben Knopf „Spotify öffnen“.
 - Logik ohne React in `amplifyLogic.js` (App und Board nutzen dieselben Funktionen).
 
 ### Fallstricke (haben schon Bugs verursacht)
