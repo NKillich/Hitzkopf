@@ -12,7 +12,7 @@ import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
 import {
     IconMoon, IconSun, IconBack, IconCheck, IconX, IconLock, IconPlay, IconNote, IconSearch, IconRetry, IconReplay,
-    IconEye, IconPause, IconEyeOff, IconAlert, IconClock, IconChevron, IconWave, IconInfo, IconNext
+    IconEye, IconPause, IconAlert, IconClock, IconChevron, IconWave, IconInfo, IconNext, IconStar
 } from '../../shared/ui/icons'
 import styles from './SecondSound.module.css'
 
@@ -35,12 +35,14 @@ const TIERS = [
     { min: 0, title: 'Oje …', sub: 'Das war nicht eure Runde. Nächstes Mal klappt’s besser.', mouth: 'M21 46 Q32 36 43 46' }
 ]
 
+// Freischaltbare Teile der Zeitleiste; je früher erraten, desto mehr Punkte
 const STAGES = [
-    { label: '1 s', seconds: 1, long: '1 Sekunde' },
-    { label: '5 s', seconds: 5, long: '5 Sekunden' },
-    { label: '10 s', seconds: 10, long: '10 Sekunden' },
-    { label: '30 s', seconds: 30, long: '30 Sekunden' }
+    { label: '1 s', seconds: 1, long: '1 Sekunde', points: 4 },
+    { label: '5 s', seconds: 5, long: '5 Sekunden', points: 3 },
+    { label: '10 s', seconds: 10, long: '10 Sekunden', points: 2 },
+    { label: '30 s', seconds: 30, long: '30 Sekunden', points: 1 }
 ]
+const MAX_POINTS = STAGES[0].points
 
 const COUNT_OPTIONS = [5, 10, 15, 20, 25, 30]
 
@@ -80,7 +82,7 @@ export default function SecondSound({ onBack }) {
     const [myPlaylistsError, setMyPlaylistsError] = useState(null)
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
     const [songCount, setSongCount] = useState(10)
-    const [maxUnlockedIndex, setMaxUnlockedIndex] = useState(0)
+    const [stage, setStage] = useState(0)                 // freigeschalteter Teil der Zeitleiste (0 = 1 s … 3 = 30 s)
     // True sobald der aktuelle Song mindestens 1× abgespielt wurde – schaltet
     // Aufdecken- und Antwort-Buttons frei. Verhindert Klick-Spam mit 403/502.
     const [hasPlayedCurrentSong, setHasPlayedCurrentSong] = useState(false)
@@ -92,7 +94,6 @@ export default function SecondSound({ onBack }) {
     const [confirmClose, setConfirmClose] = useState(false)  // Bottom-Sheet "Spiel beenden?"
     const [confirmReset, setConfirmReset] = useState(false)  // Bottom-Sheet "Statistiken zurücksetzen?"
     const [resetState, setResetState] = useState('idle')     // idle | busy | error | done
-    const [showAllPlaylists, setShowAllPlaylists] = useState(false)
     const [startingIdx, setStartingIdx] = useState(-1)       // Stufe, die gerade gestartet wird (Player lädt)
     const [cancelling, setCancelling] = useState(false)
     const [searchHasMore, setSearchHasMore] = useState(false)
@@ -106,7 +107,9 @@ export default function SecondSound({ onBack }) {
     const [targetCount, setTargetCount] = useState(10) // gewünschte Anzahl
     const [isRevealed, setIsRevealed] = useState(false)
     const [currentTrackInfo, setCurrentTrackInfo] = useState(null)
-    const [score, setScore] = useState(0)
+    const [score, setScore] = useState(0)            // erratene Songs (für die Statistik)
+    const [points, setPoints] = useState(0)          // Punkte der Runde (früher erraten = mehr)
+    const [trackYear, setTrackYear] = useState(null) // { id, year } des aktuellen Songs
     const [isPlaying, setIsPlaying] = useState(false)
     const [songHistory, setSongHistory] = useState([])
     const [historyOpen, setHistoryOpen] = useState(false)
@@ -127,7 +130,9 @@ export default function SecondSound({ onBack }) {
     const playGenRef = useRef(0)                 // wird bei Song-Wechsel erhöht: ältere Start-Anfragen verfallen
     const startingGameRef = useRef(false)        // verhindert doppelten Spielstart
     const cancelLoadRef = useRef(false)          // "Abbrechen" auf dem Ladescreen
-    const playStartRef = useRef(0)              // Startzeit der laufenden Wiedergabe (Countdown)
+    const playRef = useRef(null)                // laufender Ausschnitt: { startPos, startedAt, untilMs } (Spotify-Positionen in ms)
+    const baseRef = useRef(0)                   // Position, an der der Song „bei 0 s“ startet
+    const heardRef = useRef(0)                  // so weit wurde der Song gehört (ms ab baseRef)
     const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
     const allowPlaybackRef = useRef(false)      // true nur, solange der Spieler einen Play-Button gedrückt hat
     const songsRef = useRef([])
@@ -289,6 +294,7 @@ export default function SecondSound({ onBack }) {
         clip.attach()
         clip.setHandlers({
             onEnd: (reason, info) => {
+                noteHeard(reason === 'done')
                 allowPlaybackRef.current = false
                 setIsPlaying(false)
                 if (reason === 'drift') setPlayerError('Spotify hat von selbst den Titel gewechselt. Tippe auf Play, um den Song neu zu starten.')
@@ -297,7 +303,19 @@ export default function SecondSound({ onBack }) {
             onAutoplayFailed: () => setPlayerError('Der Browser hat die Wiedergabe blockiert. Tippe nochmal auf Play.')
         })
         return () => { clip.detach() }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase])
+
+    // Erscheinungsjahr des aktuellen Songs nachladen (der Player liefert es nicht mit)
+    const trackId = currentTrackInfo?.trackId
+    useEffect(() => {
+        if (!trackId) return
+        let alive = true
+        spotifyService.getTrack(trackId)
+            .then(t => { if (alive) setTrackYear({ id: trackId, year: (t?.album?.release_date || '').slice(0, 4) || null }) })
+            .catch(() => { /* ohne Jahr anzeigen */ })
+        return () => { alive = false }
+    }, [trackId])
 
     // Wächter: Während des Spiels darf nur nach Klick auf einen Play-Button etwas laufen.
     // Fängt alles ab, was Spotify von sich aus startet (Resume nach Gerätewechsel,
@@ -526,6 +544,8 @@ export default function SecondSound({ onBack }) {
             setIsRevealed(false)
             setCurrentTrackInfo(null)
             setScore(0)
+            setPoints(0)
+            resetTimeline()
             setIsPlaying(false)
             setSongHistory([])
             setHistoryOpen(false)
@@ -546,15 +566,40 @@ export default function SecondSound({ onBack }) {
 
     const dbg = (...args) => log('[SS]', ...args)
 
+    // Aktuelle Hörposition (ms ab Songstart) – live hochgerechnet, solange ein Ausschnitt läuft
+    const livePosMs = () => {
+        const p = playRef.current
+        if (!p) return heardRef.current
+        return Math.max(0, Math.min(p.untilMs, p.startPos + (Date.now() - p.startedAt)) - baseRef.current)
+    }
+
+    // Ausschnitt ist zu Ende oder pausiert: gehörte Strecke merken (reachedEnd = bis zur Grenze gelaufen)
+    const noteHeard = (reachedEnd) => {
+        const p = playRef.current
+        if (!p) return
+        const pos = reachedEnd ? p.untilMs - baseRef.current : livePosMs()
+        heardRef.current = Math.max(heardRef.current, pos)
+        playRef.current = null
+    }
+
+    // Song wechselt: Zeitleiste zurücksetzen
+    const resetTimeline = () => {
+        playRef.current = null
+        baseRef.current = 0
+        heardRef.current = 0
+        setStage(0)
+    }
+
     // Pausiert den laufenden Ausschnitt (lokal über das SDK)
     const stopPlayback = async () => {
         dbg('stopPlayback aufgerufen')
+        noteHeard(false)
         allowPlaybackRef.current = false
         setIsPlaying(false)
         await clip.pause()
     }
 
-    // Spielt Stufe `idx` (1/5/10/30 s) des aktuellen Songs.
+    // Spielt den Song von vorn bis zum Ende von Teil `idx` (1/5/10/30 s).
     // Ein Titel gilt erst als gestartet, wenn der Player "spielt" meldet (siehe clipPlayerCore.js).
     const handlePlayStage = async (idx) => {
         const seconds = STAGES[idx].seconds
@@ -570,7 +615,8 @@ export default function SecondSound({ onBack }) {
         if (!songsRef.current[slot]) { dbg('handlePlayStage: kein Song an Slot', slot); return }
 
         isPlayingRequestRef.current = true
-        setIsPlaying(false)         // eine laufende Stufe wird ersetzt
+        noteHeard(false)
+        setIsPlaying(false)         // ein laufender Ausschnitt wird ersetzt
         setStartingIdx(idx)
         setPlayerError(null)
         lastPlaySecondsRef.current = seconds
@@ -614,12 +660,12 @@ export default function SecondSound({ onBack }) {
                     setCurrentIndex(slot)
                 }
             }
-            playStartRef.current = result.startedAt
+            baseRef.current = result.startPos
+            playRef.current = { startPos: result.startPos, startedAt: result.startedAt, untilMs: result.startPos + seconds * 1000 }
             setIsPlaying(true)
             setHasPlayedCurrentSong(true)
             setStartNotice(null)
             maxHeardRef.current = Math.max(maxHeardRef.current, seconds)
-            setMaxUnlockedIndex(prev => Math.max(prev, idx + 1))
         } catch (e) {
             allowPlaybackRef.current = false
             dbg('handlePlayStage Fehler:', e.message)
@@ -633,6 +679,76 @@ export default function SecondSound({ onBack }) {
                 setStartingIdx(-1)
             }
         }
+    }
+
+    // Spielt an der aktuellen Stelle weiter bis zum Ende von Teil `idx` (nichts doppelt hören).
+    // Klappt das Fortsetzen nicht, wird von vorn gespielt.
+    const resumeStage = async (idx) => {
+        if (isPlayingRequestRef.current) return
+        spotifyService.activateAudio()
+        if (!playerReady) {
+            setPlayerError('Spotify Player noch nicht bereit. Bitte warte einen Moment.')
+            return
+        }
+        const uri = trackUriRef.current[currentIndexRef.current]
+        if (!uri) { handlePlayStage(idx); return }
+        const gen = playGenRef.current
+        const isStale = () => gen !== playGenRef.current
+        const untilMs = baseRef.current + STAGES[idx].seconds * 1000
+
+        isPlayingRequestRef.current = true
+        noteHeard(false)
+        setIsPlaying(false)
+        setStartingIdx(idx)
+        setPlayerError(null)
+        allowPlaybackRef.current = true
+        dbg(`resumeStage: bis ${STAGES[idx].seconds}s`)
+
+        let fallback = false
+        try {
+            const result = await clip.resumeTo({ uri, untilMs, isStale })
+            if (result.aborted || isStale()) return
+            if (result.lost) { fallback = true; return }
+            playRef.current = { startPos: result.startPos, startedAt: result.startedAt, untilMs }
+            setIsPlaying(true)
+            maxHeardRef.current = Math.max(maxHeardRef.current, STAGES[idx].seconds)
+        } catch (e) {
+            allowPlaybackRef.current = false
+            if (!isStale()) setPlayerError(e.message || 'Wiedergabe fehlgeschlagen')
+        } finally {
+            if (!isStale()) {
+                isPlayingRequestRef.current = false
+                setStartingIdx(-1)
+            }
+        }
+        if (fallback && !isStale()) {
+            dbg('resumeStage: Fortsetzen nicht möglich → von vorn')
+            handlePlayStage(idx)
+        }
+    }
+
+    // Großer Play-Button: freigeschalteten Teil hören (pausiert mittendrin → dort weiter, sonst von vorn)
+    const handlePlayToggle = () => {
+        if (isPlaying) { stopPlayback(); return }
+        const endMs = STAGES[stage].seconds * 1000
+        if (hasPlayedCurrentSong && heardRef.current > 0 && heardRef.current < endMs - 400) resumeStage(stage)
+        else handlePlayStage(stage)
+    }
+
+    // „+4 s“ usw.: nächsten Teil freischalten und genau dort weiterspielen, wo der letzte aufgehört hat
+    const handleUnlockNext = () => {
+        if (stage >= STAGES.length - 1 || isPlayingRequestRef.current) return
+        const next = stage + 1
+        setStage(next)
+        const uri = trackUriRef.current[currentIndexRef.current]
+        const untilMs = baseRef.current + STAGES[next].seconds * 1000
+        if (isPlaying && playRef.current && clip.extendTo({ uri, untilMs })) {
+            // läuft noch: Ende einfach nach hinten schieben
+            playRef.current = { ...playRef.current, untilMs }
+            maxHeardRef.current = Math.max(maxHeardRef.current, STAGES[next].seconds)
+            return
+        }
+        resumeStage(next)
     }
 
     // Nicht abspielbaren Song auslassen (zählt nicht als gespielt)
@@ -650,7 +766,7 @@ export default function SecondSound({ onBack }) {
         maxHeardRef.current = 0
         setCurrentIndex(next)
         setIsRevealed(false)
-        setMaxUnlockedIndex(0)
+        resetTimeline()
         setHasPlayedCurrentSong(false)
         setCurrentTrackInfo(null)
         setPlayerError(null)
@@ -666,8 +782,10 @@ export default function SecondSound({ onBack }) {
         allowPlaybackRef.current = false
         isAnsweringRef.current = false
         isPlayingRequestRef.current = false
+        const earned = correct ? STAGES[stage].points : 0
         if (correct) {
             setScore(prev => prev + 1)
+            setPoints(prev => prev + earned)
             if (maxHeardRef.current > 0) {
                 sessionSecondsCorrectRef.current.push(maxHeardRef.current)
             }
@@ -677,12 +795,12 @@ export default function SecondSound({ onBack }) {
         const newPlayed = playedCount + 1
         setPlayedCount(newPlayed)
         setIsRevealed(false)
-        setMaxUnlockedIndex(0)
+        resetTimeline()
         setHasPlayedCurrentSong(false)
         const historyEntry = currentTrackInfo
             ? { name: currentTrackInfo.trackName, artist: currentTrackInfo.artist, albumImage: currentTrackInfo.imageUrl }
             : { name: 'Unbekannter Titel', artist: '', albumImage: null }
-        setSongHistory(prev => [...prev, { song: historyEntry, correct }])
+        setSongHistory(prev => [...prev, { song: historyEntry, correct, points: earned }])
         setCurrentTrackInfo(null)
         if (newPlayed >= targetCount || currentIndex + 1 >= songs.length) {
             dbg(`Spiel beendet: newPlayed=${newPlayed} targetCount=${targetCount} nextIndex=${currentIndex + 1}`)
@@ -708,16 +826,14 @@ export default function SecondSound({ onBack }) {
         dbg(`handleAnswer: ${correct ? '✓ RICHTIG' : '✕ FALSCH'}`)
         const gen = playGenRef.current
         await stopPlayback()
-        if (!isRevealed) {
-            // Lösung kurz zeigen; Tipp auf das Cover überspringt die Wartezeit
-            setVerdict(correct ? 'ok' : 'no')
-            setIsRevealed(true)
-            await new Promise((resolve) => {
-                const t = setTimeout(resolve, 1500)
-                revealDoneRef.current = () => { clearTimeout(t); resolve() }
-            })
-            revealDoneRef.current = null
-        }
+        // Wertung kurz am Cover zeigen; Tipp auf das Cover überspringt die Wartezeit
+        setVerdict(correct ? 'ok' : 'no')
+        setIsRevealed(true)
+        await new Promise((resolve) => {
+            const t = setTimeout(resolve, 700)
+            revealDoneRef.current = () => { clearTimeout(t); resolve() }
+        })
+        revealDoneRef.current = null
         setVerdict(null)
         if (gen !== playGenRef.current) { isAnsweringRef.current = false; return }   // Runde wurde inzwischen beendet
         advanceAfterAnswer(correct)
@@ -740,9 +856,10 @@ export default function SecondSound({ onBack }) {
         setIsRevealed(false)
         setCurrentTrackInfo(null)
         setScore(0)
+        setPoints(0)
         setIsPlaying(false)
         setHasPlayedCurrentSong(false)
-        setMaxUnlockedIndex(0)
+        resetTimeline()
         setLoadingError(null)
         lastPlaySecondsRef.current = null
         maxHeardRef.current = 0
@@ -846,11 +963,11 @@ export default function SecondSound({ onBack }) {
         setPhase(PHASES.HOME)
     }
 
-    // Während ein Ausschnitt läuft: regelmäßig neu zeichnen (Fortschritt in der Kachel)
+    // Während ein Ausschnitt läuft: regelmäßig neu zeichnen (Fortschritt der Zeitleiste)
     const [, setFrame] = useState(0)
     useEffect(() => {
         if (phase !== PHASES.GAME || !isPlaying) return
-        const id = setInterval(() => setFrame(f => f + 1), 150)
+        const id = setInterval(() => setFrame(f => f + 1), 100)
         return () => clearInterval(id)
     }, [phase, isPlaying])
 
@@ -1308,112 +1425,75 @@ export default function SecondSound({ onBack }) {
     // ─── Spiel ───────────────────────────────────────────────────────────────
     if (phase === PHASES.GAME) {
         const connecting = !playerReady && !playerError
-        const playedN = Math.min(maxUnlockedIndex, STAGES.length)       // so viele Stufen sind freigeschaltet
-        const playingSecs = isPlaying ? lastPlaySecondsRef.current : null
-        const playingIdx = isPlaying ? STAGES.findIndex(s => s.seconds === playingSecs) : -1
-        const elapsed = isPlaying && playStartRef.current ? (Date.now() - playStartRef.current) / 1000 : 0
-        const progress = isPlaying && playingSecs ? Math.min(1, elapsed / playingSecs) : 0
-
-        // Kachel: läuft sie gerade → pausieren; läuft nichts → abspielen; läuft etwas anderes → ignorieren
         const starting = startingIdx >= 0
-        const onTile = (idx) => {
-            if (!playerReady || idx > playedN || starting) return
-            if (playingIdx === idx) { stopPlayback(); return }
-            handlePlayStage(idx)      // läuft gerade etwas anderes, wird es durch diese Stufe ersetzt
-        }
-
+        const busy = connecting || starting || !!verdict
+        const heardSec = livePosMs() / 1000
+        const isLast = stage >= STAGES.length - 1
+        const nextStep = isLast ? 0 : STAGES[stage + 1].seconds - STAGES[stage].seconds
         const canAct = hasPlayedCurrentSong && !connecting && !verdict
+        const canUnlock = hasPlayedCurrentSong && !isLast && !busy
+        const stagePoints = STAGES[stage].points
+        const year = trackYear?.id === currentTrackInfo?.trackId ? trackYear?.year : null
         const friendlyError = playerError && (/device not found/i.test(playerError)
             ? { title: 'Der Player ist noch nicht bereit', text: 'Kurz warten und nochmal tippen.' }
             : { title: 'Abspielen hat nicht geklappt', text: playerError })
         const songNo = `Song ${playedCount + 1} von ${targetCount}`
+        const playLabel = isPlaying ? 'Pause' : `Bis ${STAGES[stage].long} abspielen`
 
         return shell(
             <main className={`${styles.srMain} ${styles.srPad} ${styles.srGame}`}>
                 <header className={styles.srGameHead}>
-                    {themeBtn}
-                    <button ref={closeBtnRef} type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setConfirmClose(true)} aria-label="Spiel beenden" title="Spiel beenden"><IconX /></button>
-                </header>
-
-                <div className={styles.srProgressBox}>
-                    <span className={styles.srSongNo}>{songNo}</span>
-                    <div role="progressbar" aria-label={songNo} aria-valuemin="1" aria-valuemax={targetCount} aria-valuenow={playedCount + 1} className={styles.srSegs}>
-                        {Array.from({ length: targetCount }, (_, i) => (
-                            <span key={i} className={`${styles.srSeg} ${i < playedCount ? (songHistory[i]?.correct ? styles.srSegOk : styles.srSegNo) : (i === playedCount ? styles.srSegNow : '')}`} />
-                        ))}
+                    <button ref={closeBtnRef} type="button" className={`${styles.srBtn} ${styles.srIconBtn} ${styles.srHeadBtn}`} onClick={() => setConfirmClose(true)} aria-label="Spiel beenden" title="Spiel beenden"><IconX /></button>
+                    <div className={styles.srProgressBox}>
+                        <span className={styles.srSongNo}>{songNo}</span>
+                        <div role="progressbar" aria-label={songNo} aria-valuemin="1" aria-valuemax={targetCount} aria-valuenow={playedCount + 1} className={styles.srSegs}>
+                            {Array.from({ length: targetCount }, (_, i) => (
+                                <span key={i} className={`${styles.srSeg} ${i < playedCount ? styles.srSegPast : (i === playedCount ? styles.srSegNow : '')}`} />
+                            ))}
+                        </div>
                     </div>
-                    {selectedPlaylists.length > 0 && (
-                        <button type="button" className={`${styles.srBtn} ${styles.srPlaylistLine} ${showAllPlaylists ? styles.srPlaylistLineOpen : ''}`}
-                            onClick={() => setShowAllPlaylists(v => !v)}
-                            aria-expanded={showAllPlaylists}
-                            title={selectedPlaylists.map(p => p.name).join(' · ')}>
-                            <IconNote size={14} />
-                            <span>
-                                {showAllPlaylists || selectedPlaylists.length <= 2
-                                    ? selectedPlaylists.map(p => p.name).join(' · ')
-                                    : `${selectedPlaylists[0].name} + ${selectedPlaylists.length - 1} weitere`}
-                            </span>
-                        </button>
-                    )}
-                </div>
+                    <span className={styles.srPoints} role="status" aria-label={`${points} Punkte`}>
+                        {points}<small>P</small>
+                    </span>
+                </header>
 
                 {startNotice && <p className={styles.srToast} role="status">{startNotice}</p>}
 
-                <div
-                    className={`${styles.srCardGame} ${!isRevealed ? styles.srSkelGame : ''} ${(!isRevealed && (isPlaying || starting || connecting)) ? styles.srPulse : ''} ${((!isRevealed && canAct) || verdict) ? styles.srCardTap : ''} ${verdict === 'ok' ? styles.srVerdictOk : ''} ${verdict === 'no' ? styles.srVerdictNo : ''}`}
-                    onClick={() => {
-                        if (verdict) { revealDoneRef.current?.(); return }
-                        if (!isRevealed && canAct) setIsRevealed(true)
-                    }}
-                >
-                    {verdict && (
-                        <span className={`${styles.srVerdictBadge} ${verdict === 'ok' ? styles.srVerdictBadgeOk : styles.srVerdictBadgeNo}`} aria-hidden="true">
-                            {verdict === 'ok' ? <IconCheck size={22} w={3.2} /> : <IconX size={20} w={3.2} />}
-                        </span>
-                    )}
-                    {isRevealed ? (
-                        <div role="img" aria-label={`Albumcover: ${currentTrackInfo?.trackName || 'Song'}`} className={styles.srCoverFill}>
-                            <CoverArt src={currentTrackInfo?.imageUrl} seed={currentTrackInfo?.trackId || currentTrackInfo?.trackName || currentIndex} size={248} radius={0} />
-                        </div>
-                    ) : (
-                        <span className={styles.srSkelQ} role="img" aria-label="Verdecktes Albumcover">?</span>
-                    )}
-                </div>
+                <div className={styles.srStage}>
+                    <div
+                        className={`${styles.srCardGame} ${!isRevealed ? styles.srSkelGame : ''} ${(!isRevealed && (isPlaying || starting || connecting)) ? styles.srPulse : ''} ${((!isRevealed && canAct) || verdict) ? styles.srCardTap : ''} ${verdict === 'ok' ? styles.srVerdictOk : ''} ${verdict === 'no' ? styles.srVerdictNo : ''}`}
+                        onClick={() => {
+                            if (verdict) { revealDoneRef.current?.(); return }
+                            if (!isRevealed && canAct) setIsRevealed(true)
+                        }}
+                    >
+                        {verdict && (
+                            <span className={`${styles.srVerdictBadge} ${verdict === 'ok' ? styles.srVerdictBadgeOk : styles.srVerdictBadgeNo}`} aria-hidden="true">
+                                {verdict === 'ok' ? <IconCheck size={22} w={3.2} /> : <IconX size={20} w={3.2} />}
+                            </span>
+                        )}
+                        {isRevealed ? (
+                            <div role="img" aria-label={`Albumcover: ${currentTrackInfo?.trackName || 'Song'}`} className={styles.srCoverFill}>
+                                <CoverArt src={currentTrackInfo?.imageUrl} seed={currentTrackInfo?.trackId || currentTrackInfo?.trackName || currentIndex} size={248} radius={0} />
+                            </div>
+                        ) : (
+                            <span className={styles.srSkelQ} role="img" aria-label="Verdecktes Albumcover">?</span>
+                        )}
+                    </div>
 
-                <div className={styles.srTitleArea}>
-                    {isRevealed ? (
-                        <>
-                            <h2 className={styles.srSongTitle} title={currentTrackInfo?.trackName || ''}>{currentTrackInfo?.trackName || 'Titel wird geladen …'}</h2>
-                            <p className={styles.srSongArtist}>{currentTrackInfo?.artist || ''}</p>
-                        </>
-                    ) : (
-                        <div role="img" aria-label="Titel und Interpret sind verdeckt" className={styles.srMasks}>
-                            <span style={{ width: 196, height: 16 }} /><span style={{ width: 124, height: 12 }} />
-                        </div>
-                    )}
+                    <div className={styles.srTitleArea}>
+                        {isRevealed ? (
+                            <>
+                                <h2 className={styles.srSongTitle} title={currentTrackInfo?.trackName || ''}>{currentTrackInfo?.trackName || 'Titel wird geladen …'}</h2>
+                                <p className={styles.srSongArtist}>{[currentTrackInfo?.artist, year].filter(Boolean).join(' · ')}</p>
+                            </>
+                        ) : (
+                            <div role="img" aria-label="Titel und Interpret sind verdeckt" className={styles.srMasks}>
+                                <span style={{ width: 196, height: 16 }} /><span style={{ width: 124, height: 12 }} />
+                            </div>
+                        )}
+                    </div>
                 </div>
-
-                <div role="group" aria-label="Ausschnitte" className={styles.srTiles}>
-                    {STAGES.map((s, i) => {
-                        const locked = i > playedN
-                        const playing = playingIdx === i
-                        const loadingTile = startingIdx === i
-                        const otherPlaying = starting && !loadingTile
-                        const aria = locked ? `${s.long} – noch gesperrt` : (playing ? `${s.long} pausieren` : `${s.long} abspielen`)
-                        return (
-                            <button key={s.label} type="button" onClick={() => onTile(i)} disabled={locked || connecting || otherPlaying || loadingTile} aria-label={aria}
-                                className={`${styles.srBtn} ${styles.srTile} ${locked ? styles.srTile_locked : ((playing || loadingTile) ? styles.srTile_playing : (i === playedN ? styles.srTile_next : styles.srTile_played))} ${(connecting && !locked) || otherPlaying ? styles.srTileConn : ''}`}>
-                                {playing && <span className={styles.srTileFill} style={{ width: `${Math.round(progress * 100)}%` }} />}
-                                <span className={styles.srTileLabel}>{s.label}</span>
-                                <span className={styles.srTileStatus}>
-                                    {locked ? <><IconLock size={14} w={2.6} />gesperrt</> : (loadingTile ? <IconWave size={16} /> : (playing ? <IconPause size={20} /> : <IconPlay size={18} />))}
-                                </span>
-                            </button>
-                        )
-                    })}
-                </div>
-
-                <div className={styles.srSpacer} />
 
                 {friendlyError && (
                     <div className={styles.srAlert} role="alert">
@@ -1430,16 +1510,51 @@ export default function SecondSound({ onBack }) {
                     </div>
                 )}
 
-                <div className={styles.srActions}>
-                    <button type="button" onClick={() => canAct && setIsRevealed(r => !r)} disabled={!canAct}
-                        className={`${styles.srBtn} ${styles.srReveal} ${!canAct ? styles.srRevealOff : styles.srRevealOpen}`}>
-                        {!canAct ? <IconLock /> : (isRevealed ? <IconEyeOff /> : <IconEye />)}
-                        {!canAct ? 'Song aufdecken' : (isRevealed ? 'Song verdecken' : 'Song aufdecken')}
+                {/* Zeitleiste: 4 Teile, gesperrte gestrichelt, Orange = so weit gehört */}
+                <div className={styles.srTimeline} role="img" aria-label={`Freigeschaltet bis ${STAGES[stage].long}, gehört ${Math.floor(heardSec)} Sekunden`}>
+                    {STAGES.map((s, i) => {
+                        const from = i === 0 ? 0 : STAGES[i - 1].seconds
+                        const fill = Math.max(0, Math.min(1, (heardSec - from) / (s.seconds - from)))
+                        const locked = i > stage
+                        return (
+                            <div key={s.label} className={styles.srTlPart}>
+                                <span className={`${styles.srTlBar} ${locked ? styles.srTlLocked : ''}`}>
+                                    {!locked && <span className={styles.srTlFill} style={{ width: `${fill * 100}%` }} />}
+                                </span>
+                                <span className={`${styles.srTlLabel} ${i === stage ? styles.srTlLabelNow : ''}`}>{s.label}</span>
+                            </div>
+                        )
+                    })}
+                </div>
+
+                <div className={styles.srControls}>
+                    <button type="button" className={`${styles.srBtn} ${styles.srCtrlSide}`} onClick={() => handlePlayStage(stage)}
+                        disabled={!hasPlayedCurrentSong || busy} aria-label="Von vorn abspielen" title="Von vorn abspielen">
+                        <IconReplay size={24} />
                     </button>
-                    <div className={styles.srRate}>
-                        <button type="button" onClick={() => canAct && handleAnswer(false)} disabled={!canAct} className={`${styles.srBtn} ${styles.srRateNo} ${!canAct ? styles.srRateOff : ''}`}><IconX size={20} w={2.8} />Nicht erraten</button>
-                        <button type="button" onClick={() => canAct && handleAnswer(true)} disabled={!canAct} className={`${styles.srBtn} ${styles.srRateOk} ${!canAct ? styles.srRateOff : ''}`}><IconCheck size={22} />Erraten</button>
-                    </div>
+                    <button type="button" className={`${styles.srBtn} ${styles.srCtrlPlay}`} onClick={handlePlayToggle}
+                        disabled={busy} aria-label={playLabel} title={playLabel}>
+                        {starting ? <IconWave size={30} /> : (isPlaying ? <IconPause size={32} /> : <IconPlay size={32} />)}
+                    </button>
+                    <button type="button" className={`${styles.srBtn} ${styles.srCtrlSide} ${styles.srCtrlMore}`} onClick={handleUnlockNext}
+                        disabled={!canUnlock}
+                        aria-label={isLast ? 'Alle 30 Sekunden freigeschaltet' : `${nextStep} Sekunden mehr hören`}>
+                        {isLast ? '30 s' : `+${nextStep} s`}
+                    </button>
+                </div>
+
+                <div className={styles.srGameFoot}>
+                    {!isRevealed ? (
+                        <button type="button" onClick={() => setIsRevealed(true)} disabled={!canAct}
+                            className={`${styles.srBtn} ${styles.srSolve}`}>
+                            <IconEye />Auflösen
+                        </button>
+                    ) : (
+                        <div className={styles.srRate}>
+                            <button type="button" onClick={() => handleAnswer(false)} disabled={!!verdict} className={`${styles.srBtn} ${styles.srRateNo}`}><IconX size={20} w={2.8} />Nicht erraten</button>
+                            <button type="button" onClick={() => handleAnswer(true)} disabled={!!verdict} className={`${styles.srBtn} ${styles.srRateOk}`}><IconCheck size={22} />Erraten · +{stagePoints}</button>
+                        </div>
+                    )}
                 </div>
 
                 <ConfirmSheet
@@ -1498,6 +1613,17 @@ export default function SecondSound({ onBack }) {
 
                     {statsSaveFailed && (
                         <p className={styles.srToast} role="status">Deine Statistik konnte diesmal nicht gespeichert werden.</p>
+                    )}
+
+                    {total > 0 && (
+                        <section className={styles.srAvg}>
+                            <span className={styles.srAvgIcon}><IconStar /></span>
+                            <p className={styles.srAvgText}>
+                                <span className={styles.srMuted}>Deine Punkte</span>
+                                <span className={styles.srAvgNum}>{points} {points === 1 ? 'Punkt' : 'Punkte'}</span>
+                                <span className={styles.srAvgSub}>von {total * MAX_POINTS} möglichen · je früher erraten, desto mehr</span>
+                            </p>
+                        </section>
                     )}
 
                     {avg !== null && (

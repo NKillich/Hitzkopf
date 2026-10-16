@@ -347,6 +347,58 @@ export class ClipPlayer {
         return this.startUri({ uri, seconds, isStale })
     }
 
+    /**
+     * Läuft der Titel gerade: Ende des Ausschnitts auf Position `untilMs` verschieben (nahtlos weiterhören).
+     * Gibt false zurück, wenn nichts (oder ein anderer Titel) läuft.
+     */
+    extendTo({ uri, untilMs }) {
+        const a = this.active
+        if (!a || a.uri !== uri) return false
+        a.deadline = Math.max(a.deadline, untilMs)
+        this.trace('extend', { until: Math.round(untilMs) })
+        this._scheduleTick()
+        return true
+    }
+
+    /**
+     * Denselben, pausierten Titel an der aktuellen Stelle fortsetzen und bei Position `untilMs` anhalten.
+     * Gibt { track, startedAt, startPos } zurück, { aborted } oder { lost: true } (dann von vorn spielen).
+     */
+    async resumeTo({ uri, untilMs, isStale }) {
+        const myOp = ++this.op
+        this.active = null
+        this._clearTimer()
+        try {
+            const cur = await this.svc.getPlayerState()
+            if (!this._alive(myOp, isStale)) return { aborted: true }
+            if (cur?.track_window?.current_track?.uri !== uri || cur.position > untilMs - 300) {
+                this.trace('resume-lost', { pos: cur?.position })
+                return { lost: true }
+            }
+            const sentAt = Date.now()
+            await this.svc.resumeLocal()
+            const hit = await this._waitFor(
+                (s) => !s.paused && !s.loading && s.track_window?.current_track?.uri === uri,
+                sentAt, 3000)
+            if (!this._alive(myOp, isStale)) {
+                if (this.op === myOp) await this._silence()
+                return { aborted: true }
+            }
+            if (!hit || hit.error || hit.state.position > untilMs - 300) {
+                this.trace('resume-no-start', { hit: !!hit })
+                return { lost: true }
+            }
+            const pos = hit.state.position
+            return await this._begin({
+                track: trackInfoFrom(hit.state), seconds: (untilMs - pos) / 1000, pos, at: hit.at,
+                duration: hit.state.duration, myOp, isStale
+            })
+        } catch (e) {
+            this.trace('resume-failed', { msg: String(e?.message || e) })
+            return { lost: true }
+        }
+    }
+
     /** Pausiert den laufenden Ausschnitt (ohne Ende-Meldung). */
     async pause() {
         const was = !!this.active
