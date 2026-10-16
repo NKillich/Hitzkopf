@@ -379,3 +379,19 @@
 .srRoot .srGameFoot .srRateNo { height: 64px; border-radius: 32px; border: 1.5px solid var(--sr-line); font-size: 16px; }
 .srRoot .srGameFoot .srRateOk { height: 64px; border-radius: 32px; border: none; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 16px; }
 .srRoot .srGameFoot .srRateNo svg, .srRoot .srGameFoot .srRateOk svg { color: inherit; }
+
+/* Zeitleiste: Teile einzeln antippen, Positionsstrich */
+.srRoot .srTlPart { min-height: 44px; padding: 8px 0 0; justify-content: flex-start; align-items: stretch; border-radius: 8px; }
+.srRoot .srTlPart:disabled { cursor: default; opacity: 1; }
+.srRoot .srTlPartOn .srTlLabel { color: var(--sr-accent-text); }
+.srRoot .srTlPartOn .srTlBar { box-shadow: 0 0 0 2px var(--sr-accent); }
+.srRoot .srTlBar { overflow: visible; }
+.srRoot .srTlHead { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--sr-ink); }
+
+/* Songanzahl-Seite: Einsetzpunkt */
+.srRoot .srStartBox { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px 6px; border-radius: 20px; background: var(--sr-surface); }
+.srRoot .srStartHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.srRoot .srStartLabel { font-size: 15px; font-weight: 700; color: var(--sr-muted); }
+.srRoot .srStartValue { font-family: var(--sr-display); font-size: 20px; font-weight: 800; }
+.srRoot .srStartHint { margin: 0; font-size: 13px; line-height: 1.4; color: var(--sr-muted); }
+.srRoot .srStartBox .srSlider { height: 36px; }

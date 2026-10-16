@@ -46,6 +46,16 @@ const MAX_POINTS = STAGES[0].points
 
 const COUNT_OPTIONS = [5, 10, 15, 20, 25, 30]
 
+// Einsetzpunkt der Songs (0 = von vorn … 90 % der Songlänge), auf dem Gerät gemerkt
+const START_PCT_KEY = 'ss_start_pct'
+const START_PCT_MAX = 90
+const loadStartPct = () => {
+    try {
+        const n = Number(localStorage.getItem(START_PCT_KEY))
+        return Number.isFinite(n) ? Math.max(0, Math.min(START_PCT_MAX, Math.round(n / 10) * 10)) : 0
+    } catch { return 0 }
+}
+
 // Größen-Cache über Sitzungen hinweg (spart die teure Live-Erkennung)
 const SIZE_CACHE_KEY = 'ss_plsizes_v1'
 const SIZE_CACHE_TTL = 7 * 24 * 3600 * 1000
@@ -82,6 +92,7 @@ export default function SecondSound({ onBack }) {
     const [myPlaylistsError, setMyPlaylistsError] = useState(null)
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
     const [songCount, setSongCount] = useState(10)
+    const [startPct, setStartPct] = useState(loadStartPct)
     const [stage, setStage] = useState(0)                 // freigeschalteter Teil der Zeitleiste (0 = 1 s … 3 = 30 s)
     // True sobald der aktuelle Song mindestens 1× abgespielt wurde – schaltet
     // Aufdecken- und Antwort-Buttons frei. Verhindert Klick-Spam mit 403/502.
@@ -133,6 +144,7 @@ export default function SecondSound({ onBack }) {
     const playRef = useRef(null)                // laufender Ausschnitt: { startPos, startedAt, untilMs } (Spotify-Positionen in ms)
     const baseRef = useRef(0)                   // Position, an der der Song „bei 0 s“ startet
     const heardRef = useRef(0)                  // so weit wurde der Song gehört (ms ab baseRef)
+    const posRef = useRef(0)                    // hier wurde zuletzt angehalten (ms ab baseRef)
     const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
     const allowPlaybackRef = useRef(false)      // true nur, solange der Spieler einen Play-Button gedrückt hat
     const songsRef = useRef([])
@@ -566,19 +578,20 @@ export default function SecondSound({ onBack }) {
 
     const dbg = (...args) => log('[SS]', ...args)
 
-    // Aktuelle Hörposition (ms ab Songstart) – live hochgerechnet, solange ein Ausschnitt läuft
+    // Aktuelle Abspielposition (ms ab Einsetzpunkt) – live hochgerechnet, solange ein Ausschnitt läuft
     const livePosMs = () => {
         const p = playRef.current
-        if (!p) return heardRef.current
+        if (!p) return posRef.current
         return Math.max(0, Math.min(p.untilMs, p.startPos + (Date.now() - p.startedAt)) - baseRef.current)
     }
 
-    // Ausschnitt ist zu Ende oder pausiert: gehörte Strecke merken (reachedEnd = bis zur Grenze gelaufen)
+    // Ausschnitt ist zu Ende oder pausiert: Position und gehörte Strecke merken (reachedEnd = bis zur Grenze gelaufen)
     const noteHeard = (reachedEnd) => {
         const p = playRef.current
         if (!p) return
         const pos = reachedEnd ? p.untilMs - baseRef.current : livePosMs()
         heardRef.current = Math.max(heardRef.current, pos)
+        posRef.current = pos
         playRef.current = null
     }
 
@@ -587,6 +600,7 @@ export default function SecondSound({ onBack }) {
         playRef.current = null
         baseRef.current = 0
         heardRef.current = 0
+        posRef.current = 0
         setStage(0)
     }
 
@@ -599,7 +613,7 @@ export default function SecondSound({ onBack }) {
         await clip.pause()
     }
 
-    // Spielt den Song von vorn bis zum Ende von Teil `idx` (1/5/10/30 s).
+    // Spielt den Song vom Einsetzpunkt bis zum Ende von Teil `idx` (1/5/10/30 s).
     // Ein Titel gilt erst als gestartet, wenn der Player "spielt" meldet (siehe clipPlayerCore.js).
     const handlePlayStage = async (idx) => {
         const seconds = STAGES[idx].seconds
@@ -627,8 +641,8 @@ export default function SecondSound({ onBack }) {
             const knownUri = trackUriRef.current[slot]
             let result
             if (knownUri) {
-                // gleicher Titel von vorn (seek+resume); sonst per URI neu laden
-                result = await clip.replay({ uri: knownUri, seconds, isStale })
+                // gleicher Titel ab Einsetzpunkt (seek+resume); sonst per URI neu laden
+                result = await clip.replay({ uri: knownUri, seconds, isStale, startMs: baseRef.current, untilMs: baseRef.current + seconds * 1000 })
             } else {
                 let tries = 0
                 for (;;) {
@@ -640,6 +654,7 @@ export default function SecondSound({ onBack }) {
                         offset: song.offset,
                         seconds,
                         isStale,
+                        startFrac: startPct / 100,
                         // Duplikate werden stumm verworfen, BEVOR man sie hört (Titel ist hier verifiziert, nicht geraten)
                         accept: (t) => !(canSkip && usedUrisRef.current.has(t.uri))
                     })
@@ -660,8 +675,8 @@ export default function SecondSound({ onBack }) {
                     setCurrentIndex(slot)
                 }
             }
-            baseRef.current = result.startPos
-            playRef.current = { startPos: result.startPos, startedAt: result.startedAt, untilMs: result.startPos + seconds * 1000 }
+            if (!knownUri) baseRef.current = result.startPos
+            playRef.current = { startPos: result.startPos, startedAt: result.startedAt, untilMs: baseRef.current + seconds * 1000 }
             setIsPlaying(true)
             setHasPlayedCurrentSong(true)
             setStartNotice(null)
@@ -727,11 +742,66 @@ export default function SecondSound({ onBack }) {
         }
     }
 
-    // Großer Play-Button: freigeschalteten Teil hören (pausiert mittendrin → dort weiter, sonst von vorn)
+    // Spielt nur Teil `idx` der Zeitleiste (z. B. 5–10 s)
+    const playSegment = async (idx) => {
+        if (isPlayingRequestRef.current) return
+        spotifyService.activateAudio()
+        if (!playerReady) {
+            setPlayerError('Spotify Player noch nicht bereit. Bitte warte einen Moment.')
+            return
+        }
+        const uri = trackUriRef.current[currentIndexRef.current]
+        if (!uri) { handlePlayStage(idx); return }
+        const gen = playGenRef.current
+        const isStale = () => gen !== playGenRef.current
+        const from = idx === 0 ? 0 : STAGES[idx - 1].seconds
+        const startMs = baseRef.current + from * 1000
+        const untilMs = baseRef.current + STAGES[idx].seconds * 1000
+
+        isPlayingRequestRef.current = true
+        noteHeard(false)
+        setIsPlaying(false)
+        setStartingIdx(idx)
+        setPlayerError(null)
+        allowPlaybackRef.current = true
+        dbg(`playSegment: ${from}–${STAGES[idx].seconds}s`)
+
+        try {
+            const result = await clip.replay({ uri, seconds: STAGES[idx].seconds - from, isStale, startMs, untilMs })
+            if (result.aborted || isStale()) return
+            playRef.current = { startPos: result.startPos, startedAt: result.startedAt, untilMs }
+            setIsPlaying(true)
+            maxHeardRef.current = Math.max(maxHeardRef.current, STAGES[idx].seconds)
+        } catch (e) {
+            allowPlaybackRef.current = false
+            if (!isStale()) setPlayerError(e.message || 'Wiedergabe fehlgeschlagen')
+        } finally {
+            if (!isStale()) {
+                isPlayingRequestRef.current = false
+                setStartingIdx(-1)
+            }
+        }
+    }
+
+    // In welchem Teil der Zeitleiste steht eine Position (ms ab Einsetzpunkt)?
+    const partAt = (ms) => {
+        const i = STAGES.findIndex(s => ms < s.seconds * 1000 - 50)
+        return i < 0 ? STAGES.length - 1 : i
+    }
+
+    // Tipp auf einen freigeschalteten Teil: nur diesen hören (läuft er gerade → Pause)
+    const handleSegmentTap = (idx) => {
+        if (idx > stage || !hasPlayedCurrentSong) return
+        if (isPlaying && partAt(livePosMs()) === idx) { stopPlayback(); return }
+        playSegment(idx)
+    }
+
+    // Großer Play-Button: dort weiter, wo angehalten wurde – bis zum Ende des freigeschalteten Bereichs.
+    // Steht man schon am Ende, geht es vom Einsetzpunkt los.
     const handlePlayToggle = () => {
         if (isPlaying) { stopPlayback(); return }
         const endMs = STAGES[stage].seconds * 1000
-        if (hasPlayedCurrentSong && heardRef.current > 0 && heardRef.current < endMs - 400) resumeStage(stage)
+        if (hasPlayedCurrentSong && posRef.current > 0 && posRef.current < endMs - 400) resumeStage(stage)
         else handlePlayStage(stage)
     }
 
@@ -742,13 +812,16 @@ export default function SecondSound({ onBack }) {
         setStage(next)
         const uri = trackUriRef.current[currentIndexRef.current]
         const untilMs = baseRef.current + STAGES[next].seconds * 1000
-        if (isPlaying && playRef.current && clip.extendTo({ uri, untilMs })) {
-            // läuft noch: Ende einfach nach hinten schieben
+        const inLastPart = partAt(livePosMs()) === stage
+        if (isPlaying && inLastPart && playRef.current && clip.extendTo({ uri, untilMs })) {
+            // läuft im bisher letzten Teil: Ende einfach nach hinten schieben
             playRef.current = { ...playRef.current, untilMs }
             maxHeardRef.current = Math.max(maxHeardRef.current, STAGES[next].seconds)
             return
         }
-        resumeStage(next)
+        // am Ende des bisherigen Bereichs angehalten → nahtlos weiter; sonst genau den neuen Teil spielen
+        if (!isPlaying && posRef.current >= STAGES[stage].seconds * 1000 - 400) resumeStage(next)
+        else playSegment(next)
     }
 
     // Nicht abspielbaren Song auslassen (zählt nicht als gespielt)
@@ -1272,6 +1345,32 @@ export default function SecondSound({ onBack }) {
                             <p className={styles.srCountHint}>Deine Auswahl hat nur {knownTotal} Songs – die Runde hat deshalb {knownTotal} Songs.</p>
                         )}
                     </div>
+
+                    <div className={styles.srStartBox}>
+                        <div className={styles.srStartHead}>
+                            <span id="sr-start-label" className={styles.srStartLabel}>Songs setzen ein</span>
+                            <span className={styles.srStartValue}>{startPct === 0 ? 'von vorn' : `ab ${startPct} %`}</span>
+                        </div>
+                        <input
+                            type="range"
+                            className={styles.srSlider}
+                            min={0}
+                            max={START_PCT_MAX}
+                            step={10}
+                            value={startPct}
+                            onChange={e => {
+                                const v = Number(e.target.value)
+                                setStartPct(v)
+                                try { localStorage.setItem(START_PCT_KEY, String(v)) } catch { /* nur Komfort */ }
+                            }}
+                            aria-labelledby="sr-start-label"
+                            aria-valuetext={startPct === 0 ? 'von vorn' : `ab ${startPct} Prozent der Songlänge`}
+                            style={{ '--pct': `${(startPct / START_PCT_MAX) * 100}%` }}
+                        />
+                        <p className={styles.srStartHint}>
+                            {startPct === 0 ? 'Wie im Original – mit Intro.' : 'Überspringt Intros, oft landest du mitten im Song. Es bleiben immer 30 s bis zum Ende.'}
+                        </p>
+                    </div>
                 </div>
 
                 <div className={styles.srFooter}>
@@ -1293,7 +1392,7 @@ export default function SecondSound({ onBack }) {
                     <button type="button" className={`${styles.srBtn} ${styles.srStart}`} onClick={handleStartGame}>
                         <span className={styles.srStartText}>
                             <span className={styles.srStartTitle}>Spiel starten</span>
-                            <span className={styles.srStartSub}>{k} {k === 1 ? 'Playlist' : 'Playlists'} - {songCount} Songs</span>
+                            <span className={styles.srStartSub}>{k} {k === 1 ? 'Playlist' : 'Playlists'} - {songCount} Songs{startPct > 0 ? ` - ab ${startPct} %` : ''}</span>
                         </span>
                         <span className={styles.srStartIcon}><IconPlay size={20} /></span>
                     </button>
@@ -1427,7 +1526,9 @@ export default function SecondSound({ onBack }) {
         const connecting = !playerReady && !playerError
         const starting = startingIdx >= 0
         const busy = connecting || starting || !!verdict
-        const heardSec = livePosMs() / 1000
+        const headSec = livePosMs() / 1000                          // Abspielposition
+        const heardSec = Math.max(heardRef.current / 1000, headSec)  // so weit gehört
+        const playPart = partAt(headSec * 1000)
         const isLast = stage >= STAGES.length - 1
         const nextStep = isLast ? 0 : STAGES[stage + 1].seconds - STAGES[stage].seconds
         const canAct = hasPlayedCurrentSong && !connecting && !verdict
@@ -1510,19 +1611,27 @@ export default function SecondSound({ onBack }) {
                     </div>
                 )}
 
-                {/* Zeitleiste: 4 Teile, gesperrte gestrichelt, Orange = so weit gehört */}
-                <div className={styles.srTimeline} role="img" aria-label={`Freigeschaltet bis ${STAGES[stage].long}, gehört ${Math.floor(heardSec)} Sekunden`}>
+                {/* Zeitleiste: 4 Teile, gesperrte gestrichelt, Orange = so weit gehört; freigeschaltete Teile einzeln abspielbar */}
+                <div className={styles.srTimeline} role="group" aria-label={`Freigeschaltet bis ${STAGES[stage].long}, gehört ${Math.floor(heardSec)} Sekunden`}>
                     {STAGES.map((s, i) => {
                         const from = i === 0 ? 0 : STAGES[i - 1].seconds
-                        const fill = Math.max(0, Math.min(1, (heardSec - from) / (s.seconds - from)))
+                        const span = s.seconds - from
+                        const fill = Math.max(0, Math.min(1, (heardSec - from) / span))
                         const locked = i > stage
+                        const playingHere = isPlaying && playPart === i
+                        // Positionsstrich: zeigt, wo gerade gespielt wird bzw. angehalten wurde (wenn nicht ganz vorn an der Hörgrenze)
+                        const showHead = !locked && headSec >= from && headSec < s.seconds && (isPlaying || headSec < heardSec - 0.3) && headSec > 0
+                        const label = locked ? `${from}–${s.seconds} Sekunden, noch gesperrt` : (playingHere ? `${from}–${s.seconds} Sekunden pausieren` : `Nur ${from}–${s.seconds} Sekunden abspielen`)
                         return (
-                            <div key={s.label} className={styles.srTlPart}>
+                            <button key={s.label} type="button" onClick={() => handleSegmentTap(i)}
+                                disabled={locked || !hasPlayedCurrentSong || busy} aria-label={label} title={locked ? undefined : label}
+                                className={`${styles.srBtn} ${styles.srTlPart} ${playingHere ? styles.srTlPartOn : ''}`}>
                                 <span className={`${styles.srTlBar} ${locked ? styles.srTlLocked : ''}`}>
                                     {!locked && <span className={styles.srTlFill} style={{ width: `${fill * 100}%` }} />}
+                                    {showHead && <span className={styles.srTlHead} style={{ left: `${((headSec - from) / span) * 100}%` }} />}
                                 </span>
                                 <span className={`${styles.srTlLabel} ${i === stage ? styles.srTlLabelNow : ''}`}>{s.label}</span>
-                            </div>
+                            </button>
                         )
                     })}
                 </div>
