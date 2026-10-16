@@ -1,67 +1,102 @@
+import { useRef, useState } from 'react'
 import useTheme from '../shared/ui/useTheme'
 import theme from '../shared/ui/theme.module.css'
-import { IconMoon, IconSun, IconNext, IconTv } from '../shared/ui/icons'
+import { BottomSheet } from '../shared/ui/BottomSheet'
+import QrScanner from '../shared/ui/QrScanner'
+import { IconNext, IconGear, IconQr, IconMoon, IconSun } from '../shared/ui/icons'
+import { codeFromQr } from '../projects/Amplify2/avatars'
 import styles from './ProjectHub.module.css'
 
-// Startseite im gemeinsamen App-Design (wie Amplify und Song raten)
+// Startseite im gemeinsamen App-Design (wie Amplify und Identify).
+// Amplify 1.0 und die Live-Boards stehen hier nicht mehr (1.0 bleibt über #amplify erreichbar, Live-Board aus der Lobby).
 const GROUPS = [
     {
         label: 'Musik',
         games: [
-            { id: 'amplify2', name: 'Amplify 2.0', emoji: '🎵', description: 'Sammelt gemeinsam Songs und stimmt ab. Die beliebtesten laufen zuerst.', tag: 'Neu' },
-            { id: 'musicvoter', name: 'Amplify 1.0', emoji: '🎵', description: 'Die bewährte Version zum Vergleichen.', tag: 'Klassisch' },
-            { id: 'secondsound', name: 'Song raten', emoji: '🎧', description: 'Erkennst du den Song nach 1, 5, 10 oder 30 Sekunden?', tag: 'Spotify' }
+            { id: 'amplify2', name: 'Amplify', emoji: '🎵', tint: '#1DB954', description: 'Alle schlagen Songs vor und voten – Platz 1 läuft als Nächstes.' },
+            { id: 'secondsound', name: 'Identify', emoji: '🎧', tint: '#FF6B2C', description: 'Erkennst du den Song nach 1 Sekunde? Je früher, desto mehr Punkte.' }
         ]
     },
     {
         label: 'Party & Quiz',
         games: [
-            { id: 'hitzkopf', name: 'Hitzkopf', emoji: '🔥', description: 'Das explosive Partyspiel' },
-            { id: 'quizroyale', name: 'Quiz Royale', emoji: '🧠', description: 'Rundenbasiertes Quiz mit Upgrades & Charakteren' }
+            { id: 'hitzkopf', name: 'Hitzkopf', emoji: '🔥', tint: '#FF3B30', description: 'Das explosive Partyspiel' },
+            { id: 'quizroyale', name: 'Quiz Royale', emoji: '🧠', tint: '#C04CFD', description: 'Quiz mit Upgrades & Charakteren' }
         ]
     }
 ]
 
-// Offene Amplify-Playlists in diesem Tab (1.0 und 2.0 haben getrennte Sitzungen)
-const readAmplifyRooms = () => {
-    const read = (key) => { try { return sessionStorage.getItem(key) || null } catch { return null } }
-    return [
-        { id: 'amplify2', label: 'Amplify 2.0', code: read('a2_roomId') },
-        { id: 'musicvoter', label: 'Amplify 1.0', code: read('mv_roomId') }
-    ].filter(r => r.code)
+const CODE_RE = /^[A-Z0-9]{4,10}$/
+
+// Offene Amplify-Playlist in diesem Tab
+const readAmplifyRoom = () => {
+    try { return sessionStorage.getItem('a2_roomId') || null } catch { return null }
 }
 
-const ProjectHub = ({ onSelectProject }) => {
+const ProjectHub = ({ onSelectProject, onJoinAmplify }) => {
     const { isDark, toggleTheme } = useTheme()
-    const amplifyRooms = readAmplifyRooms()
-    const themeLabel = isDark ? 'Helles Design einschalten' : 'Dunkles Design einschalten'
+    const amplifyRoom = readAmplifyRoom()
+    const [code, setCode] = useState('')
+    const [scanning, setScanning] = useState(false)
+    const [settingsOpen, setSettingsOpen] = useState(false)
+    const gearRef = useRef(null)
+    const codeOk = CODE_RE.test(code)
+
+    const join = (e) => {
+        e?.preventDefault()
+        if (codeOk) onJoinAmplify(code)
+    }
 
     return (
         <div className={`${styles.hubRoot} ${isDark ? theme.dark : theme.light}`}>
             <div className={styles.hubApp}>
                 <header className={styles.hubHeader}>
                     <span className={styles.hubBrand}>Party Games</span>
-                    <button type="button" className={`${styles.hubBtn} ${styles.hubIconBtn}`} onClick={toggleTheme} aria-label={themeLabel} title={themeLabel}>
-                        {isDark ? <IconSun /> : <IconMoon />}
+                    <button ref={gearRef} type="button" className={`${styles.hubBtn} ${styles.hubIconBtn}`} onClick={() => setSettingsOpen(true)} aria-label="Einstellungen" title="Einstellungen">
+                        <IconGear />
                     </button>
                 </header>
 
                 <main className={styles.hubMain}>
-                    <div className={styles.hubHero}>
-                        <h1 className={styles.hubTitle}>Was spielen wir?</h1>
-                        <p className={styles.hubLead}>Spiele für den Abend mit Freunden – alle machen mit dem eigenen Handy mit.</p>
-                    </div>
+                    <h1 className={styles.hubTitle}>Was spielen wir?</h1>
 
-                    {amplifyRooms.map(r => (
-                        <button key={r.id} type="button" className={`${styles.hubBtn} ${styles.hubRejoin}`} onClick={() => onSelectProject(r.id)}>
+                    {amplifyRoom && (
+                        <button type="button" className={`${styles.hubBtn} ${styles.hubRejoin}`} onClick={() => onSelectProject('amplify2')}>
                             <span className={styles.hubLiveDot} aria-hidden="true" />
                             <span className={styles.hubRowText}>
                                 <span className={styles.hubRowName}>Zurück zu deiner Playlist</span>
-                                <span className={styles.hubRowMeta}>{r.label} · Code {r.code}</span>
+                                <span className={styles.hubRowMeta}>Amplify · Code {amplifyRoom}</span>
                             </span>
                             <IconNext />
                         </button>
-                    ))}
+                    )}
+
+                    <section className={styles.hubGroup} aria-labelledby="hub-join-label">
+                        <h2 id="hub-join-label" className={styles.hubGroupLabel}>Mitspielen</h2>
+                        <form className={styles.hubJoin} onSubmit={join}>
+                            <div className={styles.hubCodeWrap}>
+                                <input
+                                    className={styles.hubCode}
+                                    value={code}
+                                    onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                                    placeholder="RAUMCODE"
+                                    aria-label="Raumcode einer Amplify-Playlist"
+                                    autoComplete="off"
+                                    autoCapitalize="characters"
+                                    spellCheck="false"
+                                    enterKeyHint="go"
+                                />
+                                {codeOk && (
+                                    <button type="submit" className={`${styles.hubBtn} ${styles.hubCodeGo}`} aria-label="Beitreten" title="Beitreten">
+                                        <IconNext />
+                                    </button>
+                                )}
+                            </div>
+                            <button type="button" className={`${styles.hubBtn} ${styles.hubScanBtn}`} onClick={() => setScanning(true)} aria-label="QR-Code scannen" title="QR-Code scannen">
+                                <IconQr size={26} />
+                            </button>
+                        </form>
+                    </section>
 
                     {GROUPS.map(group => (
                         <section key={group.label} className={styles.hubGroup} aria-label={group.label}>
@@ -69,12 +104,9 @@ const ProjectHub = ({ onSelectProject }) => {
                             <div className={styles.hubGrid}>
                                 {group.games.map(game => (
                                     <button key={game.id} type="button" className={`${styles.hubBtn} ${styles.hubCard}`} onClick={() => onSelectProject(game.id)}>
-                                        <span className={styles.hubEmoji} aria-hidden="true">{game.emoji}</span>
+                                        <span className={styles.hubEmoji} style={{ '--tint': game.tint }} aria-hidden="true">{game.emoji}</span>
                                         <span className={styles.hubCardText}>
-                                            <span className={styles.hubCardName}>
-                                                {game.name}
-                                                {game.tag && <span className={styles.hubTag}>{game.tag}</span>}
-                                            </span>
+                                            <span className={styles.hubCardName}>{game.name}</span>
                                             <span className={styles.hubCardDesc}>{game.description}</span>
                                         </span>
                                         <span className={styles.hubChevron}><IconNext /></span>
@@ -83,21 +115,27 @@ const ProjectHub = ({ onSelectProject }) => {
                             </div>
                         </section>
                     ))}
-
-                    {[['live2', 'Live-Board 2.0', 'Eine Amplify-2.0-Playlist groß auf Fernseher oder Beamer zeigen'],
-                        ['live', 'Live-Board 1.0', 'Für Playlists aus Amplify 1.0']].map(([id, name, meta]) => (
-                        <button key={id} type="button" className={`${styles.hubBtn} ${styles.hubBoard}`} onClick={() => onSelectProject(id)}>
-                            <span className={styles.hubBoardIcon}><IconTv size={22} /></span>
-                            <span className={styles.hubRowText}>
-                                <span className={styles.hubRowName}>{name}</span>
-                                <span className={styles.hubRowMeta}>{meta}</span>
-                            </span>
-                            <IconNext />
-                        </button>
-                    ))}
-
-                    <p className={styles.hubFooter}>Made with <span aria-label="Liebe">♥</span> by Niklas</p>
                 </main>
+
+                {scanning && (
+                    <QrScanner parse={codeFromQr} invalidText="Das ist kein Amplify-Code."
+                        onCode={(c) => { setScanning(false); onJoinAmplify(c) }} onClose={() => setScanning(false)} />
+                )}
+
+                <BottomSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} labelledBy="hub-settings-title" returnFocusRef={gearRef}>
+                    <h2 id="hub-settings-title" className={styles.hubSheetTitle}>Einstellungen</h2>
+                    <p className={styles.hubSheetLabel} id="hub-theme-label">Design</p>
+                    <div className={styles.hubSeg} role="radiogroup" aria-labelledby="hub-theme-label">
+                        {[[false, 'Hell', <IconSun key="s" />], [true, 'Dunkel', <IconMoon key="m" />]].map(([dark, label, icon]) => (
+                            <button key={label} type="button" role="radio" aria-checked={isDark === dark}
+                                className={`${styles.hubBtn} ${styles.hubSegBtn} ${isDark === dark ? styles.hubSegOn : ''}`}
+                                onClick={() => { if (isDark !== dark) toggleTheme() }}>
+                                {icon}{label}
+                            </button>
+                        ))}
+                    </div>
+                    <button type="button" className={`${styles.hubBtn} ${styles.hubSheetClose}`} onClick={() => setSettingsOpen(false)}>Fertig</button>
+                </BottomSheet>
             </div>
         </div>
     )

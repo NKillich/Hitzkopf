@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { IconX } from '../../shared/ui/icons'
-import styles from './StartScreen.module.css'
-import a2 from './Amplify2.module.css'
-import { codeFromQr } from './avatars'
+import { IconX } from './icons'
+import styles from './QrScanner.module.css'
 
 
 /**
  * QR-Scanner über die Kamera (Rückkamera). Android/Chrome: eingebauter BarcodeDetector; sonst (iPhone) wird jsQR
- * erst jetzt nachgeladen. onCode(code) bei einem Amplify-Code, onClose zum Schließen.
+ * erst jetzt nachgeladen. parse(text) macht aus dem QR-Inhalt einen Code (oder null); onCode(code) bei einem
+ * gültigen Code, onClose zum Schließen. Muss in einem Element mit position: relative liegen (App-Rahmen).
  */
-export default function QrScanner({ onCode, onClose }) {
+export default function QrScanner({ parse, onCode, onClose, invalidText = 'Das ist kein passender Code.' }) {
     const videoRef = useRef(null)
     const [error, setError] = useState(null)
     const [hint, setHint] = useState(null)
@@ -60,9 +59,9 @@ export default function QrScanner({ onCode, onClose }) {
                 try {
                     const text = await detect()
                     if (text) {
-                        const code = codeFromQr(text)
+                        const code = parse(text)
                         if (code) { doneRef.current = true; navigator.vibrate?.(30); onCode(code); return }
-                        setHint('Das ist kein Amplify-Code.')
+                        setHint(invalidText)
                     }
                 } catch { /* nächster Versuch */ }
                 timer = setTimeout(tick, 250)
@@ -82,7 +81,7 @@ export default function QrScanner({ onCode, onClose }) {
             <video ref={videoRef} className={styles.scanVideo} playsInline muted />
             <div className={styles.scanFrame} aria-hidden="true" />
             <p className={styles.scanText}>{error || hint || 'Halte die Kamera auf den QR-Code des Hosts.'}</p>
-            <button type="button" className={`${a2.mvBtn} ${styles.scanClose}`} onClick={onClose} aria-label="Scanner schließen"><IconX size={22} /></button>
+            <button type="button" className={styles.scanClose} onClick={onClose} aria-label="Scanner schließen"><IconX size={22} /></button>
         </div>
     )
 }

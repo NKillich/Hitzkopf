@@ -60,6 +60,15 @@ const START_PCT_KEY = 'ss_start_pct'
 const START_PCT_MAX = 100
 const START_RANDOM = 100
 const startLabel = (pct) => pct === START_RANDOM ? 'Zufall' : (pct === 0 ? 'von vorn' : `ab ${pct} %`)
+// Spielmodus: Quick = nur Schnipsel + Erraten/Nicht erraten, Pro = zusätzlich Bonus-Tipp (Interpret, Titel, Jahr)
+const MODE_KEY = 'ss_mode'
+const MODES = [
+    { id: 'quick', label: 'Quick', desc: 'Schnipsel hören, erraten oder nicht – je früher, desto mehr Punkte.' },
+    { id: 'pro', label: 'Pro', desc: 'Dazu Bonuspunkte: Interpret und Titel eintippen, Jahr als Doppelt-oder-nichts.' }
+]
+const loadMode = () => {
+    try { return localStorage.getItem(MODE_KEY) === 'pro' ? 'pro' : 'quick' } catch { return 'quick' }
+}
 const loadStartPct = () => {
     try {
         const n = Number(localStorage.getItem(START_PCT_KEY))
@@ -104,6 +113,7 @@ export default function SecondSound({ onBack }) {
     const [selectedPlaylists, setSelectedPlaylists] = useState([])
     const [songCount, setSongCount] = useState(10)
     const [startPct, setStartPct] = useState(loadStartPct)
+    const [mode, setMode] = useState(loadMode)
     const [stage, setStage] = useState(0)                 // freigeschalteter Teil der Zeitleiste (0 = 1 s … 3 = 30 s)
     const [lockedStage, setLockedStage] = useState(null)  // Stufe beim Auflösen – zählt für die Punkte, danach ist alles frei
     // True sobald der aktuelle Song mindestens 1× abgespielt wurde – schaltet
@@ -315,7 +325,7 @@ export default function SecondSound({ onBack }) {
         spotifyService.initPlaybackPlayer(
             () => setPlayerReady(true),
             (msg) => setPlayerError(msg || 'Spotify Player konnte nicht gestartet werden. Spotify Premium erforderlich.'),
-            { activate: true, name: 'Song raten' }
+            { activate: true, name: 'Identify' }
         )
     }, [phase])
 
@@ -491,7 +501,7 @@ export default function SecondSound({ onBack }) {
 
             // Player muss existieren, bevor Live-Detection (mute play tests) läuft –
             // der Effect mit initPlaybackPlayer greift erst bei PHASES.GAME.
-            await spotifyService.ensurePlaybackPlayerReady({ name: 'Song raten' })
+            await spotifyService.ensurePlaybackPlayerReady({ name: 'Identify' })
             if (cancelLoadRef.current) throw new Error('abgebrochen')
 
             const candidates = []   // alle (Playlist, Position)-Paare: so zählt jeder Titel gleich viel
@@ -1172,9 +1182,9 @@ export default function SecondSound({ onBack }) {
 
                 <div className={styles.srHomeHero}>
                     <span className={styles.srEmoji} aria-hidden="true">🎧</span>
-                    <h1 className={styles.srHeroTitle}>Song raten</h1>
+                    <h1 className={styles.srHeroTitle}>Identify</h1>
                     <p className={styles.srLead}>
-                        Hör kurze Ausschnitte aus deinen Spotify-Playlists: erst 1 Sekunde, dann 5, 10 und 30. Erkennst du den Song, bevor er aufgedeckt wird?
+                        Hör kurze Ausschnitte aus deinen Playlists – erst 1 Sekunde, dann 5, 10 und 30. Je früher du den Song erkennst, desto mehr Punkte. Im Pro-Modus holst du dir Bonuspunkte für Interpret, Titel und Jahr.
                     </p>
                 </div>
 
@@ -1184,7 +1194,7 @@ export default function SecondSound({ onBack }) {
                             <span className={styles.srNoticeIcon}><IconRetry size={22} /></span>
                             <div>
                                 <p className={styles.srNoticeTitle}>Neue Freigabe nötig</p>
-                                <p className={styles.srNoticeText}>Spotify möchte kurz bestätigen, dass Song raten deine Playlists lesen darf. Tippe auf „Spotify verbinden“.</p>
+                                <p className={styles.srNoticeText}>Spotify möchte kurz bestätigen, dass Identify deine Playlists lesen darf. Tippe auf „Spotify verbinden“.</p>
                             </div>
                         </div>
                     )}
@@ -1385,11 +1395,27 @@ export default function SecondSound({ onBack }) {
             <main className={styles.srMain}>
                 <header className={`${styles.srSubHeader} ${styles.srPad}`}>
                     <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => { setLoadingError(null); setPhase(PHASES.PLAYLISTS) }} aria-label="Zurück"><IconBack /></button>
-                    <h1 className={styles.srSubTitle}>Songanzahl</h1>
+                    <h1 className={styles.srSubTitle}>Spiel einrichten</h1>
                     {themeBtn}
                 </header>
 
                 <div className={styles.srCountPage}>
+                    <div className={styles.srModeBox}>
+                        <div className={styles.srTabs} role="radiogroup" aria-label="Spielmodus">
+                            {MODES.map(m => (
+                                <button key={m.id} type="button" role="radio" aria-checked={mode === m.id}
+                                    className={`${styles.srBtn} ${styles.srTab} ${mode === m.id ? styles.srTabOn : ''}`}
+                                    onClick={() => {
+                                        setMode(m.id)
+                                        try { localStorage.setItem(MODE_KEY, m.id) } catch { /* nur Komfort */ }
+                                    }}>
+                                    {m.label}
+                                </button>
+                            ))}
+                        </div>
+                        <p className={styles.srModeDesc}>{MODES.find(m => m.id === mode).desc}</p>
+                    </div>
+
                     <p id="sr-count-label" className={styles.srInfoBig}>Wie viele Songs möchtest du erraten?</p>
                     <div className={styles.srSliderBox}>
                         <p className={styles.srSliderValue} aria-hidden="true"><span className={styles.srSliderNum}>{songCount}</span>Songs</p>
@@ -1458,7 +1484,7 @@ export default function SecondSound({ onBack }) {
                     <button type="button" className={`${styles.srBtn} ${styles.srStart}`} onClick={handleStartGame}>
                         <span className={styles.srStartText}>
                             <span className={styles.srStartTitle}>Spiel starten</span>
-                            <span className={styles.srStartSub}>{k} {k === 1 ? 'Playlist' : 'Playlists'} - {songCount} Songs{startPct > 0 ? ` - ${startLabel(startPct)}` : ''}</span>
+                            <span className={styles.srStartSub}>{[MODES.find(m => m.id === mode).label, `${k} ${k === 1 ? 'Playlist' : 'Playlists'}`, `${songCount} Songs`, startPct > 0 && startLabel(startPct)].filter(Boolean).join(' · ')}</span>
                         </span>
                         <span className={styles.srStartIcon}><IconPlay size={20} /></span>
                     </button>
@@ -1611,7 +1637,11 @@ export default function SecondSound({ onBack }) {
         const decade = usedJokers.includes('decade') ? decadeLabel(year) : null
         const jokerUnavailable = [!year && 'decade', !meta.name && 'letters', !currentTrackInfo?.imageUrl && 'blur'].filter(Boolean)
         const canJoker = hasPlayedCurrentSong && !isRevealed && !verdict && metaReady
-        const openBonus = () => { if (canAct && !isRevealed) setBonusOpen(true) }
+        const openBonus = () => {
+            if (!canAct || isRevealed) return
+            if (mode === 'pro') setBonusOpen(true)
+            else revealSong(null)      // Quick: ohne Bonus-Fenster aufdecken
+        }
         const friendlyError = playerError && (/device not found/i.test(playerError)
             ? { title: 'Der Player ist noch nicht bereit', text: 'Kurz warten und nochmal tippen.' }
             : { title: 'Abspielen hat nicht geklappt', text: playerError })

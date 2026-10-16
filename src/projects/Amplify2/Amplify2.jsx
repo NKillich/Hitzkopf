@@ -33,8 +33,8 @@ import useFlip from './useFlip'
 import Confetti from './Confetti'
 import { IconArrowUp, IconArrowDown, IconSpotify, IconQr } from './icons'
 import AvatarPicker from './AvatarPicker'
-import { ANIMALS, randomAnimal } from './avatars'
-import QrScanner from './QrScanner'
+import { ANIMALS, randomAnimal, codeFromQr } from './avatars'
+import QrScanner from '../../shared/ui/QrScanner'
 import ss from './StartScreen.module.css'
 import { deleteReactions } from './reactions'
 import styles from './Amplify2.module.css'
@@ -2070,9 +2070,9 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
                 <div className={styles.mvHomeHero}>
                     <span className={styles.mvEmoji} aria-hidden="true">🎵</span>
-                    <h1 className={styles.mvHeroTitle}>Amplify 2.0</h1>
+                    <h1 className={styles.mvHeroTitle}>Amplify</h1>
                     <p className={styles.mvLead}>
-                        Songs einreichen und abstimmen – ganz nebenbei. Die beliebtesten laufen zuerst über Spotify.
+                        Jeder schlägt jederzeit Songs vor und stimmt per ↑/↓ ab. Der Song auf Platz 1 läuft als Nächstes über Spotify – so entsteht eine Playlist, die allen gefällt.
                     </p>
                 </div>
 
@@ -2229,7 +2229,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                         {joining ? 'Tritt bei …' : 'Beitreten'}
                     </button>
                 </div>
-                {scanning && <QrScanner onCode={(c) => { setScanning(false); setCodeDraft(c) }} onClose={() => setScanning(false)} />}
+                {scanning && <QrScanner parse={codeFromQr} invalidText="Das ist kein Amplify-Code." onCode={(c) => { setScanning(false); setCodeDraft(c) }} onClose={() => setScanning(false)} />}
             </main>
         )
     }

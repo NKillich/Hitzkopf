@@ -46,3 +46,5 @@ export const IconVolume = ({ size = 18 }) => <Svg size={size} w={2}><path d="M4 
 export const IconTrophy = ({ size = 22 }) => <Svg size={size} w={2}><path d="M8 4h8v5a4 4 0 0 1-8 0z" /><path d="M8 6H5v1.5A3.5 3.5 0 0 0 8.5 11M16 6h3v1.5a3.5 3.5 0 0 1-3.5 3.5M12 13v4M8.5 20h7M10 17h4" /></Svg>
 export const IconExpand = ({ size = 20 }) => <Svg size={size} w={2.2}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></Svg>
 export const IconShrink = ({ size = 20 }) => <Svg size={size} w={2.2}><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></Svg>
+// QR-Code scannen (Ecken + Mitte) – Startseite und Amplify
+export const IconQr = ({ size = 22 }) => <Svg size={size} w={2}><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /><rect x="9" y="9" width="6" height="6" rx="1" /></Svg>

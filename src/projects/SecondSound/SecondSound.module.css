@@ -442,3 +442,10 @@
 .srRoot .srTipMarkNo { background: var(--sr-bad); color: var(--sr-on-bad); }
 .srRoot .srTipSummary { margin: 0 0 10px; text-align: center; font-size: 15px; font-weight: 700; }
 .srRoot .srGameFoot .srRateNo:disabled, .srRoot .srGameFoot .srRateOk:disabled { opacity: 0.35; cursor: default; }
+
+/* Spiel einrichten: Modus Quick/Pro */
+.srRoot .srModeBox { display: flex; flex-direction: column; gap: 8px; }
+.srRoot .srModeDesc { margin: 0; min-height: 2.8em; font-size: 14px; line-height: 1.4; color: var(--sr-muted); text-align: center; }
+.srRoot .srCountPage { justify-content: flex-start; padding-top: clamp(8px, 2dvh, 20px); gap: clamp(14px, 2.6dvh, 28px); }
+.srRoot .srCountPage .srInfoBig { font-size: clamp(20px, 3dvh, 26px); }
+.srRoot .srCountPage .srSliderNum { font-size: clamp(52px, 8.5dvh, 80px); }
