@@ -845,7 +845,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
     // Song → sofort hinzufügen (mit „Rückgängig“), Album → Songliste, Künstler → Suche, Playlist → geht nicht.
     const [linkBusy, setLinkBusy] = useState(false)
     const [clipOffer, setClipOffer] = useState(null)   // Android: Link in der Zwischenablage beim Zurückkommen
-    const [linkDraft, setLinkDraft] = useState('')     // Feld „Link aus Spotify einfügen“ unten
     const lastClipRef = useRef((() => { try { return sessionStorage.getItem('a2_last_clip') || '' } catch { return '' } })())
     const rememberClip = (text) => {
         lastClipRef.current = text
@@ -2312,25 +2311,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     {loadingMore ? <IconWave size={16} /> : <IconPlus size={16} />}Mehr laden
                 </button>
             )
-            // Unten: Link aus Spotify einfügen (Feld) + runder Knopf, der die Spotify-App öffnet
-            const linkPaste = (
-                <section className={styles.mvLinkPaste} aria-labelledby="mv-link-title">
-                    <h3 id="mv-link-title" className={styles.mvListTitle}>Nicht dabei? Hier Link aus Spotify einfügen:</h3>
-                    <div className={styles.mvFooterRow}>
-                        <input type="text" className={`${styles.mvInput} ${styles.mvLinkInput}`} value={linkDraft} disabled={linkBusy}
-                            placeholder={linkBusy ? 'Song wird geladen …' : 'Spotify-Link hier einfügen'} aria-labelledby="mv-link-title"
-                            autoComplete="off" spellCheck={false} inputMode="url"
-                            onChange={(e) => {
-                                const v = e.target.value
-                                if (looksLikeSpotifyLink(v)) { setLinkDraft(''); addFromLink(v) } else setLinkDraft(v)
-                            }}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && linkDraft.trim()) { addFromLink(linkDraft); setLinkDraft('') } }} />
-                        <a className={`${styles.mvBtn} ${styles.mvSpotifyBtn}`} href="https://open.spotify.com" target="_blank" rel="noopener noreferrer" aria-label="Spotify öffnen">
-                            <IconSpotify size={26} />
-                        </a>
-                    </div>
-                </section>
-            )
             const backFromView = () => (albumTracks ? setAlbumTracks(null) : artistView ? setArtistView(null) : closeAddModal())
             const headerTitle = albumTracks ? 'Album' : artistView ? 'Künstler' : 'Song hinzufügen'
 
@@ -2370,12 +2350,15 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 </div>
                             )}
                             <div className={styles.mvField}>
-                                <div className={styles.mvInputWrap}>
+                                {/* Ein Feld für alles: Suchwort oder Spotify-Link (Link → Song sofort hinzugefügt); daneben Spotify öffnen */}
+                                <div className={styles.mvFooterRow}>
+                                <div className={`${styles.mvInputWrap} ${styles.mvSearchGrow}`}>
                                     <span className={styles.mvInputIcon}><IconSearch /></span>
                                     <input
                                         id="mv-search"
                                         ref={searchInputRef}
                                         type="search"
+                                        style={searchQuery ? undefined : { paddingRight: 14 }}   // Platz fürs ✕ nur, wenn es da ist
                                         className={styles.mvInput}
                                         value={searchQuery}
                                         onChange={(e) => {
@@ -2383,7 +2366,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                             if (looksLikeSpotifyLink(e.target.value)) { setSearchQuery(''); addFromLink(e.target.value) } else setSearchQuery(e.target.value)
                                         }}
                                         onKeyDown={(e) => { if (e.key === 'Enter') handleSpotifySearch() }}
-                                        placeholder={rule?.type === 'artist' ? `Song von ${rule.artistName}` : 'Titel, Band oder Album'}
+                                        placeholder={linkBusy ? 'Song wird geladen …' : rule?.type === 'artist' ? `Song von ${rule.artistName} oder Link` : 'Titel, Band, Album oder Link'}
                                         aria-label="Songs suchen"
                                         autoComplete="off"
                                         autoFocus
@@ -2394,6 +2377,10 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                             <IconX size={16} />
                                         </button>
                                     )}
+                                </div>
+                                <a className={`${styles.mvBtn} ${styles.mvSpotifyBtn}`} href="https://open.spotify.com" target="_blank" rel="noopener noreferrer" aria-label="Spotify öffnen">
+                                    <IconSpotify size={24} />
+                                </a>
                                 </div>
                                 <div className={styles.mvFilterRow} role="group" aria-label="Filter">
                                     {roundRule?.type !== 'artist' && (
@@ -2473,7 +2460,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                     <button type="button" className={`${styles.mvBtn} ${styles.mvOutline}`} onClick={handleSpotifySearch}><IconRetry />Erneut versuchen</button>
                                 </div>
                             )}
-                            {!albumTracks && !artistView && linkPaste}
                         </div>
                     </div>
                     <div className={styles.mvFooter}>
