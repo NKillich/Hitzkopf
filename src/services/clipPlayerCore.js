@@ -200,18 +200,19 @@ export class ClipPlayer {
     /**
      * Startet einen NEUEN Titel einer Playlist (Position `offset`).
      * accept(track) → false: Titel verwerfen (z. B. schon gespielt); dann { rejected: true, track }.
+     * startFrac (0–0,9): Einsetzpunkt als Anteil der Songlänge; es bleiben immer mind. 31 s bis zum Ende.
      * Gibt { track, startedAt, startPos } zurück, { rejected } oder { aborted }.
      */
-    async startNew({ contextUri, offset, seconds, accept, isStale }) {
-        return this._start({ kind: 'context', contextUri, offset, seconds, accept, isStale })
+    async startNew({ contextUri, offset, seconds, accept, isStale, startFrac = 0 }) {
+        return this._start({ kind: 'context', contextUri, offset, seconds, accept, isStale, startFrac })
     }
 
-    /** Startet einen bekannten Titel per URI (lädt ihn neu). */
-    async startUri({ uri, seconds, isStale }) {
-        return this._start({ kind: 'uri', uri, seconds, isStale })
+    /** Startet einen bekannten Titel per URI (lädt ihn neu), optional ab Position startMs bis untilMs. */
+    async startUri({ uri, seconds, isStale, startMs, untilMs }) {
+        return this._start({ kind: 'uri', uri, seconds, isStale, startMs, untilMs })
     }
 
-    async _start({ kind, contextUri, offset, uri, seconds, accept, isStale }) {
+    async _start({ kind, contextUri, offset, uri, seconds, accept, isStale, startFrac = 0, startMs, untilMs }) {
         const myOp = ++this.op
         await this._silence()
         if (!this._alive(myOp, isStale)) return { aborted: true }
@@ -265,23 +266,27 @@ export class ClipPlayer {
                 return { rejected: true, track }
             }
 
-            // Läuft stumm schon ein Stück: zurück auf 0, dann Ton an
+            // Läuft stumm schon ein Stück (oder Einsetzpunkt gewählt): an die Zielstelle springen, dann Ton an
+            const duration = hit.state.duration || 0
+            const target = startMs ?? (startFrac > 0 && duration
+                ? Math.max(0, Math.min(Math.round(startFrac * duration), duration - 31000))
+                : 0)
             let pos = hit.state.position
             let at = hit.at
-            if (pos > 700) {
+            if (Math.abs(pos - target) > 700) {
                 try {
-                    await this.svc.seekLocal(0)
+                    await this.svc.seekLocal(target)
                     const st = await this.svc.getPlayerState()
                     if (st) { pos = st.position; at = Date.now() }
                 } catch (e) { this.trace('seek-failed', { msg: String(e?.message || e) }) }
             }
-            return await this._begin({ track, seconds, pos, at, duration: hit.state.duration, myOp, isStale, restore })
+            return await this._begin({ track, seconds, untilMs, pos, at, duration: hit.state.duration, myOp, isStale, restore })
         } finally {
             await restore()
         }
     }
 
-    async _begin({ track, seconds, pos, at, duration, myOp, isStale, restore }) {
+    async _begin({ track, seconds, untilMs, pos, at, duration, myOp, isStale, restore }) {
         if (restore) await restore()
         if (!this._alive(myOp, isStale)) {
             if (this.op === myOp) await this._silence()
@@ -289,7 +294,7 @@ export class ClipPlayer {
         }
         this.active = {
             uri: track.uri,
-            deadline: pos + seconds * 1000,
+            deadline: untilMs ?? pos + seconds * 1000,
             lastPos: pos,
             lastAt: at,
             duration,
@@ -301,10 +306,10 @@ export class ClipPlayer {
     }
 
     /**
-     * Denselben, schon geladenen Titel von vorn abspielen (seek + resume, ohne neuen Track-Load).
-     * Klappt das nicht verlässlich, wird der Titel per URI neu geladen.
+     * Denselben, schon geladenen Titel ab Position startMs (Standard: von vorn) bis untilMs abspielen
+     * (seek + resume, ohne neuen Track-Load). Klappt das nicht verlässlich, wird der Titel per URI neu geladen.
      */
-    async replay({ uri, seconds, isStale }) {
+    async replay({ uri, seconds, isStale, startMs = 0, untilMs }) {
         const myOp = ++this.op
         await this._silence()
         if (!this._alive(myOp, isStale)) return { aborted: true }
@@ -312,13 +317,14 @@ export class ClipPlayer {
         if (cur?.track_window?.current_track?.uri === uri) {
             try {
                 const sentAt = Date.now()
-                await this.svc.seekLocal(0)
+                const near = (p) => Math.abs(p - startMs) <= 1500
+                await this.svc.seekLocal(startMs)
                 let st = await this.svc.getPlayerState()
-                if (!st || st.position > 1500) {
-                    await this.svc.seekLocal(0)
+                if (!st || !near(st.position)) {
+                    await this.svc.seekLocal(startMs)
                     st = await this.svc.getPlayerState()
                 }
-                if (st && st.position <= 1500) {
+                if (st && near(st.position)) {
                     await this.svc.resumeLocal()
                     const hit = await this._waitFor(
                         (s) => !s.paused && !s.loading && s.track_window?.current_track?.uri === uri,
@@ -327,9 +333,9 @@ export class ClipPlayer {
                         if (this.op === myOp) await this._silence()
                         return { aborted: true }
                     }
-                    if (hit && !hit.error && hit.state.position <= 3000) {
+                    if (hit && !hit.error && hit.state.position <= startMs + 3000 && hit.state.position >= startMs - 1500) {
                         return await this._begin({
-                            track: trackInfoFrom(hit.state), seconds, pos: hit.state.position, at: hit.at,
+                            track: trackInfoFrom(hit.state), seconds, untilMs, pos: hit.state.position, at: hit.at,
                             duration: hit.state.duration, myOp, isStale
                         })
                     }
@@ -344,7 +350,7 @@ export class ClipPlayer {
             this.trace('replay-other-track', { loaded: (cur?.track_window?.current_track?.uri || '').slice(-8) })
         }
         if (!this._alive(myOp, isStale)) return { aborted: true }
-        return this.startUri({ uri, seconds, isStale })
+        return this.startUri({ uri, seconds, isStale, startMs, untilMs })
     }
 
     /**
