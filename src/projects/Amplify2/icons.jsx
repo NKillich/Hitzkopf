@@ -12,3 +12,5 @@ export const IconSpotify = ({ size = 24 }) => (
         <path d="M6.6 9.3c3.6-1.1 7.7-.8 10.9 1M7.2 12.3c3-.9 6.3-.6 9 .8M7.8 15.1c2.4-.7 4.9-.5 7.1.6" fill="none" stroke="#000" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
 )
+// QR-Code scannen (Ecken + Mitte)
+export const IconQr = ({ size = 22 }) => <Svg size={size} w={2}><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /><rect x="9" y="9" width="6" height="6" rx="1" /></Svg>

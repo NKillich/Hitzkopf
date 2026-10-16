@@ -14,7 +14,7 @@ import {
     IconMoon, IconSun, IconBack, IconNext, IconCheck, IconX, IconLock, IconPlay, IconPause, IconNote, IconSearch,
     IconRetry, IconAlert, IconPlus, IconTrash, IconUsers, IconGear, IconThumbUp, IconThumbDown,
     IconWave, IconSpeaker, IconInfo, IconShare, IconHelp, IconCopy, IconTv, IconSkip, IconQueue,
-    IconVolume, IconTrophy, IconLeave, IconChevron
+    IconVolume, IconTrophy, IconLeave, IconChevron, IconClock, IconFlame
 } from '../../shared/ui/icons'
 import { joinLink, boardLink } from './links'
 import {
@@ -31,15 +31,14 @@ import { parseSpotifyLink, looksLikeSpotifyLink } from './spotifyLinks'
 import { lastfmTop, lastfmDecadeTag } from './lastfm'
 import useFlip from './useFlip'
 import Confetti from './Confetti'
-import { IconArrowUp, IconArrowDown, IconSpotify } from './icons'
+import { IconArrowUp, IconArrowDown, IconSpotify, IconQr } from './icons'
+import AvatarPicker from './AvatarPicker'
+import { ANIMALS, randomAnimal } from './avatars'
+import QrScanner from './QrScanner'
+import ss from './StartScreen.module.css'
 import { deleteReactions } from './reactions'
 import styles from './Amplify2.module.css'
 
-// Profilbild zum Antippen (kein Zufallsname: jeder tippt seinen eigenen Namen, damit man sich erkennt)
-const AVATARS = [
-    '😎', '🤩', '🥳', '😜', '🤠', '👽', '🤖', '👻', '🦄', '🐶', '🐱', '🦊', '🐻', '🐼', '🐸',
-    '🐵', '🦁', '🐯', '🐙', '🦖', '🎸', '🎤', '🎧', '🥁', '🎷', '🕺', '💃', '🍕', '🍹', '🔥'
-]
 // Spotify-Login in neuem Tab zurück (?code=…): Raum, Name und Profilbild aus der kurzen Sicherung übernehmen,
 // sonst landet man auf der Startseite. Der Wiedereintritt klappt im selben Browser (gleiche Geräte-Kennung).
 const A2_LOGIN_BACKUP = 'a2_login_backup'
@@ -54,12 +53,29 @@ try {
 } catch { /* ohne Speicher geht es nur im selben Tab */ }
 
 const getStoredName = () => sessionStorage.getItem('a2_name') || ''
+// Profilbild: ein Tier (ANIMALS). Ein altes Nicht-Tier-Bild bleibt nur, solange man noch in einer Playlist ist.
 const getOrCreateEmoji = () => {
     const stored = sessionStorage.getItem('a2_emoji')
-    if (stored) return stored
-    const emoji = AVATARS[Math.floor(Math.random() * AVATARS.length)]
+    if (stored && (ANIMALS.includes(stored) || sessionStorage.getItem('a2_roomId'))) return stored
+    const emoji = randomAnimal()
     sessionStorage.setItem('a2_emoji', emoji)
     return emoji
+}
+
+// Regel beim Erstellen: − Wert + (Werte aus den Optionen der Einstellungen)
+function RuleStepper({ icon, label, options, value, tick, onChange }) {
+    const i = Math.max(0, options.indexOf(value))
+    return (
+        <div className={ss.ruleRow}>
+            <span className={ss.ruleIcon} aria-hidden="true">{icon}</span>
+            <span className={ss.ruleLabel}>{label}</span>
+            <span className={ss.stepper} role="group" aria-label={label}>
+                <button type="button" className={`${styles.mvBtn} ${ss.stepBtn}`} disabled={i === 0} onClick={() => onChange(options[i - 1])} aria-label={`${label}: weniger`}>−</button>
+                <span className={ss.stepVal} aria-live="polite">{tick(value)}</span>
+                <button type="button" className={`${styles.mvBtn} ${ss.stepBtn}`} disabled={i === options.length - 1} onClick={() => onChange(options[i + 1])} aria-label={`${label}: mehr`}>+</button>
+            </span>
+        </div>
+    )
 }
 
 // Der Name ist Schlüssel in der Lobby (players.<Name>) – daher nur einfache Zeichen, kein Punkt
@@ -150,11 +166,16 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const [myName, setMyName] = useState(getStoredName)
     const [myEmoji, setMyEmoji] = useState(getOrCreateEmoji)
     const [nameDraft, setNameDraft] = useState(myName)
-    const [avatarOpen, setAvatarOpen] = useState(false)
+    const [scanning, setScanning] = useState(false)          // QR-Scanner beim Beitreten
+    const [codeCheck, setCodeCheck] = useState(null)         // { code, state: 'checking' | 'ok' | 'missing' | 'mine' | 'error', host, players }
+    const [moreRules, setMoreRules] = useState(false)        // Erstellen: „Mehr Regeln“ aufgeklappt
+    const [createRules, setCreateRules] = useState({
+        maxSongsPerPerson: DEFAULT_MAX_SONGS, upvotesPerPerson: DEFAULT_UP, downvotesPerPerson: DEFAULT_DOWN,
+        dropBelow: DEFAULT_DROP_BELOW, dropAfterMin: DEFAULT_DROP_AFTER, streakEnabled: false
+    })
     const [roomId, setRoomId] = useState(sessionStorage.getItem('a2_roomId') || '')
     const [isHost, setIsHost] = useState(false)
     const [lobbyData, setLobbyData] = useState(null)
-    const [invite, setInvite] = useState(null)               // { code, host, playerCount, songCount } | { code, missing: true }
     const [codeDraft, setCodeDraft] = useState('')
 
     // Music State
@@ -286,7 +307,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const pickAvatar = (emoji) => {
         sessionStorage.setItem('a2_emoji', emoji)
         setMyEmoji(emoji)
-        setAvatarOpen(false)
     }
 
     // Eingegebenen Namen übernehmen; liefert den Namen oder null (Fehler steht dann am Feld)
@@ -331,14 +351,15 @@ const Amplify2 = ({ onBack, joinCode }) => {
                 history: [],
                 status: 'active',
                 // Keine Phasen: Einreichen und Abstimmen gehen immer, die besten N gehen rundenweise an Spotify
-                maxSongsPerPerson: DEFAULT_MAX_SONGS,
-                upvotesPerPerson: DEFAULT_UP,
-                downvotesPerPerson: DEFAULT_DOWN,
-                dropBelow: DEFAULT_DROP_BELOW,
-                dropAfterMin: DEFAULT_DROP_AFTER,
+                // Regeln aus dem Erstellen-Bildschirm (später in den Einstellungen änderbar)
+                maxSongsPerPerson: createRules.maxSongsPerPerson,
+                upvotesPerPerson: createRules.upvotesPerPerson,
+                downvotesPerPerson: createRules.downvotesPerPerson,
+                dropBelow: createRules.dropBelow,
+                dropAfterMin: createRules.dropAfterMin,
                 dropped: [],
                 roundRule: null,
-                streakEnabled: false,
+                streakEnabled: createRules.streakEnabled,
                 streaks: {},
                 votingRound: 0,      // Anzahl Songs, die schon aus dem Voting an Spotify gingen
                 pendingBatch: null,
@@ -392,7 +413,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
             if (res.missing) {
                 showToast(`Eine Playlist mit dem Code ${joinRoomId} gibt es nicht (mehr).`, 'bad')
-                if (invite?.code === joinRoomId) setInvite({ code: joinRoomId, missing: true })
                 return
             }
             if (res.taken) {
@@ -435,30 +455,36 @@ const Amplify2 = ({ onBack, joinCode }) => {
     }, [joinCode])
     useEffect(() => {
         const code = joinCode || sessionStorage.getItem('a2_invite')
-        if (!db || !code) return
+        if (!code) return
         if (sessionStorage.getItem('a2_roomId') === code) {   // schon dabei → Wiedereinstieg unten
             sessionStorage.removeItem('a2_invite')
             return
         }
-        let cancelled = false
-        signedIn().then(() => getDoc(doc(db, 'amplify2Lobbies', code))).then((snap) => {
-            if (cancelled) return
-            if (snap.exists() && isOpen(snap.data())) {
-                const data = snap.data()
-                setInvite({ code, host: data.host, playerCount: Object.keys(data.players || {}).length, songCount: (data.playlist || []).length })
-            } else {
-                setInvite({ code, missing: true })
-            }
-            setCurrentScreen('browse')
-        }).catch(() => { if (!cancelled) setInvite({ code, missing: true }) })
-        return () => { cancelled = true }
-    }, [db, joinCode])
+        setCodeDraft(code.toUpperCase())
+        setCurrentScreen('browse')
+    }, [joinCode])
 
     // Einladung erledigt (beigetreten oder abgelehnt)
-    const dropInvite = () => {
-        setInvite(null)
-        sessionStorage.removeItem('a2_invite')
-    }
+    const dropInvite = () => sessionStorage.removeItem('a2_invite')
+
+    // Beitreten: Code gleich prüfen (gibt es die Playlist?) – erst dann wird „Beitreten“ frei
+    useEffect(() => {
+        const code = codeDraft.trim().toUpperCase()
+        if (currentScreen !== 'browse' || !db || !CODE_RE.test(code)) { setCodeCheck(null); return }
+        if (code === roomId) { setCodeCheck({ code, state: 'mine' }); return }
+        let cancelled = false
+        setCodeCheck({ code, state: 'checking' })
+        const id = setTimeout(() => {
+            signedIn().then(() => getDoc(doc(db, 'amplify2Lobbies', code))).then((snap) => {
+                if (cancelled) return
+                const data = snap.exists() ? snap.data() : null
+                setCodeCheck(data && isOpen(data)
+                    ? { code, state: 'ok', host: data.host, players: Object.keys(data.players || {}).length }
+                    : { code, state: 'missing' })
+            }).catch(() => { if (!cancelled) setCodeCheck({ code, state: 'error' }) })
+        }, 350)
+        return () => { cancelled = true; clearTimeout(id) }
+    }, [codeDraft, currentScreen, db, roomId])
 
     // Lobby schließen (nur Host)
     const handleCloseLobby = async () => {
@@ -709,9 +735,6 @@ const Amplify2 = ({ onBack, joinCode }) => {
     }
     useEffect(() => () => clearTimeout(holdTimerRef.current), [])
 
-    // Namensfeld: ohne Namen auf „Beitreten“/„Erstellen“ getippt → Hinweis
-    const [nameNudged, setNameNudged] = useState(false)
-    const nameInputRef = useRef(null)
 
     const handleVote = async (itemId, voteType) => {
         if (!db || !roomId || !myName) return
@@ -2005,54 +2028,23 @@ const Amplify2 = ({ onBack, joinCode }) => {
 
     const nameError = roomId ? null : nameProblem(nameDraft)
     const nameEmpty = !roomId && !cleanName(nameDraft)   // leer: noch kein roter Fehler, aber kein Weiter
-    // Ohne Namen weiter getippt → Feld wackelt kurz, bekommt den Fokus und sagt, was fehlt
-    const nudgeName = () => {
-        setNameNudged(true)
-        const el = nameInputRef.current
-        if (!el) return
-        el.classList.remove(styles.mvShake)
-        void el.offsetWidth   // Animation neu starten
-        el.classList.add(styles.mvShake)
-        el.focus()
-    }
-    const nameBlocks = !!nameError && !nameEmpty   // leerer Name sperrt nicht – der Klick zeigt aufs Feld
     const nameField = (
         <div className={styles.mvField}>
             <label htmlFor="mv-name" className={styles.mvLabel}>Dein Name</label>
-            <div className={styles.mvNameRow}>
-                {roomId ? (
-                    <span className={styles.mvAvatar} aria-hidden="true">{myEmoji}</span>
-                ) : (
-                    <button type="button" className={`${styles.mvBtn} ${styles.mvAvatar} ${styles.mvAvatarBtn}`} onClick={() => setAvatarOpen(o => !o)}
-                        aria-expanded={avatarOpen} aria-controls="mv-avatars" aria-label={`Profilbild ${myEmoji} – tippen zum Ändern`} title="Profilbild ändern">{myEmoji}</button>
-                )}
-                <input id="mv-name" ref={nameInputRef} type="text" className={`${styles.mvInput} ${styles.mvInputPlain} ${nameError && !nameEmpty ? styles.mvInputBad : ''} ${nameEmpty ? styles.mvInputAttn : ''}`}
-                    value={roomId ? myName : nameDraft}
-                    onChange={(e) => setNameDraft(e.target.value)}
-                    readOnly={!!roomId} maxLength={24} autoComplete="nickname" spellCheck={false}
-                    placeholder="Wie heißt du?"
-                    aria-invalid={!!nameError && !nameEmpty} aria-describedby="mv-name-hint" />
-            </div>
-            {avatarOpen && !roomId && (
-                <div id="mv-avatars" className={styles.mvAvatarGrid} role="radiogroup" aria-label="Profilbild wählen">
-                    {AVATARS.map(e => (
-                        <button key={e} type="button" role="radio" aria-checked={e === myEmoji}
-                            className={`${styles.mvBtn} ${styles.mvAvatarPick} ${e === myEmoji ? styles.mvAvatarPickOn : ''}`}
-                            onClick={() => pickAvatar(e)}>{e}</button>
-                    ))}
-                </div>
+            <input id="mv-name" type="text" className={`${styles.mvInput} ${styles.mvInputPlain} ${nameError && !nameEmpty ? styles.mvInputBad : ''} ${nameEmpty ? styles.mvInputAttn : ''}`}
+                value={roomId ? myName : nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                readOnly={!!roomId} maxLength={24} autoComplete="nickname" spellCheck={false}
+                placeholder="z. B. Niklas"
+                aria-invalid={!!nameError && !nameEmpty} aria-describedby="mv-name-hint" />
+            {(roomId || (nameError && !nameEmpty)) && (
+                <p id="mv-name-hint" className={roomId ? styles.mvFieldHint : styles.mvFieldError}>
+                    {roomId ? 'Du bist gerade in einer Playlist – dein Name bleibt dort gleich.' : nameError}
+                </p>
             )}
-            <p id="mv-name-hint" className={(nameError && !nameEmpty) || (nameEmpty && nameNudged) ? styles.mvFieldError : styles.mvFieldHint}>
-                {roomId
-                    ? 'Du bist gerade in einer Playlist – dein Name bleibt dort gleich.'
-                    : nameEmpty && nameNudged
-                        ? 'Gib zuerst deinen Namen ein.'
-                        : nameEmpty
-                        ? 'So sehen dich die anderen – auch auf dem Live-Board. Tipp aufs Bild, um es zu ändern.'
-                        : (nameError || 'So sehen dich die anderen – auch auf dem Live-Board.')}
-            </p>
         </div>
     )
+    const roleNote = (icon, text) => <p className={ss.roleNote}>{icon}{text}</p>
 
     const skeletons = (label) => (
         <div className={styles.mvSkeletons} role="status" aria-label={label}>
@@ -2140,12 +2132,40 @@ const Amplify2 = ({ onBack, joinCode }) => {
     // ─── Erstellen ───────────────────────────────────────────────────────────
     if (currentScreen === 'create') {
         const creating = busyAction === 'create'
+        const canCreate = !creating && !!db && !!spotifyConnected && !nameError
+        const setRule = (id) => (v) => setCreateRules(r => ({ ...r, [id]: v }))
+        const rule = (s, icon, label = s.label) => (
+            <RuleStepper key={s.id} icon={icon} label={label} options={s.options} value={createRules[s.id]} tick={s.tick} onChange={setRule(s.id)} />
+        )
+        const [songs, ups, downs] = ROOM_SETTINGS
+        const [dropBelow, dropAfter] = DROP_SETTINGS
         return shell(
             <main className={styles.mvMain}>
-                {subHeader('Playlist erstellen', () => setCurrentScreen('lobby'))}
+                {subHeader('Neue Playlist', () => setCurrentScreen('lobby'))}
                 <div className={styles.mvScroll}>
-                    <p className={styles.mvInfo}>Du wirst Host: Die beliebtesten Songs laufen über dein Spotify.</p>
+                    <AvatarPicker value={myEmoji} onChange={pickAvatar} disabled={!!roomId} />
                     {nameField}
+                    <section className={styles.mvField} aria-labelledby="mv-rules-title">
+                        <h2 id="mv-rules-title" className={ss.rulesTitle}>Regeln</h2>
+                        <div className={ss.rules}>
+                            {rule(songs, <IconNote size={18} />)}
+                            {rule(ups, <IconThumbUp size={18} />)}
+                            {moreRules && (<>
+                                {rule(downs, <IconThumbDown size={18} />)}
+                                {rule(dropBelow, <IconTrash size={18} />, 'Raus ab Minus')}
+                                {rule(dropAfter, <IconClock size={18} />, 'Raus nach Zeit')}
+                                <button type="button" className={`${styles.mvBtn} ${ss.ruleRow} ${ss.ruleToggle}`} onClick={() => setCreateRules(r => ({ ...r, streakEnabled: !r.streakEnabled }))} aria-pressed={createRules.streakEnabled}>
+                                    <span className={ss.ruleIcon} aria-hidden="true"><IconFlame size={18} /></span>
+                                    <span className={ss.ruleLabel}>Streak-Bonus</span>
+                                    <span className={`${styles.mvSwitch} ${createRules.streakEnabled ? styles.mvSwitchOn : ''}`} aria-hidden="true"><span /></span>
+                                </button>
+                            </>)}
+                            <button type="button" className={`${styles.mvBtn} ${ss.moreRules}`} onClick={() => setMoreRules(m => !m)} aria-expanded={moreRules}>
+                                {moreRules ? 'Weniger Regeln' : 'Mehr Regeln'}<IconChevron open={moreRules} />
+                            </button>
+                        </div>
+                        <p className={styles.mvFieldHint}>Alles lässt sich später in den Einstellungen ändern.</p>
+                    </section>
                     {!spotifyConnected && (
                         <div className={styles.mvAlert} role="alert">
                             <span className={styles.mvAlertIcon}><IconAlert size={20} /></span>
@@ -2154,7 +2174,8 @@ const Amplify2 = ({ onBack, joinCode }) => {
                     )}
                 </div>
                 <div className={styles.mvFooter}>
-                    <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => (nameEmpty ? nudgeName() : handleCreateLobby())} disabled={creating || !db || nameBlocks || !spotifyConnected}>
+                    {roleNote(<IconSpeaker size={16} />, 'Du bist Host · Musik läuft über dein Spotify')}
+                    <button type="button" className={`${styles.mvBtn} ${canCreate ? styles.mvPrimary : styles.mvPrimaryOff}`} onClick={handleCreateLobby} disabled={!canCreate}>
                         {creating ? 'Wird erstellt …' : 'Playlist erstellen'}
                     </button>
                 </div>
@@ -2162,39 +2183,24 @@ const Amplify2 = ({ onBack, joinCode }) => {
         )
     }
 
-    // ─── Beitreten (nur per Code, QR-Code oder Link – keine öffentliche Liste) ─
+    // ─── Beitreten (per Code, QR-Code oder Link – keine öffentliche Liste) ─────
     if (currentScreen === 'browse') {
-        const validInvite = invite && !invite.missing && invite.code !== roomId ? invite : null
         const code = codeDraft.trim().toUpperCase()
         const joining = busyAction && busyAction === code
+        const check = codeCheck?.code === code ? codeCheck : null
+        const canJoin = check?.state === 'ok' && !nameError && !busyAction && !!db
+        const status = !code
+            ? { text: 'Den Code zeigt der Host unter „Teilen“ – oder scanne seinen QR-Code.' }
+            : !CODE_RE.test(code) ? { text: 'Der Code hat 4–10 Buchstaben oder Ziffern.' }
+            : !check || check.state === 'checking' ? { text: 'Code wird geprüft …' }
+            : check.state === 'ok' ? { ok: true, text: `✓ Playlist von ${check.host} · ${check.players} dabei` }
+            : check.state === 'mine' ? { ok: true, text: 'Das ist deine aktuelle Playlist – oben geht’s zurück.' }
+            : check.state === 'missing' ? { bad: true, text: 'Diese Playlist gibt es nicht (mehr). Frag den Host nach dem Code.' }
+            : { bad: true, text: 'Der Code konnte gerade nicht geprüft werden.' }
         return shell(
             <main className={styles.mvMain}>
                 {subHeader('Beitreten', () => { dropInvite(); setCurrentScreen('lobby') })}
                 <div className={styles.mvScroll}>
-                    {nameField}
-
-                    {invite?.missing && (
-                        <div className={styles.mvNotice} role="status">
-                            <span className={styles.mvNoticeIcon}><IconInfo /></span>
-                            <p className={styles.mvNoticeText}>Die Playlist {invite.code} gibt es nicht mehr. Frag den Host nach dem aktuellen Code.</p>
-                        </div>
-                    )}
-                    {validInvite && (
-                        <section className={styles.mvInvite}>
-                            <span className={styles.mvLabelSm}>Du wurdest eingeladen</span>
-                            <div className={styles.mvInviteRow}>
-                                <CoverArt seed={validInvite.code} size={52} radius={13} />
-                                <span className={styles.mvRowText}>
-                                    <span className={styles.mvRowName}>Playlist von {validInvite.host}</span>
-                                    <span className={styles.mvRowMeta}>{validInvite.playerCount} dabei · {validInvite.songCount} Songs · Code {validInvite.code}</span>
-                                </span>
-                            </div>
-                            <button type="button" className={`${styles.mvBtn} ${styles.mvPrimary}`} onClick={() => (nameEmpty ? nudgeName() : handleJoinLobby(validInvite.code))} disabled={!!busyAction || nameBlocks}>
-                                {busyAction === validInvite.code ? 'Tritt bei …' : 'Beitreten'}
-                            </button>
-                        </section>
-                    )}
-
                     {roomId && (
                         <button type="button" className={`${styles.mvBtn} ${styles.mvRejoin}`} onClick={handleRejoinRoom}>
                             <span className={styles.mvLiveDot} aria-hidden="true" />
@@ -2205,20 +2211,26 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             <IconNext />
                         </button>
                     )}
-
-                    <form className={styles.mvField} onSubmit={(e) => { e.preventDefault(); if (nameEmpty) nudgeName(); else handleJoinLobby(code) }}>
-                        <label htmlFor="mv-code" className={styles.mvLabel}>{validInvite ? 'Oder anderen Raumcode eingeben' : 'Raumcode'}</label>
-                        <div className={styles.mvNameRow}>
+                    <div className={styles.mvField}>
+                        <label htmlFor="mv-code" className={styles.mvLabel}>Raumcode</label>
+                        <div className={ss.codeRow}>
                             <input id="mv-code" type="text" className={`${styles.mvInput} ${styles.mvInputPlain} ${styles.mvCodeInput}`}
                                 value={codeDraft} onChange={(e) => setCodeDraft(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                                placeholder="z. B. 3RUCTD" maxLength={10} autoComplete="off" autoCapitalize="characters" spellCheck={false} inputMode="text" />
+                                style={{ textAlign: 'center' }} placeholder="3RUCTD" maxLength={10} autoComplete="off" autoCapitalize="characters" spellCheck={false} inputMode="text" aria-describedby="mv-code-status" />
+                            <button type="button" className={`${styles.mvBtn} ${ss.scanBtn}`} onClick={() => setScanning(true)} aria-label="QR-Code scannen"><IconQr size={22} /></button>
                         </div>
-                        <p className={styles.mvFieldHint}>Den Code zeigt der Host unter „Teilen“ – oder einfach seinen QR-Code scannen.</p>
-                        <button type="submit" className={`${styles.mvBtn} ${CODE_RE.test(code) && !nameBlocks ? styles.mvPrimary : styles.mvPrimaryOff}`} disabled={!CODE_RE.test(code) || nameBlocks || !!busyAction}>
-                            {joining ? 'Tritt bei …' : 'Beitreten'}
-                        </button>
-                    </form>
+                        <p id="mv-code-status" className={status.bad ? styles.mvFieldError : status.ok ? ss.codeOk : styles.mvFieldHint} role="status">{status.text}</p>
+                    </div>
+                    <AvatarPicker value={myEmoji} onChange={pickAvatar} disabled={!!roomId} />
+                    {nameField}
                 </div>
+                <div className={styles.mvFooter}>
+                    {roleNote(<IconUsers size={16} />, 'Du bist Gast · kein Spotify nötig')}
+                    <button type="button" className={`${styles.mvBtn} ${canJoin ? styles.mvPrimary : styles.mvPrimaryOff}`} onClick={() => handleJoinLobby(code)} disabled={!canJoin}>
+                        {joining ? 'Tritt bei …' : 'Beitreten'}
+                    </button>
+                </div>
+                {scanning && <QrScanner onCode={(c) => { setScanning(false); setCodeDraft(c) }} onClose={() => setScanning(false)} />}
             </main>
         )
     }
