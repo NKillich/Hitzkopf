@@ -15,6 +15,16 @@ import {
     IconEye, IconPause, IconAlert, IconClock, IconChevron, IconWave, IconInfo, IconNext, IconStar
 } from '../../shared/ui/icons'
 import styles from './SecondSound.module.css'
+import BonusSheet from './BonusSheet'
+import JokerSheet from './JokerSheet'
+import { JOKERS, loadTrackMeta, checkTip, tipGiven, tipAnyHit, songScore, tipSummary, titleHint, decadeLabel } from './songGuess.js'
+
+// Joker-Symbol (Spielkarte mit Stern)
+const IconJoker = ({ size = 24 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="5" y="3" width="14" height="18" rx="2.5" /><path d="M12 8.5l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z" />
+    </svg>
+)
 
 const PHASES = {
     HOME: 'home',            // Startseite: Spotify verbinden, Spiel starten
@@ -42,13 +52,14 @@ const STAGES = [
     { label: '10 s', seconds: 10, long: '10 Sekunden', points: 2 },
     { label: '30 s', seconds: 30, long: '30 Sekunden', points: 1 }
 ]
-const MAX_POINTS = STAGES[0].points
 
 const COUNT_OPTIONS = [5, 10, 15, 20, 25, 30]
 
-// Einsetzpunkt der Songs (0 = von vorn … 90 % der Songlänge), auf dem Gerät gemerkt
+// Einsetzpunkt der Songs (0 = von vorn … 90 % der Songlänge, 100 = Zufall pro Song), auf dem Gerät gemerkt
 const START_PCT_KEY = 'ss_start_pct'
-const START_PCT_MAX = 90
+const START_PCT_MAX = 100
+const START_RANDOM = 100
+const startLabel = (pct) => pct === START_RANDOM ? 'Zufall' : (pct === 0 ? 'von vorn' : `ab ${pct} %`)
 const loadStartPct = () => {
     try {
         const n = Number(localStorage.getItem(START_PCT_KEY))
@@ -120,7 +131,12 @@ export default function SecondSound({ onBack }) {
     const [currentTrackInfo, setCurrentTrackInfo] = useState(null)
     const [score, setScore] = useState(0)            // erratene Songs (für die Statistik)
     const [points, setPoints] = useState(0)          // Punkte der Runde (früher erraten = mehr)
-    const [trackYear, setTrackYear] = useState(null) // { id, year } des aktuellen Songs
+    const [trackMeta, setTrackMeta] = useState(null) // { id, name, artists, year } des aktuellen Songs (für Tipp + Jahr)
+    const [usedJokers, setUsedJokers] = useState([]) // Joker des aktuellen Songs
+    const [jokerSpent, setJokerSpent] = useState(0)  // Joker-Kosten der Runde
+    const [jokerOpen, setJokerOpen] = useState(false)
+    const [bonusOpen, setBonusOpen] = useState(false)
+    const [tipResult, setTipResult] = useState(null) // { artist, title, year } nach „Prüfen“
     const [isPlaying, setIsPlaying] = useState(false)
     const [songHistory, setSongHistory] = useState([])
     const [historyOpen, setHistoryOpen] = useState(false)
@@ -136,6 +152,8 @@ export default function SecondSound({ onBack }) {
     const revealDoneRef = useRef(null)          // beendet die kurze Auflösung nach dem Werten vorzeitig
     const statsKeyRef = useRef(null)            // Statistik-Dokument pro Spotify-Konto (sp_…)
     const closeBtnRef = useRef(null)
+    const jokerBtnRef = useRef(null)
+    const solveBtnRef = useRef(null)
     const resetBtnRef = useRef(null)
     const usedUrisRef = useRef(new Set())        // schon gespielte Titel dieser Runde (Duplikate überspringen)
     const playGenRef = useRef(0)                 // wird bei Song-Wechsel erhöht: ältere Start-Anfragen verfallen
@@ -318,14 +336,14 @@ export default function SecondSound({ onBack }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase])
 
-    // Erscheinungsjahr des aktuellen Songs nachladen (der Player liefert es nicht mit)
+    // Interpreten und frühestes Erscheinungsjahr nachladen (der Player liefert sie nicht mit)
     const trackId = currentTrackInfo?.trackId
     useEffect(() => {
         if (!trackId) return
         let alive = true
-        spotifyService.getTrack(trackId)
-            .then(t => { if (alive) setTrackYear({ id: trackId, year: (t?.album?.release_date || '').slice(0, 4) || null }) })
-            .catch(() => { /* ohne Jahr anzeigen */ })
+        loadTrackMeta(spotifyService, trackId)
+            .then(m => { if (alive) setTrackMeta(m) })
+            .catch(() => { if (alive) setTrackMeta({ id: trackId, failed: true }) })
         return () => { alive = false }
     }, [trackId])
 
@@ -557,6 +575,7 @@ export default function SecondSound({ onBack }) {
             setCurrentTrackInfo(null)
             setScore(0)
             setPoints(0)
+            setJokerSpent(0)
             resetTimeline()
             setIsPlaying(false)
             setSongHistory([])
@@ -602,6 +621,10 @@ export default function SecondSound({ onBack }) {
         heardRef.current = 0
         posRef.current = 0
         setStage(0)
+        setUsedJokers([])
+        setTipResult(null)
+        setBonusOpen(false)
+        setJokerOpen(false)
     }
 
     // Pausiert den laufenden Ausschnitt (lokal über das SDK)
@@ -654,7 +677,7 @@ export default function SecondSound({ onBack }) {
                         offset: song.offset,
                         seconds,
                         isStale,
-                        startFrac: startPct / 100,
+                        startFrac: startPct === START_RANDOM ? Math.floor(Math.random() * 10) / 10 : startPct / 100,
                         // Duplikate werden stumm verworfen, BEVOR man sie hört (Titel ist hier verifiziert, nicht geraten)
                         accept: (t) => !(canSkip && usedUrisRef.current.has(t.uri))
                     })
@@ -862,10 +885,10 @@ export default function SecondSound({ onBack }) {
         allowPlaybackRef.current = false
         isAnsweringRef.current = false
         isPlayingRequestRef.current = false
-        const earned = correct ? STAGES[stage].points : 0
+        const earned = songScore({ stagePoints: STAGES[stage].points, correct, tip: tipGiven(tipResult) ? tipResult : null }).total
+        setPoints(prev => prev + earned)
         if (correct) {
             setScore(prev => prev + 1)
-            setPoints(prev => prev + earned)
             if (maxHeardRef.current > 0) {
                 sessionSecondsCorrectRef.current.push(maxHeardRef.current)
             }
@@ -880,7 +903,7 @@ export default function SecondSound({ onBack }) {
         const historyEntry = currentTrackInfo
             ? { name: currentTrackInfo.trackName, artist: currentTrackInfo.artist, albumImage: currentTrackInfo.imageUrl }
             : { name: 'Unbekannter Titel', artist: '', albumImage: null }
-        setSongHistory(prev => [...prev, { song: historyEntry, correct, points: earned }])
+        setSongHistory(prev => [...prev, { song: historyEntry, correct, points: earned, tip: tipGiven(tipResult) ? tipResult : null }])
         setCurrentTrackInfo(null)
         if (newPlayed >= targetCount || currentIndex + 1 >= songs.length) {
             dbg(`Spiel beendet: newPlayed=${newPlayed} targetCount=${targetCount} nextIndex=${currentIndex + 1}`)
@@ -895,6 +918,39 @@ export default function SecondSound({ onBack }) {
             dbg(`Nächster Song: index ${currentIndex} → ${nextIndex} | Slot: playlist=${songs[nextIndex]?.playlistUri} offset=${songs[nextIndex]?.offset}`)
             setCurrentIndex(prev => prev + 1)
         }
+    }
+
+    // Songdaten für Tipp/Joker: geladene Daten, sonst das, was der Player kennt (dann ohne Jahr)
+    const songMeta = () => {
+        const id = currentTrackInfo?.trackId
+        if (id && trackMeta?.id === id && !trackMeta.failed) return trackMeta
+        return {
+            id, name: currentTrackInfo?.trackName || '', year: null,
+            artists: (currentTrackInfo?.artist || '').split(', ').filter(Boolean).map(name => ({ id: null, name }))
+        }
+    }
+    const metaReady = !!currentTrackInfo && trackMeta?.id === currentTrackInfo.trackId
+
+    // Joker einsetzen: Kosten sofort abziehen (Punktestand darf ins Minus)
+    const handleUseJoker = (id) => {
+        const j = JOKERS.find(x => x.id === id)
+        if (!j || usedJokers.includes(id)) return
+        setUsedJokers(prev => [...prev, id])
+        setPoints(prev => prev - j.cost)
+        setJokerSpent(prev => prev + j.cost)
+        setJokerOpen(false)
+    }
+
+    // „Auflösen“: erst das Bonus-Fenster, dann aufdecken
+    const handleBonusSkip = () => {
+        setBonusOpen(false)
+        setTipResult(null)
+        setIsRevealed(true)
+    }
+    const handleBonusCheck = (tip) => {
+        setTipResult(checkTip(tip, songMeta()))
+        setBonusOpen(false)
+        setIsRevealed(true)
     }
 
     const handleAnswer = async (correct) => {
@@ -937,6 +993,7 @@ export default function SecondSound({ onBack }) {
         setCurrentTrackInfo(null)
         setScore(0)
         setPoints(0)
+        setJokerSpent(0)
         setIsPlaying(false)
         setHasPlayedCurrentSong(false)
         resetTimeline()
@@ -1356,7 +1413,7 @@ export default function SecondSound({ onBack }) {
                     <div className={styles.srStartBox}>
                         <div className={styles.srStartHead}>
                             <span id="sr-start-label" className={styles.srStartLabel}>Songs setzen ein</span>
-                            <span className={styles.srStartValue}>{startPct === 0 ? 'von vorn' : `ab ${startPct} %`}</span>
+                            <span className={styles.srStartValue}>{startLabel(startPct)}</span>
                         </div>
                         <input
                             type="range"
@@ -1371,12 +1428,9 @@ export default function SecondSound({ onBack }) {
                                 try { localStorage.setItem(START_PCT_KEY, String(v)) } catch { /* nur Komfort */ }
                             }}
                             aria-labelledby="sr-start-label"
-                            aria-valuetext={startPct === 0 ? 'von vorn' : `ab ${startPct} Prozent der Songlänge`}
+                            aria-valuetext={startPct === START_RANDOM ? 'zufällig' : (startPct === 0 ? 'von vorn' : `ab ${startPct} Prozent der Songlänge`)}
                             style={{ '--pct': `${(startPct / START_PCT_MAX) * 100}%` }}
                         />
-                        <p className={styles.srStartHint}>
-                            {startPct === 0 ? 'Wie im Original – mit Intro.' : 'Überspringt Intros, oft landest du mitten im Song. Es bleiben immer 30 s bis zum Ende.'}
-                        </p>
                     </div>
                 </div>
 
@@ -1399,7 +1453,7 @@ export default function SecondSound({ onBack }) {
                     <button type="button" className={`${styles.srBtn} ${styles.srStart}`} onClick={handleStartGame}>
                         <span className={styles.srStartText}>
                             <span className={styles.srStartTitle}>Spiel starten</span>
-                            <span className={styles.srStartSub}>{k} {k === 1 ? 'Playlist' : 'Playlists'} - {songCount} Songs{startPct > 0 ? ` - ab ${startPct} %` : ''}</span>
+                            <span className={styles.srStartSub}>{k} {k === 1 ? 'Playlist' : 'Playlists'} - {songCount} Songs{startPct > 0 ? ` - ${startLabel(startPct)}` : ''}</span>
                         </span>
                         <span className={styles.srStartIcon}><IconPlay size={20} /></span>
                     </button>
@@ -1541,7 +1595,17 @@ export default function SecondSound({ onBack }) {
         const canAct = hasPlayedCurrentSong && !connecting && !verdict
         const canUnlock = hasPlayedCurrentSong && !isLast && !busy
         const stagePoints = STAGES[stage].points
-        const year = trackYear?.id === currentTrackInfo?.trackId ? trackYear?.year : null
+        const meta = songMeta()
+        const year = meta.year
+        const tip = tipGiven(tipResult) ? tipResult : null
+        const tipHit = tipAnyHit(tip)
+        const okPoints = songScore({ stagePoints, correct: true, tip }).total
+        const jokerImg = usedJokers.includes('blur') ? currentTrackInfo?.imageUrl : null
+        const hint = usedJokers.includes('letters') && meta.name ? titleHint(meta.name) : null
+        const decade = usedJokers.includes('decade') ? decadeLabel(year) : null
+        const jokerUnavailable = [!year && 'decade', !meta.name && 'letters', !currentTrackInfo?.imageUrl && 'blur'].filter(Boolean)
+        const canJoker = hasPlayedCurrentSong && !isRevealed && !verdict && metaReady
+        const openBonus = () => { if (canAct && !isRevealed) setBonusOpen(true) }
         const friendlyError = playerError && (/device not found/i.test(playerError)
             ? { title: 'Der Player ist noch nicht bereit', text: 'Kurz warten und nochmal tippen.' }
             : { title: 'Abspielen hat nicht geklappt', text: playerError })
@@ -1556,7 +1620,7 @@ export default function SecondSound({ onBack }) {
                         <span className={styles.srSongNo}>{songNo}</span>
                         <div role="progressbar" aria-label={songNo} aria-valuemin="1" aria-valuemax={targetCount} aria-valuenow={playedCount + 1} className={styles.srSegs}>
                             {Array.from({ length: targetCount }, (_, i) => (
-                                <span key={i} className={`${styles.srSeg} ${i < playedCount ? styles.srSegPast : (i === playedCount ? styles.srSegNow : '')}`} />
+                                <span key={i} className={`${styles.srSeg} ${i < playedCount ? (songHistory[i]?.correct ? styles.srSegOk : styles.srSegNo) : (i === playedCount ? styles.srSegNow : '')}`} />
                             ))}
                         </div>
                     </div>
@@ -1572,7 +1636,7 @@ export default function SecondSound({ onBack }) {
                         className={`${styles.srCardGame} ${!isRevealed ? styles.srSkelGame : ''} ${(!isRevealed && (isPlaying || starting || connecting)) ? styles.srPulse : ''} ${((!isRevealed && canAct) || verdict) ? styles.srCardTap : ''} ${verdict === 'ok' ? styles.srVerdictOk : ''} ${verdict === 'no' ? styles.srVerdictNo : ''}`}
                         onClick={() => {
                             if (verdict) { revealDoneRef.current?.(); return }
-                            if (!isRevealed && canAct) setIsRevealed(true)
+                            if (!isRevealed && canAct) openBonus()
                         }}
                     >
                         {verdict && (
@@ -1584,6 +1648,10 @@ export default function SecondSound({ onBack }) {
                             <div role="img" aria-label={`Albumcover: ${currentTrackInfo?.trackName || 'Song'}`} className={styles.srCoverFill}>
                                 <CoverArt src={currentTrackInfo?.imageUrl} seed={currentTrackInfo?.trackId || currentTrackInfo?.trackName || currentIndex} size={248} radius={0} />
                             </div>
+                        ) : jokerImg ? (
+                            <div role="img" aria-label="Verschwommenes Albumcover (Joker)" className={`${styles.srCoverFill} ${styles.srCoverBlur}`}>
+                                <img src={jokerImg} alt="" />
+                            </div>
                         ) : (
                             <span className={styles.srSkelQ} role="img" aria-label="Verdecktes Albumcover">?</span>
                         )}
@@ -1594,7 +1662,21 @@ export default function SecondSound({ onBack }) {
                             <>
                                 <h2 className={styles.srSongTitle} title={currentTrackInfo?.trackName || ''}>{currentTrackInfo?.trackName || 'Titel wird geladen …'}</h2>
                                 <p className={styles.srSongArtist}>{[currentTrackInfo?.artist, year].filter(Boolean).join(' · ')}</p>
+                                {tip && (
+                                    <div className={styles.srTipMarks}>
+                                        {[['title', 'Titel'], ['artist', 'Interpret'], ['year', 'Jahr']].filter(([k]) => tip[k] !== null).map(([k, label]) => (
+                                            <span key={k} className={`${styles.srTipMark} ${tip[k] ? styles.srTipMarkOk : styles.srTipMarkNo}`}>
+                                                {tip[k] ? <IconCheck size={14} w={3.2} /> : <IconX size={13} w={3.2} />}{label}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                             </>
+                        ) : (hint || decade) ? (
+                            <div className={styles.srHints}>
+                                {hint && <p className={styles.srHintTitle} aria-label={`Anfangsbuchstaben: ${hint}`}>{hint}</p>}
+                                {decade && <span className={styles.srHintChip}>{decade}</span>}
+                            </div>
                         ) : (
                             <div role="img" aria-label="Titel und Interpret sind verdeckt" className={styles.srMasks}>
                                 <span style={{ width: 196, height: 16 }} /><span style={{ width: 124, height: 12 }} />
@@ -1644,9 +1726,10 @@ export default function SecondSound({ onBack }) {
                 </div>
 
                 <div className={styles.srControls}>
-                    <button type="button" className={`${styles.srBtn} ${styles.srCtrlSide}`} onClick={() => handlePlayStage(stage)}
-                        disabled={!hasPlayedCurrentSong || busy} aria-label="Von vorn abspielen" title="Von vorn abspielen">
-                        <IconReplay size={24} />
+                    <button ref={jokerBtnRef} type="button" className={`${styles.srBtn} ${styles.srCtrlSide} ${usedJokers.length ? styles.srCtrlJokerUsed : ''}`} onClick={() => setJokerOpen(true)}
+                        disabled={!canJoker} aria-label="Joker" title="Joker">
+                        <IconJoker size={26} />
+                        {usedJokers.length > 0 && <span className={styles.srJokerBadge}>{usedJokers.length}</span>}
                     </button>
                     <button type="button" className={`${styles.srBtn} ${styles.srCtrlPlay}`} onClick={handlePlayToggle}
                         disabled={busy} aria-label={playLabel} title={playLabel}>
@@ -1661,17 +1744,42 @@ export default function SecondSound({ onBack }) {
 
                 <div className={styles.srGameFoot}>
                     {!isRevealed ? (
-                        <button type="button" onClick={() => setIsRevealed(true)} disabled={!canAct}
+                        <button ref={solveBtnRef} type="button" onClick={openBonus} disabled={!canAct}
                             className={`${styles.srBtn} ${styles.srSolve}`}>
                             <IconEye />Auflösen
                         </button>
                     ) : (
-                        <div className={styles.srRate}>
-                            <button type="button" onClick={() => handleAnswer(false)} disabled={!!verdict} className={`${styles.srBtn} ${styles.srRateNo}`}><IconX size={20} w={2.8} />Nicht erraten</button>
-                            <button type="button" onClick={() => handleAnswer(true)} disabled={!!verdict} className={`${styles.srBtn} ${styles.srRateOk}`}><IconCheck size={22} />Erraten · +{stagePoints}</button>
-                        </div>
+                        <>
+                            {tip && <p className={styles.srTipSummary} role="status">{tipSummary(tip)}{tipHit ? ` · ${okPoints} ${okPoints === 1 ? 'Punkt' : 'Punkte'}` : ''}</p>}
+                            <div className={styles.srRate}>
+                                <button type="button" onClick={() => handleAnswer(false)} disabled={!!verdict || (tip && tipHit)} className={`${styles.srBtn} ${styles.srRateNo}`}><IconX size={20} w={2.8} />Nicht erraten</button>
+                                <button type="button" onClick={() => handleAnswer(true)} disabled={!!verdict || (tip && !tipHit)} className={`${styles.srBtn} ${styles.srRateOk}`}><IconCheck size={22} />Erraten · +{okPoints}</button>
+                            </div>
+                        </>
                     )}
                 </div>
+
+                <BonusSheet
+                    key={currentIndex}
+                    open={bonusOpen}
+                    svc={spotifyService}
+                    onClose={() => setBonusOpen(false)}
+                    onSkip={handleBonusSkip}
+                    onCheck={handleBonusCheck}
+                    busy={!metaReady}
+                    yearAvailable={!!year}
+                    isPlaying={isPlaying}
+                    onPlayToggle={handlePlayToggle}
+                    returnFocusRef={solveBtnRef}
+                />
+                <JokerSheet
+                    open={jokerOpen}
+                    onClose={() => setJokerOpen(false)}
+                    onUse={handleUseJoker}
+                    used={usedJokers}
+                    unavailable={jokerUnavailable}
+                    returnFocusRef={jokerBtnRef}
+                />
 
                 <ConfirmSheet
                     open={confirmClose}
@@ -1695,6 +1803,14 @@ export default function SecondSound({ onBack }) {
         const secondsArr = sessionSecondsCorrectRef.current
         const avg = secondsArr.length > 0 ? (secondsArr.reduce((a, b) => a + b, 0) / secondsArr.length) : null
         const segs = songHistory.length ? songHistory.map(h => h.correct) : []
+        const tipCount = (k) => songHistory.filter(h => h.tip?.[k] === true).length
+        const tipLine = [['title', 'Titel'], ['artist', 'Interpret'], ['year', 'Jahr']]
+            .map(([k, label]) => [label, tipCount(k)]).filter(([, n]) => n > 0)
+            .map(([label, n]) => `${n}× ${label}`).join(' · ')
+        const pointsSub = [
+            jokerSpent > 0 && `Joker: −${jokerSpent}`,
+            tipLine && `Tipps richtig: ${tipLine}`
+        ].filter(Boolean).join(' · ') || 'Je früher erraten, desto mehr'
         return shell(
             <main className={styles.srMain}>
                 <header className={`${styles.srHeader} ${styles.srPad}`}>
@@ -1736,8 +1852,8 @@ export default function SecondSound({ onBack }) {
                             <span className={styles.srAvgIcon}><IconStar /></span>
                             <p className={styles.srAvgText}>
                                 <span className={styles.srMuted}>Deine Punkte</span>
-                                <span className={styles.srAvgNum}>{points} {points === 1 ? 'Punkt' : 'Punkte'}</span>
-                                <span className={styles.srAvgSub}>von {total * MAX_POINTS} möglichen · je früher erraten, desto mehr</span>
+                                <span className={styles.srAvgNum}>{points} {Math.abs(points) === 1 ? 'Punkt' : 'Punkte'}</span>
+                                <span className={styles.srAvgSub}>{pointsSub}</span>
                             </p>
                         </section>
                     )}
