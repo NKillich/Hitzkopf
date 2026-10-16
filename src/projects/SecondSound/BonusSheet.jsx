@@ -74,7 +74,7 @@ export default function BonusSheet({ open, svc, onClose, onSkip, onCheck, busy, 
                     {isPlaying ? <IconPause size={20} /> : <IconPlay size={20} />}
                 </button>
             </div>
-            <p className={styles.srBonusText}>Alles freiwillig. Richtiger Interpret +{BONUS_ARTIST}, richtiger Titel +{BONUS_TITLE}.</p>
+            <p className={styles.srBonusText}>Richtiger Interpret +{BONUS_ARTIST}, richtiger Titel +{BONUS_TITLE}. Ohne Eingabe zählt der Song als nicht erraten.</p>
 
             <div className={styles.srBonusField}>
                 <label htmlFor="sr-tip-artist" className={styles.srLabel}>Interpret <span className={styles.srBonusPts}>+{BONUS_ARTIST}</span></label>
@@ -136,8 +136,8 @@ export default function BonusSheet({ open, svc, onClose, onSkip, onCheck, busy, 
                 <p className={styles.srBonusHint}>Exakt richtig verdoppelt alle Punkte dieses Songs – falsch gibt 0.</p>
             </div>
 
-            <button type="button" className={`${styles.srBtn} ${filled ? styles.srBonusGo : styles.srBonusSkip}`} onClick={submit} disabled={busy || !yearOk}>
-                {busy ? 'Wird geprüft …' : (filled ? 'Prüfen' : 'Überspringen')}
+            <button type="button" className={`${styles.srBtn} ${filled ? styles.srBonusGo : styles.srBonusSkip}`} onClick={submit} disabled={filled && (busy || !yearOk)}>
+                {filled && busy ? 'Wird geprüft …' : (filled ? 'Prüfen' : 'Nicht erraten')}
             </button>
         </BottomSheet>
     )

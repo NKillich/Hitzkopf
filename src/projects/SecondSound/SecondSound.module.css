@@ -424,7 +424,7 @@
 .srRoot .srBonusPts { font-size: 12px; font-weight: 800; color: var(--sr-accent-text); }
 .srRoot .srBonusInput { padding-left: 16px; background: var(--sr-bg); }
 .srRoot .srBonusInput:focus { background: var(--sr-bg); }
-.srRoot .srBonusYear { width: 140px; padding-right: 16px; letter-spacing: 0.08em; }
+.srRoot .srBonusYear { width: 170px; padding-right: 16px; letter-spacing: 0.08em; }
 .srRoot .srBonusYear:disabled { opacity: 0.6; }
 .srRoot .srBonusHint { margin: 0; font-size: 12px; color: var(--sr-muted); }
 .srRoot .srSuggest { list-style: none; margin: 0; padding: 4px; border-radius: 16px; background: var(--sr-bg); border: 1.5px solid var(--sr-line); display: flex; flex-direction: column; }
