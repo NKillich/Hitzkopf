@@ -4,24 +4,25 @@ import { IconPause, IconPlay, IconX } from '../../shared/ui/icons'
 import { BONUS_ARTIST, BONUS_TITLE, cleanTitle, normTitle } from './songGuess.js'
 import styles from './SecondSound.module.css'
 
-// Vorschläge aus der Spotify-Suche, kurz nach dem Tippen
-function useSuggestions(query, enabled, search) {
-    const [found, setFound] = useState({ q: '', items: [] })   // Treffer gehören immer zu einem Suchwort
+// Vorschläge aus der Spotify-Suche, kurz nach dem Tippen. scope: weitere Eingabe, von der die Suche abhängt (z. B. Interpret)
+function useSuggestions(query, enabled, search, scope = '') {
+    const [found, setFound] = useState({ q: '', items: [] })   // Treffer gehören immer zu einem Suchwort (+ scope)
     const searchRef = useRef(search)
     useEffect(() => { searchRef.current = search })
     const q = query.trim()
+    const key = `${q}\u0000${scope}`
     const active = enabled && q.length >= 2
     useEffect(() => {
         if (!active) return
         let alive = true
         const id = setTimeout(() => {
             searchRef.current(q)
-                .then(items => { if (alive) setFound({ q, items }) })
-                .catch(() => { if (alive) setFound({ q, items: [] }) })
+                .then(items => { if (alive) setFound({ q: key, items }) })
+                .catch(() => { if (alive) setFound({ q: key, items: [] }) })
         }, 300)
         return () => { alive = false; clearTimeout(id) }
-    }, [q, active])
-    return active && found.q === q ? found.items : []
+    }, [q, key, active])
+    return active && found.q === key ? found.items : []
 }
 
 /**
@@ -37,11 +38,15 @@ export default function BonusSheet({ open, svc, onClose, onSkip, onCheck, busy, 
     const [focus, setFocus] = useState(null)              // 'artist' | 'title' – nur dort Vorschläge zeigen
 
     const artists = useSuggestions(artistQ, focus === 'artist' && !artistSel, (q) => svc.searchArtists(q, 5))
+    // Mit Interpret: nur Songs dieses Interpreten (ausgewählt → per ID, getippt → per Name in der Suche)
+    const artistName = artistQ.trim()
     const titles = useSuggestions(titleQ, focus === 'title' && !titlePicked, async (q) => {
-        const res = await svc.searchPage(`track:${q}`, 0, 'track')
+        const query = artistName ? `track:${q} artist:"${artistName.replace(/"/g, '')}"` : `track:${q}`
+        const res = await svc.searchPage(query, 0, 'track')
         const seen = new Set()
         const out = []
         for (const t of res.tracks || []) {
+            if (artistSel?.id && !(t.artistIds || []).includes(artistSel.id)) continue
             const key = normTitle(t.title)
             if (!key || seen.has(key)) continue
             seen.add(key)
@@ -49,7 +54,7 @@ export default function BonusSheet({ open, svc, onClose, onSkip, onCheck, busy, 
             if (out.length >= 5) break
         }
         return out
-    })
+    }, `${artistSel?.id || ''}|${artistName.toLowerCase()}`)
 
     const filled = !!(artistQ.trim() || titleQ.trim() || year.trim())
     const yearOk = !year || /^\d{4}$/.test(year)
@@ -101,7 +106,7 @@ export default function BonusSheet({ open, svc, onClose, onSkip, onCheck, busy, 
                 <label htmlFor="sr-tip-title" className={styles.srLabel}>Titel <span className={styles.srBonusPts}>+{BONUS_TITLE}</span></label>
                 <div className={styles.srInputWrap}>
                     <input id="sr-tip-title" className={`${styles.srInput} ${styles.srBonusInput}`} value={titleQ} autoComplete="off"
-                        placeholder="Songtitel" onFocus={() => setFocus('title')}
+                        placeholder={artistName ? `Songtitel von ${artistName}` : 'Songtitel'} onFocus={() => setFocus('title')}
                         onChange={e => { setTitleQ(e.target.value); setTitlePicked(false) }} />
                     {titleQ && (
                         <button type="button" className={`${styles.srBtn} ${styles.srInputClear}`} aria-label="Titel löschen"
