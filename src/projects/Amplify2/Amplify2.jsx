@@ -2028,16 +2028,16 @@ const Amplify2 = ({ onBack, joinCode }) => {
     const nameError = roomId ? null : nameProblem(nameDraft)
     const nameEmpty = !roomId && !cleanName(nameDraft)   // leer: noch kein roter Fehler, aber kein Weiter
     const nameField = (
-        <div className={styles.mvField}>
-            <label htmlFor="mv-name" className={styles.mvLabel}>Dein Name</label>
-            <input id="mv-name" type="text" className={`${styles.mvInput} ${styles.mvInputPlain} ${nameError && !nameEmpty ? styles.mvInputBad : ''} ${nameEmpty ? styles.mvInputAttn : ''}`}
+        <div className={ss.field}>
+            <label htmlFor="mv-name" className={ss.label}>Dein Name</label>
+            <input id="mv-name" type="text" className={`${ss.input} ${nameError && !nameEmpty ? ss.inputBad : ''}`}
                 value={roomId ? myName : nameDraft}
                 onChange={(e) => setNameDraft(e.target.value)}
                 readOnly={!!roomId} maxLength={24} autoComplete="nickname" spellCheck={false}
                 placeholder="z. B. Niklas"
                 aria-invalid={!!nameError && !nameEmpty} aria-describedby="mv-name-hint" />
             {(roomId || (nameError && !nameEmpty)) && (
-                <p id="mv-name-hint" className={roomId ? styles.mvFieldHint : styles.mvFieldError}>
+                <p id="mv-name-hint" className={`${ss.hint} ${roomId ? '' : ss.hintBad}`}>
                     {roomId ? 'Du bist gerade in einer Playlist – dein Name bleibt dort gleich.' : nameError}
                 </p>
             )}
@@ -2141,16 +2141,16 @@ const Amplify2 = ({ onBack, joinCode }) => {
         return shell(
             <main className={styles.mvMain}>
                 {subHeader('Neue Playlist', () => setCurrentScreen('lobby'))}
-                <div className={styles.mvScroll}>
+                <div className={`${styles.mvScroll} ${ss.start}`} style={{ gap: 20 }}>
                     <AvatarPicker value={myEmoji} onChange={pickAvatar} disabled={!!roomId} />
                     {nameField}
-                    <section className={styles.mvField} aria-labelledby="mv-rules-title">
+                    <section className={ss.field} aria-labelledby="mv-rules-title">
                         <h2 id="mv-rules-title" className={ss.rulesTitle}>Regeln</h2>
                         <div className={ss.rules}>
                             {rule(songs, <IconNote size={18} />)}
                             {rule(ups, <IconThumbUp size={18} />)}
                             {moreRules && (<>
-                                {rule(downs, <IconThumbDown size={18} />)}
+                                {rule(downs, <IconThumbDown size={18} />, 'Daumen runter')}
                                 {rule(dropBelow, <IconTrash size={18} />, 'Raus ab Minus')}
                                 {rule(dropAfter, <IconClock size={18} />, 'Raus nach Zeit')}
                                 <button type="button" className={`${styles.mvBtn} ${ss.ruleRow} ${ss.ruleToggle}`} onClick={() => setCreateRules(r => ({ ...r, streakEnabled: !r.streakEnabled }))} aria-pressed={createRules.streakEnabled}>
@@ -2163,7 +2163,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
                                 {moreRules ? 'Weniger Regeln' : 'Mehr Regeln'}<IconChevron open={moreRules} />
                             </button>
                         </div>
-                        <p className={styles.mvFieldHint}>Alles lässt sich später in den Einstellungen ändern.</p>
+                        <p className={ss.hint}>Alles lässt sich später in den Einstellungen ändern.</p>
                     </section>
                     {!spotifyConnected && (
                         <div className={styles.mvAlert} role="alert">
@@ -2199,7 +2199,7 @@ const Amplify2 = ({ onBack, joinCode }) => {
         return shell(
             <main className={styles.mvMain}>
                 {subHeader('Beitreten', () => { dropInvite(); setCurrentScreen('lobby') })}
-                <div className={styles.mvScroll}>
+                <div className={`${styles.mvScroll} ${ss.start}`} style={{ gap: 20 }}>
                     {roomId && (
                         <button type="button" className={`${styles.mvBtn} ${styles.mvRejoin}`} onClick={handleRejoinRoom}>
                             <span className={styles.mvLiveDot} aria-hidden="true" />
@@ -2210,15 +2210,15 @@ const Amplify2 = ({ onBack, joinCode }) => {
                             <IconNext />
                         </button>
                     )}
-                    <div className={styles.mvField}>
-                        <label htmlFor="mv-code" className={styles.mvLabel}>Raumcode</label>
+                    <div className={ss.field}>
+                        <label htmlFor="mv-code" className={ss.label}>Raumcode</label>
                         <div className={ss.codeRow}>
-                            <input id="mv-code" type="text" className={`${styles.mvInput} ${styles.mvInputPlain} ${styles.mvCodeInput}`}
+                            <input id="mv-code" type="text" className={`${ss.input} ${ss.codeInput} ${status.bad ? ss.inputBad : ''}`}
                                 value={codeDraft} onChange={(e) => setCodeDraft(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                                style={{ textAlign: 'center' }} placeholder="3RUCTD" maxLength={10} autoComplete="off" autoCapitalize="characters" spellCheck={false} inputMode="text" aria-describedby="mv-code-status" />
-                            <button type="button" className={`${styles.mvBtn} ${ss.scanBtn}`} onClick={() => setScanning(true)} aria-label="QR-Code scannen"><IconQr size={22} /></button>
+                                placeholder="3RUCTD" maxLength={10} autoComplete="off" autoCapitalize="characters" spellCheck={false} inputMode="text" aria-describedby="mv-code-status" />
+                            <button type="button" className={`${styles.mvBtn} ${ss.scanBtn}`} onClick={() => setScanning(true)} aria-label="QR-Code scannen"><IconQr size={24} /></button>
                         </div>
-                        <p id="mv-code-status" className={status.bad ? styles.mvFieldError : status.ok ? ss.codeOk : styles.mvFieldHint} role="status">{status.text}</p>
+                        <p id="mv-code-status" className={status.ok ? ss.codeOk : `${ss.hint} ${status.bad ? ss.hintBad : ''}`} role="status">{status.text}</p>
                     </div>
                     <AvatarPicker value={myEmoji} onChange={pickAvatar} disabled={!!roomId} />
                     {nameField}
