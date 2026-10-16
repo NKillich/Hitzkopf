@@ -53,7 +53,8 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
   Genre + Jahrzehnt → Top-Künstler des Genres, je 2 ihrer Top-5-Songs im Jahrzehnt (Spotify); nur Genre / nur Jahrzehnt →
   Top-Songs des Tags, bei Spotify gesucht. Spotifys eigene Genres sind zu unsauber. Künstler-Seite; ein Suchfeld für
   Titel/Band/Album oder Spotify-Link (Link → Song sofort hinzugefügt), daneben Knopf „Spotify öffnen“.
-- Startseiten „Neue Playlist“ / „Beitreten“: Tier-Karussell (`ANIMALS` in `avatars.js`, `AvatarPicker.jsx`, endlos, Mitte = gewählt),
+- Startseiten „Neue Playlist“ / „Beitreten“: Tier-Karussell (`ANIMALS` in `avatars.js`, `AvatarPicker.jsx`: endlos, Mitte groß = gewählt,
+  Schwung + Einrasten, Positionen direkt am DOM statt React-Neuzeichnen, gespeichert beim Stillstand),
   Name-Platzhalter immer „z. B. Niklas“, Regeln beim Erstellen (2 sichtbar, Rest unter „Mehr Regeln“), Knöpfe erst aktiv,
   wenn alles passt. Gäste: Raumcode mit Live-Prüfung + QR-Scanner (`QrScanner.jsx`, `BarcodeDetector`, sonst `jsqr`);
   Einladungslink/QR füllt den Code vor.
