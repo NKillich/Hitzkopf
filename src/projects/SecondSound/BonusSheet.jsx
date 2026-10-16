@@ -35,6 +35,7 @@ export default function BonusSheet({ open, svc, onClose, onSkip, onCheck, busy, 
     const [titleQ, setTitleQ] = useState('')
     const [titlePicked, setTitlePicked] = useState(false)
     const [year, setYear] = useState('')
+    const [yearOn, setYearOn] = useState(false)           // „Jahr: doppelt oder nichts“ bewusst eingeschaltet
     const [focus, setFocus] = useState(null)              // 'artist' | 'title' – nur dort Vorschläge zeigen
 
     const artists = useSuggestions(artistQ, focus === 'artist' && !artistSel, (q) => svc.searchArtists(q, 5))
@@ -56,25 +57,27 @@ export default function BonusSheet({ open, svc, onClose, onSkip, onCheck, busy, 
         return out
     }, `${artistSel?.id || ''}|${artistName.toLowerCase()}`)
 
-    const filled = !!(artistQ.trim() || titleQ.trim() || year.trim())
-    const yearOk = !year || /^\d{4}$/.test(year)
+    // Erraten heißt: Titel oder Interpret. Das Jahr gibt es nur dazu (und nur, wenn eingeschaltet).
+    const filled = !!(artistQ.trim() || titleQ.trim())
+    const yearActive = yearOn && filled && yearAvailable
+    const yearOk = !yearActive || /^\d{4}$/.test(year)
 
     const submit = () => {
         if (!filled) { onSkip(); return }
         if (!yearOk) return
-        onCheck({ artist: { id: artistSel?.id || null, name: artistQ.trim() }, title: titleQ.trim(), year: year.trim() })
+        onCheck({ artist: { id: artistSel?.id || null, name: artistQ.trim() }, title: titleQ.trim(), year: yearActive ? year.trim() : '' })
     }
 
     return (
         <BottomSheet open={open} onClose={onClose} labelledBy="sr-bonus-title" busy={busy} returnFocusRef={returnFocusRef}>
             <div className={styles.srBonusHead}>
-                <h2 id="sr-bonus-title" className={styles.srBonusTitle}>Bonuspunkte sammeln?</h2>
+                <h2 id="sr-bonus-title" className={styles.srBonusTitle}>Dein Tipp</h2>
                 <button type="button" className={`${styles.srBtn} ${styles.srBonusPlay}`} onClick={onPlayToggle}
                     aria-label={isPlaying ? 'Pause' : 'Weiterhören'} title={isPlaying ? 'Pause' : 'Weiterhören'}>
                     {isPlaying ? <IconPause size={20} /> : <IconPlay size={20} />}
                 </button>
             </div>
-            <p className={styles.srBonusText}>Richtiger Interpret +{BONUS_ARTIST}, richtiger Titel +{BONUS_TITLE}. Ohne Eingabe zählt der Song als nicht erraten.</p>
+            <p className={styles.srBonusText}>Gib Titel oder Interpret ein, um den Song zu erraten. Jeder Treffer bringt +{BONUS_TITLE}.</p>
 
             <div className={styles.srBonusField}>
                 <label htmlFor="sr-tip-artist" className={styles.srLabel}>Interpret <span className={styles.srBonusPts}>+{BONUS_ARTIST}</span></label>
@@ -128,16 +131,28 @@ export default function BonusSheet({ open, svc, onClose, onSkip, onCheck, busy, 
             </div>
 
             <div className={styles.srBonusField}>
-                <label htmlFor="sr-tip-year" className={styles.srLabel}>Jahr <span className={styles.srBonusPts}>doppelt oder nichts</span></label>
-                <input id="sr-tip-year" className={`${styles.srInput} ${styles.srBonusInput} ${styles.srBonusYear}`} value={year} autoComplete="off"
-                    inputMode="numeric" maxLength={4} placeholder={yearAvailable ? 'z. B. 1985' : 'nicht verfügbar'} disabled={!yearAvailable}
-                    onFocus={() => setFocus('year')}
-                    onChange={e => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
-                <p className={styles.srBonusHint}>Exakt richtig verdoppelt alle Punkte dieses Songs – falsch gibt 0.</p>
+                <button type="button" role="switch" aria-checked={yearActive} disabled={!filled || !yearAvailable}
+                    className={`${styles.srBtn} ${styles.srYearSwitch}`}
+                    onClick={() => { setYearOn(v => !v); setFocus('year') }}>
+                    <span className={styles.srYearSwitchText}>
+                        <span className={styles.srYearSwitchTitle}>Jahr: doppelt oder nichts</span>
+                        <span className={styles.srYearSwitchSub}>
+                            {!yearAvailable ? 'Für diesen Song nicht verfügbar'
+                                : (!filled ? 'Erst Titel oder Interpret eingeben' : 'Richtig = alle Punkte ×2, falsch = 0')}
+                        </span>
+                    </span>
+                    <span className={`${styles.srToggle} ${yearActive ? styles.srToggleOn : ''}`} aria-hidden="true"><span /></span>
+                </button>
+                {yearActive && (
+                    <input id="sr-tip-year" className={`${styles.srInput} ${styles.srBonusInput} ${styles.srBonusYear}`} value={year} autoComplete="off"
+                        inputMode="numeric" maxLength={4} placeholder="z. B. 1985" aria-label="Erscheinungsjahr" autoFocus
+                        onFocus={() => setFocus('year')}
+                        onChange={e => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+                )}
             </div>
 
             <button type="button" className={`${styles.srBtn} ${filled ? styles.srBonusGo : styles.srBonusSkip}`} onClick={submit} disabled={filled && (busy || !yearOk)}>
-                {filled && busy ? 'Wird geprüft …' : (filled ? 'Prüfen' : 'Nicht erraten')}
+                {filled && busy ? 'Wird geprüft …' : (filled ? (yearOk ? 'Prüfen' : 'Jahr eingeben oder ausschalten') : 'Nicht erraten')}
             </button>
         </BottomSheet>
     )
