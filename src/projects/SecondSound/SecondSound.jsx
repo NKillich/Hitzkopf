@@ -965,7 +965,8 @@ export default function SecondSound({ onBack }) {
         setBonusOpen(false)
         setIsRevealed(true)
     }
-    const handleBonusSkip = () => revealSong(null)
+    // Pro ohne Eingabe: aufdecken, zählt als nicht erraten
+    const handleBonusSkip = () => revealSong({ artist: null, title: null, year: null, skipped: true })
     const handleBonusCheck = (tip) => revealSong(checkTip(tip, songMeta()))
 
     const handleAnswer = async (correct) => {
@@ -1631,6 +1632,7 @@ export default function SecondSound({ onBack }) {
         const year = meta.year
         const tip = tipGiven(tipResult) ? tipResult : null
         const tipHit = tipAnyHit(tip)
+        const tipSkipped = !!tipResult?.skipped
         const okPoints = songScore({ stagePoints, correct: true, tip }).total
         const jokerImg = usedJokers.includes('blur') ? currentTrackInfo?.imageUrl : null
         const hint = usedJokers.includes('letters') && meta.name ? titleHint(meta.name) : null
@@ -1787,9 +1789,10 @@ export default function SecondSound({ onBack }) {
                     ) : (
                         <>
                             {tip && <p className={styles.srTipSummary} role="status">{tipSummary(tip)}{tipHit ? ` · ${okPoints} ${okPoints === 1 ? 'Punkt' : 'Punkte'}` : ''}</p>}
+                            {tipSkipped && <p className={styles.srTipSummary} role="status">Nichts getippt · 0 Punkte</p>}
                             <div className={styles.srRate}>
                                 <button type="button" onClick={() => handleAnswer(false)} disabled={!!verdict || (tip && tipHit)} className={`${styles.srBtn} ${styles.srRateNo}`}><IconX size={20} w={2.8} />Nicht erraten</button>
-                                <button type="button" onClick={() => handleAnswer(true)} disabled={!!verdict || (tip && !tipHit)} className={`${styles.srBtn} ${styles.srRateOk}`}><IconCheck size={22} />Erraten · +{okPoints}</button>
+                                <button type="button" onClick={() => handleAnswer(true)} disabled={!!verdict || tipSkipped || (tip && !tipHit)} className={`${styles.srBtn} ${styles.srRateOk}`}><IconCheck size={22} />Erraten · +{okPoints}</button>
                             </div>
                         </>
                     )}

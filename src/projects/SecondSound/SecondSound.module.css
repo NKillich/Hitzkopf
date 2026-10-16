@@ -424,7 +424,7 @@
 .srRoot .srBonusPts { font-size: 12px; font-weight: 800; color: var(--sr-accent-text); }
 .srRoot .srBonusInput { padding-left: 16px; background: var(--sr-bg); }
 .srRoot .srBonusInput:focus { background: var(--sr-bg); }
-.srRoot .srBonusYear { width: 140px; padding-right: 16px; letter-spacing: 0.08em; }
+.srRoot .srBonusYear { width: 170px; padding-right: 16px; letter-spacing: 0.08em; }
 .srRoot .srBonusYear:disabled { opacity: 0.6; }
 .srRoot .srBonusHint { margin: 0; font-size: 12px; color: var(--sr-muted); }
 .srRoot .srSuggest { list-style: none; margin: 0; padding: 4px; border-radius: 16px; background: var(--sr-bg); border: 1.5px solid var(--sr-line); display: flex; flex-direction: column; }
@@ -449,3 +449,14 @@
 .srRoot .srCountPage { justify-content: flex-start; padding-top: clamp(8px, 2dvh, 20px); gap: clamp(14px, 2.6dvh, 28px); }
 .srRoot .srCountPage .srInfoBig { font-size: clamp(20px, 3dvh, 26px); }
 .srRoot .srCountPage .srSliderNum { font-size: clamp(52px, 8.5dvh, 80px); }
+
+/* Dein Tipp: Schalter „Jahr: doppelt oder nichts“ */
+.srRoot .srYearSwitch { width: 100%; min-height: 60px; gap: 12px; padding: 10px 14px; box-sizing: border-box; border-radius: 18px; border: 1.5px solid var(--sr-line); background: var(--sr-bg); color: var(--sr-ink); justify-content: space-between; text-align: left; }
+.srRoot .srYearSwitch:disabled { opacity: 0.55; cursor: default; }
+.srRoot .srYearSwitchText { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.srRoot .srYearSwitchTitle { font-size: 15px; font-weight: 800; }
+.srRoot .srYearSwitchSub { font-size: 13px; color: var(--sr-muted); }
+.srRoot .srToggle { position: relative; width: 48px; height: 28px; flex: none; border-radius: 14px; background: var(--sr-surface2); border: 1.5px solid var(--sr-line); box-sizing: border-box; transition: background 0.15s; }
+.srRoot .srToggle span { position: absolute; top: 2px; left: 2px; width: 21px; height: 21px; border-radius: 50%; background: var(--sr-muted); transition: transform 0.15s, background 0.15s; }
+.srRoot .srToggleOn { background: var(--sr-accent); border-color: var(--sr-accent); }
+.srRoot .srToggleOn span { transform: translateX(20px); background: var(--sr-on-accent); }
