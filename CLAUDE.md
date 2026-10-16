@@ -21,6 +21,15 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
 - Firestore-Regeln stehen in `firestore.rules`; veröffentlichen mit `npm run deploy:rules` (braucht Firebase-Login,
   geht nur am PC des Users – sonst im PR darauf hinweisen).
 
+### Designs nach Vorlage (Screenshot/Mockup vom User)
+- **Vorher:** Maße aus der Vorlage ablesen (Größen, Rundungen, Abstände, Schrift, Farben, Anzahl sichtbarer Elemente)
+  und im Vorschlag nennen – der User bestätigt sie mit dem „go“.
+- **Nachher:** Screenshot in derselben Breite, Seite an Seite mit der Vorlage in ein Bild legen, Element für Element
+  vergleichen; erst ohne Abweichung fertig. Vergleichsbild + bewusste Abweichungen **im Chat** schicken (nicht im PR).
+- Ziehen/Wischen immer mit **Maus und Touch** testen (der User prüft oft am PC).
+- Neue Elemente bekommen eigene Klassen mit genug Spezifität (z. B. `.start button.x`): `.mvRoot .mvBtn`/`.mvInput`
+  und die globalen `button`/`input`-Styles aus `App.css` überschreiben sonst Hintergrund, Rahmen und Größe.
+
 ## Amplify: zwei Versionen
 
 - **Amplify 2.0** = `src/projects/Amplify2/` – hier wird weiterentwickelt. Routen `#amplify2/CODE` und `#live2/CODE`,
