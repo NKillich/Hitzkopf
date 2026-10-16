@@ -541,11 +541,8 @@
 }
 @media (prefers-reduced-motion: reduce) { .mvRoot .mvConfetti { display: none; } }
 
-/* Namensfeld: leuchtet, solange es leer ist; wackelt, wenn man ohne Namen weiter will */
+/* Namensfeld: leuchtet, solange es leer ist */
 .mvRoot .mvInputAttn { border-color: var(--sr-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sr-accent) 25%, transparent); }
-.mvRoot .mvShake { animation: mvShake 0.4s ease-in-out; }
-@keyframes mvShake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
-@media (prefers-reduced-motion: reduce) { .mvRoot .mvShake { animation: none; } }
 
 /* Suchtreffer: nach rechts wischen = hinzufügen (grüner Streifen, ab der Schwelle ✓ statt ➕) */
 .mvRoot .mvSwipe { position: relative; overflow: hidden; border-radius: 18px; list-style: none; }

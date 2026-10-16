@@ -1,0 +1,44 @@
+/* Start-Bildschirme Amplify 2.0 (Erstellen/Beitreten): Profilbild-Karussell, QR-Scanner. Farben aus theme.module.css */
+.picker { display: flex; flex-direction: column; align-items: center; gap: 14px; margin: 4px 0 6px; }
+.bigAvatar { width: 104px; height: 104px; border-radius: 52px; display: flex; align-items: center; justify-content: center; font-size: 56px; line-height: 1;
+    background: var(--sr-surface); border: 3px solid var(--sr-ok); box-sizing: border-box; animation: pop 0.25s ease-out; }
+@keyframes pop { from { transform: scale(0.85); } to { transform: scale(1); } }
+.carousel { position: relative; width: 100%; height: 56px; overflow: hidden; touch-action: pan-y; outline: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 44px, #000 calc(100% - 44px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 44px, #000 calc(100% - 44px), transparent 100%); }
+.strip { position: absolute; top: 4px; left: 50%; display: flex; gap: 8px; margin-left: calc(-26px - 5 * 52px); will-change: transform; }
+.item { width: 44px; height: 44px; flex: none; border-radius: 22px; background: var(--sr-surface); font-size: 24px; line-height: 1; padding: 0;
+    display: flex; align-items: center; justify-content: center; border: 2px solid transparent; box-sizing: border-box; }
+.itemOn { border-color: var(--sr-ok); background: color-mix(in srgb, var(--sr-ok) 14%, var(--sr-surface)); }
+.arrow { position: absolute; top: 10px; width: 34px; height: 34px; border-radius: 17px; padding: 0; z-index: 1;
+    background: var(--sr-surface2); color: var(--sr-ink); display: flex; align-items: center; justify-content: center; }
+.arrowLeft { left: 0; }
+.arrowRight { right: 0; }
+.chevLeft { display: flex; transform: rotate(90deg); }
+.chevRight { display: flex; transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .bigAvatar { animation: none; } }
+
+.scanner { position: absolute; inset: 0; z-index: 70; background: #000; display: flex; align-items: center; justify-content: center; }
+.scanVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scanFrame { position: relative; width: 62%; aspect-ratio: 1; border-radius: 24px; border: 3px solid rgba(255, 255, 255, 0.9); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45); }
+.scanText { position: absolute; left: 24px; right: 24px; bottom: calc(48px + env(safe-area-inset-bottom, 0px)); margin: 0; text-align: center; color: #fff; font-size: 16px; font-weight: 700; line-height: 1.4; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
+.scanClose { position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); right: 16px; width: 44px; height: 44px; border-radius: 22px; background: rgba(0, 0, 0, 0.55); color: #fff; display: flex; align-items: center; justify-content: center; }
+
+/* Erstellen: Regeln */
+.rulesTitle { margin: 6px 2px 8px; font-size: 16px; font-weight: 800; }
+.rules { display: flex; flex-direction: column; border-radius: 20px; background: var(--sr-surface); padding: 4px 6px 4px 14px; }
+.ruleRow { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 6px 0; box-sizing: border-box; border-bottom: 1px solid var(--sr-line); width: 100%; text-align: left; color: var(--sr-ink); background: none; }
+.ruleToggle { padding-right: 8px; }
+.ruleIcon { display: flex; flex: none; color: var(--sr-muted); }
+.ruleLabel { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; line-height: 1.25; }
+.stepper { display: flex; align-items: center; flex: none; height: 44px; border-radius: 22px; background: var(--sr-surface2); padding: 0 4px; }
+.stepBtn { width: 36px; height: 36px; border-radius: 18px; font-size: 20px; font-weight: 700; color: var(--sr-ink); background: none; }
+.stepBtn:disabled { opacity: 0.3; }
+.stepVal { min-width: 34px; text-align: center; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.moreRules { align-self: center; gap: 4px; height: 44px; padding: 0 12px; font-size: 14px; font-weight: 800; color: var(--sr-muted); background: none; }
+
+/* Beitreten: Code + QR, Hinweis über dem Knopf */
+.codeRow { display: flex; gap: 10px; }
+.scanBtn { flex: none; width: 48px; height: 48px; border-radius: 16px; background: var(--sr-surface); border: 2px solid var(--sr-line); color: var(--sr-ink); display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.codeOk { margin: 6px 2px 0; font-size: 14px; font-weight: 700; color: var(--sr-ok); }
+.roleNote { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--sr-muted); }
