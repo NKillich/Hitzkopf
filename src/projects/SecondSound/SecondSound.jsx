@@ -789,10 +789,17 @@ export default function SecondSound({ onBack }) {
         return i < 0 ? STAGES.length - 1 : i
     }
 
+    // Teil, der gerade läuft – nie hinter dem Ende des laufenden Ausschnitts (an der Grenze sonst kurz der nächste)
+    const playingPart = () => {
+        const p = playRef.current
+        const at = partAt(livePosMs())
+        return p ? Math.min(at, partAt(p.untilMs - baseRef.current - 100)) : Math.min(at, stage)
+    }
+
     // Tipp auf einen freigeschalteten Teil: nur diesen hören (läuft er gerade → Pause)
     const handleSegmentTap = (idx) => {
         if (idx > stage || !hasPlayedCurrentSong) return
-        if (isPlaying && partAt(livePosMs()) === idx) { stopPlayback(); return }
+        if (isPlaying && playingPart() === idx) { stopPlayback(); return }
         playSegment(idx)
     }
 
@@ -812,7 +819,7 @@ export default function SecondSound({ onBack }) {
         setStage(next)
         const uri = trackUriRef.current[currentIndexRef.current]
         const untilMs = baseRef.current + STAGES[next].seconds * 1000
-        const inLastPart = partAt(livePosMs()) === stage
+        const inLastPart = playingPart() === stage
         if (isPlaying && inLastPart && playRef.current && clip.extendTo({ uri, untilMs })) {
             // läuft im bisher letzten Teil: Ende einfach nach hinten schieben
             playRef.current = { ...playRef.current, untilMs }
@@ -1528,7 +1535,7 @@ export default function SecondSound({ onBack }) {
         const busy = connecting || starting || !!verdict
         const headSec = livePosMs() / 1000                          // Abspielposition
         const heardSec = Math.max(heardRef.current / 1000, headSec)  // so weit gehört
-        const playPart = partAt(headSec * 1000)
+        const playPart = playingPart()
         const isLast = stage >= STAGES.length - 1
         const nextStep = isLast ? 0 : STAGES[stage + 1].seconds - STAGES[stage].seconds
         const canAct = hasPlayedCurrentSong && !connecting && !verdict
