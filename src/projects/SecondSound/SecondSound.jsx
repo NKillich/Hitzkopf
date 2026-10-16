@@ -105,6 +105,7 @@ export default function SecondSound({ onBack }) {
     const [songCount, setSongCount] = useState(10)
     const [startPct, setStartPct] = useState(loadStartPct)
     const [stage, setStage] = useState(0)                 // freigeschalteter Teil der Zeitleiste (0 = 1 s … 3 = 30 s)
+    const [lockedStage, setLockedStage] = useState(null)  // Stufe beim Auflösen – zählt für die Punkte, danach ist alles frei
     // True sobald der aktuelle Song mindestens 1× abgespielt wurde – schaltet
     // Aufdecken- und Antwort-Buttons frei. Verhindert Klick-Spam mit 403/502.
     const [hasPlayedCurrentSong, setHasPlayedCurrentSong] = useState(false)
@@ -148,6 +149,7 @@ export default function SecondSound({ onBack }) {
 
     const currentIndexRef = useRef(0)
     const isAnsweringRef = useRef(false)        // verhindert Doppel-Klick auf Antwort-Buttons
+    const frozenHeardRef = useRef(0)            // gehörte Stufe beim Auflösen (für Ø-Zeit)
     const maxHeardRef = useRef(0)               // längste gehörte Stufe des aktuellen Songs (für Ø-Zeit)
     const revealDoneRef = useRef(null)          // beendet die kurze Auflösung nach dem Werten vorzeitig
     const statsKeyRef = useRef(null)            // Statistik-Dokument pro Spotify-Konto (sp_…)
@@ -621,6 +623,7 @@ export default function SecondSound({ onBack }) {
         heardRef.current = 0
         posRef.current = 0
         setStage(0)
+        setLockedStage(null)
         setUsedJokers([])
         setTipResult(null)
         setBonusOpen(false)
@@ -842,9 +845,9 @@ export default function SecondSound({ onBack }) {
         setStage(next)
         const uri = trackUriRef.current[currentIndexRef.current]
         const untilMs = baseRef.current + STAGES[next].seconds * 1000
-        const inLastPart = playingPart() === stage
-        if (isPlaying && inLastPart && playRef.current && clip.extendTo({ uri, untilMs })) {
-            // läuft im bisher letzten Teil: Ende einfach nach hinten schieben
+        const toFrontier = playRef.current && playRef.current.untilMs >= baseRef.current + STAGES[stage].seconds * 1000 - 50
+        if (isPlaying && toFrontier && clip.extendTo({ uri, untilMs })) {
+            // läuft bis zum bisherigen Ende: Ende einfach nach hinten schieben (spielt alle Abschnitte dazwischen)
             playRef.current = { ...playRef.current, untilMs }
             maxHeardRef.current = Math.max(maxHeardRef.current, STAGES[next].seconds)
             return
@@ -885,12 +888,13 @@ export default function SecondSound({ onBack }) {
         allowPlaybackRef.current = false
         isAnsweringRef.current = false
         isPlayingRequestRef.current = false
-        const earned = songScore({ stagePoints: STAGES[stage].points, correct, tip: tipGiven(tipResult) ? tipResult : null }).total
+        const earned = songScore({ stagePoints: STAGES[lockedStage ?? stage].points, correct, tip: tipGiven(tipResult) ? tipResult : null }).total
+        const heardAtReveal = lockedStage !== null ? frozenHeardRef.current : maxHeardRef.current
         setPoints(prev => prev + earned)
         if (correct) {
             setScore(prev => prev + 1)
-            if (maxHeardRef.current > 0) {
-                sessionSecondsCorrectRef.current.push(maxHeardRef.current)
+            if (heardAtReveal > 0) {
+                sessionSecondsCorrectRef.current.push(heardAtReveal)
             }
         }
         lastPlaySecondsRef.current = null
@@ -942,16 +946,17 @@ export default function SecondSound({ onBack }) {
     }
 
     // „Auflösen“: erst das Bonus-Fenster, dann aufdecken
-    const handleBonusSkip = () => {
+    // Aufdecken: Punkte-Stufe einfrieren, danach sind alle Abschnitte kostenlos frei
+    const revealSong = (result) => {
+        setLockedStage(stage)
+        frozenHeardRef.current = maxHeardRef.current
+        setStage(STAGES.length - 1)
+        setTipResult(result)
         setBonusOpen(false)
-        setTipResult(null)
         setIsRevealed(true)
     }
-    const handleBonusCheck = (tip) => {
-        setTipResult(checkTip(tip, songMeta()))
-        setBonusOpen(false)
-        setIsRevealed(true)
-    }
+    const handleBonusSkip = () => revealSong(null)
+    const handleBonusCheck = (tip) => revealSong(checkTip(tip, songMeta()))
 
     const handleAnswer = async (correct) => {
         if (isAnsweringRef.current) {
@@ -1593,8 +1598,9 @@ export default function SecondSound({ onBack }) {
         const isLast = stage >= STAGES.length - 1
         const nextStep = isLast ? 0 : STAGES[stage + 1].seconds - STAGES[stage].seconds
         const canAct = hasPlayedCurrentSong && !connecting && !verdict
-        const canUnlock = hasPlayedCurrentSong && !isLast && !busy
-        const stagePoints = STAGES[stage].points
+        const canUnlock = hasPlayedCurrentSong && !isLast && !busy && !isRevealed
+        const pointsStage = lockedStage ?? stage
+        const stagePoints = STAGES[pointsStage].points
         const meta = songMeta()
         const year = meta.year
         const tip = tipGiven(tipResult) ? tipResult : null
@@ -1737,8 +1743,8 @@ export default function SecondSound({ onBack }) {
                     </button>
                     <button type="button" className={`${styles.srBtn} ${styles.srCtrlSide} ${styles.srCtrlMore}`} onClick={handleUnlockNext}
                         disabled={!canUnlock}
-                        aria-label={isLast ? 'Alle 30 Sekunden freigeschaltet' : `${nextStep} Sekunden mehr hören`}>
-                        {isLast ? '30 s' : `+${nextStep} s`}
+                        aria-label={lockedStage !== null ? `Aufgelöst bei ${STAGES[lockedStage].long}` : (isLast ? 'Alle 30 Sekunden freigeschaltet' : `${nextStep} Sekunden mehr hören`)}>
+                        {lockedStage !== null ? STAGES[lockedStage].label : (isLast ? '30 s' : `+${nextStep} s`)}
                     </button>
                 </div>
 
