@@ -13,6 +13,8 @@
  */
 
 const MAX_TRACE = 600
+const STOP_LEAD_MS = 120      // Pause-Befehl so viel früher senden (Spotify reagiert verzögert)
+const NEAR_MS = 500           // so nah muss die gemeldete Position am Sprungziel liegen
 
 const summarize = (s) => {
     if (!s) return null
@@ -152,8 +154,8 @@ export class ClipPlayer {
             const same = last && !last.state.paused && last.state.track_window?.current_track?.uri === a.uri
             const est = same ? last.state.position + (Date.now() - last.at) : a.lastPos + (Date.now() - a.lastAt)
             const rem = a.deadline - est
-            if (rem <= 25) { this._finish('done'); return }
-            this.timer = setTimeout(step, Math.max(15, Math.min(rem - 10, 250)))
+            if (rem <= STOP_LEAD_MS) { this._finish('done'); return }
+            this.timer = setTimeout(step, Math.max(15, Math.min(rem - STOP_LEAD_MS + 5, 250)))
         }
         step()
     }
@@ -182,6 +184,26 @@ export class ClipPlayer {
             const cur = this.svc.getLastState()
             if (cur) check(cur.state, cur.at)
         })
+    }
+
+    /**
+     * Springt im laufenden (stummen) Titel an targetMs. Direkt nach seek() meldet getCurrentState() oft noch die
+     * ALTE Position – deshalb auf ein Player-Ereignis mit der neuen Position warten (notfalls nachfragen, 2 Versuche).
+     * Gibt { state, at } zurück oder null.
+     */
+    async _seekPlaying(uri, targetMs, myOp, isStale) {
+        const ok = (st) => st && !st.paused && st.track_window?.current_track?.uri === uri && Math.abs(st.position - targetMs) <= NEAR_MS
+        for (let i = 0; i < 2; i++) {
+            const sentAt = Date.now()
+            await this.svc.seekLocal(targetMs)
+            const hit = await this._waitFor(ok, sentAt, 1500)
+            if (!this._alive(myOp, isStale)) return null
+            if (hit && !hit.error) return hit
+            const st = await this.svc.getPlayerState()
+            if (ok(st)) return { state: st, at: Date.now() }
+            this.trace('seek-retry', { target: Math.round(targetMs), pos: st?.position })
+        }
+        return null
     }
 
     async _silence() {
@@ -267,7 +289,7 @@ export class ClipPlayer {
             }
 
             // Läuft stumm schon ein Stück (oder Einsetzpunkt gewählt): an die Zielstelle springen, dann Ton an
-            const duration = hit.state.duration || 0
+            const duration = hit.state.duration || hit.state.track_window?.current_track?.duration_ms || 0
             const target = startMs ?? (startFrac > 0 && duration
                 ? Math.max(0, Math.min(Math.round(startFrac * duration), duration - 31000))
                 : 0)
@@ -275,9 +297,8 @@ export class ClipPlayer {
             let at = hit.at
             if (Math.abs(pos - target) > 700) {
                 try {
-                    await this.svc.seekLocal(target)
-                    const st = await this.svc.getPlayerState()
-                    if (st) { pos = st.position; at = Date.now() }
+                    const h = await this._seekPlaying(track.uri, target, myOp, isStale)
+                    if (h) { pos = h.state.position; at = h.at } else this.trace('seek-failed', { target })
                 } catch (e) { this.trace('seek-failed', { msg: String(e?.message || e) }) }
             }
             return await this._begin({ track, seconds, untilMs, pos, at, duration: hit.state.duration, myOp, isStale, restore })
@@ -315,36 +336,43 @@ export class ClipPlayer {
         if (!this._alive(myOp, isStale)) return { aborted: true }
         const cur = await this.svc.getPlayerState()
         if (cur?.track_window?.current_track?.uri === uri) {
+            // Stumm: so hört man weder die alte Stelle noch einen Nachsprung
+            const vol = await this.svc.getVolumeLocal()
+            if (vol != null && vol > 0.05) this.baseVolume = vol
+            await this.svc.setVolumeLocal(0)
+            const restore = async () => { await this.svc.setVolumeLocal(this.baseVolume ?? 0.8) }
             try {
+                await this.svc.seekLocal(startMs)            // schon im Pausenzustand vorspringen
                 const sentAt = Date.now()
-                const near = (p) => Math.abs(p - startMs) <= 1500
-                await this.svc.seekLocal(startMs)
-                let st = await this.svc.getPlayerState()
-                if (!st || !near(st.position)) {
-                    await this.svc.seekLocal(startMs)
-                    st = await this.svc.getPlayerState()
+                await this.svc.resumeLocal()
+                let hit = await this._waitFor(
+                    (st) => !st.paused && !st.loading && st.track_window?.current_track?.uri === uri,
+                    sentAt, 3000)
+                if (!this._alive(myOp, isStale)) {
+                    if (this.op === myOp) await this._silence()
+                    return { aborted: true }
                 }
-                if (st && near(st.position)) {
-                    await this.svc.resumeLocal()
-                    const hit = await this._waitFor(
-                        (s) => !s.paused && !s.loading && s.track_window?.current_track?.uri === uri,
-                        sentAt, 3000)
+                if (hit && !hit.error && Math.abs(hit.state.position - startMs) > NEAR_MS) {
+                    // Sprung im Pausenzustand nicht übernommen → jetzt (laufend, stumm) nochmal
+                    this.trace('replay-reseek', { pos: hit.state.position, target: startMs })
+                    hit = await this._seekPlaying(uri, startMs, myOp, isStale)
                     if (!this._alive(myOp, isStale)) {
                         if (this.op === myOp) await this._silence()
                         return { aborted: true }
                     }
-                    if (hit && !hit.error && hit.state.position <= startMs + 3000 && hit.state.position >= startMs - 1500) {
-                        return await this._begin({
-                            track: trackInfoFrom(hit.state), seconds, untilMs, pos: hit.state.position, at: hit.at,
-                            duration: hit.state.duration, myOp, isStale
-                        })
-                    }
-                    this.trace('replay-no-start', { hit: !!hit })
-                } else {
-                    this.trace('replay-seek-unreliable', { pos: st?.position })
                 }
+                if (hit && !hit.error) {
+                    return await this._begin({
+                        track: trackInfoFrom(hit.state), seconds, untilMs, pos: hit.state.position, at: hit.at,
+                        duration: hit.state.duration, myOp, isStale, restore
+                    })
+                }
+                this.trace('replay-no-start', { hit: !!hit })
+                await this._silence()
             } catch (e) {
                 this.trace('replay-failed', { msg: String(e?.message || e) })
+            } finally {
+                await restore()
             }
         } else {
             this.trace('replay-other-track', { loaded: (cur?.track_window?.current_track?.uri || '').slice(-8) })
