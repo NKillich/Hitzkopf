@@ -12,7 +12,7 @@
     text-align: left;
     transition: background 0.25s ease;
 }
-.hubRoot .hubApp { width: 100%; max-width: 430px; height: 100%; display: flex; flex-direction: column; }
+.hubRoot .hubApp { position: relative; width: 100%; max-width: 430px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
 /* App.css setzt globale h1-/button-Optik – hier neutralisieren */
 .hubRoot h1,
 .hubRoot h2 { color: inherit; text-shadow: none; margin: 0; font-size: inherit; position: static; letter-spacing: normal; }
@@ -49,9 +49,7 @@
 .hubRoot .hubIconBtn { width: 44px; height: 44px; flex: none; border-radius: 22px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); }
 
 .hubRoot .hubMain { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 20px calc(24px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 20px; }
-.hubRoot .hubHero { display: flex; flex-direction: column; gap: 10px; padding: clamp(4px, 2dvh, 20px) 0 4px; }
-.hubRoot .hubTitle { font-family: var(--sr-display); font-size: clamp(38px, 6dvh, 52px); line-height: 0.98; letter-spacing: -0.035em; font-weight: 800; }
-.hubRoot .hubLead { font-size: clamp(15px, 2.1dvh, 17px); line-height: 1.45; color: var(--sr-muted); max-width: 360px; }
+.hubRoot .hubTitle { padding: clamp(4px, 1.6dvh, 16px) 0 0; font-family: var(--sr-display); font-size: clamp(30px, 9vw, 44px); line-height: 1.02; letter-spacing: -0.035em; font-weight: 800; }
 
 .hubRoot .hubGroup { display: flex; flex-direction: column; gap: 8px; }
 .hubRoot .hubGroupLabel { font-size: 15px; font-weight: 700; color: var(--sr-muted); }
@@ -60,11 +58,10 @@
 .hubRoot .hubCard { width: 100%; min-height: 88px; justify-content: flex-start; gap: 14px; padding: 12px 12px 12px 12px; box-sizing: border-box; border-radius: 22px; background: var(--sr-surface); border: 2px solid transparent; text-align: left; transition: border-color 0.15s ease, background 0.15s ease; }
 .hubRoot .hubCard:hover { border-color: var(--sr-line); }
 .hubRoot .hubCard:active { background: var(--sr-surface2); }
-.hubRoot .hubEmoji { width: 64px; height: 64px; flex: none; border-radius: 18px; background: var(--sr-surface2); display: flex; align-items: center; justify-content: center; font-size: 38px; line-height: 1; }
+.hubRoot .hubEmoji { width: 64px; height: 64px; flex: none; box-sizing: border-box; border-radius: 18px; background: color-mix(in srgb, var(--tint, var(--sr-muted)) 14%, var(--sr-surface)); border: 1px solid color-mix(in srgb, var(--tint, var(--sr-muted)) 30%, transparent); display: flex; align-items: center; justify-content: center; font-size: 38px; line-height: 1; }
 .hubRoot .hubCardText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .hubRoot .hubCardName { display: flex; align-items: center; gap: 8px; font-family: var(--sr-display); font-size: 21px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
 .hubRoot .hubCardDesc { font-size: 14px; line-height: 1.4; color: var(--sr-muted); }
-.hubRoot .hubTag { font-family: 'Figtree', system-ui, sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0; padding: 3px 8px; border-radius: 10px; background: var(--sr-accent-soft); color: var(--sr-accent-text); }
 .hubRoot .hubChevron { display: flex; flex: none; color: var(--sr-muted); }
 
 .hubRoot .hubRowText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; text-align: left; }
@@ -74,13 +71,6 @@
 .hubRoot .hubRejoin { width: 100%; min-height: 64px; justify-content: flex-start; gap: 12px; padding: 8px 14px 8px 18px; box-sizing: border-box; border-radius: 20px; background: var(--sr-surface); border: 2px solid var(--sr-ok); text-align: left; }
 .hubRoot .hubLiveDot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--sr-ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--sr-ok) 25%, transparent); animation: hubPulse 1.6s ease-in-out infinite; }
 @keyframes hubPulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--sr-ok) 10%, transparent); } }
-
-.hubRoot .hubBoard { width: 100%; min-height: 64px; justify-content: flex-start; gap: 12px; padding: 8px 14px 8px 10px; box-sizing: border-box; border-radius: 20px; border: 2px solid var(--sr-line); text-align: left; color: var(--sr-ink); }
-.hubRoot .hubBoard:hover { background: var(--sr-surface); }
-.hubRoot .hubBoardIcon { width: 44px; height: 44px; flex: none; border-radius: 14px; background: var(--sr-surface2); display: flex; align-items: center; justify-content: center; }
-
-.hubRoot .hubFooter { margin-top: auto; padding-top: 8px; text-align: center; font-size: 13px; color: var(--sr-muted); }
-.hubRoot .hubFooter span { color: var(--sr-accent); }
 
 /* Breite Bildschirme: zwei Spalten */
 @media (min-width: 760px) {
@@ -94,3 +84,21 @@
     .hubRoot .hubLiveDot { animation: none; }
     .hubRoot, .hubRoot .hubCard { transition: none; }
 }
+
+/* Mitspielen: Raumcode + QR-Scanner */
+.hubRoot .hubJoin { display: flex; gap: 10px; }
+.hubRoot .hubCodeWrap { position: relative; flex: 1; min-width: 0; }
+.hubRoot .hubCode { width: 100%; height: 64px; margin: 0; padding: 0 60px 0 22px; box-sizing: border-box; border-radius: 20px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); box-shadow: none; transform: none; transition: none; font-family: var(--sr-display); font-size: 22px; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase; text-align: left; }
+.hubRoot .hubCode::placeholder { color: var(--sr-muted); opacity: 0.6; }
+.hubRoot .hubCode:focus { outline: none; border-color: var(--sr-accent); background: var(--sr-surface); box-shadow: none; transform: none; }
+.hubRoot .hubCodeGo { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 14px; background: var(--sr-accent); color: var(--sr-on-accent); }
+.hubRoot .hubCodeGo:hover:not(:disabled), .hubRoot .hubCodeGo:active:not(:disabled) { transform: translateY(-50%); }
+.hubRoot .hubScanBtn { width: 64px; height: 64px; flex: none; border-radius: 20px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); }
+
+/* Einstellungen (Bottom-Sheet) */
+.hubRoot .hubSheetTitle { font-family: var(--sr-display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.hubRoot .hubSheetLabel { margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--sr-muted); }
+.hubRoot .hubSeg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 24px; background: var(--sr-surface2); }
+.hubRoot .hubSegBtn { height: 48px; gap: 8px; border-radius: 20px; font-size: 16px; font-weight: 700; color: var(--sr-muted); }
+.hubRoot .hubSegOn { background: var(--sr-bg); color: var(--sr-ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.hubRoot .hubSheetClose { margin-top: 10px; width: 100%; height: 56px; border-radius: 28px; background: var(--sr-accent); color: var(--sr-on-accent); font-size: 17px; font-weight: 800; }

@@ -4,9 +4,13 @@ React + Vite, Firebase (anonymer Login + Firestore), Spotify Web API, veröffent
 (`https://nkillich.github.io/Hitzkopf/`, Pfad `/Hitzkopf/`). Nach jedem Merge auf `main` baut GitHub Actions
 die Seite neu (1–2 Minuten).
 
-Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song raten“), `MusicVoter` (= Amplify 1.0),
-`Amplify2` (= Amplify 2.0). Startseite: `src/components/ProjectHub.jsx`, Routing per Hash in `src/App.jsx`.
-**Schwerpunkt: Amplify 2.0 und Song raten.** Hitzkopf ist auf Eis – keine Updates nötig, auch wenn es nicht mehr läuft.
+Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= **Identify**, früher „Song raten“),
+`MusicVoter` (= Amplify 1.0), `Amplify2` (= **Amplify**, intern „Amplify 2.0“). Ordner- und Code-Namen bleiben so.
+Startseite: `src/components/ProjectHub.jsx` (Raumcode/QR → Amplify-Lobby, Spiele-Liste, Zahnrad = Hell/Dunkel),
+Routing per Hash in `src/App.jsx` (`#identify`, alter Link `#songraten` geht weiter).
+**Schwerpunkt: Amplify und Identify.** Hitzkopf ist auf Eis – keine Updates nötig, auch wenn es nicht mehr läuft.
+Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel + Erraten/Nicht erraten) und **Pro**
+(zusätzlich Bonus-Tipp Interpret/Titel/Jahr); Joker in beiden. Logik ohne React in `SecondSound/songGuess.js`.
 
 ## Arbeitsweise
 
@@ -32,10 +36,10 @@ Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= „Song
 
 ## Amplify: zwei Versionen
 
-- **Amplify 2.0** = `src/projects/Amplify2/` – hier wird weiterentwickelt. Routen `#amplify2/CODE` und `#live2/CODE`,
+- **Amplify 2.0** (in der App nur „Amplify“) = `src/projects/Amplify2/` – hier wird weiterentwickelt. Routen `#amplify2/CODE` und `#live2/CODE`,
   Firestore-Sammlung `amplify2Lobbies` (+ Unterliste `reactions`), Sitzungsschlüssel `a2_…`.
 - **Amplify 1.0** = `src/projects/MusicVoter/` (`#amplify`, `#live`, `musicVoterLobbies`, `mv_…`) ist das Backup –
-  **nicht ändern**, außer der User verlangt es.
+  **nicht ändern**, außer der User verlangt es. Steht nicht mehr auf der Startseite, nur noch per Link erreichbar.
 - Gemeinsam genutzt (vor Änderungen fragen): `src/services/spotifyService.js`, `src/shared/ui/*`, `ProjectHub.jsx`, `App.jsx`.
 
 ### So funktioniert Amplify 2.0

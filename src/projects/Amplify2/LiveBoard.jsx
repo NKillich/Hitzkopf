@@ -167,7 +167,7 @@ export default function LiveBoard2({ roomCode, onBack }) {
                 <div className={styles.lbCenter}>
                     {topButtons}
                     <span className={styles.lbBigEmoji} aria-hidden="true">📺</span>
-                    <h1 className={styles.lbCenterTitle}>Amplify 2.0 Live</h1>
+                    <h1 className={styles.lbCenterTitle}>Amplify Live</h1>
                     {status === 'loading' && <p className={styles.lbMuted}>Playlist {code} wird geladen …</p>}
                     {status === 'missing' && <p className={styles.lbMuted}>Die Playlist {code} gibt es nicht (mehr). Vielleicht wurde sie geschlossen.</p>}
                     {status === 'error' && <p className={styles.lbMuted}><IconAlert size={18} /> Verbindung fehlgeschlagen. Prüf das Internet und lade die Seite neu.</p>}
