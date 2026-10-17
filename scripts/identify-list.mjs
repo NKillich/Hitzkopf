@@ -1,15 +1,16 @@
-// Identify-Gastmodus: aus Spotify-Song-Links eine Liste mit Apple-Hörproben bauen.
+// Identify-Gastmodus: aus Spotify-Song-Links eine Liste mit Apple-Hörproben bauen (als Datei).
+// Hinweis: Normalerweise pflegt man Listen im Identify Studio (#studio). Das Skript bleibt für große Mengen am PC.
 // Spotify wird nur hier (einmalig, mit dem App-Token der Funktion „spotifyToken“) nach Titel/Interpret/Länge gefragt;
 // gespeichert werden nur Apple-Daten (ID, Titel, Interpret, Jahr, Cover, Hörprobe). Aufruf:
 //   node scripts/identify-list.mjs <id> "<Name>" <emoji> <links.txt>
-// links.txt: eine Spotify-Song-ID oder ein Link (open.spotify.com/track/…) pro Zeile.
+// links.txt: Spotify-Song-IDs oder Links (open.spotify.com/track/…).
 // Ergebnis: public/identify/lists/<id>.json + Eintrag in public/identify/lists/index.json,
 // Bericht über nicht gefundene/unsichere Songs: scripts/identify-lists/<id>.report.txt
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInAnonymously } from 'firebase/auth'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import { cleanTitle, normTitle, normName } from '../src/projects/SecondSound/songGuess.js'
+import { matchToApple, spotifyIdsFromText, spotifyTrack } from '../src/projects/SecondSound/appleMatch.js'
 
 const firebaseConfig = {
     apiKey: 'AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA', authDomain: 'hitzkopf-f0ea6.firebaseapp.com',
@@ -19,88 +20,26 @@ const [id, name, emoji, file] = process.argv.slice(2)
 if (!id || !name || !file) { console.error('Aufruf: node scripts/identify-list.mjs <id> "<Name>" <emoji> <links.txt>'); process.exit(1) }
 
 const OUT_DIR = 'public/identify/lists'
-const APPLE_PAUSE_MS = 3200          // Apple erlaubt ca. 20 Suchen pro Minute
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-const ids = [...new Set(readFileSync(file, 'utf8').split(/\r?\n/)
-    .map(l => (l.match(/track\/([A-Za-z0-9]{22})/) || l.trim().match(/^([A-Za-z0-9]{22})$/) || [])[1])
-    .filter(Boolean))]
+const ids = spotifyIdsFromText(readFileSync(file, 'utf8'))
 console.log(`${ids.length} Spotify-Songs in ${file}`)
 
 const app = initializeApp(firebaseConfig)
 await signInAnonymously(getAuth(app))
 const { data: tok } = await httpsCallable(getFunctions(app), 'spotifyToken')()
 
-async function spotifyTrack(tid) {
-    for (let i = 0; i < 4; i++) {
-        const r = await fetch(`https://api.spotify.com/v1/tracks/${tid}`, { headers: { Authorization: `Bearer ${tok.access_token}` } })
-        if (r.status === 429) { await sleep((Number(r.headers.get('retry-after')) || 5) * 1000); continue }
-        if (!r.ok) return { error: r.status }
-        const t = await r.json()
-        return { title: t.name, artists: (t.artists || []).map(a => a.name), year: parseInt(t.album?.release_date, 10) || null, ms: t.duration_ms }
-    }
-    return { error: 429 }
-}
-
-async function appleSearch(term) {
-    for (let i = 0; i < 5; i++) {
-        const r = await fetch(`https://itunes.apple.com/search?${new URLSearchParams({ term, entity: 'song', limit: '25', country: 'DE' })}`)
-        if (r.status === 403 || r.status === 429) { console.log('  Apple bremst – 60 s Pause'); await sleep(60000); continue }
-        if (!r.ok) return []
-        return (await r.json()).results || []
-    }
-    return []
-}
-
-// Beste Apple-Version: gleicher Titel (ohne Zusätze), passender Interpret, ähnliche Länge, keine Karaoke/Cover
-const BAD = /karaoke|tribute|made famous|originally performed|cover version|instrumental|8-bit|lullaby|re-?recorded|demo/i
-function pick(sp, results) {
-    const wantTitle = normTitle(sp.title)
-    const wantArtists = sp.artists.map(normName)
-    let best = null
-    for (const a of results) {
-        if (a.kind !== 'song' || !a.previewUrl) continue
-        const titleOk = normTitle(a.trackName) === wantTitle
-        const an = normName(a.artistName)
-        const artistOk = wantArtists.some(w => an === w || an.includes(w) || w.includes(an))
-        if (!titleOk || !artistOk) continue
-        let score = 100
-        if (BAD.test(`${a.collectionName} ${a.trackName} ${a.artistName}`)) score -= 60
-        if (/live|remaster|version|mix|edit|acoustic/i.test(a.trackName)) score -= 10
-        if (sp.ms && a.trackTimeMillis) score -= Math.min(30, Math.abs(sp.ms - a.trackTimeMillis) / 1000)
-        if (/compilation|hits|best of|greatest|bravo|charts/i.test(a.collectionName)) score -= 5
-        if (!best || score > best.score) best = { a, score }
-    }
-    return best
-}
-
 const songs = []
 const report = []
 for (let i = 0; i < ids.length; i++) {
-    const sp = await spotifyTrack(ids[i])
+    const sp = await spotifyTrack(ids[i], tok.access_token)
     await sleep(120)
     if (sp.error) { report.push(`Spotify-Fehler ${sp.error}: ${ids[i]}`); continue }
     const label = `${sp.artists[0]} – ${sp.title}`
-    let hit = pick(sp, await appleSearch(`${sp.artists[0]} ${cleanTitle(sp.title)}`))
-    await sleep(APPLE_PAUSE_MS)
-    if (!hit) {   // zweiter Versuch nur mit dem Titel
-        hit = pick(sp, await appleSearch(cleanTitle(sp.title)))
-        await sleep(APPLE_PAUSE_MS)
-    }
+    const hit = await matchToApple(sp, { onWait: () => console.log('  Apple bremst – 60 s Pause') })
     if (!hit) { report.push(`nicht gefunden: ${label}`); console.log(`${i + 1}/${ids.length} ✗ ${label}`); continue }
-    const a = hit.a
-    if (hit.score < 75) report.push(`unsicher (${Math.round(hit.score)}): ${label} → ${a.artistName} – ${a.trackName} [${a.collectionName}]`)
-    // Frühestes bekanntes Jahr (Best-ofs/Neuauflagen haben spätere Daten)
-    const years = [parseInt(a.releaseDate, 10), sp.year].filter(Boolean)
-    songs.push({
-        id: a.trackId,
-        title: a.trackName,
-        artist: a.artistName,
-        artistId: a.artistId,
-        year: years.length ? Math.min(...years) : null,
-        cover: (a.artworkUrl100 || '').replace('100x100bb', '300x300bb') || null,
-        preview: a.previewUrl
-    })
+    if (hit.score < 75) report.push(`unsicher (${Math.round(hit.score)}): ${label} → ${hit.a.artistName} – ${hit.a.trackName} [${hit.a.collectionName}]`)
+    songs.push(hit.song)
     console.log(`${i + 1}/${ids.length} ✓ ${label}`)
 }
 

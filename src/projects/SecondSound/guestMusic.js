@@ -1,19 +1,47 @@
-// Identify-Gastmodus: kuratierte Listen (public/identify/lists, erzeugt mit scripts/identify-list.mjs)
-// und Apples freie Suche für die Vorschläge im Pro-Modus – beides ohne Login, direkt aus dem Browser.
+// Identify-Gastmodus: kuratierte Listen (gepflegt im Identify Studio, gespeichert in Firestore; Rückfall auf die
+// Dateien in public/identify/lists) und Apples freie Suche für die Vorschläge im Pro-Modus – alles ohne Login.
+import { getApp } from 'firebase/app'
+import { getFirestore } from 'firebase/firestore'
+import '../../firebase.js'
 import { normTitle, normName } from './songGuess.js'
+import { fetchIndex, fetchList } from './listStore.js'
 
 const LIST_BASE = `${import.meta.env.BASE_URL}identify/lists/`
 
-export async function loadGuestIndex() {
+const db = () => getFirestore(getApp())
+
+async function fileIndex() {
     const r = await fetch(`${LIST_BASE}index.json`, { cache: 'no-cache' })
     if (!r.ok) throw new Error('Listen konnten nicht geladen werden.')
     return r.json()
 }
 
+/** Übersicht der Listen: aus Firestore (Studio), sonst aus den Dateien */
+export async function loadGuestIndex() {
+    try {
+        const lists = await fetchIndex(db())
+        if (lists.length) return lists
+    } catch (e) { console.warn('[Identify] Listen aus Firestore nicht lesbar, nehme Dateien:', e?.code || e) }
+    return fileIndex()
+}
+
 export async function loadGuestList(id) {
+    try {
+        const list = await fetchList(db(), id)
+        if (list) return list
+    } catch { /* Rückfall auf Datei */ }
     const r = await fetch(`${LIST_BASE}${encodeURIComponent(id)}.json`, { cache: 'no-cache' })
     if (!r.ok) throw new Error(`Liste „${id}“ konnte nicht geladen werden.`)
     return r.json()
+}
+
+/** Die Listen aus den Dateien (für die einmalige Übernahme ins Studio) */
+export async function loadFileLists() {
+    const index = await fileIndex()
+    return Promise.all(index.map(async (l) => {
+        const r = await fetch(`${LIST_BASE}${encodeURIComponent(l.id)}.json`, { cache: 'no-cache' })
+        return r.ok ? r.json() : null
+    })).then(lists => lists.filter(Boolean))
 }
 
 const itunes = async (params) => {
