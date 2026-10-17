@@ -9,7 +9,7 @@ import theme from '../../shared/ui/theme.module.css'
 import { ConfirmSheet } from '../../shared/ui/BottomSheet'
 import { IconBack, IconPlus, IconTrash, IconSearch, IconPlay, IconPause, IconX, IconCheck, IconAlert, IconRetry } from '../../shared/ui/icons'
 import { fetchIndex, fetchList, saveList, deleteList, slugFor, MAX_SONGS } from '../SecondSound/listStore.js'
-import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong, songAsQuery, appleFromLink } from '../SecondSound/appleMatch.js'
+import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong, songAsQuery, appleFromLink, parseExportifyCsv } from '../SecondSound/appleMatch.js'
 import { cleanTitle } from '../SecondSound/songGuess.js'
 import { loadFileLists } from '../SecondSound/guestMusic.js'
 import styles from './IdentifyStudio.module.css'
@@ -22,6 +22,8 @@ const db = getFirestore(studioApp)
 
 const SAVE_EVERY = 10                 // beim Hinzufügen alle 10 Songs zwischenspeichern
 const TOKEN_MAX_AGE = 45 * 60 * 1000  // Spotify-App-Token rechtzeitig erneuern
+const SPOTIFY_GAP_MS = 1500           // Spotify-Links: höchstens ca. 40 Anfragen pro Minute (schont das Kontingent)
+const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
 // Spotify-App-Token über die Funktion „spotifyToken“ (anonymer Login der normalen App)
 async function getSpotifyToken() {
@@ -265,29 +267,39 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
     const removeSong = (id) => persist({ ...listRef.current, songs: listRef.current.songs.filter(s => s.id !== id) })
     const dropMissing = (spotifyId) => persist({ ...listRef.current, missing: (listRef.current.missing || []).filter(m => m.spotifyId !== spotifyId) })
 
-    // Spotify-Links → Apple-Songs (dauert: Apple erlaubt ca. 20 Suchen pro Minute)
-    const addLinks = async () => {
-        const all = spotifyIdsFromText(links)
+    // Songs hinzufügen: aus Exportify-CSV (Titel/Interpret/Album schon dabei – keine Spotify-Anfrage)
+    // oder aus Spotify-Links (dann pro Song eine Spotify-Anfrage über dein Kontingent, gebremst)
+    const runAdd = async (items) => {
         const known = new Set(listRef.current.spotifyIds || [])
-        const ids = all.filter(id => !known.has(id))
-        if (!all.length) { show('Keine Spotify-Song-Links gefunden.', true); return }
+        const todo = items.filter(it => !it.spotifyId || !known.has(it.spotifyId))
         cancelRef.current = false
         let wake = null
         try { wake = await navigator.wakeLock?.request('screen') } catch { /* optional */ }
-        const state = { total: ids.length, done: 0, label: '', added: 0, skipped: all.length - ids.length, missing: 0, waiting: false }
+        const state = { total: todo.length, done: 0, label: '', added: 0, skipped: items.length - todo.length, missing: 0, waiting: false }
         setJob({ ...state })
         let token = null, tokenAt = 0
         let pending = 0
+        let stopNote = null
         const albumCache = new Map()
+        const remember = (cur, id) => (id ? [...(cur.spotifyIds || []), id] : (cur.spotifyIds || []))
         try {
-            for (const id of ids) {
+            for (const it of todo) {
                 if (cancelRef.current) break
-                if (!token || Date.now() - tokenAt > TOKEN_MAX_AGE) { token = await getSpotifyToken(); tokenAt = Date.now() }
-                const sp = await spotifyTrack(id, token)
+                let sp = it.sp
+                if (!sp) {
+                    if (!token || Date.now() - tokenAt > TOKEN_MAX_AGE) { token = await getSpotifyToken(); tokenAt = Date.now() }
+                    sp = await spotifyTrack(it.spotifyId, token)
+                    await sleep(SPOTIFY_GAP_MS)
+                    if (sp.error === 429 && sp.retryAfter) {
+                        const until = new Date(Date.now() + sp.retryAfter * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+                        stopNote = `Spotify-Kontingent erschöpft – Links gehen wieder ab ca. ${until} Uhr. Bisher Verarbeitetes ist gespeichert. Tipp: CSV aus Exportify nutzen, das braucht kein Kontingent.`
+                        break
+                    }
+                }
                 const cur = listRef.current
-                let next = { ...cur, spotifyIds: [...(cur.spotifyIds || []), id] }
+                let next = { ...cur, spotifyIds: remember(cur, it.spotifyId) }
                 if (sp.error) {
-                    next.missing = [...(cur.missing || []), { spotifyId: id, artist: '', title: `Spotify-Fehler ${sp.error}` }]
+                    next.missing = [...(cur.missing || []), { spotifyId: it.spotifyId, artist: '', title: `Spotify-Fehler ${sp.error}` }]
                     state.missing++
                 } else {
                     state.label = `${sp.artists[0]} – ${sp.title}`
@@ -295,10 +307,10 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                     const hit = await matchToApple(sp, { albumCache, onWait: () => setJob({ ...state, waiting: true }) })
                     if (cancelRef.current) break
                     const now = listRef.current
-                    next = { ...now, spotifyIds: [...(now.spotifyIds || []), id] }
-                    if (hit && !now.songs.some(s => s.id === hit.song.id)) { next.songs = [...now.songs, hit.song]; state.added++ }
+                    next = { ...now, spotifyIds: remember(now, it.spotifyId) }
+                    if (hit && !now.songs.some(x => x.id === hit.song.id)) { next.songs = [...now.songs, hit.song]; state.added++ }
                     else if (hit) state.skipped++
-                    else { next.missing = [...(now.missing || []), { spotifyId: id, artist: sp.artists[0], title: sp.title }]; state.missing++ }
+                    else { next.missing = [...(now.missing || []), { spotifyId: it.spotifyId || `csv-${Date.now()}-${state.done}`, artist: sp.artists.join(', '), title: sp.title }]; state.missing++ }
                 }
                 listRef.current = next
                 state.done++
@@ -308,8 +320,22 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
         } catch (e) { show(`Fehler beim Hinzufügen: ${errText(e)}`, true) }
         await persist(listRef.current)
         try { await wake?.release() } catch { /* optional */ }
-        setJob({ ...state, finished: true, cancelled: cancelRef.current })
-        if (!cancelRef.current) setLinks('')
+        setJob({ ...state, finished: true, cancelled: cancelRef.current || !!stopNote, note: stopNote })
+        return !cancelRef.current && !stopNote
+    }
+
+    const addLinks = async () => {
+        const ids = spotifyIdsFromText(links)
+        if (!ids.length) { show('Keine Spotify-Song-Links gefunden.', true); return }
+        if (await runAdd(ids.map(spotifyId => ({ spotifyId })))) setLinks('')
+    }
+
+    const addCsv = async (file) => {
+        if (!file) return
+        let items
+        try { items = parseExportifyCsv(await file.text()) } catch (e) { show(e.message, true); return }
+        if (!items.length) { show('In der Datei stehen keine Songs.', true); return }
+        await runAdd(items)
     }
 
     // „Versionen prüfen“: jeden Song neu zuordnen (Original-Album statt Jubiläum/Single/Live) und nur bei Treffer tauschen
@@ -422,7 +448,12 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
 
                 <section className={styles.card}>
                     <h2 className={styles.h2}>Songs hinzufügen</h2>
-                    <p className={styles.muted}>Spotify-Song-Links einfügen, z. B. in der Spotify-Desktop-App Playlist öffnen, Strg+A, Strg+C. Schon enthaltene Songs werden übersprungen. Dauer: etwa 3–6 Sekunden pro Song – Tab offen lassen.</p>
+                    <p className={styles.muted}><b>Empfohlen: CSV aus Exportify.</b> Auf <a href="https://exportify.net" target="_blank" rel="noreferrer">exportify.net</a> mit Spotify anmelden, bei der Playlist „Export“, Datei hier hochladen. Kostet kein Spotify-Kontingent. Schon enthaltene Songs werden übersprungen. Dauer: etwa 4–15 Sekunden pro Song – Tab offen lassen.</p>
+                    <label className={`${styles.btn} ${styles.primarySm} ${styles.fileBtn} ${running ? styles.fileBtnOff : ''}`}>
+                        <IconPlus size={18} />CSV hochladen
+                        <input type="file" accept=".csv,text/csv" disabled={running} onChange={e => { addCsv(e.target.files?.[0]); e.target.value = '' }} />
+                    </label>
+                    <p className={styles.muted}>Oder einzelne Spotify-Song-Links einfügen (Spotify-Desktop-App: Strg+A, Strg+C). Das nutzt dein Spotify-Kontingent – nur für ein paar Songs gedacht.</p>
                     <textarea className={styles.textarea} value={links} onChange={e => setLinks(e.target.value)} rows={5} disabled={running}
                         placeholder="https://open.spotify.com/track/…" aria-label="Spotify-Links" />
                     <div className={styles.row}>
@@ -436,6 +467,7 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                             {job.total > 0 && <div className={styles.bar}><span style={{ width: `${pct}%` }} /></div>}
                             <p>{job.finished ? (job.cancelled ? 'Abgebrochen.' : 'Fertig.') : `${job.done}/${job.total} · ${job.waiting ? 'Apple bremst – kurze Pause …' : job.label}`}</p>
                             <p className={styles.muted}>Neu: {job.added} · übersprungen: {job.skipped} · nicht gefunden: {job.missing}</p>
+                            {job.note && <p className={styles.error}>{job.note}</p>}
                         </div>
                     )}
                 </section>

@@ -3,14 +3,15 @@
 // Spotify wird nur hier (einmalig, mit dem App-Token der Funktion „spotifyToken“) nach Titel/Interpret/Länge gefragt;
 // gespeichert werden nur Apple-Daten (ID, Titel, Interpret, Jahr, Cover, Hörprobe). Aufruf:
 //   node scripts/identify-list.mjs <id> "<Name>" <emoji> <links.txt>
-// links.txt: Spotify-Song-IDs oder Links (open.spotify.com/track/…).
+// links.txt: Spotify-Song-IDs oder Links (open.spotify.com/track/…) – nutzt pro Song eine Spotify-Anfrage (Kontingent!).
+// Besser: playlist.csv von exportify.net – enthält Titel/Interpret/Album, braucht KEINE Spotify-Anfrage.
 // Ergebnis: public/identify/lists/<id>.json + Eintrag in public/identify/lists/index.json,
 // Bericht über nicht gefundene/unsichere Songs: scripts/identify-lists/<id>.report.txt
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInAnonymously } from 'firebase/auth'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import { matchToApple, spotifyIdsFromText, spotifyTrack } from '../src/projects/SecondSound/appleMatch.js'
+import { matchToApple, spotifyIdsFromText, spotifyTrack, parseExportifyCsv } from '../src/projects/SecondSound/appleMatch.js'
 
 const firebaseConfig = {
     apiKey: 'AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA', authDomain: 'hitzkopf-f0ea6.firebaseapp.com',
@@ -22,25 +23,35 @@ if (!id || !name || !file) { console.error('Aufruf: node scripts/identify-list.m
 const OUT_DIR = 'public/identify/lists'
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-const ids = spotifyIdsFromText(readFileSync(file, 'utf8'))
-console.log(`${ids.length} Spotify-Songs in ${file}`)
+const raw = readFileSync(file, 'utf8')
+const isCsv = /.csv$/i.test(file)
+const items = isCsv ? parseExportifyCsv(raw) : spotifyIdsFromText(raw).map(spotifyId => ({ spotifyId }))
+console.log(`${items.length} Songs in ${file}${isCsv ? ' (CSV – ohne Spotify-Anfragen)' : ''}`)
 
-const app = initializeApp(firebaseConfig)
-await signInAnonymously(getAuth(app))
-const { data: tok } = await httpsCallable(getFunctions(app), 'spotifyToken')()
+let tok = null
+if (!isCsv) {
+    const app = initializeApp(firebaseConfig)
+    await signInAnonymously(getAuth(app))
+    tok = (await httpsCallable(getFunctions(app), 'spotifyToken')()).data
+}
+const albumCache = new Map()
 
 const songs = []
 const report = []
-for (let i = 0; i < ids.length; i++) {
-    const sp = await spotifyTrack(ids[i], tok.access_token)
-    await sleep(120)
-    if (sp.error) { report.push(`Spotify-Fehler ${sp.error}: ${ids[i]}`); continue }
+for (let i = 0; i < items.length; i++) {
+    let sp = items[i].sp
+    if (!sp) {
+        sp = await spotifyTrack(items[i].spotifyId, tok.access_token)
+        await sleep(1500)
+        if (sp.error === 429 && sp.retryAfter) { console.log(`Spotify-Kontingent erschöpft (noch ${Math.round(sp.retryAfter / 60)} Min.) – Abbruch. Tipp: CSV von exportify.net nutzen.`); break }
+    }
+    if (sp.error) { report.push(`Spotify-Fehler ${sp.error}: ${items[i].spotifyId}`); continue }
     const label = `${sp.artists[0]} – ${sp.title}`
-    const hit = await matchToApple(sp, { onWait: () => console.log('  Apple bremst – 60 s Pause') })
-    if (!hit) { report.push(`nicht gefunden: ${label}`); console.log(`${i + 1}/${ids.length} ✗ ${label}`); continue }
+    const hit = await matchToApple(sp, { albumCache, onWait: () => console.log('  Apple bremst – 60 s Pause') })
+    if (!hit) { report.push(`nicht gefunden: ${label}`); console.log(`${i + 1}/${items.length} ✗ ${label}`); continue }
     if (hit.score < 75) report.push(`unsicher (${Math.round(hit.score)}): ${label} → ${hit.a.artistName} – ${hit.a.trackName} [${hit.a.collectionName}]`)
     songs.push(hit.song)
-    console.log(`${i + 1}/${ids.length} ✓ ${label}`)
+    console.log(`${i + 1}/${items.length} ✓ ${label}`)
 }
 
 // Doppelte Apple-Songs entfernen
@@ -56,6 +67,6 @@ const at = index.findIndex(l => l.id === id)
 if (at >= 0) index[at] = entry; else index.push(entry)
 writeFileSync(indexFile, JSON.stringify(index, null, 1) + '\n')
 writeFileSync(`scripts/identify-lists/${id}.report.txt`,
-    `${unique.length} von ${ids.length} Songs übernommen\n\n${report.join('\n') || 'Alles gefunden.'}\n`)
-console.log(`\nFertig: ${unique.length}/${ids.length} → ${OUT_DIR}/${id}.json · Bericht: scripts/identify-lists/${id}.report.txt`)
+    `${unique.length} von ${items.length} Songs übernommen\n\n${report.join('\n') || 'Alles gefunden.'}\n`)
+console.log(`\nFertig: ${unique.length}/${items.length} → ${OUT_DIR}/${id}.json · Bericht: scripts/identify-lists/${id}.report.txt`)
 process.exit(0)

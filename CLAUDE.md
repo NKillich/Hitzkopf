@@ -22,13 +22,16 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
 - Pro-Vorschläge im Gastmodus über Apple (`SecondSound/guestMusic.js`), nicht über die Spotify-ID (die bleibt für Amplify frei).
   Apple sucht nur ganze Wörter → mit Interpret werden dessen Songs einmal geholt und lokal gefiltert.
 - **Identify Studio** (`#studio`, nicht auf der Startseite, `src/projects/IdentifyStudio/`): Der User pflegt die Listen
-  selbst – anlegen, umbenennen, Spotify-Links hinzufügen (Zuordnung zu Apple im Browser, `SecondSound/appleMatch.js`),
+  selbst – anlegen, umbenennen, **CSV von exportify.net hochladen** (Hauptweg: Titel/Interpret/Album/Länge stehen drin,
+  **keine Spotify-Anfrage** → kein Kontingent), einzelne Spotify-Links (1 Anfrage/Song über die App-ID, gebremst 1,5 s,
+  bei langer 429-Sperre sofort Abbruch mit Uhrzeit) – Zuordnung zu Apple im Browser (`SecondSound/appleMatch.js`),
   Songs löschen, nicht gefundene von Hand bei Apple suchen, „Andere Version“ pro Song, „Versionen prüfen“ pro Liste, Liste löschen.
   Zuordnung: gleicher Titel + Interpret; Varianten (Live, Instrumental, Remix, Acoustic, Karaoke …) nur, wenn der Spotify-Song
-  selbst eine ist; Original-Album vor Single/Deluxe/Jubiläum/Best-of, bei Gleichstand ältere Apple-ID. Apples **Suche** ist
+  selbst eine ist; Original-Album vor Single/Deluxe/Jubiläum/Best-of – **immer**, auch wenn Spotify selbst eine Sonderausgabe
+  nennt (Spotify: „Hybrid Theory (Bonus Edition)“); bei Gleichstand ältere Apple-ID. Apples **Suche** ist
   lückenhaft (z. B. „Collision Course“, „From Zero“ fehlen), per ID ist aber alles abrufbar → zweiter Weg:
   Künstler-ID (musicArtist-Suche) → `lookup?id=…&entity=album` (alle Alben) → Album mit dem Spotify-Namen (Kern ohne
-  „- EP“/„(Deluxe)“) → Songliste. Künstler/Alben/Songlisten werden pro Lauf gemerkt. Notfalls Apple-Music-Link (Album/Song)
+  „- EP“/„(Deluxe)“), sonst Original-Alben aus dem Erscheinungsjahr (Spotify nennt oft die Single) → Songliste. Künstler/Alben/Songlisten werden pro Lauf gemerkt. Notfalls Apple-Music-Link (Album/Song)
   ins Suchfeld des Studios einfügen; bei Album-Links gibt es „Alle übernehmen“. Google-Login über eine **eigene Firebase-Instanz**
   („studio“), damit der anonyme Login der Spiele (Amplify-Host!) unberührt bleibt. Schreiben nur, wenn die UID in
   `isStudioAdmin()` in `firestore.rules` steht (UID statt E-Mail, weil die Regeln öffentlich im Repo liegen).
@@ -102,6 +105,10 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   nur das Gerät mit `hostUid` darf die Lobby löschen. Test-Lobbys deshalb ohne `hostUid` anlegen.
 
 ## Spotify-Grenzen (Stand Okt. 2026)
+- **Kontingent der App-ID ist knapp:** Am 17.10.2026 nach >500 Einzel-Abfragen (Listen anlegen) „429 QUOTA_EXCEEDED“ für ~9 h –
+  betrifft dann auch die Song-Suche der Amplify-Gäste. Massen-Abfragen vermeiden; Listen per Exportify-CSV anlegen.
+- Ohne Login liefert Spotify nur: Suche, einzelne Songs per ID (`/tracks/{id}`; `/tracks?ids=` → 403), Playlist-Metadaten ohne Songs;
+  oEmbed (`open.spotify.com/oembed`) nur den Titel. Playlist-Inhalte/Nutzer-Playlists nur mit Login (401/403).
 - App im Entwicklermodus (Regeln seit 9. März 2026): nur **max. 5 freigeschaltete Konten** pro Client-ID (inkl. Entwickler),
   Spotify Premium nötig, nur **eine** Client-ID pro Entwickler – alle Spiele teilen sich diese 5 Plätze. Freischalten:
   developer.spotify.com/dashboard → App → Settings → User Management (Name + E-Mail des Spotify-Kontos).
