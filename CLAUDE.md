@@ -23,7 +23,13 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   Apple sucht nur ganze Wörter → mit Interpret werden dessen Songs einmal geholt und lokal gefiltert.
 - **Identify Studio** (`#studio`, nicht auf der Startseite, `src/projects/IdentifyStudio/`): Der User pflegt die Listen
   selbst – anlegen, umbenennen, Spotify-Links hinzufügen (Zuordnung zu Apple im Browser, `SecondSound/appleMatch.js`),
-  Songs löschen, nicht gefundene von Hand bei Apple suchen, Liste löschen. Google-Login über eine **eigene Firebase-Instanz**
+  Songs löschen, nicht gefundene von Hand bei Apple suchen, „Andere Version“ pro Song, „Versionen prüfen“ pro Liste, Liste löschen.
+  Zuordnung: gleicher Titel + Interpret; Varianten (Live, Instrumental, Remix, Acoustic, Karaoke …) nur, wenn der Spotify-Song
+  selbst eine ist; Original-Album vor Single/Deluxe/Jubiläum/Best-of, bei Gleichstand ältere Apple-ID. Apples **Suche** ist
+  lückenhaft (z. B. „Collision Course“, „From Zero“ fehlen), per ID ist aber alles abrufbar → zweiter Weg:
+  Künstler-ID (musicArtist-Suche) → `lookup?id=…&entity=album` (alle Alben) → Album mit dem Spotify-Namen (Kern ohne
+  „- EP“/„(Deluxe)“) → Songliste. Künstler/Alben/Songlisten werden pro Lauf gemerkt. Notfalls Apple-Music-Link (Album/Song)
+  ins Suchfeld des Studios einfügen; bei Album-Links gibt es „Alle übernehmen“. Google-Login über eine **eigene Firebase-Instanz**
   („studio“), damit der anonyme Login der Spiele (Amplify-Host!) unberührt bleibt. Schreiben nur, wenn die UID in
   `isStudioAdmin()` in `firestore.rules` steht (UID statt E-Mail, weil die Regeln öffentlich im Repo liegen).
 - Alternativ per Skript (große Mengen am PC, schreibt nur Dateien):
