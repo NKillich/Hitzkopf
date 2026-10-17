@@ -1,0 +1,16 @@
+399 von 402 Songs übernommen
+
+unsicher (70): Prince – Little Red Corvette → Prince – Little Red Corvette [4Ever]
+nicht gefunden: Green Day – American Idiot
+unsicher (70): Tame Impala – Borderline → Tame Impala – Borderline [The Slow Rush]
+unsicher (70): Radiohead – Creep → Radiohead – Creep (Acoustic) [Creep - EP]
+nicht gefunden: Tame Impala – The Less I Know The Better
+unsicher (70): John Mellencamp – Jack & Diane → John Mellencamp – Jack & Diane (Writing Demo) [On the Rural Route 7609]
+unsicher (40): Sigala – Lullaby → Sigala & Paloma Faith – Lullaby [Brighter Days]
+nicht gefunden: Sniffy Dog – Little Boxes
+
+Nachbearbeitet:
+- Creep (Acoustic) entfernt – Apples freie Suche liefert das Radiohead-Original nicht.
+- Jack & Diane: Demo ersetzt durch Album-Version (John Cougar, American Fool).
+- Nicht verfügbar über Apples freie Suche: Green Day – American Idiot, Tame Impala – The Less I Know The Better,
+  Sniffy Dog – Little Boxes.
