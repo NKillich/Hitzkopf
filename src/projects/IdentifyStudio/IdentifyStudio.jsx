@@ -9,9 +9,11 @@ import theme from '../../shared/ui/theme.module.css'
 import { ConfirmSheet } from '../../shared/ui/BottomSheet'
 import { IconBack, IconPlus, IconTrash, IconSearch, IconPlay, IconPause, IconX, IconCheck, IconAlert, IconRetry } from '../../shared/ui/icons'
 import { fetchIndex, fetchList, saveList, deleteList, slugFor, MAX_SONGS } from '../SecondSound/listStore.js'
-import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong, songAsQuery, appleFromLink, parseExportifyCsv } from '../SecondSound/appleMatch.js'
+import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong, songAsQuery, appleFromLink } from '../SecondSound/appleMatch.js'
 import { cleanTitle } from '../SecondSound/songGuess.js'
 import { loadFileLists } from '../SecondSound/guestMusic.js'
+import useImportQueue from './useImportQueue'
+import QueuePanel from './QueuePanel'
 import styles from './IdentifyStudio.module.css'
 
 // Eigene Firebase-Instanz fürs Studio: Der Google-Login hier ersetzt nicht den anonymen Login der Spiele
@@ -48,6 +50,7 @@ export default function IdentifyStudio({ onBack }) {
     const currentRef = useRef(null)
     const [toast, setToast] = useState(null)
     const [noRights, setNoRights] = useState(false)
+    const editorBusyRef = useRef(null)                  // Liste, an der der Editor gerade selbst arbeitet (Warteschlange wartet)
 
     const show = useCallback((text, bad = false) => {
         setToast({ text, bad })
@@ -61,11 +64,32 @@ export default function IdentifyStudio({ onBack }) {
             if (e?.code === 'permission-denied') { setNoRights(true); setLists([]) } else setListsError(errText(e))
         }
     }, [])
-    // Anmeldestatus verfolgen; angemeldet → Übersicht laden
+    // Gespeicherte Liste (aus der Warteschlange) in Übersicht und ggf. geöffnetem Editor aktualisieren
+    const onListSaved = useCallback((saved) => {
+        setNoRights(false)
+        if (currentRef.current?.id === saved.id) { currentRef.current = saved; setCurrent(saved) }
+        setLists(prev => {
+            const entry = { id: saved.id, name: saved.name, count: saved.songs.length, cover: saved.songs[0]?.cover || null }
+            const at = (prev || []).findIndex(l => l.id === saved.id)
+            if (at < 0) return [...(prev || []), entry]
+            const next = [...prev]
+            next[at] = entry
+            return next
+        })
+    }, [])
+    const queue = useImportQueue({
+        db,
+        onListSaved,
+        isBlocked: (id) => !!id && editorBusyRef.current === id,
+        onError: (text) => show(text, true)
+    })
+    const startQueue = queue.start
+
+    // Anmeldestatus verfolgen; angemeldet → Übersicht laden und Warteschlange (weiter) abarbeiten
     useEffect(() => onAuthStateChanged(auth, u => {
         setUser(u || null)
-        if (u) reloadIndex()
-    }), [reloadIndex])
+        if (u) { reloadIndex(); startQueue() }
+    }), [reloadIndex, startQueue])
 
     const login = async () => {
         setLoginError(null)
@@ -137,18 +161,18 @@ export default function IdentifyStudio({ onBack }) {
         <div className={root}>
             <div className={styles.app}>
                 {current
-                    ? <ListEditor list={current} listRef={currentRef} persist={persist} show={show}
+                    ? <ListEditor list={current} listRef={currentRef} persist={persist} show={show} queue={queue} editorBusyRef={editorBusyRef}
                         onClose={() => { setCurrent(null); currentRef.current = null }}
                         onDeleted={(id) => { setCurrent(null); currentRef.current = null; setLists(prev => (prev || []).filter(l => l.id !== id)) }} />
                     : <Overview user={user} lists={lists} listsError={listsError} noRights={noRights} onBack={onBack}
-                        onOpen={openList} persist={persist} show={show} onReload={reloadIndex} />}
+                        onOpen={openList} persist={persist} show={show} onReload={reloadIndex} queue={queue} />}
                 {toast && <p className={`${styles.toast} ${toast.bad ? styles.toastBad : ''}`} role="status">{toast.text}</p>}
             </div>
         </div>
     )
 }
 
-function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, show, onReload }) {
+function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, show, onReload, queue }) {
     const [name, setName] = useState('')
     const [busy, setBusy] = useState(false)
 
@@ -190,6 +214,8 @@ function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, 
 
                 {noRights && <RightsHint uid={user.uid} />}
 
+                <QueuePanel q={queue} />
+
                 <section className={styles.card}>
                     <h2 className={styles.h2}>Neue Liste</h2>
                     <form className={styles.row} onSubmit={create}>
@@ -229,6 +255,15 @@ function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, 
     )
 }
 
+function EditorBusy({ editorBusyRef, listId, busy, onFree }) {
+    useEffect(() => {
+        editorBusyRef.current = busy ? listId : null
+        if (!busy) onFree?.()
+        return () => { if (editorBusyRef.current === listId) { editorBusyRef.current = null; onFree?.() } }
+    }, [editorBusyRef, listId, busy, onFree])
+    return null
+}
+
 function RightsHint({ uid }) {
     return (
         <div className={styles.warn} role="alert">
@@ -243,7 +278,7 @@ function RightsHint({ uid }) {
     )
 }
 
-function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
+function ListEditor({ list, listRef, persist, show, onClose, onDeleted, queue, editorBusyRef }) {
     const [name, setName] = useState(list.name)
     const [links, setLinks] = useState('')
     const [job, setJob] = useState(null)        // { total, done, label, added, skipped, missing, waiting }
@@ -330,12 +365,10 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
         if (await runAdd(ids.map(spotifyId => ({ spotifyId })))) setLinks('')
     }
 
-    const addCsv = async (file) => {
-        if (!file) return
-        let items
-        try { items = parseExportifyCsv(await file.text()) } catch (e) { show(e.message, true); return }
-        if (!items.length) { show('In der Datei stehen keine Songs.', true); return }
-        await runAdd(items)
+    // CSV läuft über die gemeinsame Warteschlange (in diese Liste)
+    const addCsv = async (files) => {
+        const n = await queue.enqueueFiles(files, list.id, list.name)
+        if (n) show(n === 1 ? 'In die Warteschlange gestellt.' : `${n} Dateien in die Warteschlange gestellt.`)
     }
 
     // „Versionen prüfen“: jeden Song neu zuordnen (Original-Album statt Jubiläum/Single/Live) und nur bei Treffer tauschen
@@ -424,14 +457,18 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
     const f = filter.trim().toLowerCase()
     const shown = f ? list.songs.filter(s => `${s.title} ${s.artist}`.toLowerCase().includes(f)) : list.songs
     const missing = list.missing || []
-    const running = (job && !job.finished) || (check && !check.finished)
+    const ownRunning = (job && !job.finished) || (check && !check.finished)
+    const queueFilling = queue.busyListId === list.id
+    const queued = queue.queue.filter(e => e.targetId === list.id && (e.status === 'waiting' || e.status === 'running'))
+    const running = ownRunning || queueFilling
     const replacing = search?.replaceId ? list.songs.find(s => s.id === search.replaceId) : null
     const pct = job?.total ? Math.round((job.done / job.total) * 100) : 100
 
     return (
         <>
+            <EditorBusy editorBusyRef={editorBusyRef} listId={list.id} busy={!!ownRunning} onFree={queue.kick} />
             <header className={styles.header}>
-                <button type="button" className={`${styles.btn} ${styles.iconBtn}`} onClick={onClose} disabled={running} aria-label="Zurück zur Übersicht"><IconBack /></button>
+                <button type="button" className={`${styles.btn} ${styles.iconBtn}`} onClick={onClose} disabled={ownRunning} aria-label="Zurück zur Übersicht"><IconBack /></button>
                 <h1 className={styles.title}>{list.emoji ? `${list.emoji} ` : ''}{list.name}</h1>
             </header>
             <main className={styles.main}>
@@ -447,11 +484,13 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                 </section>
 
                 <section className={styles.card}>
+                    {queueFilling && <p className={styles.warnInline} role="status">Diese Liste wird gerade von der Warteschlange befüllt ({queue.running?.progress?.done ?? 0}/{queue.running?.progress?.total ?? '?'}) – Bearbeiten ist so lange gesperrt.</p>}
+                    {!queueFilling && queued.length > 0 && <p className={styles.muted}>In der Warteschlange für diese Liste: {queued.length} {queued.length === 1 ? 'Datei' : 'Dateien'}.</p>}
                     <h2 className={styles.h2}>Songs hinzufügen</h2>
-                    <p className={styles.muted}><b>Empfohlen: CSV aus Exportify.</b> Auf <a href="https://exportify.net" target="_blank" rel="noreferrer">exportify.net</a> mit Spotify anmelden, bei der Playlist „Export“, Datei hier hochladen. Kostet kein Spotify-Kontingent. Schon enthaltene Songs werden übersprungen. Dauer: etwa 4–15 Sekunden pro Song – Tab offen lassen.</p>
+                    <p className={styles.muted}><b>Empfohlen: CSV aus Exportify.</b> Auf <a href="https://exportify.net" target="_blank" rel="noreferrer">exportify.net</a> mit Spotify anmelden, bei der Playlist „Export“, Datei hier hochladen. Kostet kein Spotify-Kontingent. Läuft über die Warteschlange (Übersicht) – du kannst die Seite verlassen und andere Listen bearbeiten; schon enthaltene Songs werden übersprungen.</p>
                     <label className={`${styles.btn} ${styles.primarySm} ${styles.fileBtn} ${running ? styles.fileBtnOff : ''}`}>
                         <IconPlus size={18} />CSV hochladen
-                        <input type="file" accept=".csv,text/csv" disabled={running} onChange={e => { addCsv(e.target.files?.[0]); e.target.value = '' }} />
+                        <input type="file" accept=".csv,text/csv" multiple disabled={running} onChange={e => { addCsv(e.target.files); e.target.value = '' }} />
                     </label>
                     <p className={styles.muted}>Oder einzelne Spotify-Song-Links einfügen (Spotify-Desktop-App: Strg+A, Strg+C). Das nutzt dein Spotify-Kontingent – nur für ein paar Songs gedacht.</p>
                     <textarea className={styles.textarea} value={links} onChange={e => setLinks(e.target.value)} rows={5} disabled={running}

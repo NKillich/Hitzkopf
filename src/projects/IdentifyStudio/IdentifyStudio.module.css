@@ -65,3 +65,15 @@
 .root .fileBtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .root .fileBtnOff { opacity: 0.5; pointer-events: none; }
 .root .muted a { color: var(--sr-accent-text); }
+
+/* Warteschlange */
+.dropOver { outline: 2px dashed var(--sr-accent); outline-offset: -6px; }
+.queueRow { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 14px; background: var(--sr-bg); }
+.queueTop { display: flex; align-items: center; gap: 8px; }
+.queueTop .rowName { flex: 1; min-width: 0; }
+.root .queueName { height: 36px; min-width: 0; font-size: 14px; font-weight: 700; }
+.badge { flex: none; height: 24px; padding: 0 10px; border-radius: 12px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 800; background: var(--sr-surface2); color: var(--sr-muted); }
+.badge_running { background: var(--sr-accent-soft); color: var(--sr-accent-text); }
+.badge_done { background: var(--sr-ok); color: var(--sr-on-ok); }
+.badge_error { background: var(--sr-bad); color: var(--sr-on-bad); }
+.warnInline { margin: 0 0 6px; padding: 10px 12px; border-radius: 12px; background: var(--sr-accent-soft); color: var(--sr-ink); font-size: 14px; line-height: 1.4; }
