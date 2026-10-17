@@ -67,9 +67,12 @@ export default function IdentifyStudio({ onBack }) {
     const login = async () => {
         setLoginError(null)
         try { await signInWithPopup(auth, new GoogleAuthProvider()) } catch (e) {
-            setLoginError(e?.code === 'auth/operation-not-allowed'
-                ? 'Die Google-Anmeldung ist in Firebase noch nicht eingeschaltet (Authentication → Anmeldemethoden → Google).'
-                : (e?.code === 'auth/popup-closed-by-user' ? null : `Anmeldung fehlgeschlagen: ${e?.message || e}`))
+            const hints = {
+                'auth/operation-not-allowed': 'Die Google-Anmeldung ist in Firebase noch nicht eingeschaltet (Authentication → Anmeldemethode → Google).',
+                'auth/unauthorized-domain': `Diese Adresse ist in Firebase nicht freigegeben. Firebase → Authentication → Einstellungen → Autorisierte Domains → „${window.location.hostname}“ hinzufügen.`,
+                'auth/popup-blocked': 'Der Browser hat das Anmeldefenster blockiert. Pop-ups für diese Seite erlauben und nochmal tippen.'
+            }
+            setLoginError(e?.code === 'auth/popup-closed-by-user' ? null : (hints[e?.code] || `Anmeldung fehlgeschlagen: ${e?.message || e}`))
         }
     }
 
@@ -81,7 +84,7 @@ export default function IdentifyStudio({ onBack }) {
             setCurrent(saved)
             setNoRights(false)
             setLists(prev => {
-                const entry = { id: saved.id, name: saved.name, emoji: saved.emoji, count: saved.songs.length, cover: saved.songs[0]?.cover || null }
+                const entry = { id: saved.id, name: saved.name, count: saved.songs.length, cover: saved.songs[0]?.cover || null }
                 const next = (prev || []).filter(l => l.id !== saved.id)
                 const at = (prev || []).findIndex(l => l.id === saved.id)
                 if (at >= 0) next.splice(at, 0, entry); else next.push(entry)
@@ -144,7 +147,6 @@ export default function IdentifyStudio({ onBack }) {
 
 function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, show, onReload }) {
     const [name, setName] = useState('')
-    const [emoji, setEmoji] = useState('🎵')
     const [busy, setBusy] = useState(false)
 
     const create = async (e) => {
@@ -152,7 +154,7 @@ function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, 
         if (!name.trim() || busy) return
         setBusy(true)
         const id = slugFor(name, (lists || []).map(l => l.id))
-        const ok = await persist({ id, name: name.trim(), emoji: emoji || '🎵', songs: [], missing: [], spotifyIds: [] })
+        const ok = await persist({ id, name: name.trim(), songs: [], missing: [], spotifyIds: [] })
         setBusy(false)
         if (ok) { setName(''); onOpen(id) }
     }
@@ -163,7 +165,9 @@ function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, 
         try {
             const fileLists = await loadFileLists()
             for (const l of fileLists) {
-                if (!(await persist({ id: l.id, name: l.name, emoji: l.emoji, songs: l.songs || [], missing: [], spotifyIds: [] }))) break
+                // Emoji der alten Dateilisten wandert in den Namen („🤘 Linkin Park“)
+                const fullName = l.emoji && !l.name.startsWith(l.emoji) ? `${l.emoji} ${l.name}` : l.name
+                if (!(await persist({ id: l.id, name: fullName, songs: l.songs || [], missing: [], spotifyIds: [] }))) break
             }
             show(`${fileLists.length} Listen übernommen.`)
             onReload()
@@ -186,8 +190,7 @@ function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, 
                 <section className={styles.card}>
                     <h2 className={styles.h2}>Neue Liste</h2>
                     <form className={styles.row} onSubmit={create}>
-                        <input className={`${styles.input} ${styles.emojiInput}`} value={emoji} onChange={e => setEmoji(e.target.value)} aria-label="Emoji" maxLength={8} />
-                        <input className={styles.input} value={name} onChange={e => setName(e.target.value)} placeholder="Name, z. B. 80er Party" aria-label="Name der Liste" maxLength={60} />
+                        <input className={styles.input} value={name} onChange={e => setName(e.target.value)} placeholder="Name, z. B. 🎉 80er Party" aria-label="Name der Liste" maxLength={60} />
                         <button type="submit" className={`${styles.btn} ${styles.primarySm}`} disabled={!name.trim() || busy}><IconPlus size={18} />Anlegen</button>
                     </form>
                 </section>
@@ -210,7 +213,7 @@ function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, 
                                 <button type="button" className={`${styles.btn} ${styles.listRow}`} onClick={() => onOpen(l.id)}>
                                     {l.cover ? <img src={l.cover} alt="" className={styles.cover} /> : <span className={styles.cover} />}
                                     <span className={styles.rowText}>
-                                        <span className={styles.rowName}>{l.emoji} {l.name}</span>
+                                        <span className={styles.rowName}>{l.emoji ? `${l.emoji} ` : ''}{l.name}</span>
                                         <span className={styles.rowMeta}>{l.count} Songs · {l.id}</span>
                                     </span>
                                 </button>
@@ -239,7 +242,6 @@ function RightsHint({ uid }) {
 
 function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
     const [name, setName] = useState(list.name)
-    const [emoji, setEmoji] = useState(list.emoji)
     const [links, setLinks] = useState('')
     const [job, setJob] = useState(null)        // { total, done, label, added, skipped, missing, waiting }
     const cancelRef = useRef(false)
@@ -253,9 +255,9 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
 
     useEffect(() => () => { audioRef.current?.pause(); cancelRef.current = true }, [])
 
-    const changed = name.trim() !== list.name || emoji !== list.emoji
+    const changed = name.trim() !== list.name
 
-    const saveMeta = () => persist({ ...listRef.current, name: name.trim() || list.name, emoji: emoji || '🎵' })
+    const saveMeta = () => persist({ ...listRef.current, name: name.trim() || list.name })
 
     const removeSong = (id) => persist({ ...listRef.current, songs: listRef.current.songs.filter(s => s.id !== id) })
     const dropMissing = (spotifyId) => persist({ ...listRef.current, missing: (listRef.current.missing || []).filter(m => m.spotifyId !== spotifyId) })
@@ -349,15 +351,15 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
         <>
             <header className={styles.header}>
                 <button type="button" className={`${styles.btn} ${styles.iconBtn}`} onClick={onClose} disabled={running} aria-label="Zurück zur Übersicht"><IconBack /></button>
-                <h1 className={styles.title}>{list.emoji} {list.name}</h1>
+                <h1 className={styles.title}>{list.emoji ? `${list.emoji} ` : ''}{list.name}</h1>
             </header>
             <main className={styles.main}>
                 <p className={styles.muted}>{list.songs.length} Songs · ID {list.id}{list.songs.length >= MAX_SONGS ? ` · Höchstgrenze ${MAX_SONGS} erreicht` : ''}</p>
 
                 <section className={styles.card}>
                     <h2 className={styles.h2}>Name</h2>
+                    <p className={styles.muted}>Ein Emoji kannst du einfach mit in den Namen schreiben, z. B. „🎉 80er Party“.</p>
                     <div className={styles.row}>
-                        <input className={`${styles.input} ${styles.emojiInput}`} value={emoji} onChange={e => setEmoji(e.target.value)} aria-label="Emoji" maxLength={8} />
                         <input className={styles.input} value={name} onChange={e => setName(e.target.value)} aria-label="Name der Liste" maxLength={60} />
                         <button type="button" className={`${styles.btn} ${styles.primarySm}`} onClick={saveMeta} disabled={!changed}><IconCheck size={18} />Speichern</button>
                     </div>
