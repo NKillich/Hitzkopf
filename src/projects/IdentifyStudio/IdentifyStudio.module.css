@@ -77,3 +77,9 @@
 .badge_done { background: var(--sr-ok); color: var(--sr-on-ok); }
 .badge_error { background: var(--sr-bad); color: var(--sr-on-bad); }
 .warnInline { margin: 0 0 6px; padding: 10px 12px; border-radius: 12px; background: var(--sr-accent-soft); color: var(--sr-ink); font-size: 14px; line-height: 1.4; }
+
+/* Kachel (Kürzel/Emoji) wie in „Musik wählen“ */
+.tile { width: 48px; height: 48px; flex: none; border-radius: 12px; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px; letter-spacing: -0.02em; overflow: hidden; white-space: nowrap; }
+.metaField { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.metaLabel { font-size: 13px; font-weight: 700; color: var(--sr-muted); }
+.tileEmoji { font-size: 26px; letter-spacing: 0; }

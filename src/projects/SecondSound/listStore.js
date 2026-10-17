@@ -7,7 +7,7 @@ const listRef = (db, id) => doc(db, 'identifyLists', id)
 
 export const MAX_SONGS = 2000      // ein Firestore-Dokument darf höchstens 1 MB groß sein
 
-/** Übersicht aller Listen: [{ id, name, count, cover }] (ältere Einträge evtl. mit emoji) */
+/** Übersicht aller Listen: [{ id, name, count, cover, category?, badge? }] (ältere Einträge evtl. mit emoji) */
 export async function fetchIndex(db) {
     const snap = await getDoc(indexRef(db))
     return snap.exists() ? (snap.data().lists || []) : []
@@ -19,10 +19,13 @@ export async function fetchList(db, id) {
     return snap.exists() ? snap.data() : null
 }
 
-const indexEntry = (list) => ({
+/** Eintrag der Übersicht zu einer Liste */
+export const indexEntry = (list) => ({
     id: list.id,
     name: list.name,
     ...(list.emoji ? { emoji: list.emoji } : {}),
+    ...(list.category ? { category: list.category } : {}),
+    ...(list.badge ? { badge: list.badge } : {}),
     count: (list.songs || []).length,
     cover: list.songs?.[0]?.cover || null
 })
@@ -33,6 +36,8 @@ export async function saveList(db, list) {
         id: list.id,
         name: String(list.name || '').trim().slice(0, 60) || 'Ohne Namen',
         ...(list.emoji ? { emoji: String(list.emoji).slice(0, 8) } : {}),
+        ...(String(list.category || '').trim() ? { category: String(list.category).trim().slice(0, 30) } : {}),
+        ...(String(list.badge || '').trim() ? { badge: String(list.badge).trim().slice(0, 16) } : {}),
         songs: (list.songs || []).slice(0, MAX_SONGS),
         missing: (list.missing || []).slice(0, 500),
         spotifyIds: (list.spotifyIds || []).slice(0, 5000),

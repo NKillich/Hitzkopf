@@ -8,7 +8,8 @@ import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
 import { ConfirmSheet } from '../../shared/ui/BottomSheet'
 import { IconBack, IconPlus, IconTrash, IconSearch, IconPlay, IconPause, IconX, IconCheck, IconAlert, IconRetry } from '../../shared/ui/icons'
-import { fetchIndex, fetchList, saveList, deleteList, slugFor, MAX_SONGS } from '../SecondSound/listStore.js'
+import { fetchIndex, fetchList, saveList, deleteList, slugFor, indexEntry, MAX_SONGS } from '../SecondSound/listStore.js'
+import { tileColor, tileLabel, cleanBadge, isEmojiLabel, CATEGORY_ORDER, MAX_BADGE } from '../SecondSound/listTiles.js'
 import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong, songAsQuery, appleFromLink } from '../SecondSound/appleMatch.js'
 import { cleanTitle } from '../SecondSound/songGuess.js'
 import { loadFileLists } from '../SecondSound/guestMusic.js'
@@ -69,7 +70,7 @@ export default function IdentifyStudio({ onBack }) {
         setNoRights(false)
         if (currentRef.current?.id === saved.id) { currentRef.current = saved; setCurrent(saved) }
         setLists(prev => {
-            const entry = { id: saved.id, name: saved.name, count: saved.songs.length, cover: saved.songs[0]?.cover || null }
+            const entry = indexEntry(saved)
             const at = (prev || []).findIndex(l => l.id === saved.id)
             if (at < 0) return [...(prev || []), entry]
             const next = [...prev]
@@ -111,7 +112,7 @@ export default function IdentifyStudio({ onBack }) {
             setCurrent(saved)
             setNoRights(false)
             setLists(prev => {
-                const entry = { id: saved.id, name: saved.name, count: saved.songs.length, cover: saved.songs[0]?.cover || null }
+                const entry = indexEntry(saved)
                 const next = (prev || []).filter(l => l.id !== saved.id)
                 const at = (prev || []).findIndex(l => l.id === saved.id)
                 if (at >= 0) next.splice(at, 0, entry); else next.push(entry)
@@ -162,6 +163,7 @@ export default function IdentifyStudio({ onBack }) {
             <div className={styles.app}>
                 {current
                     ? <ListEditor list={current} listRef={currentRef} persist={persist} show={show} queue={queue} editorBusyRef={editorBusyRef}
+                        categories={[...new Set([...CATEGORY_ORDER, ...(lists || []).map(l => l.category).filter(Boolean)])]}
                         onClose={() => { setCurrent(null); currentRef.current = null }}
                         onDeleted={(id) => { setCurrent(null); currentRef.current = null; setLists(prev => (prev || []).filter(l => l.id !== id)) }} />
                     : <Overview user={user} lists={lists} listsError={listsError} noRights={noRights} onBack={onBack}
@@ -240,10 +242,10 @@ function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, 
                         {(lists || []).map(l => (
                             <li key={l.id}>
                                 <button type="button" className={`${styles.btn} ${styles.listRow}`} onClick={() => onOpen(l.id)}>
-                                    {l.cover ? <img src={l.cover} alt="" className={styles.cover} /> : <span className={styles.cover} />}
+                                    <span className={`${styles.tile} ${isEmojiLabel(tileLabel(l)) ? styles.tileEmoji : ''}`} style={{ background: tileColor(l.name) }} aria-hidden="true">{tileLabel(l)}</span>
                                     <span className={styles.rowText}>
                                         <span className={styles.rowName}>{l.emoji ? `${l.emoji} ` : ''}{l.name}</span>
-                                        <span className={styles.rowMeta}>{l.count} Songs · {l.id}</span>
+                                        <span className={styles.rowMeta}>{l.count} Songs · {l.category || 'ohne Kategorie'}</span>
                                     </span>
                                 </button>
                             </li>
@@ -278,8 +280,10 @@ function RightsHint({ uid }) {
     )
 }
 
-function ListEditor({ list, listRef, persist, show, onClose, onDeleted, queue, editorBusyRef }) {
+function ListEditor({ list, listRef, persist, show, onClose, onDeleted, queue, editorBusyRef, categories }) {
     const [name, setName] = useState(list.name)
+    const [category, setCategory] = useState(list.category || '')
+    const [badge, setBadge] = useState(list.badge || '')
     const [links, setLinks] = useState('')
     const [job, setJob] = useState(null)        // { total, done, label, added, skipped, missing, waiting }
     const cancelRef = useRef(false)
@@ -295,9 +299,9 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted, queue, e
 
     useEffect(() => () => { audioRef.current?.pause(); cancelRef.current = true }, [])
 
-    const changed = name.trim() !== list.name
+    const changed = name.trim() !== list.name || category.trim() !== (list.category || '') || cleanBadge(badge) !== (list.badge || '')
 
-    const saveMeta = () => persist({ ...listRef.current, name: name.trim() || list.name })
+    const saveMeta = () => persist({ ...listRef.current, name: name.trim() || list.name, category: category.trim(), badge: cleanBadge(badge) })
 
     const removeSong = (id) => persist({ ...listRef.current, songs: listRef.current.songs.filter(s => s.id !== id) })
     const dropMissing = (spotifyId) => persist({ ...listRef.current, missing: (listRef.current.missing || []).filter(m => m.spotifyId !== spotifyId) })
@@ -475,12 +479,26 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted, queue, e
                 <p className={styles.muted}>{list.songs.length} Songs · ID {list.id}{list.songs.length >= MAX_SONGS ? ` · Höchstgrenze ${MAX_SONGS} erreicht` : ''}</p>
 
                 <section className={styles.card}>
-                    <h2 className={styles.h2}>Name</h2>
-                    <p className={styles.muted}>Ein Emoji kannst du einfach mit in den Namen schreiben, z. B. „🎉 80er Party“.</p>
-                    <div className={styles.row}>
-                        <input className={styles.input} value={name} onChange={e => setName(e.target.value)} aria-label="Name der Liste" maxLength={60} />
-                        <button type="button" className={`${styles.btn} ${styles.primarySm}`} onClick={saveMeta} disabled={!changed}><IconCheck size={18} />Speichern</button>
+                    <h2 className={styles.h2}>Name und Anzeige</h2>
+                    <label className={styles.metaField}>
+                        <span className={styles.metaLabel}>Name</span>
+                        <input className={styles.input} value={name} onChange={e => setName(e.target.value)} maxLength={60} />
+                    </label>
+                    <label className={styles.metaField}>
+                        <span className={styles.metaLabel}>Kategorie</span>
+                        <input className={styles.input} value={category} onChange={e => setCategory(e.target.value)} maxLength={30}
+                            list="studio-categories" placeholder="z. B. Jahrzehnte" />
+                        <datalist id="studio-categories">{categories.map(c => <option key={c} value={c} />)}</datalist>
+                    </label>
+                    <div className={styles.metaField}>
+                        <label className={styles.metaLabel} htmlFor="studio-badge">Kachel (Kürzel oder Emoji, max. {MAX_BADGE} Zeichen)</label>
+                        <div className={styles.row}>
+                            <span className={`${styles.tile} ${isEmojiLabel(cleanBadge(badge)) ? styles.tileEmoji : ''}`} style={{ background: tileColor(name.trim() || list.name) }} aria-hidden="true">{tileLabel({ name: name.trim() || list.name, badge: cleanBadge(badge) })}</span>
+                            <input id="studio-badge" className={styles.input} value={badge} onChange={e => setBadge(e.target.value)} maxLength={16} placeholder="z. B. 80s oder 🎸" />
+                        </div>
                     </div>
+                    <p className={styles.muted}>Kategorie und Kachel erscheinen bei „Musik wählen“ im Gastmodus. Ohne Kategorie landet die Liste unter „Weitere“, ohne Kürzel zeigt die Kachel die Anfangsbuchstaben. Reihenfolge: Jahrzehnte, Genres, Best of, Party-Mixe, danach weitere alphabetisch.</p>
+                    <button type="button" className={`${styles.btn} ${styles.primarySm}`} onClick={saveMeta} disabled={!changed}><IconCheck size={18} />Speichern</button>
                 </section>
 
                 <section className={styles.card}>
