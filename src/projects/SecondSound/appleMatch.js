@@ -61,10 +61,10 @@ export function pickAppleMatch(sp, results) {
         const appleVariants = variantsOf(`${a.trackName} ${a.collectionName}`)
         if ([...appleVariants].some(v => !spVariants.has(v))) continue
         let score = 100
-        if (REISSUE.test(a.collectionName) && !REISSUE.test(sp.album || '')) score -= 8
-        if (SINGLE.test(a.collectionName) && !SINGLE.test(sp.album || '')) score -= 6
+        if (REISSUE.test(a.collectionName)) score -= 12
+        if (SINGLE.test(a.collectionName)) score -= 12
         if (CLEAN.test(`${a.trackName} ${a.collectionName}`) && !CLEAN.test(sp.title)) score -= 12
-        if (sp.album && normTitle(a.collectionName) === normTitle(sp.album)) score += 5
+        if (sp.album && albumCore(a.collectionName) === albumCore(sp.album)) score += 5
         if (sp.ms && a.trackTimeMillis) score -= Math.min(15, Math.abs(sp.ms - a.trackTimeMillis) / 1000)
         const better = !best || score > best.score + 0.01 ||
             (Math.abs(score - best.score) <= 0.01 && a.collectionId < best.a.collectionId)
@@ -88,7 +88,9 @@ export function toListSong(a, spYear = null) {
     }
 }
 
-const GOOD = 90    // ab hier wird nicht weiter gesucht
+const GOOD = 90    // ab hier wird nicht weiter gesucht …
+// … aber nur, wenn es das Original-Album ist (Single/Deluxe/Jubiläum → noch über die Künstler-Alben schauen)
+const isFinal = (hit) => !!hit && hit.score >= GOOD && !REISSUE.test(hit.a.collectionName) && !SINGLE.test(hit.a.collectionName)
 
 /** Kern eines Albumnamens: „Collision Course - EP“ → „collision course“, „From Zero (Deluxe Edition)“ → „from zero“ */
 export const albumCore = (name) => normTitle(String(name || '').split(/\s*[:([]\s*|\s+-\s+/)[0].replace(REISSUE, ''))
@@ -122,23 +124,40 @@ const albumTracksCached = (collectionId, cache, onWait) => cached(cache, `tracks
     return tracks
 })
 
-/** Weg 2: Künstler → seine Alben → das Album mit dem Spotify-Namen → dessen Songs */
+// Original vor Deluxe/Jubiläum/Single, dann die ältere Veröffentlichung
+const originalFirst = (x, y) =>
+    Number(REISSUE.test(x.collectionName) || SINGLE.test(x.collectionName)) - Number(REISSUE.test(y.collectionName) || SINGLE.test(y.collectionName))
+    || x.collectionId - y.collectionId
+
+/**
+ * Weg 2: Künstler → seine Alben → (a) Album mit dem Spotify-Namen, (b) sonst Original-Alben aus dem Erscheinungsjahr
+ * (Spotify nennt oft die Single, z. B. „Heavy Is the Crown“ statt „From Zero“) → deren Songs.
+ */
 async function searchViaArtistAlbums(sp, cache, onWait) {
     const want = albumCore(sp.album)
-    if (!want) return null
+    const year = Number(sp.year) || null
     let best = null
+    const tryAlbums = async (albums) => {
+        for (const al of albums) {
+            const hit = pickAppleMatch(sp, await albumTracksCached(al.collectionId, cache, onWait))
+            if (hit && (!best || hit.score > best.score)) best = hit
+            if (isFinal(best)) return true
+        }
+        return false
+    }
     for (const artist of sp.artists.slice(0, 3)) {
         for (const artistId of await appleArtistIds(artist, cache, onWait)) {
-            const albums = (await appleArtistAlbums(artistId, cache, onWait))
-                .filter(al => albumCore(al.collectionName) === want)
-                // Original vor Deluxe/Jubiläum, dann die ältere Veröffentlichung
-                .sort((x, y) => Number(REISSUE.test(x.collectionName)) - Number(REISSUE.test(y.collectionName)) || x.collectionId - y.collectionId)
-                .slice(0, 3)
-            for (const al of albums) {
-                const hit = pickAppleMatch(sp, await albumTracksCached(al.collectionId, cache, onWait))
-                if (hit && (!best || hit.score > best.score)) best = hit
+            const all = await appleArtistAlbums(artistId, cache, onWait)
+            const named = want ? all.filter(al => albumCore(al.collectionName) === want).sort(originalFirst).slice(0, 3) : []
+            if (await tryAlbums(named)) return best
+            if (year) {
+                const sameYear = all
+                    .filter(al => !named.includes(al) && Math.abs((parseInt(al.releaseDate, 10) || 0) - year) <= 1)
+                    .filter(al => !REISSUE.test(al.collectionName) && !variantsOf(al.collectionName).size)
+                    .sort(originalFirst)
+                    .slice(0, 4)
+                if (await tryAlbums(sameYear)) return best
             }
-            if (best && best.score >= GOOD) return best
         }
     }
     return best
@@ -155,7 +174,7 @@ export async function matchToApple(sp, { onWait, albumCache } = {}) {
     let hit = pickAppleMatch(sp, await appleSearch({ term: `${sp.artists[0]} ${cleanTitle(sp.title)}` }, { onWait }))
     await sleep(APPLE_PAUSE_MS)
 
-    if ((!hit || hit.score < GOOD) && sp.album) hit = keep(hit, await searchViaArtistAlbums(sp, albumCache, onWait))
+    if (!isFinal(hit) && (sp.album || sp.year)) hit = keep(hit, await searchViaArtistAlbums(sp, albumCache, onWait))
 
     if (!hit || hit.score < GOOD) {
         hit = keep(hit, pickAppleMatch(sp, await appleSearch({ term: cleanTitle(sp.title) }, { onWait })))
@@ -182,6 +201,64 @@ export async function appleFromLink(text, { onWait } = {}) {
     return { tracks, albumName: tracks[0]?.collectionName || '', isAlbum: true }
 }
 
+/** Eine CSV-Zeile in Felder zerlegen (Anführungszeichen, "" als Escape) */
+function csvFields(line) {
+    const out = []
+    let cur = '', quoted = false
+    for (let i = 0; i < line.length; i++) {
+        const c = line[i]
+        if (quoted) {
+            if (c === '"' && line[i + 1] === '"') { cur += '"'; i++ }
+            else if (c === '"') quoted = false
+            else cur += c
+        } else if (c === '"') quoted = true
+        else if (c === ',') { out.push(cur); cur = '' }
+        else cur += c
+    }
+    out.push(cur)
+    return out
+}
+
+/**
+ * Playlist-Export von exportify.net (CSV) → [{ spotifyId, sp: { title, artists[], album, year, ms } }].
+ * Braucht keine Spotify-Anfrage (kostet also kein Kontingent). Wirft einen Fehler, wenn die Spalten fehlen.
+ */
+export function parseExportifyCsv(text) {
+    // Zeilen mit Zeilenumbrüchen in Anführungszeichen zusammenhalten
+    const rows = []
+    let buf = ''
+    for (const line of String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/)) {
+        buf = buf ? `${buf}\n${line}` : line
+        if ((buf.match(/"/g) || []).length % 2 === 0) { if (buf.trim()) rows.push(buf); buf = '' }
+    }
+    if (!rows.length) return []
+    const head = csvFields(rows[0]).map(h => h.trim().toLowerCase())
+    const col = (...names) => head.findIndex(h => names.includes(h))
+    const iUri = col('track uri', 'spotify uri', 'uri'), iName = col('track name', 'name', 'title')
+    const iArtist = col('artist name(s)', 'artist names', 'artist name', 'artists', 'artist')
+    const iAlbum = col('album name', 'album'), iDate = col('release date', 'album release date'), iMs = col('duration (ms)', 'duration_ms', 'track duration (ms)')
+    if (iName < 0 || iArtist < 0) throw new Error('Das sieht nicht nach einem Exportify-Export aus (Spalten „Track Name“ und „Artist Name(s)“ fehlen).')
+    const items = []
+    for (const row of rows.slice(1)) {
+        const f = csvFields(row)
+        const title = (f[iName] || '').trim()
+        const artists = (f[iArtist] || '').split(/\s*[;]\s*/).map(a => a.trim()).filter(Boolean)
+        if (!title || !artists.length) continue
+        const spotifyId = (String(f[iUri] || '').match(/([A-Za-z0-9]{22})/) || [])[1] || null
+        items.push({
+            spotifyId,
+            sp: {
+                title,
+                artists,
+                album: iAlbum >= 0 ? (f[iAlbum] || '').trim() : '',
+                year: iDate >= 0 ? (parseInt(f[iDate], 10) || null) : null,
+                ms: iMs >= 0 ? (Number(f[iMs]) || null) : null
+            }
+        })
+    }
+    return items
+}
+
 /** Spotify-Song-IDs aus eingefügtem Text (Links oder reine IDs, eine pro Zeile oder gemischt) */
 export const spotifyIdsFromText = (text) => [...new Set(String(text || '')
     .split(/[\s,]+/)
@@ -192,7 +269,13 @@ export const spotifyIdsFromText = (text) => [...new Set(String(text || '')
 export async function spotifyTrack(id, token) {
     for (let i = 0; i < 4; i++) {
         const r = await fetch(`https://api.spotify.com/v1/tracks/${id}`, { headers: { Authorization: `Bearer ${token}` } })
-        if (r.status === 429) { await sleep((Number(r.headers.get('retry-after')) || 5) * 1000); continue }
+        if (r.status === 429) {
+            const wait = Number(r.headers.get('retry-after')) || 5
+            // Lange Sperre (Kontingent erschöpft) → sofort melden statt stundenlang zu warten
+            if (wait > 60) return { error: 429, retryAfter: wait }
+            await sleep(wait * 1000)
+            continue
+        }
         if (!r.ok) return { error: r.status }
         const t = await r.json()
         return {
