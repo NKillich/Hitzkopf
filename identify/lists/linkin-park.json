@@ -1,0 +1,142 @@
+{
+ "id": "linkin-park",
+ "name": "Linkin Park",
+ "emoji": "🤘",
+ "songs": [
+  {
+   "id": 1526170277,
+   "title": "Papercut",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/c7/14/ab/c714ab1e-4b37-8fad-cc6a-5272b8525ea6/mzaf_4722817586372173135.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170279,
+   "title": "One Step Closer",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/6d/19/9f/6d199f01-c780-98a9-5b0e-2e0a756cc2f1/mzaf_11530044659774985082.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170280,
+   "title": "With You",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/11/9a/4e/119a4ec6-bde6-8465-46c4-336d746b14fc/mzaf_5530137275531753616.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170281,
+   "title": "Points of Authority",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/f3/e5/dc/f3e5dcdc-4d9d-00da-18fd-515af1b8713e/mzaf_931563363282465040.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170282,
+   "title": "Crawling",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/1e/8d/46/1e8d46f0-9aa3-fcf5-1bc9-a454169143a6/mzaf_15003509542501212.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170283,
+   "title": "Runaway",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/5f/06/5d/5f065d59-1ef9-20d6-30ec-3070c2d15699/mzaf_11320891551781484815.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170284,
+   "title": "By Myself",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/49/f4/0b/49f40b98-7cec-5783-005a-eb26723e0a50/mzaf_12207773232350528677.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170285,
+   "title": "In the End",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/d8/dc/11/d8dc116b-7e96-28c7-15db-0cc37e5e3cab/mzaf_12868833223285506199.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170286,
+   "title": "A Place for My Head",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/99/d7/8a/99d78af5-5c0e-c740-3255-746093d9fcc8/mzaf_13454218429591929724.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170287,
+   "title": "Forgotten",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/0b/82/eb/0b82eb4c-7227-d2a5-2031-d4edad1ca4ed/mzaf_6016530294129924528.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170288,
+   "title": "Cure for the Itch",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/b4/10/94/b41094ca-f1db-0307-ef80-edf3c0868bc8/mzaf_9022364966494813850.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170289,
+   "title": "Pushing Me Away",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/e2/82/49/e2824974-d0af-5d34-0722-c6a96a49f585/mzaf_9054297669724318852.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170512,
+   "title": "My December (B-Side Rarities)",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/a3/4e/47/a34e473c-0c2f-e676-ea6a-b738902b2dd3/mzaf_3239715119108408039.plus.aac.p.m4a"
+  },
+  {
+   "id": 1526170510,
+   "title": "High Voltage (B-Side Rarities)",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/be/00/fc/be00fccd-3af2-e383-1772-d5eca9cf4a57/mzaf_1968518775179508186.plus.aac.p.m4a"
+  },
+  {
+   "id": 1745056137,
+   "title": "Papercut",
+   "artist": "LINKIN PARK",
+   "artistId": 148662,
+   "year": 2000,
+   "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/b8/b1/75/b8b17515-d782-a739-69d8-7b703465595e/093624841845.jpg/300x300bb.jpg",
+   "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/5d/21/3f/5d213f71-d57a-3d52-bb82-af10ac876a40/mzaf_17591028302327983742.plus.aac.p.m4a"
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+[
+ {
+  "id": "linkin-park",
+  "name": "Linkin Park",
+  "emoji": "🤘",
+  "count": 15,
+  "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d9/5f/35/d95f35e4-11bb-05d7-bb26-d65ce620d920/093624893219.jpg/300x300bb.jpg"
+ },
+ {
+  "id": "mix",
+  "name": "Mix",
+  "emoji": "🎉",
+  "count": 398,
+  "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/83/c6/54/83c6541f-3b90-b46a-b46a-17bf8fd9af16/5034202113645.png/300x300bb.jpg"
+ }
+]
