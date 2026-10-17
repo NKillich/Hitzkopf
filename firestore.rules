@@ -85,7 +85,7 @@ service cloud.firestore {
     // schreiben nur das Konto des Identify Studios (Google-Login, UID siehe Studio-Startseite).
     function isStudioAdmin() {
       return request.auth != null
-             && request.auth.uid in ['STUDIO_UID_HIER_EINTRAGEN'];
+             && request.auth.uid in ['yADmp1vfE4PrPkoAyrr13dSJMoX2'];
     }
     match /identifyLists/{listId} {
       allow read: if true;

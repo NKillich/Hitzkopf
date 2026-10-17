@@ -67,9 +67,12 @@ export default function IdentifyStudio({ onBack }) {
     const login = async () => {
         setLoginError(null)
         try { await signInWithPopup(auth, new GoogleAuthProvider()) } catch (e) {
-            setLoginError(e?.code === 'auth/operation-not-allowed'
-                ? 'Die Google-Anmeldung ist in Firebase noch nicht eingeschaltet (Authentication → Anmeldemethoden → Google).'
-                : (e?.code === 'auth/popup-closed-by-user' ? null : `Anmeldung fehlgeschlagen: ${e?.message || e}`))
+            const hints = {
+                'auth/operation-not-allowed': 'Die Google-Anmeldung ist in Firebase noch nicht eingeschaltet (Authentication → Anmeldemethode → Google).',
+                'auth/unauthorized-domain': `Diese Adresse ist in Firebase nicht freigegeben. Firebase → Authentication → Einstellungen → Autorisierte Domains → „${window.location.hostname}“ hinzufügen.`,
+                'auth/popup-blocked': 'Der Browser hat das Anmeldefenster blockiert. Pop-ups für diese Seite erlauben und nochmal tippen.'
+            }
+            setLoginError(e?.code === 'auth/popup-closed-by-user' ? null : (hints[e?.code] || `Anmeldung fehlgeschlagen: ${e?.message || e}`))
         }
     }
 
