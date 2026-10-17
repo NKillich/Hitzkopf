@@ -5,6 +5,7 @@ import { getAuth, signInAnonymously } from 'firebase/auth'
 import '../../firebase.js'
 import spotifyService from '../../services/spotifyService'
 import clip from '../../services/clipPlayer.js'
+import { AppleClipPlayer, appleUri } from '../../services/appleClipPlayer.js'
 import { log, warn } from '../../utils/logger.js'
 import CoverArt from '../../shared/ui/CoverArt'
 import { ConfirmSheet } from '../../shared/ui/BottomSheet'
@@ -16,6 +17,7 @@ import {
 } from '../../shared/ui/icons'
 import styles from './SecondSound.module.css'
 import BonusSheet from './BonusSheet'
+import { loadGuestIndex, loadGuestList, appleSearch } from './guestMusic.js'
 import JokerSheet from './JokerSheet'
 import { JOKERS, loadTrackMeta, checkTip, tipGiven, tipAnyHit, songScore, tipSummary, titleHint, decadeLabel } from './songGuess.js'
 
@@ -25,6 +27,15 @@ const IconJoker = ({ size = 24 }) => (
         <rect x="5" y="3" width="14" height="18" rx="2.5" /><path d="M12 8.5l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z" />
     </svg>
 )
+
+// Gastmodus: Apple-Hörproben aus kuratierten Listen, ohne Login
+const appleClip = new AppleClipPlayer({ log })
+
+// Statistik für Gäste: nur auf diesem Gerät
+const GUEST_STATS_KEY = 'ss_guest_stats'
+const readGuestStats = () => {
+    try { return JSON.parse(localStorage.getItem(GUEST_STATS_KEY) || 'null') } catch { return null }
+}
 
 const PHASES = {
     HOME: 'home',            // Startseite: Spotify verbinden, Spiel starten
@@ -98,6 +109,10 @@ export default function SecondSound({ onBack }) {
     const [phase, setPhase] = useState(PHASES.HOME)
     const [connected, setConnected] = useState(null)   // null = wird geprüft
     const [playerReady, setPlayerReady] = useState(false)
+    const [guest, setGuest] = useState(false)              // Gastmodus (Apple-Hörproben, kein Login)
+    const guestRef = useRef(false)
+    const [guestLists, setGuestLists] = useState(null)     // Verzeichnis der Gast-Listen (null = lädt)
+    const [guestListsError, setGuestListsError] = useState(false)
     const [playerError, setPlayerError] = useState(null)
     const [allTimeStats, setAllTimeStats] = useState(null)
     const { isDark, toggleTheme } = useTheme()
@@ -178,6 +193,7 @@ export default function SecondSound({ onBack }) {
     const isPlayingRequestRef = useRef(false)   // verhindert parallele Play-Requests
     const allowPlaybackRef = useRef(false)      // true nur, solange der Spieler einen Play-Button gedrückt hat
     const songsRef = useRef([])
+    const guestSongsRef = useRef(new Map())     // Gastmodus: apple:ID → Song aus der Liste
     const trackUriRef = useRef({})              // Slot-Index → Track-URI (beim ersten Abspielen gemerkt)
     const searchInputRef = useRef(null)
     const lastPlaySecondsRef = useRef(null)
@@ -205,6 +221,22 @@ export default function SecondSound({ onBack }) {
     }
 
     const saveAndLoadStats = async (finalScore, finalPlayed, totalSeconds, countWithTime) => {
+        if (guestRef.current) {
+            if (finalPlayed <= 0) return
+            const old = readGuestStats() || {}
+            const correct = Math.min(finalScore, finalPlayed)
+            const st = {
+                songsCorrect: (old.songsCorrect || 0) + correct,
+                songsTotal: (old.songsTotal || 0) + finalPlayed,
+                gamesPlayed: (old.gamesPlayed || 0) + 1,
+                bestPercent: Math.max(old.bestPercent || 0, Math.min(100, Math.round((correct / finalPlayed) * 100))),
+                totalSecondsCorrect: (old.totalSecondsCorrect || 0) + (countWithTime > 0 ? totalSeconds : 0),
+                correctGuessesWithTime: (old.correctGuessesWithTime || 0) + countWithTime
+            }
+            try { localStorage.setItem(GUEST_STATS_KEY, JSON.stringify(st)) } catch { setStatsSaveFailed(true) }
+            setAllTimeStats(st)
+            return
+        }
         const db = dbRef.current
         if (!db || finalPlayed <= 0) return
         setStatsSaveFailed(false)
@@ -309,6 +341,7 @@ export default function SecondSound({ onBack }) {
     // Beim Verlassen der App den Player sauber trennen (er bleibt zwischen den Spielen verbunden)
     useEffect(() => () => {
         clip.detach()
+        appleClip.detach()
         spotifyService.disconnectPlayer()
     }, [])
 
@@ -317,6 +350,7 @@ export default function SecondSound({ onBack }) {
     useEffect(() => {
         if (phase !== PHASES.GAME) return
         setPlayerError(null)
+        if (guestRef.current) { setPlayerReady(true); return }      // Apple-Hörproben brauchen keinen Player-Start
         if (spotifyService.isPlaybackReady()) {
             setPlayerReady(true)
             return
@@ -332,9 +366,10 @@ export default function SecondSound({ onBack }) {
     // Wiedergabe-Steuerung: Player-Ereignisse auswerten (Ende des Ausschnitts, Titelwechsel, Fehler)
     useEffect(() => {
         if (phase !== PHASES.GAME) return
-        clip.reset()
-        clip.attach()
-        clip.setHandlers({
+        const player = guestRef.current ? appleClip : clip
+        player.reset()
+        player.attach()
+        player.setHandlers({
             onEnd: (reason, info) => {
                 noteHeard(reason === 'done')
                 allowPlaybackRef.current = false
@@ -344,7 +379,7 @@ export default function SecondSound({ onBack }) {
             },
             onAutoplayFailed: () => setPlayerError('Der Browser hat die Wiedergabe blockiert. Tippe nochmal auf Play.')
         })
-        return () => { clip.detach() }
+        return () => { player.detach() }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase])
 
@@ -352,6 +387,14 @@ export default function SecondSound({ onBack }) {
     const trackId = currentTrackInfo?.trackId
     useEffect(() => {
         if (!trackId) return
+        if (guestRef.current) {
+            // Gast: alles steht schon in der Liste
+            const song = guestSongsRef.current.get(trackId)
+            setTrackMeta(song
+                ? { id: trackId, name: song.title, artists: [{ id: song.artistId ?? null, name: song.artist }], year: song.year || null }
+                : { id: trackId, failed: true })
+            return
+        }
         let alive = true
         loadTrackMeta(spotifyService, trackId)
             .then(m => { if (alive) setTrackMeta(m) })
@@ -363,7 +406,7 @@ export default function SecondSound({ onBack }) {
     // Fängt alles ab, was Spotify von sich aus startet (Resume nach Gerätewechsel,
     // fremde Wiedergabe auf dem Konto, fehlgeschlagene Pause usw.).
     useEffect(() => {
-        if (phase !== PHASES.GAME || !playerReady) return
+        if (phase !== PHASES.GAME || !playerReady || guestRef.current) return
         let stopped = false
         const tick = async () => {
             if (stopped || allowPlaybackRef.current) return
@@ -486,6 +529,7 @@ export default function SecondSound({ onBack }) {
         usedUrisRef.current = new Set()
         playGenRef.current++
         clip.reset()
+        appleClip.reset()
 
         try {
             // Echtes Fisher-Yates – Math.random()-0.5 als Sortier-Func ist statistisch
@@ -499,59 +543,76 @@ export default function SecondSound({ onBack }) {
                 return a
             }
 
-            // Player muss existieren, bevor Live-Detection (mute play tests) läuft –
-            // der Effect mit initPlaybackPlayer greift erst bei PHASES.GAME.
-            await spotifyService.ensurePlaybackPlayerReady({ name: 'Identify' })
-            if (cancelLoadRef.current) throw new Error('abgebrochen')
-
-            const candidates = []   // alle (Playlist, Position)-Paare: so zählt jeder Titel gleich viel
-
-            for (let pIdx = 0; pIdx < selectedPlaylists.length; pIdx++) {
-                const playlist = selectedPlaylists[pIdx]
-                const uri = `spotify:playlist:${playlist.id}`
-
-                // Größe ermitteln: Cache → getPlaylistInfo (falls > 0) → detectPlaylistSize
-                let count = playlistSizeCache.current[playlist.id] || 0
-
-                if (!count && playlist.trackCount > 1) {
-                    count = playlist.trackCount
-                    log(`[SS] "${playlist.name}": nutze gecachte trackCount=${count} aus Auswahl`)
-                }
-
-                if (!count) {
-                    try {
-                        const info = await spotifyService.getPlaylistInfo(playlist.id)
-                        if (info.trackCount > 1) {
-                            count = info.trackCount
-                            log(`[SS] "${playlist.name}": getPlaylistInfo trackCount=${count}`)
-                        }
-                    } catch (e) {
-                        warn(`[SS] getPlaylistInfo für "${playlist.name}" fehlgeschlagen:`, e.message)
-                    }
-                }
-
-                // Wenn beide API-Quellen versagen → echte Größe via Player-Test ermitteln
-                if (!count) {
-                    log(`[SS] "${playlist.name}": API-Größe nicht verfügbar, starte Live-Detection…`)
-                    try {
-                        count = await spotifyService.detectPlaylistSize(uri, {
-                            shouldCancel: () => cancelLoadRef.current
-                        })
-                        log(`[SS] "${playlist.name}": Live-Detection ermittelt ${count} Tracks`)
-                        saveSize(playlist.id, count)
-                    } catch (e) {
-                        if (cancelLoadRef.current) throw new Error('abgebrochen')
-                        console.error(`[SS] Live-Detection fehlgeschlagen:`, e.message)
-                        // Keine geratene Größe: sonst entstehen Offsets, die es nicht gibt (oder 1 Song)
-                        throw new Error(`„${playlist.name}": ${e.message}`)
-                    }
-                }
-
-                if (count > 1) playlistSizeCache.current[playlist.id] = count
-
-                for (let i = 0; i < count; i++) candidates.push({ playlistUri: uri, offset: i })
-                log(`[SS] "${playlist.name}": trackCount=${count}`)
+            const candidates = []   // alle Titel aller gewählten Listen/Playlists: so zählt jeder gleich viel
+            if (guestRef.current) {
+                // Gast: Songs stehen in den Listen-Dateien
+                guestSongsRef.current = new Map()
+                const lists = await Promise.all(selectedPlaylists.map(p => loadGuestList(p.id)))
                 if (cancelLoadRef.current) throw new Error('abgebrochen')
+                const seenSongs = new Set()
+                for (const list of lists) {
+                    for (const song of list.songs || []) {
+                        if (!song?.preview || seenSongs.has(song.id)) continue
+                        seenSongs.add(song.id)
+                        guestSongsRef.current.set(appleUri(song), song)
+                        candidates.push({ guestSong: song })
+                    }
+                }
+            } else {
+                // Player muss existieren, bevor Live-Detection (mute play tests) läuft –
+                // der Effect mit initPlaybackPlayer greift erst bei PHASES.GAME.
+                await spotifyService.ensurePlaybackPlayerReady({ name: 'Identify' })
+                if (cancelLoadRef.current) throw new Error('abgebrochen')
+
+
+                for (let pIdx = 0; pIdx < selectedPlaylists.length; pIdx++) {
+                    const playlist = selectedPlaylists[pIdx]
+                    const uri = `spotify:playlist:${playlist.id}`
+
+                    // Größe ermitteln: Cache → getPlaylistInfo (falls > 0) → detectPlaylistSize
+                    let count = playlistSizeCache.current[playlist.id] || 0
+
+                    if (!count && playlist.trackCount > 1) {
+                        count = playlist.trackCount
+                        log(`[SS] "${playlist.name}": nutze gecachte trackCount=${count} aus Auswahl`)
+                    }
+
+                    if (!count) {
+                        try {
+                            const info = await spotifyService.getPlaylistInfo(playlist.id)
+                            if (info.trackCount > 1) {
+                                count = info.trackCount
+                                log(`[SS] "${playlist.name}": getPlaylistInfo trackCount=${count}`)
+                            }
+                        } catch (e) {
+                            warn(`[SS] getPlaylistInfo für "${playlist.name}" fehlgeschlagen:`, e.message)
+                        }
+                    }
+
+                    // Wenn beide API-Quellen versagen → echte Größe via Player-Test ermitteln
+                    if (!count) {
+                        log(`[SS] "${playlist.name}": API-Größe nicht verfügbar, starte Live-Detection…`)
+                        try {
+                            count = await spotifyService.detectPlaylistSize(uri, {
+                                shouldCancel: () => cancelLoadRef.current
+                            })
+                            log(`[SS] "${playlist.name}": Live-Detection ermittelt ${count} Tracks`)
+                            saveSize(playlist.id, count)
+                        } catch (e) {
+                            if (cancelLoadRef.current) throw new Error('abgebrochen')
+                            console.error(`[SS] Live-Detection fehlgeschlagen:`, e.message)
+                            // Keine geratene Größe: sonst entstehen Offsets, die es nicht gibt (oder 1 Song)
+                            throw new Error(`„${playlist.name}": ${e.message}`)
+                        }
+                    }
+
+                    if (count > 1) playlistSizeCache.current[playlist.id] = count
+
+                    for (let i = 0; i < count; i++) candidates.push({ playlistUri: uri, offset: i })
+                    log(`[SS] "${playlist.name}": trackCount=${count}`)
+                    if (cancelLoadRef.current) throw new Error('abgebrochen')
+                }
+
             }
 
             // Zufällig aus ALLEN Titeln aller Playlists ziehen (3× Reserve für übersprungene/doppelte Titel)
@@ -562,7 +623,7 @@ export default function SecondSound({ onBack }) {
 
             // Sicherstellen, dass vor dem ersten Klick nichts mehr läuft
             allowPlaybackRef.current = false
-            await spotifyService.pauseLocalPlayer()
+            if (!guestRef.current) await spotifyService.pauseLocalPlayer()
 
             if (slots.length === 0) {
                 setLoadingError('Keine Playlists verfügbar. Bitte eine Playlist auswählen.')
@@ -646,7 +707,7 @@ export default function SecondSound({ onBack }) {
         noteHeard(false)
         allowPlaybackRef.current = false
         setIsPlaying(false)
-        await clip.pause()
+        await (guestRef.current ? appleClip : clip).pause()
     }
 
     // Spielt den Song vom Einsetzpunkt bis zum Ende von Teil `idx` (1/5/10/30 s).
@@ -659,6 +720,7 @@ export default function SecondSound({ onBack }) {
             setPlayerError('Spotify Player noch nicht bereit. Bitte warte einen Moment.')
             return
         }
+        const player = guestRef.current ? appleClip : clip
         const gen = playGenRef.current
         const isStale = () => gen !== playGenRef.current
         let slot = currentIndexRef.current
@@ -678,14 +740,15 @@ export default function SecondSound({ onBack }) {
             let result
             if (knownUri) {
                 // gleicher Titel ab Einsetzpunkt (seek+resume); sonst per URI neu laden
-                result = await clip.replay({ uri: knownUri, seconds, isStale, startMs: baseRef.current, untilMs: baseRef.current + seconds * 1000 })
+                result = await player.replay({ uri: knownUri, seconds, isStale, startMs: baseRef.current, untilMs: baseRef.current + seconds * 1000 })
             } else {
                 let tries = 0
                 for (;;) {
                     const song = songsRef.current[slot]
                     if (!song) throw new Error('Keine weiteren Songs verfügbar.')
                     const canSkip = slot + 1 < songsRef.current.length && tries < 5
-                    result = await clip.startNew({
+                    result = await player.startNew({
+                        song: song.guestSong,          // Gast: Apple-Song aus der Liste
                         contextUri: song.playlistUri,
                         offset: song.offset,
                         seconds,
@@ -757,7 +820,7 @@ export default function SecondSound({ onBack }) {
 
         let fallback = false
         try {
-            const result = await clip.resumeTo({ uri, untilMs, isStale })
+            const result = await (guestRef.current ? appleClip : clip).resumeTo({ uri, untilMs, isStale })
             if (result.aborted || isStale()) return
             if (result.lost) { fallback = true; return }
             playRef.current = { startPos: result.startPos, startedAt: result.startedAt, untilMs }
@@ -803,7 +866,7 @@ export default function SecondSound({ onBack }) {
         dbg(`playSegment: ${from}–${STAGES[idx].seconds}s`)
 
         try {
-            const result = await clip.replay({ uri, seconds: STAGES[idx].seconds - from, isStale, startMs, untilMs })
+            const result = await (guestRef.current ? appleClip : clip).replay({ uri, seconds: STAGES[idx].seconds - from, isStale, startMs, untilMs })
             if (result.aborted || isStale()) return
             playRef.current = { startPos: result.startPos, startedAt: result.startedAt, untilMs }
             setIsPlaying(true)
@@ -856,7 +919,7 @@ export default function SecondSound({ onBack }) {
         const uri = trackUriRef.current[currentIndexRef.current]
         const untilMs = baseRef.current + STAGES[next].seconds * 1000
         const toFrontier = playRef.current && playRef.current.untilMs >= baseRef.current + STAGES[stage].seconds * 1000 - 50
-        if (isPlaying && toFrontier && clip.extendTo({ uri, untilMs })) {
+        if (isPlaying && toFrontier && (guestRef.current ? appleClip : clip).extendTo({ uri, untilMs })) {
             // läuft bis zum bisherigen Ende: Ende einfach nach hinten schieben (spielt alle Abschnitte dazwischen)
             playRef.current = { ...playRef.current, untilMs }
             maxHeardRef.current = Math.max(maxHeardRef.current, STAGES[next].seconds)
@@ -997,6 +1060,7 @@ export default function SecondSound({ onBack }) {
     const resetGameState = () => {
         playGenRef.current++
         clip.reset()
+        appleClip.reset()
         isPlayingRequestRef.current = false
         allowPlaybackRef.current = false
         setStartingIdx(-1)
@@ -1071,8 +1135,27 @@ export default function SecondSound({ onBack }) {
 
     // Startseite → Playlist-Auswahl (immer mit leerer Auswahl)
     const handleOpenPlaylists = () => {
+        guestRef.current = false
+        setGuest(false)
         resetSelection()
         setLoadingError(null)
+        setPhase(PHASES.PLAYLISTS)
+    }
+
+    // Gastmodus: kuratierte Listen mit Apple-Hörproben, ohne Login
+    const loadGuestLists = async () => {
+        setGuestListsError(false)
+        try { setGuestLists(await loadGuestIndex()) } catch (e) {
+            console.error('[SS] Gast-Listen laden fehlgeschlagen:', e)
+            setGuestListsError(true)
+        }
+    }
+    const handleOpenGuest = () => {
+        guestRef.current = true
+        setGuest(true)
+        resetSelection()
+        setLoadingError(null)
+        if (!guestLists) loadGuestLists()
         setPhase(PHASES.PLAYLISTS)
     }
 
@@ -1141,7 +1224,7 @@ export default function SecondSound({ onBack }) {
 
     // Setup: eigene Playlists direkt beim Öffnen laden (häufigster Fall)
     useEffect(() => {
-        if (phase === PHASES.PLAYLISTS && searchMode === 'mine') handleLoadMyPlaylists()
+        if (phase === PHASES.PLAYLISTS && searchMode === 'mine' && !guestRef.current) handleLoadMyPlaylists()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase, searchMode])
 
@@ -1206,11 +1289,11 @@ export default function SecondSound({ onBack }) {
                         </button>
                     )}
 
-                    {connected ? (
+                    {connected && (
                         <button type="button" className={`${styles.srBtn} ${styles.srPrimary}`} onClick={handleOpenPlaylists}>Spiel starten</button>
-                    ) : (
-                        <button type="button" disabled aria-disabled="true" className={`${styles.srBtn} ${styles.srStartOff}`}><IconLock />Spiel starten</button>
                     )}
+
+                    <button type="button" className={`${styles.srBtn} ${styles.srSecondary}`} onClick={handleOpenGuest}>Als Gast spielen</button>
 
                     <button type="button" className={`${styles.srBtn} ${styles.srSecondary}`} onClick={handleOpenSettings}>Einstellungen</button>
 
@@ -1221,7 +1304,7 @@ export default function SecondSound({ onBack }) {
                             <button type="button" className={`${styles.srBtn} ${styles.srStatusLink}`} onClick={handleDisconnect}>Verbindung trennen</button>
                         </p>
                     ) : (
-                        !checking && <p className={styles.srFineRow}><IconInfo />Du brauchst Spotify Premium.</p>
+                        !checking && <p className={styles.srFineRow}><IconInfo />Mit Spotify: Premium nötig. Als Gast: ohne Konto, 30-Sekunden-Ausschnitte.</p>
                     )}
                 </div>
             </main>
@@ -1245,21 +1328,30 @@ export default function SecondSound({ onBack }) {
         else if (playlistResults.length) view = 'ok'
         else view = (searchLoading || searchedQuery !== q) ? 'loading' : 'empty'
 
-        const list = isMine ? myPlaylists : playlistResults
-        const heading = isMine ? 'Deine Playlists' : (q && view === 'ok' ? `Treffer für „${q}“` : 'Suchergebnisse')
+        let list = isMine ? myPlaylists : playlistResults
+        let heading = isMine ? 'Deine Playlists' : (q && view === 'ok' ? `Treffer für „${q}“` : 'Suchergebnisse')
+        if (guest) {
+            if (guestListsError) view = 'error'
+            else if (!guestLists) view = 'loading'
+            else view = guestLists.length ? 'ok' : 'empty'
+            list = (guestLists || []).map(l => ({ id: l.id, name: `${l.emoji ? l.emoji + ' ' : ''}${l.name}`, imageUrl: l.cover, trackCount: l.count }))
+            heading = 'Listen'
+        }
 
         return shell(
             <main className={styles.srMain}>
                 <header className={`${styles.srSubHeader} ${styles.srPad}`}>
                     <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setPhase(PHASES.HOME)} aria-label="Zurück"><IconBack /></button>
-                    <h1 className={styles.srSubTitle}>Playlists</h1>
+                    <h1 className={styles.srSubTitle}>{guest ? 'Listen' : 'Playlists'}</h1>
                     {themeBtn}
                 </header>
 
                 <div className={`${styles.srScroll} ${styles.srScrollFix}`}>
-                    <p className={styles.srInfo}>Wähle eine oder mehrere Playlists, aus denen du zufällige Songs erraten willst</p>
+                    <p className={styles.srInfo}>{guest
+                        ? 'Wähle eine oder mehrere Listen – gespielt werden 30-Sekunden-Ausschnitte, ganz ohne Konto'
+                        : 'Wähle eine oder mehrere Playlists, aus denen du zufällige Songs erraten willst'}</p>
 
-                    <div className={styles.srTabs} role="tablist" aria-label="Playlist-Quelle">
+                    {!guest && <div className={styles.srTabs} role="tablist" aria-label="Playlist-Quelle">
                         <button type="button" role="tab" aria-selected={isMine} className={`${styles.srBtn} ${styles.srTab} ${isMine ? styles.srTabOn : ''}`}
                             onClick={() => { setSearchMode('mine'); handleLoadMyPlaylists() }}>
                             Meine Playlists
@@ -1268,9 +1360,9 @@ export default function SecondSound({ onBack }) {
                             onClick={() => setSearchMode('playlist')}>
                             <IconSearch size={18} />Suchen
                         </button>
-                    </div>
+                    </div>}
 
-                    {!isMine && (
+                    {!guest && !isMine && (
                         <div className={styles.srField}>
                             <label htmlFor="sr-search" className={styles.srLabel}>Playlist suchen</label>
                             <div className={styles.srInputWrap}>
@@ -1347,11 +1439,11 @@ export default function SecondSound({ onBack }) {
                         {view === 'empty' && (
                             <div className={styles.srEmpty}>
                                 <span className={styles.srEmptyIcon}>{isMine ? <IconNote size={24} /> : <IconSearch size={24} />}</span>
-                                <p className={styles.srEmptyTitle}>{isMine ? 'Noch keine Playlists' : 'Nichts gefunden'}</p>
+                                <p className={styles.srEmptyTitle}>{guest ? 'Noch keine Listen' : (isMine ? 'Noch keine Playlists' : 'Nichts gefunden')}</p>
                                 <p className={styles.srEmptyText}>
-                                    {isMine ? 'In deinem Spotify-Konto gibt es noch keine Playlists. Such einfach nach anderen.' : `Zu „${q}“ gibt es keine Playlists. Versuch einen anderen Begriff.`}
+                                    {guest ? 'Hier kommen bald Listen dazu.' : (isMine ? 'In deinem Spotify-Konto gibt es noch keine Playlists. Such einfach nach anderen.' : `Zu „${q}“ gibt es keine Playlists. Versuch einen anderen Begriff.`)}
                                 </p>
-                                {isMine && (
+                                {isMine && !guest && (
                                     <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={() => setSearchMode('playlist')}>Playlists suchen</button>
                                 )}
                             </div>
@@ -1370,7 +1462,7 @@ export default function SecondSound({ onBack }) {
                                 <span className={`${styles.srEmptyIcon} ${styles.srEmptyIconBad}`}><IconAlert size={24} /></span>
                                 <p className={styles.srEmptyTitle}>Playlists konnten nicht geladen werden</p>
                                 <p className={styles.srEmptyText}>Prüf deine Internetverbindung und versuch es gleich nochmal.</p>
-                                <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={() => handleLoadMyPlaylists(true)}>
+                                <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={() => (guest ? loadGuestLists() : handleLoadMyPlaylists(true))}>
                                     <IconRetry />Erneut versuchen
                                 </button>
                             </div>
@@ -1442,7 +1534,7 @@ export default function SecondSound({ onBack }) {
                         )}
                     </div>
 
-                    <div className={styles.srStartBox}>
+                    {!guest && <div className={styles.srStartBox}>
                         <div className={styles.srStartHead}>
                             <span id="sr-start-label" className={styles.srStartLabel}>Songs setzen ein</span>
                             <span className={styles.srStartValue}>{startLabel(startPct)}</span>
@@ -1463,7 +1555,7 @@ export default function SecondSound({ onBack }) {
                             aria-valuetext={startPct === START_RANDOM ? 'zufällig' : (startPct === 0 ? 'von vorn' : `ab ${startPct} Prozent der Songlänge`)}
                             style={{ '--pct': `${(startPct / START_PCT_MAX) * 100}%` }}
                         />
-                    </div>
+                    </div>}
                 </div>
 
                 <div className={styles.srFooter}>
@@ -1485,7 +1577,7 @@ export default function SecondSound({ onBack }) {
                     <button type="button" className={`${styles.srBtn} ${styles.srStart}`} onClick={handleStartGame}>
                         <span className={styles.srStartText}>
                             <span className={styles.srStartTitle}>Spiel starten</span>
-                            <span className={styles.srStartSub}>{[MODES.find(m => m.id === mode).label, `${k} ${k === 1 ? 'Playlist' : 'Playlists'}`, `${songCount} Songs`, startPct > 0 && startLabel(startPct)].filter(Boolean).join(' · ')}</span>
+                            <span className={styles.srStartSub}>{[MODES.find(m => m.id === mode).label, guest ? `${k} ${k === 1 ? 'Liste' : 'Listen'}` : `${k} ${k === 1 ? 'Playlist' : 'Playlists'}`, `${songCount} Songs`, !guest && startPct > 0 && startLabel(startPct)].filter(Boolean).join(' · ')}</span>
                         </span>
                         <span className={styles.srStartIcon}><IconPlay size={20} /></span>
                     </button>
@@ -1801,7 +1893,7 @@ export default function SecondSound({ onBack }) {
                 <BonusSheet
                     key={currentIndex}
                     open={bonusOpen}
-                    svc={spotifyService}
+                    svc={guest ? appleSearch : spotifyService}
                     onClose={() => setBonusOpen(false)}
                     onSkip={handleBonusSkip}
                     onCheck={handleBonusCheck}

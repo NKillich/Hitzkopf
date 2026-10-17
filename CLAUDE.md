@@ -12,6 +12,20 @@ Routing per Hash in `src/App.jsx` (`#identify`, alter Link `#songraten` geht wei
 Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel + Erraten/Nicht erraten) und **Pro**
 (zusätzlich Bonus-Tipp Interpret/Titel/Jahr); Joker in beiden. Logik ohne React in `SecondSound/songGuess.js`.
 
+### Identify: Gastmodus (ohne Login, für alle)
+- „Als Gast spielen“ auf der Identify-Startseite: statt Spotify-Playlists die **kuratierten Listen** aus
+  `public/identify/lists/` (`index.json` + `<id>.json`), Ton = **Apples freie 30-s-Hörproben** (iTunes-Suche, CORS erlaubt,
+  kein Schlüssel). Spieler brauchen kein Konto; Spotify-Modus bleibt unverändert für freigeschaltete Konten.
+- Player: `src/services/appleClipPlayer.js` – gleiche Befehle wie `clipPlayerCore.js` (startNew/replay/resumeTo/extendTo),
+  der Spielbildschirm wählt per `guestRef` den Player. Kein Einsetzpunkt (Hörprobe ist fest), Statistik nur auf dem Gerät.
+- Pro-Vorschläge im Gastmodus über Apple (`SecondSound/guestMusic.js`), nicht über die Spotify-ID (die bleibt für Amplify frei).
+  Apple sucht nur ganze Wörter → mit Interpret werden dessen Songs einmal geholt und lokal gefiltert.
+- **Neue Liste anlegen** (User schickt Spotify-Song-Links, z. B. per Strg+A/Strg+C aus der Spotify-Desktop-App):
+  Links in `scripts/identify-lists/<id>.txt` speichern, dann `node scripts/identify-list.mjs <id> "<Name>" <emoji> scripts/identify-lists/<id>.txt`.
+  Das Skript fragt Spotify einmalig pro Song (App-Token), sucht bei Apple (ca. 20 Suchen/Minute → 400 Songs ≈ 25 Min.,
+  im Hintergrund laufen lassen) und schreibt Liste, Verzeichnis und Bericht (`<id>.report.txt`: nicht gefunden/unsicher).
+  Gespeichert werden nur Apple-Daten (ID, Titel, Interpret, Jahr, Cover, Hörprobe-Adresse), keine Spotify-Daten.
+
 ## Arbeitsweise
 
 - Sprache: **Deutsch** – Antworten, Code-Kommentare, Commit- und PR-Texte.
