@@ -460,3 +460,17 @@
 .srRoot .srToggle span { position: absolute; top: 2px; left: 2px; width: 21px; height: 21px; border-radius: 50%; background: var(--sr-muted); transition: transform 0.15s, background 0.15s; }
 .srRoot .srToggleOn { background: var(--sr-accent); border-color: var(--sr-accent); }
 .srRoot .srToggleOn span { transform: translateX(20px); background: var(--sr-on-accent); }
+
+/* ── „Musik wählen“ (Gastmodus) ───────────────────────────────────────── */
+.srRoot .srPickTop { flex: none; padding: 6px 20px 10px; display: flex; flex-direction: column; gap: 12px; }
+.srRoot .srCatChips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -20px; padding: 0 20px 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.srRoot .srCatChips::-webkit-scrollbar { display: none; }
+.srRoot .srCatChip { flex: none; height: 36px; padding: 0 16px; border-radius: 18px; border: 2px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); font-size: 14px; font-weight: 700; white-space: nowrap; }
+.srRoot .srCatChipOn { background: var(--sr-ink); border-color: var(--sr-ink); color: var(--sr-bg); }
+.srRoot .srPickScroll { gap: 20px; padding-top: 4px; }
+.srRoot .srGroup { display: flex; flex-direction: column; gap: 8px; flex: none; }
+.srRoot .srGroupHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.srRoot .srGroupTitle { font-family: var(--sr-display); font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
+.srRoot .srGroupCount { flex: none; font-size: 14px; font-weight: 600; color: var(--sr-muted); }
+.srRoot .srBadge { width: 46px; height: 46px; flex: none; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; }
+.srRoot .srBadgeEmoji { font-size: 25px; letter-spacing: 0; }

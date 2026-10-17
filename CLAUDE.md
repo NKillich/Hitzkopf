@@ -21,6 +21,9 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   der Spielbildschirm wählt per `guestRef` den Player. Kein Einsetzpunkt (Hörprobe ist fest), Statistik nur auf dem Gerät.
 - Pro-Vorschläge im Gastmodus über Apple (`SecondSound/guestMusic.js`), nicht über die Spotify-ID (die bleibt für Amplify frei).
   Apple sucht nur ganze Wörter → mit Interpret werden dessen Songs einmal geholt und lokal gefiltert.
+- Auswahl „Musik wählen“ (nur Gastmodus): Suche, Kategorie-Chips, Gruppen je Kategorie (`SecondSound/listTiles.js`:
+  Jahrzehnte → Genres → Best of → Party-Mixe → weitere alphabetisch → „Weitere“ ohne Kategorie). Kategorie und Kachel
+  (`category`, `badge` = Kürzel/Emoji, max. 4 Zeichen) trägt der User pro Liste im Studio ein; Kachelfarbe kommt fest aus dem Namen.
 - **Identify Studio** (`#studio`, nicht auf der Startseite, `src/projects/IdentifyStudio/`): Der User pflegt die Listen
   selbst – anlegen, umbenennen, **CSV von exportify.net hochladen** (Hauptweg: Titel/Interpret/Album/Länge stehen drin,
   **keine Spotify-Anfrage** → kein Kontingent), einzelne Spotify-Links (1 Anfrage/Song über die App-ID, gebremst 1,5 s,

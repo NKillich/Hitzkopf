@@ -18,6 +18,7 @@ import {
 import styles from './SecondSound.module.css'
 import BonusSheet from './BonusSheet'
 import { loadGuestIndex, loadGuestList, appleSearch } from './guestMusic.js'
+import { groupByCategory, tileColor, tileLabel, isEmojiLabel } from './listTiles.js'
 import JokerSheet from './JokerSheet'
 import { JOKERS, loadTrackMeta, checkTip, tipGiven, tipAnyHit, songScore, tipSummary, titleHint, decadeLabel } from './songGuess.js'
 
@@ -113,6 +114,9 @@ export default function SecondSound({ onBack }) {
     const guestRef = useRef(false)
     const [guestLists, setGuestLists] = useState(null)     // Verzeichnis der Gast-Listen (null = lädt)
     const [guestListsError, setGuestListsError] = useState(false)
+    const [guestQuery, setGuestQuery] = useState('')       // „Musik wählen“: Suche
+    const [guestCat, setGuestCat] = useState('all')        // „Musik wählen“: gewählte Kategorie (Chip)
+    const guestSearchRef = useRef(null)
     const [playerError, setPlayerError] = useState(null)
     const [allTimeStats, setAllTimeStats] = useState(null)
     const { isDark, toggleTheme } = useTheme()
@@ -1319,6 +1323,125 @@ export default function SecondSound({ onBack }) {
         const isSel = (id) => selectedPlaylists.some(p => p.id === id)
         const toggle = (p) => (isSel(p.id) ? handleRemovePlaylist(p.id) : handleAddPlaylist(p))
 
+        // ── Gastmodus: „Musik wählen“ – Listen nach Kategorien, Suche und Filter-Chips ──
+        if (guest) {
+            const all = (guestLists || []).map(l => ({ ...l, display: `${l.emoji ? l.emoji + ' ' : ''}${l.name}` }))
+            const groups = groupByCategory(all)
+            const gq = guestQuery.trim().toLowerCase()
+            const cat = groups.some(g => g.category === guestCat) ? guestCat : 'all'
+            const shown = groups
+                .filter(g => cat === 'all' || g.category === cat)
+                .map(g => ({ ...g, lists: gq ? g.lists.filter(l => `${l.display} ${g.category} ${l.badge || ''}`.toLowerCase().includes(gq)) : g.lists }))
+                .filter(g => g.lists.length)
+            const asPick = (l) => ({ id: l.id, name: l.display, imageUrl: l.cover, trackCount: l.count })
+            let gView = 'ok'
+            if (guestListsError) gView = 'error'
+            else if (!guestLists) gView = 'loading'
+            else if (!all.length) gView = 'empty'
+            else if (!shown.length) gView = 'none'
+
+            return shell(
+                <main className={styles.srMain}>
+                    <header className={`${styles.srSubHeader} ${styles.srPad}`}>
+                        <button type="button" className={`${styles.srBtn} ${styles.srIconBtn}`} onClick={() => setPhase(PHASES.HOME)} aria-label="Zurück"><IconBack /></button>
+                        <h1 className={styles.srSubTitle}>Musik wählen</h1>
+                        {themeBtn}
+                    </header>
+
+                    <div className={styles.srPickTop}>
+                        <div className={styles.srInputWrap}>
+                            <span className={styles.srInputIcon}><IconSearch /></span>
+                            <input ref={guestSearchRef} type="search" className={styles.srInput} value={guestQuery} onChange={e => setGuestQuery(e.target.value)}
+                                placeholder="Künstler, Genre, Jahrzehnt …" aria-label="Listen durchsuchen" autoComplete="off" />
+                            {guestQuery && (
+                                <button type="button" className={`${styles.srBtn} ${styles.srInputClear}`} aria-label="Suche löschen"
+                                    onClick={() => { setGuestQuery(''); guestSearchRef.current?.focus() }}>
+                                    <IconX size={16} w={2.6} />
+                                </button>
+                            )}
+                        </div>
+                        {groups.length > 1 && (
+                            <div className={styles.srCatChips} role="group" aria-label="Kategorie">
+                                {['all', ...groups.map(g => g.category)].map(c => (
+                                    <button key={c} type="button" aria-pressed={cat === c} onClick={() => setGuestCat(c)}
+                                        className={`${styles.srBtn} ${styles.srCatChip} ${cat === c ? styles.srCatChipOn : ''}`}>
+                                        {c === 'all' ? 'Alle' : c}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className={`${styles.srScroll} ${styles.srPickScroll}`}>
+                        {gView === 'ok' && shown.map(g => (
+                            <section key={g.category} className={styles.srGroup} aria-label={g.category}>
+                                <div className={styles.srGroupHead}>
+                                    <h2 className={styles.srGroupTitle}>{g.category}</h2>
+                                    <span className={styles.srGroupCount}>{g.lists.length === 1 ? '1 Liste' : `${g.lists.length} Listen`}</span>
+                                </div>
+                                <ul className={styles.srList}>
+                                    {g.lists.map(l => {
+                                        const sel = isSel(l.id)
+                                        return (
+                                            <li key={l.id}>
+                                                <button type="button" aria-pressed={sel} onClick={() => toggle(asPick(l))} className={`${styles.srBtn} ${styles.srRow} ${sel ? styles.srRowOn : ''}`}>
+                                                    <span className={`${styles.srBadge} ${isEmojiLabel(tileLabel(l)) ? styles.srBadgeEmoji : ''}`} style={{ background: tileColor(l.name) }} aria-hidden="true">{tileLabel(l)}</span>
+                                                    <span className={styles.srRowText}>
+                                                        <span className={styles.srRowName}>{l.display}</span>
+                                                        <span className={styles.srRowMeta}>{l.count === 1 ? '1 Song' : `${l.count || 0} Songs`}</span>
+                                                    </span>
+                                                    <span className={`${styles.srCheck} ${sel ? styles.srCheckOn : ''}`}>{sel && <IconCheck />}</span>
+                                                </button>
+                                            </li>
+                                        )
+                                    })}
+                                </ul>
+                            </section>
+                        ))}
+
+                        {gView === 'loading' && (
+                            <div className={styles.srSkeletons} role="status" aria-label="Listen werden geladen">
+                                {[150, 120, 170].map((w, i) => (
+                                    <div key={w} className={styles.srSkelRow} style={{ opacity: 1 - i * 0.25 }}>
+                                        <span className={styles.srSkelCover} />
+                                        <span className={styles.srSkelLines}><span style={{ width: w }} /><span style={{ width: w / 2 }} /></span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {(gView === 'empty' || gView === 'none') && (
+                            <div className={styles.srEmpty}>
+                                <span className={styles.srEmptyIcon}>{gView === 'empty' ? <IconNote size={24} /> : <IconSearch size={24} />}</span>
+                                <p className={styles.srEmptyTitle}>{gView === 'empty' ? 'Noch keine Listen' : 'Nichts gefunden'}</p>
+                                <p className={styles.srEmptyText}>{gView === 'empty' ? 'Hier kommen bald Listen dazu.' : 'Versuch einen anderen Begriff oder eine andere Kategorie.'}</p>
+                                {gView === 'none' && (
+                                    <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={() => { setGuestQuery(''); setGuestCat('all') }}>Alle Listen zeigen</button>
+                                )}
+                            </div>
+                        )}
+
+                        {gView === 'error' && (
+                            <div className={styles.srEmpty} role="alert">
+                                <span className={`${styles.srEmptyIcon} ${styles.srEmptyIconBad}`}><IconAlert size={24} /></span>
+                                <p className={styles.srEmptyTitle}>Listen konnten nicht geladen werden</p>
+                                <p className={styles.srEmptyText}>Prüf deine Internetverbindung und versuch es gleich nochmal.</p>
+                                <button type="button" className={`${styles.srBtn} ${styles.srOutline}`} onClick={loadGuestLists}><IconRetry />Erneut versuchen</button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className={styles.srFooter}>
+                        {k > 0 ? (
+                            <button type="button" className={`${styles.srBtn} ${styles.srPrimary}`} onClick={goToCount}>Weiter · {k === 1 ? '1 Liste' : `${k} Listen`}</button>
+                        ) : (
+                            <button type="button" disabled aria-disabled="true" className={`${styles.srBtn} ${styles.srStartOff}`}><IconLock />Weiter</button>
+                        )}
+                    </div>
+                </main>
+            )
+        }
+
         let view
         if (isMine) {
             if (myPlaylistsError) view = 'error'
@@ -1330,13 +1453,6 @@ export default function SecondSound({ onBack }) {
 
         let list = isMine ? myPlaylists : playlistResults
         let heading = isMine ? 'Deine Playlists' : (q && view === 'ok' ? `Treffer für „${q}“` : 'Suchergebnisse')
-        if (guest) {
-            if (guestListsError) view = 'error'
-            else if (!guestLists) view = 'loading'
-            else view = guestLists.length ? 'ok' : 'empty'
-            list = (guestLists || []).map(l => ({ id: l.id, name: `${l.emoji ? l.emoji + ' ' : ''}${l.name}`, imageUrl: l.cover, trackCount: l.count }))
-            heading = 'Listen'
-        }
 
         return shell(
             <main className={styles.srMain}>
