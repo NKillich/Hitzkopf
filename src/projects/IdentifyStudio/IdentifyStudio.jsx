@@ -7,9 +7,10 @@ import { firebaseConfig } from '../../firebase.js'
 import useTheme from '../../shared/ui/useTheme'
 import theme from '../../shared/ui/theme.module.css'
 import { ConfirmSheet } from '../../shared/ui/BottomSheet'
-import { IconBack, IconPlus, IconTrash, IconSearch, IconPlay, IconPause, IconX, IconCheck, IconAlert } from '../../shared/ui/icons'
+import { IconBack, IconPlus, IconTrash, IconSearch, IconPlay, IconPause, IconX, IconCheck, IconAlert, IconRetry } from '../../shared/ui/icons'
 import { fetchIndex, fetchList, saveList, deleteList, slugFor, MAX_SONGS } from '../SecondSound/listStore.js'
-import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong } from '../SecondSound/appleMatch.js'
+import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong, songAsQuery } from '../SecondSound/appleMatch.js'
+import { cleanTitle } from '../SecondSound/songGuess.js'
 import { loadFileLists } from '../SecondSound/guestMusic.js'
 import styles from './IdentifyStudio.module.css'
 
@@ -246,7 +247,9 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
     const [job, setJob] = useState(null)        // { total, done, label, added, skipped, missing, waiting }
     const cancelRef = useRef(false)
     const [filter, setFilter] = useState('')
-    const [search, setSearch] = useState(null)  // { q, results, busy, forMissing }
+    const [search, setSearch] = useState(null)  // { q, results, busy, forMissing, replaceId }
+    const [check, setCheck] = useState(null)    // „Versionen prüfen“: { total, done, label, changed: [], finished, cancelled }
+    const searchRef = useRef(null)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const audioRef = useRef(null)
@@ -275,6 +278,7 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
         setJob({ ...state })
         let token = null, tokenAt = 0
         let pending = 0
+        const albumCache = new Map()
         try {
             for (const id of ids) {
                 if (cancelRef.current) break
@@ -288,7 +292,7 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                 } else {
                     state.label = `${sp.artists[0]} – ${sp.title}`
                     setJob({ ...state })
-                    const hit = await matchToApple(sp, { onWait: () => setJob({ ...state, waiting: true }) })
+                    const hit = await matchToApple(sp, { albumCache, onWait: () => setJob({ ...state, waiting: true }) })
                     if (cancelRef.current) break
                     const now = listRef.current
                     next = { ...now, spotifyIds: [...(now.spotifyIds || []), id] }
@@ -308,17 +312,56 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
         if (!cancelRef.current) setLinks('')
     }
 
-    // Von Hand bei Apple suchen (für nicht gefundene Songs oder einfach so)
-    const runSearch = async (q, forMissing = null) => {
-        setSearch({ q, results: [], busy: true, forMissing })
+    // „Versionen prüfen“: jeden Song neu zuordnen (Original-Album statt Jubiläum/Single/Live) und nur bei Treffer tauschen
+    const checkVersions = async () => {
+        cancelRef.current = false
+        let wake = null
+        try { wake = await navigator.wakeLock?.request('screen') } catch { /* optional */ }
+        const songs = [...listRef.current.songs]
+        const state = { total: songs.length, done: 0, label: '', changed: [], waiting: false }
+        setCheck({ ...state })
+        const albumCache = new Map()
+        let pending = 0
         try {
-            const results = (await appleSearch({ term: q, limit: '20' })).filter(a => a.previewUrl)
-            setSearch({ q, results, busy: false, forMissing })
-        } catch { setSearch({ q, results: [], busy: false, forMissing }) }
+            for (const old of songs) {
+                if (cancelRef.current) break
+                state.label = `${old.artist} – ${old.title}`
+                setCheck({ ...state })
+                const hit = await matchToApple(songAsQuery(old), { albumCache, onWait: () => setCheck({ ...state, waiting: true }) })
+                if (cancelRef.current) break
+                const cur = listRef.current
+                if (hit && hit.song.id !== old.id && !cur.songs.some(x => x.id === hit.song.id)) {
+                    listRef.current = { ...cur, songs: cur.songs.map(x => (x.id === old.id ? hit.song : x)) }
+                    state.changed = [...state.changed, { from: `${old.title} [${old.album || '?'}]`, to: `${hit.song.title} [${hit.song.album || '?'}]` }]
+                    if (++pending >= SAVE_EVERY) { pending = 0; if (!(await persist(listRef.current))) break }
+                }
+                state.done++
+                setCheck({ ...state, waiting: false })
+            }
+        } catch (e) { show(`Fehler beim Prüfen: ${errText(e)}`, true) }
+        await persist(listRef.current)
+        try { await wake?.release() } catch { /* optional */ }
+        setCheck({ ...state, finished: true, cancelled: cancelRef.current })
+    }
+
+    // Von Hand bei Apple suchen (für nicht gefundene Songs, zum Tauschen einer Version oder einfach so)
+    const runSearch = async (q, forMissing = null, replaceId = null) => {
+        setSearch({ q, results: [], busy: true, forMissing, replaceId })
+        searchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        try {
+            const results = (await appleSearch({ term: q, limit: '25' })).filter(a => a.previewUrl)
+            setSearch({ q, results, busy: false, forMissing, replaceId })
+        } catch { setSearch({ q, results: [], busy: false, forMissing, replaceId }) }
     }
     const addFromSearch = async (a) => {
         const cur = listRef.current
         if (cur.songs.some(s => s.id === a.trackId)) { show('Song ist schon in der Liste.'); return }
+        if (search?.replaceId) {
+            // „Andere Version“: an derselben Stelle austauschen
+            const next = { ...cur, songs: cur.songs.map(s => (s.id === search.replaceId ? toListSong(a, s.year) : s)) }
+            if (await persist(next)) { show(`Getauscht: „${a.trackName}“ (${a.collectionName}).`); setSearch(null) }
+            return
+        }
         const next = { ...cur, songs: [...cur.songs, toListSong(a)] }
         if (search?.forMissing) next.missing = (cur.missing || []).filter(m => m.spotifyId !== search.forMissing)
         if (await persist(next)) { show(`„${a.trackName}“ hinzugefügt.`); if (search?.forMissing) setSearch(null) }
@@ -344,7 +387,8 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
     const f = filter.trim().toLowerCase()
     const shown = f ? list.songs.filter(s => `${s.title} ${s.artist}`.toLowerCase().includes(f)) : list.songs
     const missing = list.missing || []
-    const running = job && !job.finished
+    const running = (job && !job.finished) || (check && !check.finished)
+    const replacing = search?.replaceId ? list.songs.find(s => s.id === search.replaceId) : null
     const pct = job?.total ? Math.round((job.done / job.total) * 100) : 100
 
     return (
@@ -385,6 +429,28 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                     )}
                 </section>
 
+                <section className={styles.card}>
+                    <h2 className={styles.h2}>Versionen prüfen</h2>
+                    <p className={styles.muted}>Ordnet alle Songs neu zu und tauscht nur, wo es das Original-Album gibt (statt Jubiläumsausgabe, Single, Live, Instrumental …). Etwa 4 Sekunden pro Song – Tab offen lassen.</p>
+                    <div className={styles.row}>
+                        {check && !check.finished
+                            ? <button type="button" className={`${styles.btn} ${styles.secondary}`} onClick={() => { cancelRef.current = true }}>Abbrechen</button>
+                            : <button type="button" className={`${styles.btn} ${styles.secondary}`} onClick={checkVersions} disabled={running || !list.songs.length}><IconRetry size={16} />Versionen prüfen</button>}
+                    </div>
+                    {check && (
+                        <div className={styles.job} role="status">
+                            {check.total > 0 && <div className={styles.bar}><span style={{ width: `${Math.round((check.done / check.total) * 100)}%` }} /></div>}
+                            <p>{check.finished ? (check.cancelled ? 'Abgebrochen.' : 'Fertig.') : `${check.done}/${check.total} · ${check.waiting ? 'Apple bremst – kurze Pause …' : check.label}`}</p>
+                            <p className={styles.muted}>Umgestellt: {check.changed.length}</p>
+                            {check.finished && check.changed.length > 0 && (
+                                <ul className={styles.changes}>
+                                    {check.changed.map((c, i) => <li key={i}>{c.from} → {c.to}</li>)}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+                </section>
+
                 {missing.length > 0 && (
                     <section className={styles.card}>
                         <h2 className={styles.h2}>Nicht gefunden ({missing.length})</h2>
@@ -401,9 +467,10 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                     </section>
                 )}
 
-                <section className={styles.card}>
-                    <h2 className={styles.h2}>{search?.forMissing ? 'Passende Version suchen' : 'Song bei Apple suchen'}</h2>
-                    <form className={styles.row} onSubmit={e => { e.preventDefault(); const q = e.currentTarget.q.value.trim(); if (q) runSearch(q, search?.forMissing || null) }}>
+                <section className={styles.card} ref={searchRef}>
+                    <h2 className={styles.h2}>{replacing ? `Andere Version für „${replacing.title}“` : (search?.forMissing ? 'Passende Version suchen' : 'Song bei Apple suchen')}</h2>
+                    {replacing && <p className={styles.muted}>Jetzt: {replacing.album || 'unbekanntes Album'} · Tipp auf „Tauschen“ ersetzt den Song an derselben Stelle. <button type="button" className={`${styles.btn} ${styles.link}`} onClick={() => setSearch(null)}>Abbrechen</button></p>}
+                    <form className={styles.row} onSubmit={e => { e.preventDefault(); const q = e.currentTarget.q.value.trim(); if (q) runSearch(q, search?.forMissing || null, search?.replaceId || null) }}>
                         <input name="q" key={search?.q || 'leer'} defaultValue={search?.q || ''} className={styles.input} placeholder="Interpret und Titel" aria-label="Apple-Suche" />
                         <button type="submit" className={`${styles.btn} ${styles.secondarySm}`}><IconSearch size={16} />Suchen</button>
                     </form>
@@ -420,7 +487,7 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                                 <button type="button" className={`${styles.btn} ${styles.iconBtnSm}`} onClick={() => togglePreview(a.trackId, a.previewUrl)} aria-label="Hörprobe">
                                     {playingId === a.trackId ? <IconPause size={16} /> : <IconPlay size={16} />}
                                 </button>
-                                <button type="button" className={`${styles.btn} ${styles.primarySm}`} onClick={() => addFromSearch(a)}><IconPlus size={16} />Nehmen</button>
+                                <button type="button" className={`${styles.btn} ${styles.primarySm}`} onClick={() => addFromSearch(a)}>{replacing ? <><IconRetry size={16} />Tauschen</> : <><IconPlus size={16} />Nehmen</>}</button>
                             </li>
                         ))}
                     </ul>
@@ -437,11 +504,12 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                                 {s.cover ? <img src={s.cover} alt="" className={styles.coverSm} loading="lazy" /> : <span className={styles.coverSm} />}
                                 <span className={styles.rowText}>
                                     <span className={styles.rowName}>{s.title}</span>
-                                    <span className={styles.rowMeta}>{s.artist}{s.year ? ` · ${s.year}` : ''}</span>
+                                    <span className={styles.rowMeta}>{s.artist}{s.year ? ` · ${s.year}` : ''}{s.album ? ` · ${s.album}` : ''}</span>
                                 </span>
                                 <button type="button" className={`${styles.btn} ${styles.iconBtnSm}`} onClick={() => togglePreview(s.id, s.preview)} aria-label="Hörprobe">
                                     {playingId === s.id ? <IconPause size={16} /> : <IconPlay size={16} />}
                                 </button>
+                                <button type="button" className={`${styles.btn} ${styles.iconBtnSm}`} onClick={() => runSearch(`${s.artist} ${cleanTitle(s.title)}`, null, s.id)} disabled={running} aria-label={`Andere Version für „${s.title}“`} title="Andere Version"><IconRetry size={16} /></button>
                                 <button type="button" className={`${styles.btn} ${styles.iconBtnSm}`} onClick={() => removeSong(s.id)} disabled={running} aria-label={`„${s.title}“ entfernen`}><IconTrash size={16} /></button>
                             </li>
                         ))}
