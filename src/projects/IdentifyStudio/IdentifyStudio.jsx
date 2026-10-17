@@ -9,7 +9,7 @@ import theme from '../../shared/ui/theme.module.css'
 import { ConfirmSheet } from '../../shared/ui/BottomSheet'
 import { IconBack, IconPlus, IconTrash, IconSearch, IconPlay, IconPause, IconX, IconCheck, IconAlert, IconRetry } from '../../shared/ui/icons'
 import { fetchIndex, fetchList, saveList, deleteList, slugFor, MAX_SONGS } from '../SecondSound/listStore.js'
-import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong, songAsQuery } from '../SecondSound/appleMatch.js'
+import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong, songAsQuery, appleFromLink } from '../SecondSound/appleMatch.js'
 import { cleanTitle } from '../SecondSound/songGuess.js'
 import { loadFileLists } from '../SecondSound/guestMusic.js'
 import styles from './IdentifyStudio.module.css'
@@ -345,13 +345,24 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
     }
 
     // Von Hand bei Apple suchen (für nicht gefundene Songs, zum Tauschen einer Version oder einfach so)
+    // Suchbegriff oder Apple-Music-Link (Album → alle Songs, Song-Link → genau dieser Song)
     const runSearch = async (q, forMissing = null, replaceId = null) => {
         setSearch({ q, results: [], busy: true, forMissing, replaceId })
         searchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         try {
-            const results = (await appleSearch({ term: q, limit: '25' })).filter(a => a.previewUrl)
-            setSearch({ q, results, busy: false, forMissing, replaceId })
+            const link = await appleFromLink(q)
+            const results = (link ? link.tracks : await appleSearch({ term: q, limit: '25' })).filter(a => a.previewUrl)
+            setSearch({ q, results, busy: false, forMissing, replaceId, album: link?.isAlbum ? link.albumName : null })
         } catch { setSearch({ q, results: [], busy: false, forMissing, replaceId }) }
+    }
+
+    // Album-Link: alle Songs übernehmen (schon enthaltene werden übersprungen)
+    const addAllFromSearch = async () => {
+        const cur = listRef.current
+        const have = new Set(cur.songs.map(x => x.id))
+        const fresh = (search?.results || []).filter(a => !have.has(a.trackId)).map(a => toListSong(a))
+        if (!fresh.length) { show('Alle Songs sind schon in der Liste.'); return }
+        if (await persist({ ...cur, songs: [...cur.songs, ...fresh] })) show(`${fresh.length} Songs aus „${search.album}“ hinzugefügt.`)
     }
     const addFromSearch = async (a) => {
         const cur = listRef.current
@@ -454,7 +465,7 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                 {missing.length > 0 && (
                     <section className={styles.card}>
                         <h2 className={styles.h2}>Nicht gefunden ({missing.length})</h2>
-                        <p className={styles.muted}>Apples freie Suche kennt nicht jeden Song. Such von Hand nach einer passenden Version oder verwirf den Eintrag.</p>
+                        <p className={styles.muted}>Apples freie Suche kennt nicht jeden Song. Such von Hand nach einer passenden Version – oder füg einen Apple-Music-Link ein (Album oder Song aus music.apple.com) – oder verwirf den Eintrag.</p>
                         <ul className={styles.list}>
                             {missing.map(m => (
                                 <li key={m.spotifyId} className={styles.missRow}>
@@ -471,11 +482,17 @@ function ListEditor({ list, listRef, persist, show, onClose, onDeleted }) {
                     <h2 className={styles.h2}>{replacing ? `Andere Version für „${replacing.title}“` : (search?.forMissing ? 'Passende Version suchen' : 'Song bei Apple suchen')}</h2>
                     {replacing && <p className={styles.muted}>Jetzt: {replacing.album || 'unbekanntes Album'} · Tipp auf „Tauschen“ ersetzt den Song an derselben Stelle. <button type="button" className={`${styles.btn} ${styles.link}`} onClick={() => setSearch(null)}>Abbrechen</button></p>}
                     <form className={styles.row} onSubmit={e => { e.preventDefault(); const q = e.currentTarget.q.value.trim(); if (q) runSearch(q, search?.forMissing || null, search?.replaceId || null) }}>
-                        <input name="q" key={search?.q || 'leer'} defaultValue={search?.q || ''} className={styles.input} placeholder="Interpret und Titel" aria-label="Apple-Suche" />
+                        <input name="q" key={search?.q || 'leer'} defaultValue={search?.q || ''} className={styles.input} placeholder="Interpret und Titel – oder Apple-Music-Link" aria-label="Apple-Suche oder Apple-Music-Link" />
                         <button type="submit" className={`${styles.btn} ${styles.secondarySm}`}><IconSearch size={16} />Suchen</button>
                     </form>
                     {search?.busy && <p className={styles.muted}>Sucht …</p>}
                     {search && !search.busy && search.results.length === 0 && <p className={styles.muted}>Keine Treffer.</p>}
+                    {search?.album && !search.busy && search.results.length > 0 && !replacing && !search.forMissing && (
+                        <div className={styles.row}>
+                            <span className={styles.muted}>Album „{search.album}“ · {search.results.length} Songs</span>
+                            <button type="button" className={`${styles.btn} ${styles.primarySm}`} onClick={addAllFromSearch} disabled={running}><IconPlus size={16} />Alle übernehmen</button>
+                        </div>
+                    )}
                     <ul className={styles.list}>
                         {(search?.results || []).map(a => (
                             <li key={a.trackId} className={styles.songRow}>

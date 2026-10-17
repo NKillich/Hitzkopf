@@ -90,42 +90,96 @@ export function toListSong(a, spYear = null) {
 
 const GOOD = 90    // ab hier wird nicht weiter gesucht
 
+/** Kern eines Albumnamens: „Collision Course - EP“ → „collision course“, „From Zero (Deluxe Edition)“ → „from zero“ */
+export const albumCore = (name) => normTitle(String(name || '').split(/\s*[:([]\s*|\s+-\s+/)[0].replace(REISSUE, ''))
+
+// Gemerktes (pro Liste/Lauf): Künstler-IDs, Alben eines Künstlers, Songs eines Albums – spart Apple-Anfragen
+async function cached(cache, key, load) {
+    if (cache?.has(key)) return cache.get(key)
+    const value = await load()
+    cache?.set(key, value)
+    return value
+}
+
+/** Apple-Künstler-IDs zu einem Namen (Künstlersuche; nur Namen, die wirklich passen) */
+const appleArtistIds = (name, cache, onWait) => cached(cache, `artist|${normName(name)}`, async () => {
+    const res = await appleFetch(`https://itunes.apple.com/search?${new URLSearchParams({ term: name, entity: 'musicArtist', country: 'DE', limit: '5' })}`, onWait)
+    await sleep(APPLE_PAUSE_MS)
+    const want = normName(name)
+    return res.filter(r => normName(r.artistName) === want).map(r => r.artistId).slice(0, 2)
+})
+
+/** Alle Alben eines Apple-Künstlers – auch solche, die Apples Suche nicht findet (z. B. „Collision Course“) */
+const appleArtistAlbums = (artistId, cache, onWait) => cached(cache, `albums|${artistId}`, async () => {
+    const res = await appleFetch(`https://itunes.apple.com/lookup?id=${artistId}&entity=album&limit=200&country=DE`, onWait)
+    await sleep(APPLE_PAUSE_MS)
+    return res.filter(r => r.wrapperType === 'collection')
+})
+
+const albumTracksCached = (collectionId, cache, onWait) => cached(cache, `tracks|${collectionId}`, async () => {
+    const tracks = await appleAlbumTracks(collectionId, { onWait })
+    await sleep(APPLE_PAUSE_MS)
+    return tracks
+})
+
+/** Weg 2: Künstler → seine Alben → das Album mit dem Spotify-Namen → dessen Songs */
+async function searchViaArtistAlbums(sp, cache, onWait) {
+    const want = albumCore(sp.album)
+    if (!want) return null
+    let best = null
+    for (const artist of sp.artists.slice(0, 3)) {
+        for (const artistId of await appleArtistIds(artist, cache, onWait)) {
+            const albums = (await appleArtistAlbums(artistId, cache, onWait))
+                .filter(al => albumCore(al.collectionName) === want)
+                // Original vor Deluxe/Jubiläum, dann die ältere Veröffentlichung
+                .sort((x, y) => Number(REISSUE.test(x.collectionName)) - Number(REISSUE.test(y.collectionName)) || x.collectionId - y.collectionId)
+                .slice(0, 3)
+            for (const al of albums) {
+                const hit = pickAppleMatch(sp, await albumTracksCached(al.collectionId, cache, onWait))
+                if (hit && (!best || hit.score > best.score)) best = hit
+            }
+            if (best && best.score >= GOOD) return best
+        }
+    }
+    return best
+}
+
 /**
  * Sucht einen Spotify-Song { title, artists[], album, year, ms } bei Apple:
- * 1. „Interpret Titel“  2. das Spotify-Album bei Apple (Songliste des Albums)  3. nur der Titel.
+ * 1. Suche „Interpret Titel“  2. Künstler → Alben → Spotify-Album → Songs  3. Suche nur nach dem Titel.
  * Gibt { song, score, a } oder null zurück. Hält Apples Tempo-Grenze selbst ein.
- * albumCache (Map) spart Anfragen, wenn mehrere Songs vom selben Album kommen.
+ * albumCache (Map, pro Lauf) merkt sich Künstler, Alben und Songlisten.
  */
 export async function matchToApple(sp, { onWait, albumCache } = {}) {
     const keep = (hit, next) => (next && (!hit || next.score > hit.score) ? next : hit)
     let hit = pickAppleMatch(sp, await appleSearch({ term: `${sp.artists[0]} ${cleanTitle(sp.title)}` }, { onWait }))
     await sleep(APPLE_PAUSE_MS)
 
-    if ((!hit || hit.score < GOOD) && sp.album) {
-        const key = `${normName(sp.artists[0])}|${normTitle(sp.album)}`
-        let tracks = albumCache?.get(key)
-        if (!tracks) {
-            // Album über einen seiner Songs finden (Apples Album-Suche ist lückenhaft)
-            const found = await appleSearch({ term: `${sp.artists[0]} ${cleanTitle(sp.album)}`, limit: '50' }, { onWait })
-            await sleep(APPLE_PAUSE_MS)
-            const ids = [...new Set(found
-                .filter(a => normTitle(a.collectionName) === normTitle(sp.album) && sp.artists.map(normName).some(w => normName(a.artistName).includes(w) || w.includes(normName(a.artistName))))
-                .map(a => a.collectionId))].slice(0, 2)
-            tracks = []
-            for (const id of ids) {
-                tracks.push(...await appleAlbumTracks(id, { onWait }))
-                await sleep(APPLE_PAUSE_MS)
-            }
-            albumCache?.set(key, tracks)
-        }
-        hit = keep(hit, pickAppleMatch(sp, tracks))
-    }
+    if ((!hit || hit.score < GOOD) && sp.album) hit = keep(hit, await searchViaArtistAlbums(sp, albumCache, onWait))
 
     if (!hit || hit.score < GOOD) {
         hit = keep(hit, pickAppleMatch(sp, await appleSearch({ term: cleanTitle(sp.title) }, { onWait })))
         await sleep(APPLE_PAUSE_MS)
     }
     return hit ? { song: toListSong(hit.a, sp.year), score: hit.score, a: hit.a } : null
+}
+
+/**
+ * Apple-Music-Link → Songs: Album-Link (…/album/name/123) liefert alle Songs, Song-Link (…?i=456 oder …/song/name/456) genau einen.
+ * Gibt { tracks, albumName, isAlbum } oder null (kein Apple-Link) zurück.
+ */
+export async function appleFromLink(text, { onWait } = {}) {
+    const t = String(text || '').trim()
+    if (!/music\.apple\.com|itunes\.apple\.com/.test(t)) return null
+    const song = t.match(/[?&]i=(\d+)/) || t.match(/\/song\/[^/]+\/(\d+)/)
+    if (song) {
+        const res = (await appleFetch(`https://itunes.apple.com/lookup?id=${song[1]}&country=DE`, onWait)).filter(r => r.wrapperType === 'track')
+        return { tracks: res, albumName: res[0]?.collectionName || '', isAlbum: false }
+    }
+    const album = t.match(/\/album\/(?:[^/]+\/)?(\d+)/)
+    if (!album) return { tracks: [], albumName: '', isAlbum: false }
+    const tracks = await appleAlbumTracks(album[1], { onWait })
+    return { tracks, albumName: tracks[0]?.collectionName || '', isAlbum: true }
 }
 
 /** Spotify-Song-IDs aus eingefügtem Text (Links oder reine IDs, eine pro Zeile oder gemischt) */
@@ -159,5 +213,8 @@ export async function spotifyTrack(id, token) {
 export function songAsQuery(s) {
     let album = String(s.album || '').split(/\s*[:([]\s*|\s+-\s+/)[0].replace(REISSUE, '').trim()
     if (variantsOf(album).size) album = ''
-    return { title: cleanTitle(s.title), artists: [s.artist], album, year: s.year || null, ms: null }
+    // „JAŸ-Z & LINKIN PARK“ → auch einzeln suchen (für den Weg über die Alben der Künstler)
+    const parts = String(s.artist || '').split(/\s*(?:&|,|\bfeat\.?|\bft\.?|\bx\b)\s*/i).filter(Boolean)
+    const artists = [...new Set([s.artist, ...parts])].filter(Boolean)
+    return { title: cleanTitle(s.title), artists, album, year: s.year || null, ms: null }
 }
