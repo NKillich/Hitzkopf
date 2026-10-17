@@ -81,6 +81,21 @@ service cloud.firestore {
                         || request.auth.uid in resource.data.players.keys());
     }
 
+    // Identify-Gastmodus: kuratierte Listen. Lesen darf jeder (auch ohne Login),
+    // schreiben nur das Konto des Identify Studios (Google-Login, UID siehe Studio-Startseite).
+    function isStudioAdmin() {
+      return request.auth != null
+             && request.auth.uid in ['STUDIO_UID_HIER_EINTRAGEN'];
+    }
+    match /identifyLists/{listId} {
+      allow read: if true;
+      allow write: if isStudioAdmin() && listId.matches('[a-z0-9-]{1,40}');
+    }
+    match /identifyIndex/{docId} {
+      allow read: if true;
+      allow write: if isStudioAdmin() && docId == 'main';
+    }
+
     // Song raten: Statistiken (anonymer Login; Dokument pro Spotify-Konto "sp_...")
     match /userStats/{deviceId} {
       function validId() {

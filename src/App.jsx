@@ -8,6 +8,7 @@ import SecondSound from './projects/SecondSound/SecondSound'
 import LiveBoard from './projects/MusicVoter/LiveBoard'
 import Amplify2 from './projects/Amplify2/Amplify2'
 import LiveBoard2 from './projects/Amplify2/LiveBoard'
+import IdentifyStudio from './projects/IdentifyStudio/IdentifyStudio'
 import './App.css'
 
 const PROJECT_META = {
@@ -18,6 +19,7 @@ const PROJECT_META = {
     secondsound: { title: 'Identify',    emoji: '🎧' },
     live:        { title: 'Amplify 1.0 Live', emoji: '📺' },
     live2:       { title: 'Amplify Live', emoji: '📺' },
+    studio:      { title: 'Identify Studio', emoji: '🎛️' },
 }
 
 const setPageMeta = (projectId) => {
@@ -50,6 +52,7 @@ const HASH_MAP = {
     live:      'live',         // #live/RAUMCODE – Live-Board einer Amplify-Playlist
     amplify2:  'amplify2',     // Amplify 2.0 (Weiterentwicklung; 1.0 bleibt als Backup)
     live2:     'live2',        // #live2/RAUMCODE – Live-Board 2.0
+    studio:    'studio',       // #studio – Identify Studio (Listen pflegen, nur für den Betreiber, nicht auf der Startseite)
     identify:  'secondsound',  // Identify (früher „Song raten“) – steht zuletzt, damit die Adresse #identify lautet
 }
 const ID_TO_HASH = Object.fromEntries(Object.entries(HASH_MAP).map(([h, id]) => [id, h]))
@@ -127,6 +130,10 @@ function App() {
 
             {currentProject === 'live2' && (
                 <LiveBoard2 roomCode={hashParam} onBack={handleBackToHub} />
+            )}
+
+            {currentProject === 'studio' && (
+                <IdentifyStudio onBack={handleBackToHub} />
             )}
 
             {currentProject === 'secondsound' && (
