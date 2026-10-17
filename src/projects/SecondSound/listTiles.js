@@ -30,27 +30,25 @@ export function cleanBadge(v) {
     return parts.slice(0, MAX_BADGE).join('')
 }
 
-const catRank = (c) => {
-    const i = CATEGORY_ORDER.indexOf(c)
-    if (i >= 0) return [0, i]
-    return c === NO_CATEGORY ? [2, 0] : [1, 0]
-}
-
-/** Listen nach Kategorie gruppieren: [{ category, lists }] in fester Reihenfolge */
-export function groupByCategory(lists) {
+/**
+ * Listen nach Kategorie gruppieren: [{ category, lists, uncategorized }] in fester Reihenfolge.
+ * noCategory: Name der Gruppe ohne Kategorie (steht immer ganz unten) – Identify „Weitere“, Studio „Nicht zugeordnet“.
+ */
+export function groupByCategory(lists, noCategory = NO_CATEGORY) {
     const map = new Map()
+    const rest = []
     for (const l of lists) {
-        const c = String(l.category || '').trim() || NO_CATEGORY
+        const c = String(l.category || '').trim()
+        if (!c) { rest.push(l); continue }
         if (!map.has(c)) map.set(c, [])
         map.get(c).push(l)
     }
-    return [...map.entries()]
-        .sort(([a], [b]) => {
-            const [ra, ia] = catRank(a)
-            const [rb, ib] = catRank(b)
-            return ra - rb || ia - ib || a.localeCompare(b, 'de')
-        })
-        .map(([category, items]) => ({ category, lists: items }))
+    const rank = (c) => { const i = CATEGORY_ORDER.indexOf(c); return i >= 0 ? i : CATEGORY_ORDER.length }
+    const groups = [...map.entries()]
+        .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b, 'de'))
+        .map(([category, items]) => ({ category, lists: items, uncategorized: false }))
+    if (rest.length) groups.push({ category: noCategory, lists: rest, uncategorized: true })
+    return groups
 }
 
 /** Besteht der Kachel-Text nur aus Emoji? (dann größer darstellen) */

@@ -83,3 +83,10 @@
 .metaField { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .metaLabel { font-size: 13px; font-weight: 700; color: var(--sr-muted); }
 .tileEmoji { font-size: 26px; letter-spacing: 0; }
+
+/* Übersicht nach Kategorien (wie „Musik wählen“ in Identify) */
+.group { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.groupHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.groupTitle { margin: 0; font-size: 17px; font-weight: 800; }
+.groupOpen { color: var(--sr-accent-text); }
+.groupCount { flex: none; font-size: 13px; font-weight: 600; color: var(--sr-muted); }

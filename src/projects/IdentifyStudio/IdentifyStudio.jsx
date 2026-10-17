@@ -9,7 +9,7 @@ import theme from '../../shared/ui/theme.module.css'
 import { ConfirmSheet } from '../../shared/ui/BottomSheet'
 import { IconBack, IconPlus, IconTrash, IconSearch, IconPlay, IconPause, IconX, IconCheck, IconAlert, IconRetry } from '../../shared/ui/icons'
 import { fetchIndex, fetchList, saveList, deleteList, slugFor, indexEntry, MAX_SONGS } from '../SecondSound/listStore.js'
-import { tileColor, tileLabel, cleanBadge, isEmojiLabel, CATEGORY_ORDER, MAX_BADGE } from '../SecondSound/listTiles.js'
+import { tileColor, tileLabel, cleanBadge, isEmojiLabel, groupByCategory, CATEGORY_ORDER, MAX_BADGE } from '../SecondSound/listTiles.js'
 import { matchToApple, spotifyIdsFromText, spotifyTrack, appleSearch, toListSong, songAsQuery, appleFromLink } from '../SecondSound/appleMatch.js'
 import { cleanTitle } from '../SecondSound/songGuess.js'
 import { loadFileLists } from '../SecondSound/guestMusic.js'
@@ -177,6 +177,8 @@ export default function IdentifyStudio({ onBack }) {
 function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, show, onReload, queue }) {
     const [name, setName] = useState('')
     const [busy, setBusy] = useState(false)
+    const groups = groupByCategory(lists || [], 'Nicht zugeordnet')
+    const unassigned = groups.find(g => g.uncategorized)?.lists.length || 0
 
     const create = async (e) => {
         e.preventDefault()
@@ -228,6 +230,7 @@ function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, 
 
                 <section className={styles.card}>
                     <h2 className={styles.h2}>Listen {lists ? `(${lists.length})` : ''}</h2>
+                    {unassigned > 0 && <p className={styles.muted}>davon {unassigned} nicht zugeordnet – Kategorie im Listen-Editor eintragen.</p>}
                     {listsError && <p className={styles.error}>{listsError}</p>}
                     {!lists && !listsError && <p className={styles.muted}>Lädt …</p>}
                     {lists && lists.length === 0 && (
@@ -238,19 +241,27 @@ function Overview({ user, lists, listsError, noRights, onBack, onOpen, persist, 
                             </button>
                         </div>
                     )}
-                    <ul className={styles.list}>
-                        {(lists || []).map(l => (
-                            <li key={l.id}>
-                                <button type="button" className={`${styles.btn} ${styles.listRow}`} onClick={() => onOpen(l.id)}>
-                                    <span className={`${styles.tile} ${isEmojiLabel(tileLabel(l)) ? styles.tileEmoji : ''}`} style={{ background: tileColor(l.name) }} aria-hidden="true">{tileLabel(l)}</span>
-                                    <span className={styles.rowText}>
-                                        <span className={styles.rowName}>{l.emoji ? `${l.emoji} ` : ''}{l.name}</span>
-                                        <span className={styles.rowMeta}>{l.count} Songs · {l.category || 'ohne Kategorie'}</span>
-                                    </span>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
+                    {groups.map(g => (
+                        <div key={g.category} className={styles.group}>
+                            <div className={styles.groupHead}>
+                                <h3 className={`${styles.groupTitle} ${g.uncategorized ? styles.groupOpen : ''}`}>{g.category}</h3>
+                                <span className={styles.groupCount}>{g.lists.length === 1 ? '1 Liste' : `${g.lists.length} Listen`}</span>
+                            </div>
+                            <ul className={styles.list}>
+                                {g.lists.map(l => (
+                                    <li key={l.id}>
+                                        <button type="button" className={`${styles.btn} ${styles.listRow}`} onClick={() => onOpen(l.id)}>
+                                            <span className={`${styles.tile} ${isEmojiLabel(tileLabel(l)) ? styles.tileEmoji : ''}`} style={{ background: tileColor(l.name) }} aria-hidden="true">{tileLabel(l)}</span>
+                                            <span className={styles.rowText}>
+                                                <span className={styles.rowName}>{l.emoji ? `${l.emoji} ` : ''}{l.name}</span>
+                                                <span className={styles.rowMeta}>{l.count === 1 ? '1 Song' : `${l.count || 0} Songs`}</span>
+                                            </span>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
                 </section>
             </main>
         </>
