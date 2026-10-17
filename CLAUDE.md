@@ -26,6 +26,10 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   **keine Spotify-Anfrage** → kein Kontingent), einzelne Spotify-Links (1 Anfrage/Song über die App-ID, gebremst 1,5 s,
   bei langer 429-Sperre sofort Abbruch mit Uhrzeit) – Zuordnung zu Apple im Browser (`SecondSound/appleMatch.js`),
   Songs löschen, nicht gefundene von Hand bei Apple suchen, „Andere Version“ pro Song, „Versionen prüfen“ pro Liste, Liste löschen.
+  **Warteschlange** (`IdentifyStudio/useImportQueue.js`, `QueuePanel.jsx`): mehrere CSV-Dateien auf einmal (auch nachreichen),
+  Abarbeitung nacheinander im Hintergrund der Studio-Seite; Liste = Dateiname, gleicher Name → Liste wird ergänzt; Stand im
+  localStorage (`identify_studio_queue_v1`) → nach Neuladen geht es weiter. Die Liste, die gerade befüllt wird, ist im Editor
+  gesperrt; arbeitet der Editor selbst an einer Liste (Links/Versionen prüfen), wartet die Warteschlange für diese Liste.
   Zuordnung: gleicher Titel + Interpret; Varianten (Live, Instrumental, Remix, Acoustic, Karaoke …) nur, wenn der Spotify-Song
   selbst eine ist; Original-Album vor Single/Deluxe/Jubiläum/Best-of – **immer**, auch wenn Spotify selbst eine Sonderausgabe
   nennt (Spotify: „Hybrid Theory (Bonus Edition)“); bei Gleichstand ältere Apple-ID. Apples **Suche** ist
