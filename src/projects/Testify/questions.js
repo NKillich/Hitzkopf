@@ -3,6 +3,9 @@
 //   pick4 – own/other: Frage an dich / über den anderen ({n} = Name), options: 4 Antworten
 //   pair  – own: Frage, options: 2 × { label, icon } (beide Schritte auf einem Bildschirm)
 //   scale – own/other, labels: 5 Beschriftungen für 1–5 (Ränder = labels[0] und labels[4])
+//   emoji4 – Bildwahl: own/other, options: 4 × { label, icon } (große Kacheln 2 × 2)
+//   yesno – Schon mal …?: own: Frage (Ja/Nein fest, beide Schritte auf einem Bildschirm)
+//   who   – Wer von uns?: own: Frage an beide; Antwort „Ich“ oder der andere, kein Tipp (zählt nur gemeinsam)
 // Formulierungen bewusst neutral (kein Gendern nötig: „Früh aufstehen“ statt „Frühaufsteherin“).
 
 export const CATEGORIES = {
@@ -12,6 +15,8 @@ export const CATEGORIES = {
     essen: 'Essen',
     persoenlichkeit: 'Persönlichkeit',
     liebe: 'Liebe',
+    kindheit: 'Kindheit',
+    waswaere: 'Was wäre wenn',
 }
 
 export const SETS = {
@@ -82,4 +87,77 @@ export const QUESTIONS = [
     { id: 'li7', sets: PA, cat: 'liebe', type: 'pick4', own: 'Was nervt dich im Haushalt am meisten?', other: 'Was nervt {n} im Haushalt am meisten?', options: ['Abwaschen', 'Wäsche', 'Putzen', 'Einkaufen'] },
     { id: 'li8', sets: PA, cat: 'liebe', type: 'scale', own: 'Wie gern planst du Überraschungen?', other: 'Wie gern plant {n} Überraschungen?', labels: ['Nie', 'Selten', 'Ab und zu', 'Gern', 'Ständig'] },
     { id: 'li9', sets: PA, cat: 'liebe', type: 'pair', own: 'Zusammen kochen oder essen gehen?', options: [{ label: 'Kochen', icon: '🍳' }, { label: 'Essen gehen', icon: '🍽️' }] },
+
+    // ── Neu: Eins aus 4 ────────────────────────────────────────────────────
+    { id: 'kh1', sets: F, cat: 'kindheit', type: 'pick4', own: 'Was wolltest du als Kind am ehesten werden?', other: 'Was wollte {n} als Kind am ehesten werden?', options: ['Polizei', 'Tierarzt', 'Astronaut', 'Fußballprofi'] },
+    { id: 'kh2', sets: F, cat: 'kindheit', type: 'pick4', own: 'Welche Süßigkeit war als Kind dein Favorit?', other: 'Welche Süßigkeit war als Kind der Favorit von {n}?', options: ['Gummibärchen', 'Schokolade', 'Brausepulver', 'Lutscher'] },
+    { id: 'kh3', sets: F, cat: 'kindheit', type: 'pick4', own: 'Was hast du als Kind am liebsten gespielt?', other: 'Was hat {n} als Kind am liebsten gespielt?', options: ['Lego', 'Draußen toben', 'Videospiele', 'Brettspiele'] },
+    { id: 'ww1', sets: F, cat: 'waswaere', type: 'pick4', own: 'Du gewinnst eine Million – was machst du zuerst?', other: '{n} gewinnt eine Million – was passiert zuerst?', options: ['Weltreise', 'Haus kaufen', 'Sparen', 'Party für alle'] },
+    { id: 'ww2', sets: F, cat: 'waswaere', type: 'pick4', own: 'Du darfst ein Jahr in einer anderen Zeit leben – welche?', other: '{n} darf ein Jahr in einer anderen Zeit leben – welche?', options: ['Steinzeit', 'Mittelalter', '80er', 'Zukunft'] },
+    { id: 'ww3', sets: F, cat: 'waswaere', type: 'pick4', own: 'Zombie-Apokalypse: Was ist deine Rolle?', other: 'Zombie-Apokalypse: Was ist die Rolle von {n}?', options: ['Anführer', 'Koch', 'Erste, die es erwischt', 'Einzelkämpfer'] },
+    { id: 'al9', sets: F, cat: 'alltag', type: 'pick4', own: 'Was machst du als Erstes nach dem Aufwachen?', other: 'Was macht {n} als Erstes nach dem Aufwachen?', options: ['Handy checken', 'Kaffee', 'Duschen', 'Snoozen'] },
+    { id: 're8', sets: F, cat: 'reisen', type: 'pick4', own: 'Was nervt dich im Urlaub am meisten?', other: 'Was nervt {n} im Urlaub am meisten?', options: ['Hitze', 'Touristen', 'Schlechtes Essen', 'Mücken'] },
+    { id: 'es8', sets: F, cat: 'essen', type: 'pick4', own: 'Was darf auf deiner Pizza nie fehlen?', other: 'Was darf auf der Pizza von {n} nie fehlen?', options: ['Salami', 'Pilze', 'Ananas', 'Extra Käse'] },
+    { id: 'pe10', sets: F, cat: 'persoenlichkeit', type: 'pick4', own: 'Wie reagierst du auf Streit?', other: 'Wie reagiert {n} auf Streit?', options: ['Sofort klären', 'Erst mal Ruhe', 'Witz machen', 'Laut werden'] },
+
+    // ── Neu: Dies oder das ─────────────────────────────────────────────────
+    { id: 'ww4', sets: F, cat: 'waswaere', type: 'pair', own: 'Fliegen können oder unsichtbar sein?', options: [{ label: 'Fliegen', icon: '🦅' }, { label: 'Unsichtbar', icon: '👻' }] },
+    { id: 'kh4', sets: F, cat: 'kindheit', type: 'pair', own: 'Als Kind: Zeichentrick oder draußen spielen?', options: [{ label: 'Zeichentrick', icon: '📺' }, { label: 'Draußen', icon: '🌳' }] },
+    { id: 'al10', sets: F, cat: 'alltag', type: 'pair', own: 'Serie oder Film?', options: [{ label: 'Serie', icon: '🍿' }, { label: 'Film', icon: '🎬' }] },
+    { id: 'es9', sets: F, cat: 'essen', type: 'pair', own: 'Pizza oder Pasta?', options: [{ label: 'Pizza', icon: '🍕' }, { label: 'Pasta', icon: '🍝' }] },
+
+    // ── Neu: Skala ─────────────────────────────────────────────────────────
+    { id: 'kh5', sets: F, cat: 'kindheit', type: 'scale', own: 'Wie brav warst du als Kind?', other: 'Wie brav war {n} als Kind?', labels: ['Kleiner Teufel', 'Frech', 'Mal so, mal so', 'Ziemlich brav', 'Engel'] },
+    { id: 'ww5', sets: F, cat: 'waswaere', type: 'scale', own: 'Wie lange würdest du ohne Handy durchhalten?', other: 'Wie lange würde {n} ohne Handy durchhalten?', labels: ['Eine Stunde', 'Einen Tag', 'Eine Woche', 'Einen Monat', 'Für immer'] },
+    { id: 're9', sets: F, cat: 'reisen', type: 'scale', own: 'Wie abenteuerlustig bist du auf Reisen?', other: 'Wie abenteuerlustig ist {n} auf Reisen?', labels: ['All-inclusive', 'Gemütlich', 'Mittel', 'Abenteuer', 'Rucksack ins Ungewisse'] },
+    { id: 'mu8', sets: F, cat: 'musik', type: 'scale', own: 'Wie textsicher bist du bei deinen Lieblingsliedern?', other: 'Wie textsicher ist {n} bei den Lieblingsliedern?', labels: ['Nur der Refrain', 'Ein paar Zeilen', 'Meistens', 'Fast alles', 'Jedes Wort'] },
+
+    // ── Neu: Bildwahl (2 × 2) ──────────────────────────────────────────────
+    { id: 'bw1', sets: F, cat: 'persoenlichkeit', type: 'emoji4', own: 'Welches Tier passt am besten zu dir?', other: 'Welches Tier passt am besten zu {n}?', options: [{ label: 'Faultier', icon: '🦥' }, { label: 'Fuchs', icon: '🦊' }, { label: 'Löwe', icon: '🦁' }, { label: 'Eule', icon: '🦉' }] },
+    { id: 'bw2', sets: F, cat: 'persoenlichkeit', type: 'emoji4', own: 'Welches Wetter ist dein Wetter?', other: 'Welches Wetter ist das Wetter von {n}?', options: [{ label: 'Sonne', icon: '☀️' }, { label: 'Regen', icon: '🌧️' }, { label: 'Schnee', icon: '❄️' }, { label: 'Gewitter', icon: '⛈️' }] },
+    { id: 'bw3', sets: F, cat: 'essen', type: 'emoji4', own: 'Welcher Snack beim Filmabend?', other: 'Welchen Snack nimmt {n} beim Filmabend?', options: [{ label: 'Popcorn', icon: '🍿' }, { label: 'Chips', icon: '🥔' }, { label: 'Schokolade', icon: '🍫' }, { label: 'Obst', icon: '🍓' }] },
+    { id: 'bw4', sets: F, cat: 'reisen', type: 'emoji4', own: 'Wo würdest du am liebsten übernachten?', other: 'Wo würde {n} am liebsten übernachten?', options: [{ label: 'Baumhaus', icon: '🌳' }, { label: 'Schloss', icon: '🏰' }, { label: 'Iglu', icon: '🧊' }, { label: 'Hausboot', icon: '🛥️' }] },
+    { id: 'bw5', sets: F, cat: 'alltag', type: 'emoji4', own: 'Welcher Sport liegt dir am meisten?', other: 'Welcher Sport liegt {n} am meisten?', options: [{ label: 'Fußball', icon: '⚽' }, { label: 'Schwimmen', icon: '🏊' }, { label: 'Fitness', icon: '🏋️' }, { label: 'Couch', icon: '🛋️' }] },
+    { id: 'bw6', sets: F, cat: 'essen', type: 'emoji4', own: 'Welches Getränk am Freitagabend?', other: 'Welches Getränk nimmt {n} am Freitagabend?', options: [{ label: 'Bier', icon: '🍺' }, { label: 'Wein', icon: '🍷' }, { label: 'Cocktail', icon: '🍹' }, { label: 'Limo', icon: '🥤' }] },
+    { id: 'bw7', sets: F, cat: 'waswaere', type: 'emoji4', own: 'Du darfst ein Fahrzeug geschenkt bekommen – welches?', other: '{n} darf ein Fahrzeug geschenkt bekommen – welches?', options: [{ label: 'Sportwagen', icon: '🏎️' }, { label: 'Motorrad', icon: '🏍️' }, { label: 'Wohnmobil', icon: '🚐' }, { label: 'Segelboot', icon: '⛵' }] },
+    { id: 'bw8', sets: F, cat: 'kindheit', type: 'emoji4', own: 'Welches Spielzeug hättest du als Kind am liebsten gehabt?', other: 'Welches Spielzeug hätte {n} als Kind am liebsten gehabt?', options: [{ label: 'Teddy', icon: '🧸' }, { label: 'Spielkonsole', icon: '🎮' }, { label: 'Fahrrad', icon: '🚲' }, { label: 'Baukasten', icon: '🧱' }] },
+    { id: 'bw9', sets: F, cat: 'musik', type: 'emoji4', own: 'Welches Instrument würdest du gern spielen?', other: 'Welches Instrument würde {n} gern spielen?', options: [{ label: 'Gitarre', icon: '🎸' }, { label: 'Klavier', icon: '🎹' }, { label: 'Schlagzeug', icon: '🥁' }, { label: 'Saxofon', icon: '🎷' }] },
+    { id: 'bw10', sets: F, cat: 'alltag', type: 'emoji4', own: 'Welcher Wochentag ist dein liebster?', other: 'Welcher Wochentag ist der liebste von {n}?', options: [{ label: 'Freitag', icon: '🎉' }, { label: 'Samstag', icon: '🛍️' }, { label: 'Sonntag', icon: '😴' }, { label: 'Mittwoch', icon: '🐫' }] },
+    { id: 'bw11', sets: F, cat: 'reisen', type: 'emoji4', own: 'Welche Landschaft macht dich am glücklichsten?', other: 'Welche Landschaft macht {n} am glücklichsten?', options: [{ label: 'Meer', icon: '🌊' }, { label: 'Wald', icon: '🌲' }, { label: 'Wüste', icon: '🏜️' }, { label: 'Großstadt', icon: '🌆' }] },
+    { id: 'bw12', sets: F, cat: 'persoenlichkeit', type: 'emoji4', own: 'Welcher Emoji beschreibt dich am besten?', other: 'Welcher Emoji beschreibt {n} am besten?', options: [{ label: 'Lachen', icon: '😂' }, { label: 'Cool', icon: '😎' }, { label: 'Nachdenklich', icon: '🤔' }, { label: 'Verliebt', icon: '😍' }] },
+
+    // ── Neu: Schon mal …? (Ja/Nein) ────────────────────────────────────────
+    { id: 'sm1', sets: F, cat: 'alltag', type: 'yesno', own: 'Schon mal eine Nacht komplett durchgemacht?' },
+    { id: 'sm2', sets: F, cat: 'reisen', type: 'yesno', own: 'Schon mal einen Flug verpasst?' },
+    { id: 'sm3', sets: F, cat: 'essen', type: 'yesno', own: 'Schon mal Insekten gegessen?' },
+    { id: 'sm4', sets: F, cat: 'kindheit', type: 'yesno', own: 'Schon mal als Kind von zu Hause „abgehauen“?' },
+    { id: 'sm5', sets: F, cat: 'musik', type: 'yesno', own: 'Schon mal auf einer Bühne gestanden?' },
+    { id: 'sm6', sets: F, cat: 'persoenlichkeit', type: 'yesno', own: 'Schon mal bei einem Film geweint?' },
+    { id: 'sm7', sets: F, cat: 'alltag', type: 'yesno', own: 'Schon mal den eigenen Geburtstag vergessen?' },
+    { id: 'sm8', sets: F, cat: 'reisen', type: 'yesno', own: 'Schon mal allein verreist?' },
+    { id: 'sm9', sets: F, cat: 'waswaere', type: 'yesno', own: 'Würdest du für ein Jahr auf eine einsame Insel ziehen?' },
+    { id: 'sm10', sets: F, cat: 'persoenlichkeit', type: 'yesno', own: 'Schon mal jemanden absichtlich angeschwindelt, um eine Party zu schwänzen?' },
+    { id: 'sm11', sets: F, cat: 'essen', type: 'yesno', own: 'Schon mal etwas vom Boden gegessen (5-Sekunden-Regel)?' },
+    { id: 'sm12', sets: F, cat: 'alltag', type: 'yesno', own: 'Schon mal in der Öffentlichkeit laut gesungen?' },
+
+    // ── Neu: Wer von uns? (beide antworten, kein Tipp) ─────────────────────
+    { id: 'wu1', sets: F, cat: 'alltag', type: 'who', own: 'Wer von euch kommt öfter zu spät?' },
+    { id: 'wu2', sets: F, cat: 'essen', type: 'who', own: 'Wer von euch kocht besser?' },
+    { id: 'wu3', sets: F, cat: 'persoenlichkeit', type: 'who', own: 'Wer von euch ist schneller beleidigt?' },
+    { id: 'wu4', sets: F, cat: 'reisen', type: 'who', own: 'Wer von euch würde sich im Urlaub eher verlaufen?' },
+    { id: 'wu5', sets: F, cat: 'alltag', type: 'who', own: 'Wer von euch ist ordentlicher?' },
+    { id: 'wu6', sets: F, cat: 'musik', type: 'who', own: 'Wer von euch hat den besseren Musikgeschmack?' },
+    { id: 'wu7', sets: F, cat: 'waswaere', type: 'who', own: 'Wer von euch würde eine Zombie-Apokalypse länger überleben?' },
+    { id: 'wu8', sets: F, cat: 'persoenlichkeit', type: 'who', own: 'Wer von euch ist lustiger?' },
+    { id: 'wu9', sets: F, cat: 'kindheit', type: 'who', own: 'Wer von euch war als Kind frecher?' },
+    { id: 'wu10', sets: F, cat: 'alltag', type: 'who', own: 'Wer von euch verbringt mehr Zeit am Handy?' },
+    { id: 'wu11', sets: FR, cat: 'persoenlichkeit', type: 'who', own: 'Wer von euch ist auf Partys länger dabei?' },
+    { id: 'wu12', sets: PA, cat: 'liebe', type: 'who', own: 'Wer von euch hat zuerst „Ich liebe dich“ gesagt?' },
+    { id: 'wu13', sets: PA, cat: 'liebe', type: 'who', own: 'Wer von euch ist romantischer?' },
+    { id: 'wu14', sets: PA, cat: 'liebe', type: 'who', own: 'Wer von euch entschuldigt sich nach einem Streit zuerst?' },
+    { id: 'wu15', sets: PA, cat: 'liebe', type: 'who', own: 'Wer von euch klaut nachts die Decke?' },
+
+    // ── Neu: nur Freunde ───────────────────────────────────────────────────
+    { id: 'fr1', sets: FR, cat: 'alltag', type: 'pick4', own: 'Was machst du am ehesten, wenn die Gruppe nicht weiß, wohin?', other: 'Was macht {n} am ehesten, wenn die Gruppe nicht weiß, wohin?', options: ['Entscheiden', 'Abstimmen lassen', 'Mitlaufen', 'Nach Hause gehen'] },
+    { id: 'fr2', sets: FR, cat: 'persoenlichkeit', type: 'pair', own: 'Lieber großer Freundeskreis oder wenige enge Freunde?', options: [{ label: 'Großer Kreis', icon: '👥' }, { label: 'Wenige enge', icon: '🤝' }] },
 ]

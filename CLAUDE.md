@@ -54,6 +54,10 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   Ergebnis „X kennt Y zu …“ bereinigt um Zufallstreffer. „Nochmal“: Host stellt neu ein, Gast bestätigt „Nochmal spielen“.
 - Design nach `testify_screendesigns.pdf` (Akzent Lila `#C791FF`), Aufbau Start/Erstellen/Beitreten wie Amplify (Tier-Karussell geteilt).
 - Fragen vorerst fest in `Testify/questions.js` (Sets `freunde`/`paar`, neutral formuliert – kein Gendern). Logik ohne React: `testifyLogic.js`.
+  Typen: `pick4`, `pair`, `scale`, `emoji4` (Bildwahl 2 × 2), `yesno` (Schon mal …?), `who` (Wer von uns?: kein Tipp, zählt nur
+  für den gemeinsamen Wert). Mischung pro Spiel `TYPE_MIX`. Ziel: ≥ 5 Spiele à 15 ohne Wiederholung – pro Typ genug Fragen
+  (bei 15 Runden: 4 Eins aus 4, 3 Dies oder das, je 2 der übrigen). Gespielte Fragen merkt sich jedes Gerät
+  (`tf_played_v1`, beim Beitreten als `players.<uid>.played` in die Lobby) → auch neue Lobbys wiederholen nichts.
 - Firestore `testifyLobbies`, Spieler-Schlüssel = UID (nicht der Name). Countdown synchron über `round.doneAt` (Serverzeit) + Uhrabgleich.
 - Testen ohne zweites Handy: `scripts/testify-test.mjs` (Bot spielt mit). Vor dem Veröffentlichen der Regeln im Dev-Modus
   `localStorage.tf_dev_col = 'lobbies'` setzen (offene Hitzkopf-Sammlung) und das Skript mit `TF_COL=lobbies` starten; Lobbys danach löschen.

@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
 import { IconX, IconCheck, IconLock, IconInfo } from '../../shared/ui/icons'
-import { IconGrid, IconSwap, IconScale, IconArrow, IconMinus } from './icons'
+import { IconGrid, IconSwap, IconScale, IconArrow, IconMinus, IconFriends, IconCards } from './icons'
 import Confetti from './Confetti'
 import {
     BOTH_MS, COUNT_MS, REVEAL_AT, SCORE_DELAY, TYPE_LABEL, catLabel, verdict, answerText, scoreOf, fmtPoints,
+    isPairLike, optionsOf, whoSame,
 } from './testifyLogic'
 import styles from './Testify.module.css'
 
 const LETTERS = ['A', 'B', 'C', 'D']
-const TYPE_ICON = { pick4: <IconGrid />, pair: <IconSwap />, scale: <IconScale /> }
+const TYPE_ICON = {
+    pick4: <IconGrid />, pair: <IconSwap />, scale: <IconScale />, emoji4: <IconCards />, yesno: <IconCheck size={16} w={2.6} />, who: <IconFriends size={16} />,
+}
 
 // Uhr für den Ablauf nach dem zweiten „Fertig“: alle 100 ms neu zeichnen, bis Zeitpunkt until erreicht ist
 function useNow(until) {
@@ -86,7 +89,8 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
     const now = useNow(revealing ? doneLocal + REVEAL_AT + SCORE_DELAY + 300 : null)
     const t = revealing ? now - doneLocal : -1
     let step
-    if (!revealing) step = own == null ? (q.type === 'pair' ? 'pair' : 'own') : guess == null ? 'guess' : 'wait'
+    const isWho = q.type === 'who'
+    if (!revealing) step = own == null ? (isPairLike(q) ? 'pair' : isWho ? 'who' : 'own') : guess == null && !isWho ? 'guess' : 'wait'
     else step = t < BOTH_MS ? 'wait' : t < REVEAL_AT ? 'count' : 'reveal'
 
     const withCurrent = step === 'reveal' && t >= REVEAL_AT + SCORE_DELAY
@@ -115,7 +119,11 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
     }
 
     // Stand des anderen (Fußzeile beim Tippen)
-    const theirNote = theirs.own == null
+    const theirNote = isWho
+        ? (theirs.own == null
+            ? <p className={styles.footNote}><span className={`${styles.dot} ${styles.dotWait}`} />{oName} überlegt noch</p>
+            : <p className={styles.footNote}><span className={`${styles.dot} ${styles.dotOk}`} />{oName} ist schon fertig</p>)
+        : theirs.own == null
         ? <p className={styles.footNote}><span className={`${styles.dot} ${styles.dotWait}`} />{oName} beantwortet gerade die eigene Frage</p>
         : theirs.guess == null
             ? <p className={styles.footNote}><span className={`${styles.dot} ${styles.dotWait}`} />{oName} tippt gerade für dich</p>
@@ -189,6 +197,30 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
             )
         }
 
+        if (q.type === 'emoji4') {
+            return (
+                <section className={styles.screen}>
+                    {head}
+                    <div className={styles.scroll}>
+                        {stepsBar(guessing)}
+                        {tags}
+                        {title}
+                        <div className={`${styles.pairGrid} ${styles.emojiGrid}`} role="radiogroup">
+                            {q.options.map((opt, i) => (
+                                <button key={opt.label} type="button" role="radio" aria-checked={value === i}
+                                    className={`${styles.btn} ${styles.tile} ${styles.emojiTile} ${value === i ? styles.tileOn : ''}`} onClick={() => setValue(i)}>
+                                    <span className={styles.emojiBig} aria-hidden="true">{opt.icon}</span>
+                                    <span className={styles.tileText}>{opt.label}</span>
+                                    {guessing && own === i && value !== i && <span className={`${styles.mine} ${styles.mineCorner}`}><IconLock size={13} w={2.6} />Deine</span>}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    {footer}
+                </section>
+            )
+        }
+
         return (
             <section className={styles.screen}>
                 {head}
@@ -217,7 +249,7 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
     if (step === 'pair') {
         const tiles = (value, setValue, label) => (
             <div className={styles.pairGrid} role="radiogroup" aria-label={label}>
-                {q.options.map((opt, i) => (
+                {optionsOf(q).map((opt, i) => (
                     <button key={opt.label} type="button" role="radio" aria-checked={value === i}
                         className={`${styles.btn} ${styles.tile} ${value === i ? styles.tileOn : ''}`} onClick={() => setValue(i)}>
                         <span className={styles.tileIcon} aria-hidden="true">{opt.icon}</span>
@@ -232,14 +264,14 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
                 {head}
                 <div className={styles.scroll}>
                     <div className={styles.tags} style={{ marginTop: 14 }}>
-                        <span className={styles.chip}>{TYPE_ICON.pair}{TYPE_LABEL.pair}</span>
+                        <span className={styles.chip}>{TYPE_ICON[q.type]}{TYPE_LABEL[q.type]}</span>
                         <span className={styles.tagMuted}>{catLabel(q.cat)} · beides auf einem Bildschirm</span>
                     </div>
                     <h1 className={styles.pairHead}><span className={styles.pairNum}>1</span>{q.own}</h1>
                     {tiles(sel, setSel, 'Deine Antwort')}
                     <div className={styles.pairDivider} />
                     <h2 className={styles.pairHead}><span className={styles.pairNumEmoji} aria-hidden="true">{other?.emoji}</span>
-                        <span>Und was wählt <span className={styles.who}>{oName}</span>?</span>
+                        <span>Und was {q.type === 'yesno' ? 'sagt' : 'wählt'} <span className={styles.who}>{oName}</span>?</span>
                     </h2>
                     {tiles(gsel, setGsel, `Tipp für ${oName}`)}
                 </div>
@@ -252,9 +284,43 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
         )
     }
 
+    // ── Wer von uns?: beide wählen eine Person, kein Tipp ───────────────────
+    if (step === 'who') {
+        const people = [{ p: me, label: 'Ich' }, { p: other, label: oName }]
+        return (
+            <section className={styles.screen}>
+                {head}
+                <div className={styles.scroll}>
+                    <div className={styles.tags} style={{ marginTop: 14 }}>
+                        <span className={styles.chip}>{TYPE_ICON.who}{TYPE_LABEL.who}</span>
+                        <span className={styles.tagMuted}>{catLabel(q.cat)} · ihr antwortet beide</span>
+                    </div>
+                    <h1 className={styles.question}>{q.own}</h1>
+                    <div className={`${styles.pairGrid} ${styles.whoGrid}`} role="radiogroup" aria-label="Wer?">
+                        {people.map(({ p, label }, i) => (
+                            <button key={i} type="button" role="radio" aria-checked={sel === i}
+                                className={`${styles.btn} ${styles.tile} ${styles.whoTile} ${sel === i ? styles.tileOn : ''}`} onClick={() => setSel(i)}>
+                                <span className={styles.whoAvatar} aria-hidden="true">{p?.emoji}</span>
+                                <span className={styles.tileText}>{label}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <p className={styles.whoHint}><IconInfo />Wählt ihr dieselbe Person, habt ihr die gleiche Wellenlänge.</p>
+                </div>
+                <div className={styles.footer}>
+                    {theirNote}
+                    <button type="button" className={`${styles.btn} ${sel != null ? styles.primary : styles.primaryOff}`} disabled={sel == null} onClick={sendOwn}>
+                        Fertig<IconCheck size={20} />
+                    </button>
+                </div>
+            </section>
+        )
+    }
+
     // ── Warten auf den anderen / beide fertig ───────────────────────────────
     if (step === 'wait') {
-        const theirDone = revealing || (theirs.own != null && theirs.guess != null)
+        const theirDone = revealing || (theirs.own != null && (isWho || theirs.guess != null))
+        const whoText = (i) => (i == null ? '–' : i === 0 ? 'Ich' : oName)
         return (
             <section className={styles.screen}>
                 {head}
@@ -266,7 +332,7 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
                         </div>
                         <h1 className={styles.waitTitle}>{theirDone ? 'Beide fertig!' : `Warte auf ${oName} …`}</h1>
                         <p className={styles.waitSub}>
-                            {theirDone ? 'Gleich wird aufgedeckt' : theirs.own == null ? `${oName} beantwortet noch die eigene Frage` : `${oName} tippt noch für dich`}
+                            {theirDone ? 'Gleich wird aufgedeckt' : isWho ? `${oName} überlegt noch` : theirs.own == null ? `${oName} beantwortet noch die eigene Frage` : `${oName} tippt noch für dich`}
                         </p>
                         <div className={styles.statusList}>
                             <div className={styles.statusRow}>
@@ -285,16 +351,23 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
                     </div>
                 </div>
                 <div className={styles.footer}>
-                    <div className={styles.lockedGrid}>
+                    {isWho ? (
                         <div className={styles.locked}>
-                            <span className={styles.lockedLabel}><IconLock size={14} />Deine Antwort</span>
-                            <span className={styles.lockedValue}>{answerText(q, own)}</span>
+                            <span className={styles.lockedLabel}><IconLock size={14} />Deine Wahl</span>
+                            <span className={styles.lockedValue}>{whoText(own)}</span>
                         </div>
-                        <div className={styles.locked}>
-                            <span className={styles.lockedLabel}><IconLock size={14} />Tipp für {oName}</span>
-                            <span className={styles.lockedValue}>{answerText(q, guess)}</span>
+                    ) : (
+                        <div className={styles.lockedGrid}>
+                            <div className={styles.locked}>
+                                <span className={styles.lockedLabel}><IconLock size={14} />Deine Antwort</span>
+                                <span className={styles.lockedValue}>{answerText(q, own)}</span>
+                            </div>
+                            <div className={styles.locked}>
+                                <span className={styles.lockedLabel}><IconLock size={14} />Tipp für {oName}</span>
+                                <span className={styles.lockedValue}>{answerText(q, guess)}</span>
+                            </div>
                         </div>
-                    </div>
+                    )}
                     {theirDone
                         ? <button type="button" className={`${styles.btn} ${styles.primary}`} disabled>Aufdeckung startet …</button>
                         : <button type="button" className={`${styles.btn} ${styles.primaryOff}`} disabled>Warte auf {oName} …</button>}
@@ -314,11 +387,63 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
     }
 
     // ── Aufdeckung ──────────────────────────────────────────────────────────
+    const iPressedNext = nextSent || !!data.round?.next?.[uid]
+    const theyPressedNext = !!data.round?.next?.[other?.uid]
+    const nextFooter = (
+        <div className={styles.footer}>
+            <p className={styles.footNote}>
+                <span className={`${styles.dot} ${theyPressedNext ? styles.dotOk : ''}`} />
+                {theyPressedNext ? `${oName} hat „Weiter“ gedrückt` : `${oName} schaut noch`}
+            </p>
+            {iPressedNext && theyPressedNext
+                ? <button type="button" className={`${styles.btn} ${styles.primary}`} disabled>{idx + 1 >= total ? 'Ergebnis kommt …' : 'Nächste Frage …'}</button>
+                : iPressedNext
+                ? <button type="button" className={`${styles.btn} ${styles.primaryOff}`} disabled>Warte auf {oName} …</button>
+                : <button type="button" className={`${styles.btn} ${styles.primary}`} onClick={sendNext}>{idx + 1 >= total ? 'Zum Ergebnis' : 'Weiter'}<IconArrow /></button>}
+        </div>
+    )
+    if (isWho) {
+        const same = whoSame(answers, uid, other?.uid)
+        const pickOf = (a, self, o) => (a == null ? null : a === 0 ? self : o)
+        const mePick = pickOf(mine.own, me, other), themPick = pickOf(theirs.own, other, me)
+        const name = (p) => (p?.uid === uid ? 'dich' : p?.name)
+        return (
+            <section className={styles.screen}>
+                {head}
+                <div className={styles.scroll}>
+                    <p className={styles.revealMeta}>{TYPE_LABEL.who} · {catLabel(q.cat)}</p>
+                    <h1 className={styles.revealQ}>{q.own}</h1>
+                    {same ? (
+                        <div className={styles.banner} role="status">
+                            <p className={styles.bannerTitle}>Gleiche Wellenlänge! 💞</p>
+                            <p className={styles.bannerSub}>Ihr seid euch einig: {mePick?.uid === uid ? 'du' : mePick?.name}</p>
+                        </div>
+                    ) : (
+                        <div className={`${styles.banner} ${styles.bannerOff}`} role="status">
+                            <p className={styles.bannerTitle}>Ihr seht das anders 🤔</p>
+                            <p className={styles.bannerSub}>Jeder zeigt auf jemand anderen</p>
+                        </div>
+                    )}
+                    <h2 className={styles.answersTitle}>Eure Wahl</h2>
+                    <div className={styles.answerList}>
+                        {[[me, mePick], [other, themPick]].map(([p, pick]) => (
+                            <div key={p?.uid} className={styles.answerRow}>
+                                <span className={styles.avatar} aria-hidden="true">{p?.emoji}</span>
+                                <span className={styles.answerName}>{p?.uid === uid ? 'Du' : p?.name} {p?.uid === uid ? 'zeigst' : 'zeigt'} auf</span>
+                                <span className={styles.answerValue}>{pick?.emoji} {pick?.uid === p?.uid ? (p?.uid === uid ? 'dich selbst' : 'sich selbst') : name(pick)}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <p className={styles.whoHint}><IconInfo />Zählt nur für euren gemeinsamen Wert, nicht für den Spielstand.</p>
+                </div>
+                {same && <Confetti screen seed={idx + 101} delay={0.45} />}
+                {nextFooter}
+            </section>
+        )
+    }
     const vMe = verdict(q, theirs.own, mine.guess)
     const vThem = verdict(q, mine.own, theirs.guess)
     const bothRight = vMe === 'right' && vThem === 'right'
-    const iPressed = nextSent || !!data.round?.next?.[uid]
-    const theyPressed = !!data.round?.next?.[other?.uid]
     return (
         <section className={styles.screen}>
             {head}
@@ -341,7 +466,7 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
                         <span><i className={styles.legendRing} />Tipp</span>
                     </div>
                 )}
-                {q.type === 'pick4' && (<>
+                {(q.type === 'pick4' || q.type === 'emoji4') && (<>
                     <h2 className={styles.answersTitle}>Eure Antworten</h2>
                     <div className={styles.answerList}>
                         {[[me, mine.own], [other, theirs.own]].map(([p, a]) => (
@@ -355,17 +480,7 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
                 </>)}
             </div>
             {bothRight && <Confetti screen seed={idx + 101} delay={0.45} />}
-            <div className={styles.footer}>
-                <p className={styles.footNote}>
-                    <span className={`${styles.dot} ${theyPressed ? styles.dotOk : ''}`} />
-                    {theyPressed ? `${oName} hat „Weiter“ gedrückt` : `${oName} schaut noch`}
-                </p>
-                {iPressed && theyPressed
-                    ? <button type="button" className={`${styles.btn} ${styles.primary}`} disabled>{idx + 1 >= total ? 'Ergebnis kommt …' : 'Nächste Frage …'}</button>
-                    : iPressed
-                    ? <button type="button" className={`${styles.btn} ${styles.primaryOff}`} disabled>Warte auf {oName} …</button>
-                    : <button type="button" className={`${styles.btn} ${styles.primary}`} onClick={sendNext}>{idx + 1 >= total ? 'Zum Ergebnis' : 'Weiter'}<IconArrow /></button>}
-            </div>
+            {nextFooter}
         </section>
     )
 }
@@ -422,14 +537,14 @@ function RevealCard({ q, v, dir, from, to, guess, answer, oName, confetti, seed 
                 {v === 'right' ? `+1 Punkt für ${pointFor}` : v === 'close' ? '1 daneben · +½' : `${diff} daneben · 0`}
             </p>
         </>)
-    } else if (q.type === 'pair') {
+    } else if (isPairLike(q)) {
         body = (<>
             {v !== 'right' && (<>
                 <p className={styles.rLabel}>{tipLabel}</p>
                 <p className={`${styles.rValue} ${styles.rStrike}`}>{answerText(q, guess)}</p>
             </>)}
             <div className={styles.rLine} />
-            <p className={styles.rLabel}>{mineDir ? `${oName} wählt` : 'Du wählst'}</p>
+            <p className={styles.rLabel}>{q.type === 'yesno' ? (mineDir ? `${oName} sagt` : 'Du sagst') : (mineDir ? `${oName} wählt` : 'Du wählst')}</p>
             <p className={styles.rValue}>{answerText(q, answer)}</p>
         </>)
     } else {
