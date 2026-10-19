@@ -94,6 +94,15 @@ export default function Result({ data, uid, me, other, isHost, onAgain, onEnd, o
                     {bar(s.bKnowsA, true)}
                 </div>
                 <p className={styles.infoLine}><IconInfo />Bereinigt um Zufallstreffer – reines Raten ergibt 0&nbsp;%</p>
+                {s.who.total > 0 && (
+                    <div className={styles.knowCard}>
+                        <div className={styles.knowHead}>
+                            <span className={styles.knowText}>Wer von uns? Gleich gesehen</span>
+                            <span className={styles.knowPct}>{s.who.same}&nbsp;/&nbsp;{s.who.total}</span>
+                        </div>
+                        {bar(Math.round((s.who.same / s.who.total) * 100), false)}
+                    </div>
+                )}
 
                 {s.cats.length > 0 && (<>
                     <h2 className={styles.secTitle}>

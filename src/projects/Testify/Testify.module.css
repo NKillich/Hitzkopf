@@ -202,6 +202,18 @@
 .tf .tileIcon { font-size: 34px; line-height: 1; filter: grayscale(1); opacity: 0.7; transition: filter 0.15s, opacity 0.15s; }
 .tf .tileOn .tileIcon { filter: none; opacity: 1; }
 .tf .tileText { font-family: var(--sr-display); font-size: 18px; font-weight: 800; text-align: center; }
+/* Bildwahl (2 × 2 große Emoji-Kacheln) */
+.tf .emojiGrid { margin-top: 22px; }
+.tf .emojiTile { position: relative; min-height: 132px; }
+.tf .emojiBig { font-size: 46px; line-height: 1; }
+.tf .mineCorner { position: absolute; top: 8px; right: 8px; }
+
+/* Wer von uns? (zwei Personen-Kacheln) */
+.tf .whoGrid { margin-top: 24px; }
+.tf .whoTile { min-height: 168px; gap: 12px; }
+.tf .whoAvatar { width: 72px; height: 72px; border-radius: 50%; background: var(--sr-surface2); display: flex; align-items: center; justify-content: center; font-size: 42px; line-height: 1; }
+.tf .tileOn .whoAvatar { background: color-mix(in srgb, var(--tf-accent) 22%, transparent); }
+.tf .whoHint { display: flex; align-items: center; gap: 8px; margin: 16px 4px 0; font-size: 13.5px; line-height: 1.35; color: var(--sr-muted); }
 .tf .pairDivider { height: 1px; background: var(--sr-line); margin: 20px 4px 0; }
 
 /* Skala */
@@ -290,6 +302,7 @@
 .tf .legendRing { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--sr-ink); box-sizing: border-box; }
 .tf .banner { margin-top: 18px; padding: 20px 14px; border-radius: 24px; background: var(--tf-accent-soft); border: 2px solid var(--tf-accent); text-align: center;
     animation: tfBanner 0.6s 0.5s cubic-bezier(.3, 1.5, .5, 1) both; }
+.tf .bannerOff { background: var(--sr-surface); border-color: var(--sr-line); }
 .tf .bannerTitle { font-family: var(--sr-display); font-size: 28px; font-weight: 800; letter-spacing: -0.03em; }
 .tf .bannerSub { margin-top: 4px; font-size: 15px; color: var(--sr-muted); }
 .tf .answersTitle { margin: 24px 4px 10px; font-family: var(--sr-display); font-size: 15px; font-weight: 800; color: var(--sr-muted); }

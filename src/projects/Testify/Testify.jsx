@@ -52,7 +52,21 @@ const TYPES = [
     { icon: <IconGrid size={20} />, name: 'Eins aus 4', ex: 'Band, Essen, Reiseziel …' },
     { icon: <IconSwap size={20} />, name: 'Dies oder das', ex: 'Strand oder Berge' },
     { icon: <IconScale size={20} />, name: 'Skala 1–5', ex: 'mit „knapp daneben“' },
+    { icon: <IconCards size={20} />, name: 'Bildwahl', ex: 'Tier, Wetter, Snack …' },
+    { icon: <IconCheck size={20} w={2.4} />, name: 'Schon mal …?', ex: 'Ja oder Nein' },
+    { icon: <IconFriends size={20} />, name: 'Wer von uns?', ex: 'zählt gemeinsam' },
 ]
+
+// Gespielte Fragen auf diesem Gerät (älteste zuerst) – damit auch neue Spiele mit neuem Code nichts wiederholen
+const PLAYED_KEY = 'tf_played_v1'
+const PLAYED_MAX = 400
+const readPlayed = () => {
+    try { const a = JSON.parse(localStorage.getItem(PLAYED_KEY) || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string') : [] } catch { return [] }
+}
+const rememberPlayed = (ids) => {
+    const list = readPlayed().filter(id => !ids.includes(id))
+    ls.set(PLAYED_KEY, JSON.stringify([...list, ...ids].slice(-PLAYED_MAX)))
+}
 
 export default function Testify({ onBack, joinCode }) {
     const { isDark, toggleTheme } = useTheme()
@@ -83,6 +97,7 @@ export default function Testify({ onBack, joinCode }) {
     const offsetRef = useRef(0)                      // Serverzeit − Gerätezeit
     const pingRef = useRef(null)                     // { sent } – Abgleich der Uhr läuft
     const toastTimer = useRef(null)
+    const rememberedRef = useRef(null)               // Spiel, dessen Fragen schon gemerkt sind
 
     const showToast = useCallback((text) => {
         clearTimeout(toastTimer.current)
@@ -179,6 +194,11 @@ export default function Testify({ onBack, joinCode }) {
             setDoneLocal(doneAt?.toMillis
                 ? doneAt.toMillis() - (snap.metadata.hasPendingWrites ? 0 : offsetRef.current)
                 : null)
+            // Spiel zu Ende: gespielte Fragen auf diesem Gerät merken (einmal je Spiel)
+            if ((d.phase === 'result' || d.phase === 'setup') && d.gameNo && rememberedRef.current !== `${code}-${d.gameNo}`) {
+                rememberedRef.current = `${code}-${d.gameNo}`
+                rememberPlayed((d.questions || []).map(q => q.id))
+            }
             setData(d)
         }, (err) => {
             console.error('Testify-Abo fehlgeschlagen:', err)
@@ -259,7 +279,7 @@ export default function Testify({ onBack, joinCode }) {
                 hostUid: me, createdAt: serverTimestamp(), lastActiveAt: Date.now(), status: 'open',
                 set: setId, rounds, phase: 'lobby', gameNo: 0, used: [], questions: [], idx: 0, log: [],
                 round: { answers: {}, doneAt: null, next: {} }, again: {},
-                players: { [me]: { name, emoji, joinedAt: Date.now() } },
+                players: { [me]: { name, emoji, joinedAt: Date.now(), played: readPlayed() } },
             })
             ss.set(ROOM_KEY, code)
             setRoomId(code)
@@ -285,7 +305,7 @@ export default function Testify({ onBack, joinCode }) {
                 if (d.status === 'closed') return { missing: true }
                 if (d.players?.[me]) return { rejoin: true }
                 if (Object.keys(d.players || {}).length >= MAX_PLAYERS) return { full: true }
-                return { update: { [`players.${me}`]: { name, emoji, joinedAt: Date.now() } } }
+                return { update: { [`players.${me}`]: { name, emoji, joinedAt: Date.now(), played: readPlayed() } } }
             })
             if (res.missing) { showToast(`Ein Spiel mit dem Code ${code} gibt es nicht (mehr).`); return }
             if (res.full) { showToast('Dieses Spiel ist schon voll (2 Spieler).'); return }

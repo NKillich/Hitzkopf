@@ -60,7 +60,7 @@ function play(ref, mode, isHost) {
                     if (r.done) r.update['round.doneAt'] = serverTimestamp()
                     return r
                 }).then(() => log(`Frage ${d.idx + 1}: eigene Antwort`)))
-            } else if (mine.guess == null && (mode === 'mix' || theirs.own != null)) {
+            } else if (q.type !== 'who' && mine.guess == null && (mode === 'mix' || theirs.own != null)) {
                 later(`guess-${key}`, 2500, () => mutate(ref, (x) => {
                     const own = x.round.answers?.[other]?.own
                     let g = Math.floor(Math.random() * n)
