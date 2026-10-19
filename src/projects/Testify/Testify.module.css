@@ -1,0 +1,375 @@
+/* Testify – Design nach Vorlage (testify_screendesigns.pdf, 390 px breit). Grundfarben aus shared/ui/theme.module.css,
+   Akzent Lila und die Ergebnisfarben (richtig/knapp/falsch, zweiter Spieler) kommen hier dazu. */
+
+/* ── Farben ─────────────────────────────────────────────────────────────── */
+.tf {
+    --tf-accent: #C791FF; --tf-on-accent: #160B22; --tf-accent-soft: #1E1526; --tf-chip: #1B1725;
+    --tf-blue: #5B9DFF; --tf-ok: #3DDC97; --tf-on-ok: #04140D; --tf-bad: #FF6B6B; --tf-on-bad: #2A0506;
+    --tf-close: #FFD166; --tf-on-close: #2A1F00;
+    --tf-ok-card: #14201C; --tf-ok-line: #22392F; --tf-bad-card: #2A1416; --tf-bad-line: #4A2228;
+    --tf-close-card: #2A2311; --tf-close-line: #4A3D1C; --tf-track: #2A2A31; --tf-off: #1D1E23; --tf-off-ink: #6B6F78;
+}
+.tfLight {
+    --tf-accent: #8E4FE8; --tf-on-accent: #FFFFFF; --tf-accent-soft: #F1E8FE; --tf-chip: #EEE5FD;
+    --tf-blue: #2F6FE0; --tf-ok: #12A86E; --tf-on-ok: #FFFFFF; --tf-bad: #D93A33; --tf-on-bad: #FFFFFF;
+    --tf-close: #D99A00; --tf-on-close: #FFFFFF;
+    --tf-ok-card: #E3F6EC; --tf-ok-line: #B9E5CF; --tf-bad-card: #FCE8E6; --tf-bad-line: #F2C4BF;
+    --tf-close-card: #FFF4D9; --tf-close-line: #F0DCA4; --tf-track: #E1E3E8; --tf-off: #E5E7EB; --tf-off-ink: #8A9099;
+}
+
+/* ── Basis ──────────────────────────────────────────────────────────────── */
+.tf { position: fixed; inset: 0; display: flex; justify-content: center; overflow: hidden; overscroll-behavior: none;
+    background: var(--sr-bg); color: var(--sr-ink); font-family: 'Figtree', system-ui, sans-serif; font-size: 16px; text-align: left; }
+.tf .app { position: relative; width: 100%; max-width: 430px; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--sr-bg);
+    /* Akzent der gemeinsamen Bausteine (Bottom-Sheet, Fokus) im Testify-Lila */
+    --sr-accent: var(--tf-accent); --sr-on-accent: var(--tf-on-accent); }
+/* Avatar-Karussell aus Amplify: Ring der Mitte im Testify-Lila statt Grün */
+.tf .avatarWrap { --sr-ok: var(--tf-accent); }
+/* App.css setzt globale h1-/button-/input-Optik – hier neutralisieren */
+.tf h1, .tf h2, .tf h3 { color: inherit; text-shadow: none; margin: 0; font-size: inherit; position: static; letter-spacing: normal; z-index: auto; }
+.tf p, .tf ul, .tf ol { margin: 0; padding: 0; }
+.tf ul, .tf ol { list-style: none; }
+.tf .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: 0; width: auto; min-height: 0;
+    border: 0; border-radius: 0; background: none; box-shadow: none; transform: none; overflow: visible; letter-spacing: normal;
+    font: inherit; font-family: inherit; color: inherit; text-align: inherit; cursor: pointer; transition: none; -webkit-tap-highlight-color: transparent; }
+.tf .btn::before { display: none; }
+.tf .btn:hover:not(:disabled), .tf .btn:active:not(:disabled) { transform: none; box-shadow: none; }
+.tf .btn:disabled { opacity: 1; cursor: default; }
+.tf .btn:focus-visible { outline: 3px solid var(--tf-accent); outline-offset: 2px; }
+
+.tf .screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tf .scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 20px; display: flex; flex-direction: column; }
+.tf .footer { flex: none; position: relative; z-index: 2; padding: 14px 16px max(28px, calc(10px + env(safe-area-inset-bottom, 0px))); border-top: 1px solid var(--sr-line);
+    background: var(--sr-bg); display: flex; flex-direction: column; gap: 12px; }
+.tf .footerRow { display: flex; gap: 12px; align-items: center; }
+.tf .footerRow > .primary, .tf .footerRow > .primaryOff { flex: 1; min-width: 0; width: auto; }
+.tf .footNote { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 20px; font-size: 13.5px; color: var(--sr-muted); text-align: center; }
+.tf .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--sr-muted); }
+.tf .dotOk { background: var(--tf-ok); }
+.tf .dotWait { background: var(--tf-close); animation: tfBlink 1.2s ease-in-out infinite; }
+
+/* Kopf: runde Knöpfe 44 px, Titel daneben */
+.tf .header { flex: none; display: flex; align-items: center; gap: 14px; min-height: 72px; padding: 20px 16px 8px; box-sizing: border-box; }
+.tf .iconBtn { width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1.5px solid var(--sr-line); background: var(--sr-bg); color: var(--sr-ink); }
+.tf .headTitle { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tf .headTitle h1 { font-family: var(--sr-display); font-size: 24px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.1; }
+.tf .headSub { font-size: 14px; color: var(--sr-muted); }
+.tf .brand { flex: 1; font-family: var(--sr-display); font-size: 17px; font-weight: 800; color: var(--tf-accent); letter-spacing: -0.01em; }
+
+/* Knöpfe: 56 px hoch, ganz rund */
+.tf .primary { width: 100%; height: 56px; flex: none; border-radius: 28px; background: var(--tf-accent); color: var(--tf-on-accent);
+    font-family: var(--sr-display); font-size: 18px; font-weight: 800; letter-spacing: -0.01em; gap: 10px; transition: background 0.2s, color 0.2s; }
+.tf .primaryOff { width: 100%; height: 56px; flex: none; border-radius: 28px; background: var(--tf-off); color: var(--tf-off-ink);
+    font-family: var(--sr-display); font-size: 18px; font-weight: 800; letter-spacing: -0.01em; gap: 10px; transition: background 0.2s, color 0.2s; }
+.tf .secondary { height: 56px; flex: none; padding: 0 26px; border-radius: 28px; border: 1.5px solid var(--sr-line); color: var(--sr-ink);
+    font-family: var(--sr-display); font-size: 17px; font-weight: 800; gap: 8px; }
+.tf .secondaryWide { width: 100%; }
+.tf .roundBtn { width: 56px; height: 56px; flex: none; border-radius: 50%; border: 1.5px solid var(--sr-line); color: var(--sr-ink); }
+
+/* ── Start ──────────────────────────────────────────────────────────────── */
+.tf .homeHero { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 0 16px; }
+.tf .homeEmoji { font-size: clamp(64px, 13dvh, 104px); line-height: 1; }
+.tf .bigTitle { max-width: 300px; font-family: var(--sr-display); font-size: 34px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.02; }
+.tf .lead { font-size: 15px; line-height: 1.4; color: var(--sr-muted); }
+.tf .homeActions { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 0 16px calc(20px + env(safe-area-inset-bottom, 0px)); }
+.tf .notice { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--sr-surface); font-size: 15px; line-height: 1.35; }
+.tf .notice p { flex: 1; }
+.tf .rejoin { width: 100%; min-height: 64px; justify-content: flex-start; gap: 12px; padding: 8px 16px; border-radius: 20px; background: var(--sr-surface);
+    border: 1.5px solid var(--tf-accent); text-align: left; }
+.tf .rejoinText { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.tf .rejoinName { font-weight: 800; }
+.tf .rejoinMeta { font-size: 14px; color: var(--sr-muted); }
+.tf .liveDot { width: 10px; height: 10px; border-radius: 50%; background: var(--tf-ok); flex: none; animation: tfBlink 1.6s ease-in-out infinite; }
+
+/* Erstellen / Beitreten (Seite wie Vorlage 1) */
+.tf .intro { padding-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+.tf .avatarWrap { margin: 26px 0 -4px; }
+.tf .field { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.tf .label { margin: 0 4px; font-size: 15px; font-weight: 700; color: var(--sr-muted); }
+.tf input.input { width: 100%; height: 56px; margin: 0; padding: 0 18px; box-sizing: border-box; border-radius: 16px; border: 1.5px solid var(--sr-line);
+    background: var(--sr-surface); color: var(--sr-ink); font-family: inherit; font-size: 18px; font-weight: 700; text-align: left; box-shadow: none; transform: none; transition: border-color 0.15s; }
+.tf input.input::placeholder { color: var(--sr-muted); font-weight: 500; opacity: 0.8; }
+.tf input.input:focus { outline: none; border-color: var(--tf-accent); background: var(--sr-surface); box-shadow: none; transform: none; }
+.tf input.inputBad, .tf input.inputBad:focus { border-color: var(--tf-bad); }
+.tf .hint { margin: 0 4px; font-size: 14px; line-height: 1.4; color: var(--sr-muted); }
+.tf .hintBad { color: var(--tf-bad); font-weight: 600; }
+.tf .hintOk { color: var(--tf-ok); font-weight: 700; }
+.tf .codeRow { display: flex; gap: 10px; }
+.tf .codeWrap { position: relative; flex: 1; min-width: 0; }
+.tf input.codeInput { height: 60px; padding: 0 62px 0 20px; font-family: var(--sr-display); font-size: 24px; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase; }
+.tf input.codeInput::placeholder { font-weight: 800; opacity: 0.35; color: var(--sr-ink); }
+.tf .codeGo { position: absolute; right: 7px; top: 7px; width: 46px; height: 46px; border-radius: 50%; background: var(--tf-accent); color: var(--tf-on-accent);
+    animation: tfPop 0.25s cubic-bezier(.3, 1.6, .5, 1) both; }
+.tf .scanBtn { width: 60px; height: 60px; flex: none; border-radius: 18px; border: 1.5px solid var(--sr-line); background: var(--sr-surface); color: var(--sr-ink); box-sizing: border-box; }
+
+/* ── Spiel einrichten ───────────────────────────────────────────────────── */
+.tf .secTitle { margin: 28px 4px 9px; font-family: var(--sr-display); font-size: 17px; font-weight: 800; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.tf .secNote { font-family: 'Figtree', system-ui, sans-serif; font-size: 15px; font-weight: 500; color: var(--sr-muted); }
+.tf .setGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tf .setCard { flex-direction: column; align-items: flex-start; justify-content: space-between; min-height: 148px; padding: 16px; box-sizing: border-box; border-radius: 20px;
+    background: var(--sr-surface); border: 2px solid transparent; text-align: left; }
+.tf .setCardOn { background: var(--tf-accent-soft); border-color: var(--tf-accent); }
+.tf .setIcon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--sr-surface2); color: var(--sr-muted); }
+.tf .setCardOn .setIcon { background: var(--tf-accent); color: var(--tf-on-accent); }
+.tf .setName { display: block; margin-top: 16px; font-family: var(--sr-display); font-size: 21px; font-weight: 800; letter-spacing: -0.02em; }
+.tf .setSub { display: block; margin-top: 4px; font-size: 15px; color: var(--sr-muted); }
+.tf .seg { display: flex; padding: 6px; border-radius: 20px; background: var(--sr-surface); }
+.tf .segBtn { flex: 1; height: 52px; border-radius: 14px; font-family: var(--sr-display); font-size: 22px; font-weight: 800; color: var(--sr-muted); }
+.tf .segOn { background: var(--sr-ink); color: var(--sr-bg); }
+.tf .typeList { border-radius: 20px; background: var(--sr-surface); padding: 0 0 0 16px; }
+.tf .typeRow { display: flex; align-items: center; gap: 12px; min-height: 47px; padding-right: 16px; border-bottom: 1px solid var(--sr-line); }
+.tf .typeRow:last-child { border-bottom: 0; }
+.tf .typeIcon { display: flex; color: var(--sr-muted); }
+.tf .typeName { flex: 1; font-size: 17px; font-weight: 700; }
+.tf .typeEx { font-size: 15px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tf .summaryLine { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; color: var(--sr-muted); }
+.tf .againNote { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 12px 14px; border-radius: 16px; background: var(--sr-surface); }
+.tf .againNote p { flex: 1; font-size: 15px; line-height: 1.35; }
+
+/* ── Warteraum ──────────────────────────────────────────────────────────── */
+.tf .codeCard { margin-top: 10px; padding: 24px 16px 22px; border-radius: 24px; background: var(--sr-surface); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.tf .codeLabel { font-size: 14px; font-weight: 700; color: var(--sr-muted); }
+.tf .bigCode { font-family: var(--sr-display); font-size: 44px; font-weight: 800; letter-spacing: 0.16em; text-indent: 0.16em; line-height: 1; }
+.tf .qrBox { padding: 12px; border-radius: 18px; background: #FFFFFF; line-height: 0; }
+.tf .codeHelp { font-size: 15px; line-height: 1.35; color: var(--sr-muted); max-width: 300px; }
+.tf .playerGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tf .playerCard { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 126px; padding: 12px 8px; box-sizing: border-box; border-radius: 20px;
+    background: var(--sr-surface); border: 2px solid transparent; text-align: center; }
+.tf .playerMe { border-color: var(--tf-accent); }
+.tf .playerPop { animation: tfCardPop 0.45s cubic-bezier(.3, 1.4, .5, 1) both; }
+.tf .avatar { width: 56px; height: 56px; border-radius: 50%; background: var(--sr-surface2); display: flex; align-items: center; justify-content: center; font-size: 32px; line-height: 1; flex: none; }
+.tf .playerName { margin-top: 6px; font-family: var(--sr-display); font-size: 16px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf .playerRole { font-size: 12.5px; font-weight: 700; color: var(--tf-accent); }
+.tf .playerIn { color: var(--tf-ok); }
+.tf .playerEmpty { justify-content: center; border: 2px dashed var(--sr-line); background: none; color: var(--sr-muted); font-size: 15px; font-weight: 600; }
+.tf .dots { display: inline-flex; gap: 5px; margin-bottom: 8px; }
+.tf .dots i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: tfDots 1.2s ease-in-out infinite; }
+.tf .dots i:nth-child(2) { animation-delay: 0.2s; }
+.tf .dots i:nth-child(3) { animation-delay: 0.4s; }
+.tf .dotsSm { margin: 0; gap: 3px; }
+.tf .dotsSm i { width: 5px; height: 5px; }
+
+/* ── Spielkopf: Fortschritt + Spielstand ────────────────────────────────── */
+.tf .gameHead { flex: none; display: flex; align-items: center; gap: 10px; min-height: 72px; padding: 20px 16px 8px; box-sizing: border-box; }
+.tf .progress { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.tf .progressLabel { font-family: var(--sr-display); font-size: 15px; font-weight: 800; }
+.tf .bar { display: flex; gap: 3px; max-width: 100%; }
+.tf .bar i { width: 8px; height: 4px; border-radius: 2px; background: var(--tf-track); flex: 0 1 8px; min-width: 3px; transition: background 0.3s; }
+.tf .bar i.barDone { background: var(--sr-muted); }
+.tf .bar i.barNow { background: var(--tf-accent); }
+.tf .score { flex: none; display: flex; align-items: center; gap: 5px; height: 44px; padding: 0 12px; border-radius: 22px; border: 1.5px solid var(--sr-line);
+    font-family: var(--sr-display); font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tf .scoreEmoji { font-size: 16px; line-height: 1; }
+.tf .scoreColon { color: var(--sr-muted); }
+.tf .scoreNum { display: inline-block; }
+.tf .scoreBump { animation: tfScoreBump 0.7s ease-out; }
+
+/* ── Frage ──────────────────────────────────────────────────────────────── */
+.tf .steps { align-self: center; display: flex; padding: 4px; margin: 18px 0 22px; border-radius: 20px; background: var(--sr-surface); }
+.tf .step { display: flex; align-items: center; gap: 5px; height: 30px; padding: 0 13px; border-radius: 15px; font-family: var(--sr-display); font-size: 12.5px; font-weight: 800; color: var(--sr-muted); white-space: nowrap; }
+.tf .stepOn { background: var(--sr-ink); color: var(--sr-bg); }
+.tf .stepCheck { color: var(--tf-ok); display: flex; }
+.tf .tags { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tf .tags > * { flex: none; }
+.tf .tags > .tagMuted { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px 0 9px; border-radius: 13px; background: var(--tf-chip); color: var(--tf-accent);
+    font-family: var(--sr-display); font-size: 12.5px; font-weight: 800; }
+.tf .chipPerson { background: var(--sr-surface); color: var(--sr-ink); }
+.tf .chipEmoji { font-size: 16px; line-height: 1; }
+.tf .tagMuted { font-size: 13px; font-weight: 700; color: var(--sr-muted); }
+.tf .question { margin-top: 14px; font-family: var(--sr-display); font-size: 27px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.13; }
+.tf .who { color: var(--tf-accent); }
+.tf .options { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+.tf .option { width: 100%; min-height: 64px; justify-content: flex-start; gap: 14px; padding: 10px 16px 10px 12px; box-sizing: border-box; border-radius: 16px;
+    background: var(--sr-surface); border: 2px solid transparent; text-align: left; transition: border-color 0.15s, background 0.15s; }
+.tf .optionOn { background: var(--tf-accent-soft); border-color: var(--tf-accent); }
+.tf .letter { width: 40px; height: 40px; flex: none; border-radius: 12px; background: var(--sr-surface2); color: var(--sr-muted); display: flex; align-items: center; justify-content: center;
+    font-family: var(--sr-display); font-size: 14px; font-weight: 800; transition: background 0.15s, color 0.15s; }
+.tf .optionOn .letter { background: var(--tf-accent); color: var(--tf-on-accent); }
+.tf .optionText { flex: 1; min-width: 0; font-family: var(--sr-display); font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+.tf .optionCheck { display: flex; color: var(--tf-accent); animation: tfPop 0.2s ease-out both; }
+.tf .mine { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--sr-surface2); color: var(--sr-muted);
+    font-size: 13px; font-weight: 800; flex: none; }
+
+/* Dies oder das: Kacheln */
+.tf .pairHead { display: flex; align-items: center; gap: 12px; margin-top: 18px; font-family: var(--sr-display); font-size: 22px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
+.tf .pairNum { width: 28px; height: 28px; flex: none; border-radius: 50%; background: var(--sr-ink); color: var(--sr-bg); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.tf .pairNumEmoji { width: 28px; height: 28px; flex: none; border-radius: 50%; background: var(--sr-surface); display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.tf .pairGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.tf .tile { flex-direction: column; gap: 10px; min-height: 130px; padding: 14px 8px; box-sizing: border-box; border-radius: 20px; background: var(--sr-surface); border: 2px solid transparent;
+    transition: border-color 0.15s, background 0.15s; }
+.tf .tileOn { background: var(--tf-accent-soft); border-color: var(--tf-accent); }
+.tf .tileIcon { font-size: 34px; line-height: 1; filter: grayscale(1); opacity: 0.7; transition: filter 0.15s, opacity 0.15s; }
+.tf .tileOn .tileIcon { filter: none; opacity: 1; }
+.tf .tileText { font-family: var(--sr-display); font-size: 18px; font-weight: 800; text-align: center; }
+.tf .pairDivider { height: 1px; background: var(--sr-line); margin: 20px 4px 0; }
+
+/* Skala */
+.tf .scaleBig { flex: 1; min-height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+.tf .scaleNum { font-family: var(--sr-display); font-size: 96px; font-weight: 800; line-height: 0.9; color: var(--tf-accent); }
+.tf .scaleNumEmpty { color: var(--tf-track); }
+.tf .scaleLabel { font-family: var(--sr-display); font-size: 16px; font-weight: 800; color: var(--sr-muted); min-height: 24px; }
+.tf .scaleRow { display: flex; justify-content: space-between; gap: 8px; }
+.tf .scaleBtn { width: 62px; height: 62px; flex: 0 1 62px; border-radius: 50%; border: 1.5px solid var(--sr-line); background: var(--sr-bg); font-family: var(--sr-display);
+    font-size: 24px; font-weight: 800; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.tf .scaleBtnOn { background: var(--tf-accent); border-color: var(--tf-accent); color: var(--tf-on-accent); }
+.tf .scaleMine { position: absolute; right: -2px; top: -2px; width: 22px; height: 22px; border-radius: 50%; background: var(--sr-surface2); color: var(--sr-muted); display: flex; align-items: center; justify-content: center; }
+.tf .scaleEnds { display: flex; justify-content: space-between; margin: 12px 4px 0; font-family: var(--sr-display); font-size: 12.5px; font-weight: 800; color: var(--sr-muted); }
+
+/* ── Warten ─────────────────────────────────────────────────────────────── */
+.tf .waitBox { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 10px 0; text-align: center; }
+.tf .waitAvatar { position: relative; width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--sr-line); display: flex; align-items: center; justify-content: center;
+    font-size: 64px; line-height: 1; transition: border-color 0.3s; margin-bottom: 22px; }
+.tf .waitAvatar::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 3px solid var(--tf-accent); animation: tfRipple 1.8s ease-out infinite; }
+.tf .waitAvatarDone { border-color: var(--tf-ok); }
+.tf .waitAvatarDone::after { display: none; }
+.tf .waitBadge { position: absolute; right: -6px; bottom: -4px; width: 38px; height: 38px; border-radius: 12px; background: var(--tf-ok); color: var(--tf-on-ok); display: flex;
+    align-items: center; justify-content: center; animation: tfPop 0.35s cubic-bezier(.3, 1.6, .5, 1) both; }
+.tf .waitTitle { font-family: var(--sr-display); font-size: 28px; font-weight: 800; letter-spacing: -0.03em; }
+.tf .waitSub { font-size: 15px; color: var(--sr-muted); }
+.tf .statusList { width: calc(100% - 16px); margin-top: 26px; border-radius: 20px; background: var(--sr-surface); padding-left: 12px; box-sizing: border-box; text-align: left; }
+.tf .statusRow { display: flex; align-items: center; gap: 14px; min-height: 62px; padding-right: 16px; border-bottom: 1px solid var(--sr-line); }
+.tf .statusRow:last-child { border-bottom: 0; }
+.tf .statusRow .avatar { width: 40px; height: 40px; font-size: 22px; }
+.tf .statusName { flex: 1; font-family: var(--sr-display); font-size: 17px; font-weight: 800; }
+.tf .statusOk { display: flex; align-items: center; gap: 6px; font-family: var(--sr-display); font-weight: 800; color: var(--tf-ok); animation: tfPop 0.3s ease-out both; }
+.tf .statusWait { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--sr-muted); }
+.tf .lockedGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tf .locked { padding: 12px 14px; border-radius: 16px; background: var(--sr-surface); min-width: 0; }
+.tf .lockedLabel { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--sr-muted); }
+.tf .lockedValue { display: block; margin-top: 4px; font-family: var(--sr-display); font-size: 17px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Countdown ──────────────────────────────────────────────────────────── */
+.tf .countBox { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; }
+.tf .countLabel { font-family: var(--sr-display); font-size: 15px; font-weight: 800; letter-spacing: 0.12em; color: var(--sr-muted); }
+.tf .countRing { position: relative; width: 230px; height: 230px; }
+.tf .countRing svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.tf .countTrack { fill: none; stroke: var(--tf-track); stroke-width: 9; }
+.tf .countFill { fill: none; stroke: var(--tf-accent); stroke-width: 9; stroke-linecap: round; animation: tfRingFill 3s linear both; }
+.tf .countNum { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--sr-display); font-size: 110px; font-weight: 800;
+    color: var(--sr-ink); animation: tfCountNum 1s ease-out both; }
+.tf .countGo { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--sr-display); font-size: 64px; font-weight: 800;
+    letter-spacing: -0.04em; color: var(--tf-accent); animation: tfGo 0.45s cubic-bezier(.3, 1.6, .5, 1) both; }
+.tf .countRingFull .countTrack { stroke: var(--tf-accent); }
+.tf .chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.tf .personChip { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px 0 6px; border-radius: 22px; background: var(--sr-surface); font-family: var(--sr-display); font-weight: 800; }
+.tf .personChip .avatar { width: 32px; height: 32px; font-size: 18px; }
+.tf .personChip svg { color: var(--tf-ok); }
+
+/* ── Aufdeckung ─────────────────────────────────────────────────────────── */
+.tf .revealMeta { margin-top: 14px; font-family: var(--sr-display); font-size: 14px; font-weight: 700; color: var(--sr-muted); }
+.tf .revealQ { margin-top: 8px; font-family: var(--sr-display); font-size: 19.5px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.18; }
+.tf .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+.tf .rcard { position: relative; overflow: hidden; display: flex; flex-direction: column; padding: 16px 12px 16px 14px; min-width: 0; border-radius: 20px; border: 1.5px solid;
+    animation: tfSlideUp 0.35s ease-out both; }
+.tf .rcard:nth-child(2) { animation-delay: 0.08s; }
+.tf .rRight { background: var(--tf-ok-card); border-color: var(--tf-ok-line); --tone: var(--tf-ok); --on-tone: var(--tf-on-ok); }
+.tf .rWrong { background: var(--tf-bad-card); border-color: var(--tf-bad-line); --tone: var(--tf-bad); --on-tone: var(--tf-on-bad); animation: tfSlideUp 0.35s ease-out both, tfShake 0.55s 0.4s ease-in-out; }
+.tf .rClose { background: var(--tf-close-card); border-color: var(--tf-close-line); --tone: var(--tf-close); --on-tone: var(--tf-on-close); animation: tfSlideUp 0.35s ease-out both, tfWobble 0.5s 0.4s ease-in-out; }
+.tf .cards .rWrong:nth-child(2), .tf .cards .rClose:nth-child(2) { animation-delay: 0.08s, 0.48s; }
+.tf .rDir { display: flex; align-items: center; gap: 4px; margin-right: -4px; font-size: 13px; font-weight: 800; color: var(--tone); white-space: nowrap; min-width: 0; }
+.tf .rDirText { min-width: 0; overflow: hidden; text-overflow: ellipsis; margin-left: 3px; }
+.tf .rDir .rEmoji { width: 15px; font-size: 14px; line-height: 1; flex: none; display: flex; justify-content: center; }
+.tf .rDir .rArrow { color: var(--sr-muted); display: flex; }
+.tf .rVerdict { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-family: var(--sr-display); font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--tone); }
+.tf .rIcon { width: 36px; height: 36px; flex: none; border-radius: 50%; background: var(--tone); color: var(--on-tone); display: flex; align-items: center; justify-content: center; }
+.tf .rLabel { margin-top: 14px; font-size: 13px; font-weight: 700; color: var(--sr-muted); }
+.tf .rValue { margin-top: 2px; font-family: var(--sr-display); font-size: 15.5px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.tf .rStrike { text-decoration: line-through; color: var(--sr-muted); }
+.tf .rLine { height: 1px; margin-top: 14px; background: var(--tone); opacity: 0.25; }
+.tf .rPoint { margin-top: 12px; font-family: var(--sr-display); font-size: 14px; font-weight: 800; color: var(--tone); }
+.tf .rDots { display: flex; gap: 4px; margin-top: 14px; }
+.tf .rDot { width: 26px; height: 26px; flex: 0 1 26px; min-width: 0; border-radius: 50%; border: 1.5px solid var(--tf-track); display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; color: var(--sr-muted); box-sizing: border-box; }
+.tf .rDotAnswer { background: var(--tone); border-color: var(--tone); color: var(--on-tone); }
+.tf .rDotGuess { border: 2px solid var(--sr-ink); color: var(--sr-ink); }
+.tf .rText { margin-top: 12px; font-size: 14px; color: var(--sr-muted); }
+.tf .legend { display: flex; justify-content: center; gap: 24px; margin-top: 16px; font-family: var(--sr-display); font-size: 14px; font-weight: 800; color: var(--sr-muted); }
+.tf .legend span { display: flex; align-items: center; gap: 8px; }
+.tf .legendFill { width: 14px; height: 14px; border-radius: 50%; background: var(--sr-ink); }
+.tf .legendRing { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--sr-ink); box-sizing: border-box; }
+.tf .banner { margin-top: 18px; padding: 20px 14px; border-radius: 24px; background: var(--tf-accent-soft); border: 2px solid var(--tf-accent); text-align: center;
+    animation: tfBanner 0.6s 0.5s cubic-bezier(.3, 1.5, .5, 1) both; }
+.tf .bannerTitle { font-family: var(--sr-display); font-size: 28px; font-weight: 800; letter-spacing: -0.03em; }
+.tf .bannerSub { margin-top: 4px; font-size: 15px; color: var(--sr-muted); }
+.tf .answersTitle { margin: 24px 4px 10px; font-family: var(--sr-display); font-size: 15px; font-weight: 800; color: var(--sr-muted); }
+.tf .answerList { border-radius: 20px; background: var(--sr-surface); padding-left: 10px; }
+.tf .answerRow { display: flex; align-items: center; gap: 14px; min-height: 54px; padding-right: 16px; border-bottom: 1px solid var(--sr-line); }
+.tf .answerRow:last-child { border-bottom: 0; }
+.tf .answerRow .avatar { width: 34px; height: 34px; font-size: 19px; }
+.tf .answerName { flex: 1; color: var(--sr-muted); font-size: 15px; }
+.tf .answerValue { font-family: var(--sr-display); font-size: 15px; font-weight: 800; text-align: right; }
+
+/* Konfetti: in der richtigen Karte (klein) oder über den ganzen Bildschirm (Gleiche Wellenlänge) */
+.tf .confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; }
+.tf .confettiScreen { position: absolute; inset: 0; z-index: 60; pointer-events: none; overflow: hidden; }
+.tf .confetti > span, .tf .confettiScreen > span { position: absolute; top: -12px; border-radius: 2px; opacity: 0; animation: tfFall linear forwards; }
+
+/* ── Ergebnis ───────────────────────────────────────────────────────────── */
+.tf .heroCard { margin-top: 6px; padding: 24px 16px 22px; border-radius: 24px; background: var(--tf-accent-soft); border: 1.5px solid color-mix(in srgb, var(--tf-accent) 22%, transparent);
+    display: flex; flex-direction: column; align-items: center; text-align: center; }
+.tf .ring { position: relative; width: 144px; height: 144px; }
+.tf .ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.tf .ringTrack { fill: none; stroke: color-mix(in srgb, var(--tf-accent) 16%, transparent); stroke-width: 12; }
+.tf .ringFill { fill: none; stroke: var(--tf-accent); stroke-width: 12; stroke-linecap: round; transition: stroke-dashoffset 1.2s cubic-bezier(.3, .7, .3, 1); }
+.tf .ringText { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.tf .ringPct { font-family: var(--sr-display); font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.tf .ringSub { margin-top: 2px; font-size: 13px; font-weight: 700; color: var(--sr-muted); }
+.tf .heroTitle { margin-top: 18px; font-family: var(--sr-display); font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
+.tf .heroMeta { margin-top: 4px; font-size: 14px; color: var(--sr-muted); }
+.tf .knowCard { margin-top: 10px; padding: 18px 16px 16px; border-radius: 20px; background: var(--sr-surface); }
+.tf .knowHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tf .knowText { font-family: var(--sr-display); font-size: 15px; font-weight: 800; }
+.tf .knowPct { font-family: var(--sr-display); font-size: 25px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--tf-accent); white-space: nowrap; }
+.tf .knowBlue .knowPct { color: var(--tf-blue); }
+.tf .track { position: relative; height: 8px; margin-top: 10px; border-radius: 4px; background: var(--tf-track); overflow: hidden; }
+.tf .trackThin { height: 5px; margin-top: 6px; }
+.tf .trackFill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--tf-accent); transition: width 1.2s cubic-bezier(.3, .7, .3, 1); }
+.tf .trackBlue { background: var(--tf-blue); }
+.tf .infoLine { display: flex; align-items: center; gap: 8px; margin: 12px 4px 0; font-size: 13px; color: var(--sr-muted); }
+.tf .legendRow { display: flex; gap: 14px; font-family: 'Figtree', system-ui, sans-serif; font-size: 14px; font-weight: 600; color: var(--sr-muted); }
+.tf .legendRow span { display: flex; align-items: center; gap: 6px; }
+.tf .legendDot { width: 9px; height: 9px; border-radius: 50%; background: var(--tf-accent); }
+.tf .legendDotBlue { background: var(--tf-blue); }
+.tf .catList { border-radius: 20px; background: var(--sr-surface); padding: 6px 16px 16px; }
+.tf .catRow { padding-top: 12px; }
+.tf .catHead { display: flex; justify-content: space-between; gap: 8px; }
+.tf .catName { font-family: var(--sr-display); font-size: 16px; font-weight: 800; }
+.tf .catPct { font-size: 15px; font-weight: 600; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+.tf .surprise { padding: 14px 16px; border-radius: 18px; background: var(--sr-surface); margin-bottom: 10px; }
+.tf .surpriseQ { font-family: var(--sr-display); font-size: 16px; font-weight: 800; line-height: 1.25; }
+.tf .surpriseRow { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 15px; color: var(--sr-muted); }
+.tf .surpriseRow b { color: var(--sr-ink); font-weight: 700; }
+
+/* ── Sheet ──────────────────────────────────────────────────────────────── */
+.tf .sheetBtns { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.tf .sheetDanger { width: 100%; height: 56px; border-radius: 28px; background: var(--tf-bad); color: var(--tf-on-bad); font-family: var(--sr-display); font-size: 18px; font-weight: 800; }
+.tf .sheetPlain { width: 100%; height: 52px; border-radius: 26px; color: var(--sr-ink); font-size: 17px; font-weight: 700; }
+.tf .toast { position: absolute; left: 16px; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 70; padding: 12px 16px; border-radius: 16px;
+    background: var(--sr-card); color: var(--sr-card-ink); font-size: 15px; font-weight: 600; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3); animation: tfSlideUp 0.25s ease-out both; }
+.tf .loading { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--sr-muted); }
+
+/* ── Animationen ────────────────────────────────────────────────────────── */
+@keyframes tfBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes tfDots { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+@keyframes tfPop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes tfCardPop { 0% { transform: scale(0.6); opacity: 0; } 70% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes tfRipple { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.45); opacity: 0; } }
+@keyframes tfRingFill { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
+@keyframes tfCountNum { 0% { transform: scale(1.8); opacity: 0; } 25% { transform: scale(1); opacity: 1; } 75% { transform: scale(0.92); opacity: 1; } 100% { transform: scale(0.85); opacity: 0; } }
+@keyframes tfGo { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes tfSlideUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes tfShake { 0%, 100% { transform: none; } 20% { transform: translateX(-8px) rotate(-2deg); } 40% { transform: translateX(7px) rotate(1.5deg); }
+    60% { transform: translateX(-5px) rotate(-1deg); } 80% { transform: translateX(3px) rotate(0.5deg); } }
+@keyframes tfWobble { 0%, 100% { transform: none; } 30% { transform: rotate(-2deg) translateX(-3px); } 65% { transform: rotate(1.5deg) translateX(2px); } }
+@keyframes tfBanner { 0% { transform: scale(0.4) rotate(-6deg); opacity: 0; } 70% { transform: scale(1.05) rotate(1deg); opacity: 1; } 100% { transform: none; opacity: 1; } }
+@keyframes tfScoreBump { 0% { transform: scale(1); color: inherit; } 30% { transform: scale(1.5); color: var(--tf-ok); } 100% { transform: scale(1); color: inherit; } }
+@keyframes tfFall { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 100% { opacity: 0.9; transform: translate(var(--drift), var(--fall)) rotate(var(--spin)); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .tf *, .tf *::after { animation-duration: 0.01s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; }
+    .tf .confetti, .tf .confettiScreen { display: none; }
+    .tf .countNum, .tf .waitAvatar::after { animation: none !important; }
+    .tf .waitAvatar::after { display: none; }
+    .tf .ringFill, .tf .trackFill { transition: none; }
+}

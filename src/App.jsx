@@ -9,6 +9,11 @@ import LiveBoard from './projects/MusicVoter/LiveBoard'
 import Amplify2 from './projects/Amplify2/Amplify2'
 import LiveBoard2 from './projects/Amplify2/LiveBoard'
 import IdentifyStudio from './projects/IdentifyStudio/IdentifyStudio'
+import Testify from './projects/Testify/Testify'
+import { lobbyCollection as testifyCollection } from './projects/Testify/store'
+import { getApp } from 'firebase/app'
+import { getAuth, signInAnonymously } from 'firebase/auth'
+import { getFirestore, doc, getDoc } from 'firebase/firestore'
 import './App.css'
 
 const PROJECT_META = {
@@ -20,6 +25,7 @@ const PROJECT_META = {
     live:        { title: 'Amplify 1.0 Live', emoji: '📺' },
     live2:       { title: 'Amplify Live', emoji: '📺' },
     studio:      { title: 'Identify Studio', emoji: '🎛️' },
+    testify:     { title: 'Testify', emoji: '💞' },
 }
 
 const setPageMeta = (projectId) => {
@@ -53,6 +59,7 @@ const HASH_MAP = {
     amplify2:  'amplify2',     // Amplify 2.0 (Weiterentwicklung; 1.0 bleibt als Backup)
     live2:     'live2',        // #live2/RAUMCODE – Live-Board 2.0
     studio:    'studio',       // #studio – Identify Studio (Listen pflegen, nur für den Betreiber, nicht auf der Startseite)
+    testify:   'testify',      // #testify/RAUMCODE – Testify (Wie gut kennt ihr euch?)
     identify:  'secondsound',  // Identify (früher „Song raten“) – steht zuletzt, damit die Adresse #identify lautet
 }
 const ID_TO_HASH = Object.fromEntries(Object.entries(HASH_MAP).map(([h, id]) => [id, h]))
@@ -61,6 +68,20 @@ const ID_TO_HASH = Object.fromEntries(Object.entries(HASH_MAP).map(([h, id]) => 
 function parseHash() {
     const [name, param] = window.location.hash.replace('#', '').split('/')
     return { project: HASH_MAP[name.toLowerCase()] ?? null, param: param ? param.toUpperCase() : null }
+}
+
+// Zu welchem Spiel gehört ein Raumcode? (anonymer Login nötig zum Lesen)
+async function gameForCode(code) {
+    try {
+        const app = getApp()
+        const auth = getAuth(app)
+        await auth.authStateReady()
+        if (!auth.currentUser) await signInAnonymously(auth)
+        const db = getFirestore(app)
+        if ((await getDoc(doc(db, 'amplify2Lobbies', code))).exists()) return 'amplify2'
+        if (/^[A-Z0-9]{6}$/.test(code) && (await getDoc(doc(db, testifyCollection(), code))).exists()) return 'testify'
+    } catch { /* dann Amplify – zeigt selbst, wenn es den Code nicht gibt */ }
+    return 'amplify2'
 }
 
 function getInitialProject() {
@@ -91,11 +112,13 @@ function App() {
         logEvent('open_project', { project: projectId })
         setCurrentProject(projectId)
     }
-    // Raumcode/QR auf der Startseite → Amplify mit diesem Code öffnen (wie ein Einladungslink)
-    const handleJoinAmplify = (code) => {
-        logEvent('open_project', { project: 'amplify2', via: 'code' })
+    // Raumcode/QR auf der Startseite → das Spiel mit diesem Code öffnen (wie ein Einladungslink).
+    // Erst Amplify, dann Testify; gibt es keins von beiden, zeigt Amplify „gibt es nicht“.
+    const handleJoinCode = async (code, game = null) => {
+        const project = game || await gameForCode(code)
+        logEvent('open_project', { project, via: 'code' })
         setHashParam(code)
-        setCurrentProject('amplify2')
+        setCurrentProject(project)
     }
     const handleBackToHub = () => {
         setHashParam(null)
@@ -105,7 +128,7 @@ function App() {
     return (
         <div className="App">
             {!currentProject && (
-                <ProjectHub onSelectProject={handleSelectProject} onJoinAmplify={handleJoinAmplify} />
+                <ProjectHub onSelectProject={handleSelectProject} onJoinCode={handleJoinCode} />
             )}
             
             {currentProject === 'hitzkopf' && (
@@ -138,6 +161,10 @@ function App() {
 
             {currentProject === 'secondsound' && (
                 <SecondSound onBack={handleBackToHub} />
+            )}
+
+            {currentProject === 'testify' && (
+                <Testify onBack={handleBackToHub} joinCode={hashParam} />
             )}
         </div>
     )
