@@ -4,7 +4,8 @@ import theme from '../shared/ui/theme.module.css'
 import { BottomSheet } from '../shared/ui/BottomSheet'
 import QrScanner from '../shared/ui/QrScanner'
 import { IconNext, IconGear, IconQr, IconMoon, IconSun } from '../shared/ui/icons'
-import { codeFromQr } from '../projects/Amplify2/avatars'
+import { codeFromQr as amplifyCode } from '../projects/Amplify2/avatars'
+import { codeFromQr as testifyCode } from '../projects/Testify/store'
 import styles from './ProjectHub.module.css'
 
 // Startseite im gemeinsamen App-Design (wie Amplify und Identify).
@@ -20,6 +21,7 @@ const GROUPS = [
     {
         label: 'Party & Quiz',
         games: [
+            { id: 'testify', name: 'Testify', emoji: '💞', tint: '#C791FF', description: 'Wie gut kennt ihr euch? Zwei Handys, eine Frage pro Runde.' },
             { id: 'hitzkopf', name: 'Hitzkopf', emoji: '🔥', tint: '#FF3B30', description: 'Das explosive Partyspiel' },
             { id: 'quizroyale', name: 'Quiz Royale', emoji: '🧠', tint: '#C04CFD', description: 'Quiz mit Upgrades & Charakteren' }
         ]
@@ -28,23 +30,34 @@ const GROUPS = [
 
 const CODE_RE = /^[A-Z0-9]{4,10}$/
 
+// QR-Code: Einladungslink von Testify (#testify/CODE) führt direkt dorthin, sonst Amplify-Link oder reiner Code
+const parseQr = (text) => {
+    if (/#testify\//.test(String(text))) {
+        const code = testifyCode(text)
+        return code ? { code, game: 'testify' } : null
+    }
+    const code = amplifyCode(text)
+    return code ? { code, game: /#amplify2\//.test(String(text)) ? 'amplify2' : null } : null
+}
+
 // Offene Amplify-Playlist in diesem Tab
 const readAmplifyRoom = () => {
     try { return sessionStorage.getItem('a2_roomId') || null } catch { return null }
 }
 
-const ProjectHub = ({ onSelectProject, onJoinAmplify }) => {
+const ProjectHub = ({ onSelectProject, onJoinCode }) => {
     const { isDark, toggleTheme } = useTheme()
     const amplifyRoom = readAmplifyRoom()
     const [code, setCode] = useState('')
     const [scanning, setScanning] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
+    const [joining, setJoining] = useState(false)   // Code wird gerade einem Spiel zugeordnet
     const gearRef = useRef(null)
     const codeOk = CODE_RE.test(code)
 
     const join = (e) => {
         e?.preventDefault()
-        if (codeOk) onJoinAmplify(code)
+        if (codeOk && !joining) { setJoining(true); onJoinCode(code) }
     }
 
     return (
@@ -80,7 +93,7 @@ const ProjectHub = ({ onSelectProject, onJoinAmplify }) => {
                                     value={code}
                                     onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
                                     placeholder="RAUMCODE"
-                                    aria-label="Raumcode einer Amplify-Playlist"
+                                    aria-label="Raumcode (Amplify oder Testify)"
                                     autoComplete="off"
                                     autoCapitalize="characters"
                                     spellCheck="false"
@@ -118,8 +131,8 @@ const ProjectHub = ({ onSelectProject, onJoinAmplify }) => {
                 </main>
 
                 {scanning && (
-                    <QrScanner parse={codeFromQr} invalidText="Das ist kein Amplify-Code."
-                        onCode={(c) => { setScanning(false); onJoinAmplify(c) }} onClose={() => setScanning(false)} />
+                    <QrScanner parse={parseQr} invalidText="Das ist kein Raumcode."
+                        onCode={(c) => { setScanning(false); onJoinCode(c.code, c.game) }} onClose={() => setScanning(false)} />
                 )}
 
                 <BottomSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} labelledBy="hub-settings-title" returnFocusRef={gearRef}>

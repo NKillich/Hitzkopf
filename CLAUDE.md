@@ -5,8 +5,8 @@ React + Vite, Firebase (anonymer Login + Firestore), Spotify Web API, veröffent
 die Seite neu (1–2 Minuten).
 
 Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= **Identify**, früher „Song raten“),
-`MusicVoter` (= Amplify 1.0), `Amplify2` (= **Amplify**, intern „Amplify 2.0“). Ordner- und Code-Namen bleiben so.
-Startseite: `src/components/ProjectHub.jsx` (Raumcode/QR → Amplify-Lobby, Spiele-Liste, Zahnrad = Hell/Dunkel),
+`MusicVoter` (= Amplify 1.0), `Amplify2` (= **Amplify**, intern „Amplify 2.0“), `Testify`. Ordner- und Code-Namen bleiben so.
+Startseite: `src/components/ProjectHub.jsx` (Raumcode/QR → erst Amplify, dann Testify; Spiele-Liste, Zahnrad = Hell/Dunkel),
 Routing per Hash in `src/App.jsx` (`#identify`, alter Link `#songraten` geht weiter).
 **Schwerpunkt: Amplify und Identify.** Hitzkopf ist auf Eis – keine Updates nötig, auch wenn es nicht mehr läuft.
 Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel + Erraten/Nicht erraten) und **Pro**
@@ -47,6 +47,16 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   Das Skript fragt Spotify einmalig pro Song (App-Token), sucht bei Apple (ca. 20 Suchen/Minute → 400 Songs ≈ 25 Min.,
   im Hintergrund laufen lassen) und schreibt Liste, Verzeichnis und Bericht (`<id>.report.txt`: nicht gefunden/unsicher).
   Gespeichert werden nur Apple-Daten (ID, Titel, Interpret, Jahr, Cover, Hörprobe-Adresse), keine Spotify-Daten.
+
+### Testify („Wie gut kennt ihr euch?“, `#testify/CODE`)
+- Genau 2 Handys. Pro Frage: eigene Antwort (danach gesperrt) → Tipp für den anderen → warten → Countdown → Aufdeckung →
+  beide „Weiter“. Fragetypen Eins aus 4 / Dies oder das (beides auf einem Bildschirm) / Skala 1–5 (1 daneben = „knapp“, ½ Punkt).
+  Ergebnis „X kennt Y zu …“ bereinigt um Zufallstreffer. „Nochmal“: Host stellt neu ein, Gast bestätigt „Nochmal spielen“.
+- Design nach `testify_screendesigns.pdf` (Akzent Lila `#C791FF`), Aufbau Start/Erstellen/Beitreten wie Amplify (Tier-Karussell geteilt).
+- Fragen vorerst fest in `Testify/questions.js` (Sets `freunde`/`paar`, neutral formuliert – kein Gendern). Logik ohne React: `testifyLogic.js`.
+- Firestore `testifyLobbies`, Spieler-Schlüssel = UID (nicht der Name). Countdown synchron über `round.doneAt` (Serverzeit) + Uhrabgleich.
+- Testen ohne zweites Handy: `scripts/testify-test.mjs` (Bot spielt mit). Vor dem Veröffentlichen der Regeln im Dev-Modus
+  `localStorage.tf_dev_col = 'lobbies'` setzen (offene Hitzkopf-Sammlung) und das Skript mit `TF_COL=lobbies` starten; Lobbys danach löschen.
 
 ## Arbeitsweise
 
