@@ -67,11 +67,19 @@
 .tf .roundBtn { width: 56px; height: 56px; flex: none; border-radius: 50%; border: 1.5px solid var(--sr-line); color: var(--sr-ink); }
 
 /* ── Start ──────────────────────────────────────────────────────────────── */
-.tf .homeHero { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 0 16px; }
-.tf .homeEmoji { font-size: clamp(64px, 13dvh, 104px); line-height: 1; }
+/* Startseite wie Identify/Amplify: Textknopf „Zum Menü“, Mitte zentriert */
+.tf .homeHeader { justify-content: space-between; min-height: 0; padding: 17px 20px 0; }
+.tf .textBtn { height: 44px; padding: 0 14px 0 4px; border-radius: 22px; color: var(--sr-muted); font-size: 16px; font-weight: 600; gap: 2px; }
+.tf .themeBtn { background: var(--sr-surface); }
+.tf .homeHero { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(10px, 2dvh, 18px);
+    padding: 0 20px; text-align: center; }
+.tf .homeEmoji { font-size: clamp(72px, 15dvh, 120px); line-height: 1; }
+.tf .homeTitle { font-family: var(--sr-display); font-size: clamp(40px, 6.6dvh, 58px); line-height: 0.95; letter-spacing: -0.035em; font-weight: 800; }
+.tf .homeLead { margin: 0 auto; max-width: 340px; font-size: clamp(15px, 2.1dvh, 18px); line-height: 1.45; color: var(--sr-muted); }
+.tf .homeFine { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 2px; font-size: 14px; color: var(--sr-muted); }
 .tf .bigTitle { max-width: 300px; font-family: var(--sr-display); font-size: 34px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.02; }
 .tf .lead { font-size: 15px; line-height: 1.4; color: var(--sr-muted); }
-.tf .homeActions { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 0 16px calc(20px + env(safe-area-inset-bottom, 0px)); }
+.tf .homeActions { flex: none; display: flex; flex-direction: column; gap: clamp(8px, 1.4dvh, 12px); padding: 0 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
 .tf .notice { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--sr-surface); font-size: 15px; line-height: 1.35; }
 .tf .notice p { flex: 1; }
 .tf .rejoin { width: 100%; min-height: 64px; justify-content: flex-start; gap: 12px; padding: 8px 16px; border-radius: 20px; background: var(--sr-surface);
@@ -372,4 +380,10 @@
     .tf .countNum, .tf .waitAvatar::after { animation: none !important; }
     .tf .waitAvatar::after { display: none; }
     .tf .ringFill, .tf .trackFill { transition: none; }
+}
+
+/* Am PC/Tablet: App als Handy-Karte in der Mitte (wie Amplify und Identify) */
+@media (min-width: 600px) and (min-height: 560px) {
+    .tf { align-items: center; background: var(--sr-outer); }
+    .tf .app { height: min(100%, 880px); border-radius: 34px; border: 1px solid var(--sr-line); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35); }
 }

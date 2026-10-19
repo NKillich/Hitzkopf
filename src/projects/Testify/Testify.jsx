@@ -451,17 +451,16 @@ export default function Testify({ onBack, joinCode }) {
         const themeLabel = isDark ? 'Helles Design' : 'Dunkles Design'
         return shell(
             <section className={styles.screen}>
-                <header className={styles.header}>
-                    <button type="button" className={`${styles.btn} ${styles.iconBtn}`} onClick={onBack} aria-label="Zum Menü"><IconBack /></button>
-                    <span className={styles.brand}>Testify</span>
-                    <button type="button" className={`${styles.btn} ${styles.iconBtn}`} onClick={toggleTheme} aria-label={themeLabel} title={themeLabel}>
+                <header className={`${styles.header} ${styles.homeHeader}`}>
+                    <button type="button" className={`${styles.btn} ${styles.textBtn}`} onClick={onBack}><IconBack />Zum Menü</button>
+                    <button type="button" className={`${styles.btn} ${styles.iconBtn} ${styles.themeBtn}`} onClick={toggleTheme} aria-label={themeLabel} title={themeLabel}>
                         {isDark ? <IconSun /> : <IconMoon />}
                     </button>
                 </header>
                 <div className={styles.homeHero}>
                     <span className={styles.homeEmoji} aria-hidden="true">💞</span>
-                    <h1 className={styles.bigTitle}>Wie gut kennt ihr euch?</h1>
-                    <p className={styles.lead}>Zwei Handys, eine Frage pro Runde. Erst deine Antwort, dann dein Tipp für den anderen.</p>
+                    <h1 className={styles.homeTitle}>Testify</h1>
+                    <p className={styles.homeLead}>Wie gut kennt ihr euch? Zwei Handys, eine Frage pro Runde – erst deine Antwort, dann dein Tipp für den anderen.</p>
                 </div>
                 <div className={styles.homeActions}>
                     {notice && (
@@ -472,6 +471,7 @@ export default function Testify({ onBack, joinCode }) {
                     )}
                     <button type="button" className={`${styles.btn} ${styles.primary}`} onClick={() => setScreen('create')}><IconPlus />Spiel erstellen</button>
                     <button type="button" className={`${styles.btn} ${styles.secondary} ${styles.secondaryWide}`} onClick={() => setScreen('join')}>Mit Code beitreten</button>
+                    <p className={styles.homeFine}><IconInfo />Für 2 Handys · kein Konto nötig</p>
                 </div>
             </section>
         )
