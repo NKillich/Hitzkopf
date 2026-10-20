@@ -4,10 +4,12 @@
 //   node scripts/testify-test.mjs host [Name] [modus]       → legt ein Spiel an (Code steht in der Ausgabe), Browser tritt bei
 //   node scripts/testify-test.mjs delete CODE               → Test-Lobby löschen (nur, was das Skript selbst angelegt hat, oder TF_COL=lobbies)
 // modus: right (tippt immer richtig), wrong (immer falsch), mix (Zufall, Standard). Beenden mit Strg+C.
+// FAKE_KI=1 beim Bot: stellt nach dem Beitritt eine fertige KI-Antwort in die Lobby (feste Fragen als „KI-Fragen“ mit Thema,
+// jede vierte Frage leer) – zum Testen der KI-Oberfläche, solange die Funktion testifyQuestions nicht veröffentlicht ist.
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInAnonymously } from 'firebase/auth'
 import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { answerUpdate, nextUpdate, startGame, optionCount } from '../src/projects/Testify/testifyLogic.js'
+import { answerUpdate, nextUpdate, startGame, optionCount, genKey, pickQuestions, catLabel } from '../src/projects/Testify/testifyLogic.js'
 
 const firebaseConfig = {
     apiKey: 'AIzaSyBQ7c9JkZ3zWlyIjZLl1O1sJJOrKfYJbmA', authDomain: 'hitzkopf-f0ea6.firebaseapp.com',
@@ -47,7 +49,7 @@ function play(ref, mode, isHost) {
         }
         const players = Object.keys(d.players || {})
         const other = players.find(u => u !== me)
-        if (d.phase === 'lobby' && isHost && players.length === 2) later('start', 1500, () => mutate(ref, (x) => ({ update: startGame(x, x.themes, x.rounds) })))
+        if (d.phase === 'lobby' && isHost && players.length === 2) later('start', 1500, () => mutate(ref, (x) => ({ update: startGame(x) })))
         if (d.phase === 'play') {
             const q = d.questions[d.idx]
             const mine = d.round?.answers?.[me] || {}
@@ -86,6 +88,14 @@ if (cmd === 'bot') {
     const res = await mutate(ref, (d) => (d.players?.[me] ? {} : { update: { [`players.${me}`]: { name, emoji: '🐼', joinedAt: Date.now() } } }))
     if (res.missing) { console.log('Gibt es nicht:', code); process.exit(1) }
     log('beigetreten als', name, 'in', COL, code, 'Modus', mode)
+    if (process.env.FAKE_KI === '1') {
+        await mutate(ref, (d) => {
+            const qs = pickQuestions(d.themes || [], d.rounds || 15, [])
+                .map((q, i) => (i % 4 === 3 ? null : { ...q, id: `fake${Date.now().toString(36)}${i}`, catLabel: catLabel(q) }))
+            return { update: { gen: { status: 'done', key: genKey(d), at: Date.now(), fromPool: 3, generated: 8, missing: 0 }, genQuestions: qs } }
+        })
+        log('Fake-KI-Fragen in die Lobby gestellt')
+    }
     play(ref, mode, false)
 } else if (cmd === 'host') {
     const [name = 'Lisa', mode = 'mix'] = args

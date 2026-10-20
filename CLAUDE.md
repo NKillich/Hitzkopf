@@ -60,6 +60,14 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   für den gemeinsamen Wert). Mischung pro Spiel `TYPE_MIX`. Ziel: ≥ 5 Spiele à 15 ohne Wiederholung – pro Typ genug Fragen
   (bei 15 Runden: 4 Eins aus 4, 3 Dies oder das, je 2 der übrigen). Gespielte Fragen merkt sich jedes Gerät
   (`tf_played_v1`, beim Beitreten als `players.<uid>.played` in die Lobby) → auch neue Lobbys wiederholen nichts.
+- **KI-Fragen** (Schalter „KI-Fragen“ in „Spiel einrichten“, dazu bis zu 5 eigene Themen wie „Herr der Ringe“): Der Host ruft beim
+  Erstellen bzw. bei „Nochmal“ die Firebase-Funktion `testifyQuestions` auf (`functions/testifyQuestions.js`, Logik in `testifyCore.js`).
+  Sie nimmt zuerst Fragen aus dem gemeinsamen Pool `testifyPool` (gleiches Thema + Typ, noch nicht gespielt), nur Fehlendes erzeugt
+  Claude Opus 5.5 (Secret `ANTHROPIC_API_KEY`, Tageslimit 20 pro Gerät in `testifyUsage`). Persönliche eigene Themen landen nicht im Pool.
+  Ergebnis in der Lobby: `gen` (Status + Schlüssel `genKey`) und `genQuestions`; das Spiel nimmt sie nur bei passendem Schlüssel,
+  leere Plätze und Fehler → feste Fragen. 👍/👎 nach der Aufdeckung (`testifyPool/{id}/votes/{uid}`, gezählt von `testifyVote`,
+  ab 3 👎 und mehr 👎 als 👍 ausgeblendet). `genKey`/`cleanTheme` gibt es doppelt (App + Funktion) – immer beide ändern.
+  KI-Oberfläche ohne veröffentlichte Funktion testen: Bot mit `FAKE_KI=1` starten. Kern-Logik: `node scripts/testify-ki-test.mjs`.
 - Firestore `testifyLobbies`, Spieler-Schlüssel = UID (nicht der Name). Countdown synchron über `round.doneAt` (Serverzeit) + Uhrabgleich.
 - Testen ohne zweites Handy: `scripts/testify-test.mjs` (Bot spielt mit). Vor dem Veröffentlichen der Regeln im Dev-Modus
   `localStorage.tf_dev_col = 'lobbies'` setzen (offene Hitzkopf-Sammlung) und das Skript mit `TF_COL=lobbies` starten; Lobbys danach löschen.

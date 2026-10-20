@@ -29,9 +29,23 @@ export const catLabel = (q) => q?.catLabel || CATEGORIES[q?.cat] || q?.cat || ''
 
 export const cleanName = (s) => String(s || '').replace(/\s+/g, ' ').trim()
 
-/** Gewählte Themen kurz als Text: „Reisen, Musik + 3“ */
-export function themesText(themes = []) {
-    const names = themes.map(t => CATEGORIES[t] || t)
+// ── Eigene Themen und KI-Fragen ─────────────────────────────────────────────
+export const MAX_CUSTOM = 5
+/** Eigenes Thema säubern – genau wie auf dem Server (functions/testifyCore.js cleanTheme) */
+// eslint-disable-next-line no-control-regex
+export const cleanTheme = (s) => String(s || '').replace(/[\u0000-\u001f<>{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
+/** Schlüssel der Einstellungen, für die KI-Fragen gelten – genau wie auf dem Server (testifyQuestions.js genKey) */
+export const genKey = (d) => [
+    (d.gameNo || 0) + 1, d.rounds || 15, (d.themes || []).join(','), (d.customThemes || []).map(cleanTheme).join(','),
+].join('|')
+/** Sind die KI-Fragen der Lobby fertig und passen zu den aktuellen Einstellungen? */
+export const aiReady = (d) => d?.ai !== false && d?.gen?.status === 'done' && d.gen.key === genKey(d) && Array.isArray(d.genQuestions)
+/** Ist die Lobby startklar (KI aus, KI fertig oder KI fehlgeschlagen → feste Fragen)? */
+export const genSettled = (d) => d?.ai === false || ((d?.gen?.status === 'done' || d?.gen?.status === 'error') && d.gen.key === genKey(d))
+
+/** Gewählte Themen kurz als Text: „Reisen, Musik + 3“ (eigene Themen mitgezählt) */
+export function themesText(themes = [], custom = []) {
+    const names = [...themes.map(t => CATEGORIES[t] || t), ...custom.map(cleanTheme)]
     if (names.length <= 2) return names.join(', ') || 'Alle Themen'
     return `${names.slice(0, 2).join(', ')} + ${names.length - 2}`
 }
@@ -232,12 +246,28 @@ export function playedOf(data) {
     return order
 }
 
-/** Neues Spiel aus Themen und Rundenzahl (ohne Fragen, die eines der Handys oder diese Lobby schon hatte) */
-export function startGame(data, themes, rounds, rnd = Math.random) {
-    const questions = pickQuestions(themes, rounds, playedOf(data), rnd)
+/**
+ * Neues Spiel mit den Einstellungen der Lobby (themes, rounds): KI-Fragen, wenn sie fertig sind und passen –
+ * leere Plätze (KI-Frage durchgefallen) und alles ohne KI kommen aus den festen Fragen.
+ * Nie Fragen, die eines der Handys oder diese Lobby schon hatte (solange der Vorrat reicht).
+ */
+export function startGame(data, rnd = Math.random) {
+    const themes = data.themes || []
+    const rounds = data.rounds || DEFAULT_ROUNDS
+    const played = playedOf(data)
+    let questions
+    if (aiReady(data)) {
+        const list = data.genQuestions.slice(0, rounds)
+        const fill = pickQuestions(themes, list.filter(q => !q).length, played, rnd)
+        questions = list.map(q => (q
+            ? (q.type === 'pick4' || q.type === 'emoji4' ? { ...q, options: shuffle(q.options, rnd) } : { ...q })
+            : fill.shift())).filter(Boolean)
+    } else {
+        questions = pickQuestions(themes, rounds, played, rnd)
+    }
     const used = [...new Set([...(data.used || []), ...questions.map(q => q.id)])]
     return {
-        themes, rounds, phase: 'play', questions, idx: 0, log: [], used,
+        phase: 'play', questions, idx: 0, log: [], used, aiUsed: aiReady(data),
         round: { answers: {}, doneAt: null, next: {} }, again: {}, gameNo: (data.gameNo || 0) + 1,
     }
 }

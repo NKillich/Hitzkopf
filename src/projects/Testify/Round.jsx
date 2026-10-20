@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { IconX, IconCheck, IconLock, IconInfo } from '../../shared/ui/icons'
 import { IconGrid, IconSwap, IconScale, IconArrow, IconMinus, IconFriends, IconCards } from './icons'
 import Confetti from './Confetti'
+import { isPoolQuestion, readVote } from './aiQuestions'
 import {
     BOTH_MS, COUNT_MS, REVEAL_AT, SCORE_DELAY, TYPE_LABEL, catLabel, verdict, answerText, scoreOf, fmtPoints,
     isPairLike, optionsOf, whoSame,
@@ -68,7 +69,7 @@ function GameHead({ idx, total, me, other, myScore, otherScore, onLeave }) {
 }
 
 /** Eine Runde: eigene Antwort → Tipp → warten → Countdown → Aufdeckung → Weiter */
-export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNext, onLeave }) {
+export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNext, onLeave, onVote }) {
     const idx = data.idx
     const q = data.questions[idx]
     const total = data.questions.length
@@ -435,6 +436,7 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
                         ))}
                     </div>
                     <p className={styles.whoHint}><IconInfo />Zählt nur für euren gemeinsamen Wert, nicht für den Spielstand.</p>
+                    {onVote && isPoolQuestion(q) && <VoteRow q={q} onVote={onVote} />}
                 </div>
                 {same && <Confetti screen seed={idx + 101} delay={0.45} />}
                 {nextFooter}
@@ -478,10 +480,26 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
                         ))}
                     </div>
                 </>)}
+                {onVote && isPoolQuestion(q) && <VoteRow q={q} onVote={onVote} />}
             </div>
             {bothRight && <Confetti screen seed={idx + 101} delay={0.45} />}
             {nextFooter}
         </section>
+    )
+}
+
+/** 👍/👎 zu einer KI-Frage aus dem Pool (eine Stimme pro Gerät, änderbar) */
+function VoteRow({ q, onVote }) {
+    const [v, setV] = useState(() => readVote(q.id))
+    const vote = (val) => { setV(val); onVote(q.id, val) }
+    return (
+        <div className={styles.voteRow}>
+            <span className={styles.voteLabel}>✨ KI-Frage – gut gemacht?</span>
+            {[[1, '👍', 'Gute Frage'], [-1, '👎', 'Schlechte Frage']].map(([val, icon, label]) => (
+                <button key={val} type="button" aria-pressed={v === val} aria-label={label}
+                    className={`${styles.btn} ${styles.voteBtn} ${v === val ? styles.voteOn : ''}`} onClick={() => vote(val)}>{icon}</button>
+            ))}
+        </div>
     )
 }
 
