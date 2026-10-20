@@ -24,9 +24,17 @@ export const YESNO = [{ label: 'Ja', icon: '👍' }, { label: 'Nein', icon: '�
 export const isPairLike = (q) => q.type === 'pair' || q.type === 'yesno'
 /** Optionen einer Frage (Schon mal …? hat feste Ja/Nein-Kacheln) */
 export const optionsOf = (q) => (q.type === 'yesno' ? YESNO : q.options)
-export const catLabel = (cat) => CATEGORIES[cat] || cat
+/** Name des Themas einer Frage (KI-Fragen bringen ihn mit, feste Fragen über CATEGORIES) */
+export const catLabel = (q) => q?.catLabel || CATEGORIES[q?.cat] || q?.cat || ''
 
 export const cleanName = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+
+/** Gewählte Themen kurz als Text: „Reisen, Musik + 3“ */
+export function themesText(themes = []) {
+    const names = themes.map(t => CATEGORIES[t] || t)
+    if (names.length <= 2) return names.join(', ') || 'Alle Themen'
+    return `${names.slice(0, 2).join(', ')} + ${names.length - 2}`
+}
 
 // ── Fragen ziehen ───────────────────────────────────────────────────────────
 const shuffle = (arr, rnd = Math.random) => {
@@ -48,15 +56,20 @@ export function typeCounts(n) {
 }
 
 /**
- * n Fragen aus einem Set: Fragetypen gemischt (TYPE_MIX), gleiche Kategorie nicht zweimal hintereinander (soweit möglich).
- * used = schon gespielte Fragen-IDs, älteste zuerst: die kommen erst, wenn nichts Neues übrig ist – dann die am längsten
- * nicht gespielten zuerst. Antworten von „Eins aus 4“ / „Bildwahl“ werden gemischt (beide Handys lesen sie aus der Lobby).
+ * n feste Fragen zu den gewählten Themen: Fragetypen gemischt (TYPE_MIX), gleiches Thema nicht zweimal hintereinander
+ * (soweit möglich). used = schon gespielte Fragen-IDs, älteste zuerst: die kommen erst, wenn nichts Neues übrig ist –
+ * dann die am längsten nicht gespielten zuerst; reicht auch das nicht, helfen neue Fragen anderer Themen aus.
+ * Antworten von „Eins aus 4“ / „Bildwahl“ werden gemischt (beide Handys lesen sie aus der Lobby).
  */
-export function pickQuestions(setId, n, used = [], rnd = Math.random) {
-    const pool = QUESTIONS.filter(q => q.sets.includes(setId))
+export function pickQuestions(themes, n, used = [], rnd = Math.random) {
+    const wanted = new Set(themes?.length ? themes : Object.keys(CATEGORIES))
     const age = new Map(used.map((id, i) => [id, i]))   // kleiner = länger her
-    const fresh = shuffle(pool.filter(q => !age.has(q.id)), rnd)
-    const old = shuffle(pool.filter(q => age.has(q.id)), rnd).sort((a, b) => age.get(a.id) - age.get(b.id))
+    const inThemes = QUESTIONS.filter(q => wanted.has(q.cat))
+    const fresh = shuffle(inThemes.filter(q => !age.has(q.id)), rnd)
+    const old = [
+        ...shuffle(inThemes.filter(q => age.has(q.id)), rnd).sort((a, b) => age.get(a.id) - age.get(b.id)),
+        ...shuffle(QUESTIONS.filter(q => !wanted.has(q.cat) && !age.has(q.id)), rnd),
+    ]
     const want = typeCounts(n)
     const chosen = []
     const take = (list, type) => {
@@ -81,7 +94,6 @@ export function pickQuestions(setId, n, used = [], rnd = Math.random) {
     }
     return ordered.map((src) => {
         const q = { ...src }
-        delete q.sets   // gehört nicht in die Lobby
         if (q.type === 'pick4' || q.type === 'emoji4') q.options = shuffle(q.options, rnd)
         return q
     })
@@ -180,11 +192,13 @@ export function summary(data, aUid, bUid) {
     }
     together = Math.round(together)
     const cats = []
-    for (const cat of Object.keys(CATEGORIES)) {
+    // Themen in der Reihenfolge von CATEGORIES, eigene (KI-)Themen danach in Spielreihenfolge
+    const order = [...Object.keys(CATEGORIES), ...(data.questions || []).map(q => q.cat)]
+    for (const cat of [...new Set(order)]) {
         const a = aOnB.filter(e => e.q.cat === cat)
         const b = bOnA.filter(e => e.q.cat === cat)
         if (!a.length && !b.length) continue
-        cats.push({ cat, label: CATEGORIES[cat], a: knowsPercent(a), b: knowsPercent(b) })
+        cats.push({ cat, label: catLabel((a[0] || b[0]).q), a: knowsPercent(a), b: knowsPercent(b) })
     }
     // Größte Überraschungen: beide falsch zuerst, dann weit daneben (Skala), höchstens 3
     const qs = data.questions || []
@@ -218,12 +232,12 @@ export function playedOf(data) {
     return order
 }
 
-/** Neues Spiel aus Set und Rundenzahl (ohne Fragen, die eines der Handys oder diese Lobby schon hatte) */
-export function startGame(data, setId, rounds, rnd = Math.random) {
-    const questions = pickQuestions(setId, rounds, playedOf(data), rnd)
+/** Neues Spiel aus Themen und Rundenzahl (ohne Fragen, die eines der Handys oder diese Lobby schon hatte) */
+export function startGame(data, themes, rounds, rnd = Math.random) {
+    const questions = pickQuestions(themes, rounds, playedOf(data), rnd)
     const used = [...new Set([...(data.used || []), ...questions.map(q => q.id)])]
     return {
-        set: setId, rounds, phase: 'play', questions, idx: 0, log: [], used,
+        themes, rounds, phase: 'play', questions, idx: 0, log: [], used,
         round: { answers: {}, doneAt: null, next: {} }, again: {}, gameNo: (data.gameNo || 0) + 1,
     }
 }

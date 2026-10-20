@@ -25,7 +25,7 @@ const PROJECT_META = {
     live:        { title: 'Amplify 1.0 Live', emoji: '📺' },
     live2:       { title: 'Amplify Live', emoji: '📺' },
     studio:      { title: 'Identify Studio', emoji: '🎛️' },
-    testify:     { title: 'Testify', emoji: '💞' },
+    testify:     { title: 'Testify', emoji: '🧩' },
 }
 
 const setPageMeta = (projectId) => {

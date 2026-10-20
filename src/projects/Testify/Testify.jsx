@@ -13,9 +13,9 @@ import QrScanner from '../../shared/ui/QrScanner'
 import { IconBack, IconX, IconShare, IconQr, IconPlay, IconPlus, IconMoon, IconSun, IconCheck, IconInfo } from '../../shared/ui/icons'
 import AvatarPicker from '../Amplify2/AvatarPicker'
 import { ANIMALS, randomAnimal } from '../Amplify2/avatars'
-import { IconHeart, IconFriends, IconGrid, IconSwap, IconScale, IconArrow, IconCards } from './icons'
-import { SETS } from './questions'
-import { ROUND_OPTIONS, DEFAULT_ROUNDS, MAX_PLAYERS, cleanName, pairOf, startGame, answerUpdate, nextUpdate } from './testifyLogic'
+import { IconFriends, IconGrid, IconSwap, IconScale, IconArrow, IconCards } from './icons'
+import { CATEGORIES, CATEGORY_ICON, DEFAULT_THEMES } from './questions'
+import { ROUND_OPTIONS, DEFAULT_ROUNDS, MAX_PLAYERS, cleanName, pairOf, startGame, answerUpdate, nextUpdate, themesText } from './testifyLogic'
 import { lobbyCollection, CODE_RE, generateCode, inviteLink, codeFromQr } from './store'
 import Round from './Round'
 import Result from './Result'
@@ -38,6 +38,15 @@ const storedEmoji = () => {
     const n = randomAnimal()
     ls.set('tf_emoji', n)
     return n
+}
+// Zuletzt gewählte Themen (auf diesem Gerät)
+const THEMES_KEY = 'tf_themes_v1'
+const readThemes = () => {
+    try {
+        const a = JSON.parse(localStorage.getItem(THEMES_KEY) || 'null')
+        const ok = Array.isArray(a) ? a.filter(t => CATEGORIES[t]) : []
+        return ok.length ? ok : DEFAULT_THEMES
+    } catch { return DEFAULT_THEMES }
 }
 const NAME_RE = /^[\p{L}\p{N} ._-]+$/u
 const nameProblem = (s) => {
@@ -77,7 +86,7 @@ export default function Testify({ onBack, joinCode }) {
     const [screen, setScreen] = useState('home')     // home | create | setup | join | room
     const [nameDraft, setNameDraft] = useState(() => ls.get('tf_name') || '')
     const [emoji, setEmoji] = useState(storedEmoji)
-    const [setId, setSetId] = useState('freunde')
+    const [themes, setThemes] = useState(readThemes)
     const [rounds, setRounds] = useState(DEFAULT_ROUNDS)
     const [codeDraft, setCodeDraft] = useState('')
     const [codeCheck, setCodeCheck] = useState(null) // { code, state: checking|ok|missing|full|error, host }
@@ -259,6 +268,13 @@ export default function Testify({ onBack, joinCode }) {
 
     // ── Aktionen ────────────────────────────────────────────────────────────
     const pickEmoji = (e) => { setEmoji(e); ls.set('tf_emoji', e) }
+    const toggleTopic = (id) => setThemes((cur) => {
+        const next = cur.includes(id) ? cur.filter(t => t !== id) : [...cur, id]
+        if (!next.length) return cur
+        const ordered = Object.keys(CATEGORIES).filter(t => next.includes(t))
+        ls.set(THEMES_KEY, JSON.stringify(ordered))
+        return ordered
+    })
     const commitName = () => {
         const n = cleanName(nameDraft)
         if (nameProblem(n)) return null
@@ -277,7 +293,7 @@ export default function Testify({ onBack, joinCode }) {
             for (let i = 0; i < 4 && (await getDoc(lobbyRef(code))).exists(); i++) code = generateCode()
             await setDoc(lobbyRef(code), {
                 hostUid: me, createdAt: serverTimestamp(), lastActiveAt: Date.now(), status: 'open',
-                set: setId, rounds, phase: 'lobby', gameNo: 0, used: [], questions: [], idx: 0, log: [],
+                themes, rounds, phase: 'lobby', gameNo: 0, used: [], questions: [], idx: 0, log: [],
                 round: { answers: {}, doneAt: null, next: {} }, again: {},
                 players: { [me]: { name, emoji, joinedAt: Date.now(), played: readPlayed() } },
             })
@@ -338,7 +354,7 @@ export default function Testify({ onBack, joinCode }) {
 
     const startNow = () => run((d) => {
         if (Object.keys(d.players || {}).length < MAX_PLAYERS) return {}
-        return { update: startGame(d, d.phase === 'setup' ? setId : d.set, d.phase === 'setup' ? rounds : d.rounds) }
+        return { update: startGame(d, d.phase === 'setup' ? themes : d.themes, d.phase === 'setup' ? rounds : d.rounds) }
     }, 'Das Spiel konnte nicht gestartet werden.')
 
     const answer = (patch) => run((d) => {
@@ -350,7 +366,7 @@ export default function Testify({ onBack, joinCode }) {
 
     const again = () => {
         if (data?.hostUid === uid) {
-            setSetId(data.set || 'freunde')
+            setThemes(data.themes?.length ? data.themes : readThemes())
             setRounds(data.rounds || DEFAULT_ROUNDS)
             return run((d) => (d.phase === 'result' ? { update: { phase: 'setup' } } : {}))
         }
@@ -478,7 +494,7 @@ export default function Testify({ onBack, joinCode }) {
                     </button>
                 </header>
                 <div className={styles.homeHero}>
-                    <span className={styles.homeEmoji} aria-hidden="true">💞</span>
+                    <span className={styles.homeEmoji} aria-hidden="true">🧩</span>
                     <h1 className={styles.homeTitle}>Testify</h1>
                     <p className={styles.homeLead}>Wie gut kennt ihr euch? Zwei Handys, eine Frage pro Runde – erst deine Antwort, dann dein Tipp für den anderen.</p>
                 </div>
@@ -524,15 +540,18 @@ export default function Testify({ onBack, joinCode }) {
     // ── Spiel einrichten (vor dem Erstellen und bei „Nochmal“) ──────────────
     const setupBody = (
         <>
-            <h2 className={styles.secTitle} style={{ marginTop: 18 }}>Fragenset</h2>
-            <div className={styles.setGrid} role="radiogroup" aria-label="Fragenset">
-                {Object.entries(SETS).map(([id, s]) => (
-                    <button key={id} type="button" role="radio" aria-checked={setId === id}
-                        className={`${styles.btn} ${styles.setCard} ${setId === id ? styles.setCardOn : ''}`} onClick={() => setSetId(id)}>
-                        <span className={styles.setIcon}>{id === 'paar' ? <IconHeart /> : <IconFriends />}</span>
-                        <span><span className={styles.setName}>{s.label}</span><span className={styles.setSub}>{s.sub}</span></span>
-                    </button>
-                ))}
+            <h2 className={styles.secTitle} style={{ marginTop: 18 }}>Themen<span className={styles.secNote}>{themes.length} gewählt</span></h2>
+            <div className={styles.themeGrid} role="group" aria-label="Themen">
+                {Object.entries(CATEGORIES).map(([id, label]) => {
+                    const on = themes.includes(id)
+                    return (
+                        <button key={id} type="button" aria-pressed={on}
+                            className={`${styles.btn} ${styles.themeChip} ${on ? styles.themeChipOn : ''}`}
+                            onClick={() => toggleTopic(id)}>
+                            <span aria-hidden="true">{CATEGORY_ICON[id]}</span>{label}
+                        </button>
+                    )
+                })}
             </div>
             <h2 className={styles.secTitle}>Runden</h2>
             <div className={styles.seg} role="radiogroup" aria-label="Runden">
@@ -553,7 +572,7 @@ export default function Testify({ onBack, joinCode }) {
             </div>
         </>
     )
-    const summaryLine = <p className={styles.summaryLine}><IconCards />{rounds} Fragen · Set „{SETS[setId].label}“ · für 2 Handys</p>
+    const summaryLine = <p className={styles.summaryLine}><IconCards />{rounds} Fragen · {themes.length} {themes.length === 1 ? 'Thema' : 'Themen'} · für 2 Handys</p>
 
     if (screen === 'setup') {
         const creating = busy === 'create'
@@ -677,7 +696,7 @@ export default function Testify({ onBack, joinCode }) {
                 <button type="button" className={`${styles.btn} ${styles.iconBtn}`} onClick={askLeave} aria-label="Spiel verlassen"><IconX size={20} /></button>
                 <div className={styles.headTitle}>
                     <h1>Warteraum</h1>
-                    <span className={styles.headSub}>{SETS[data.set]?.label} · {data.rounds} Fragen</span>
+                    <span className={styles.headSub}>{themesText(data.themes)} · {data.rounds} Fragen</span>
                 </div>
                 <button type="button" className={`${styles.btn} ${styles.iconBtn}`} aria-label="Einladung teilen"
                     onClick={() => share(`Spiel mit mir Testify! Code: ${roomId}`, link)}><IconShare /></button>
