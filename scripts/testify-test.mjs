@@ -47,7 +47,7 @@ function play(ref, mode, isHost) {
         }
         const players = Object.keys(d.players || {})
         const other = players.find(u => u !== me)
-        if (d.phase === 'lobby' && isHost && players.length === 2) later('start', 1500, () => mutate(ref, (x) => ({ update: startGame(x, x.set, x.rounds) })))
+        if (d.phase === 'lobby' && isHost && players.length === 2) later('start', 1500, () => mutate(ref, (x) => ({ update: startGame(x, x.themes, x.rounds) })))
         if (d.phase === 'play') {
             const q = d.questions[d.idx]
             const mine = d.round?.answers?.[me] || {}
@@ -92,7 +92,7 @@ if (cmd === 'bot') {
     const code = Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('')
     const ref = doc(db, COL, code)
     await setDoc(ref, {
-        hostUid: me, createdAt: Date.now(), lastActiveAt: Date.now(), status: 'open', set: 'freunde', rounds: 10, phase: 'lobby',
+        hostUid: me, createdAt: Date.now(), lastActiveAt: Date.now(), status: 'open', themes: ['essen', 'reisen', 'musik', 'alltag'], rounds: 10, phase: 'lobby',
         gameNo: 0, used: [], questions: [], idx: 0, log: [], round: { answers: {}, doneAt: null, next: {} }, again: {},
         players: { [me]: { name, emoji: '🐼', joinedAt: Date.now() } },
     })

@@ -146,12 +146,12 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
         const tags = guessing ? (
             <div className={styles.tags}>
                 <span className={`${styles.chip} ${styles.chipPerson}`}><span className={styles.chipEmoji} aria-hidden="true">{other?.emoji}</span>Über {oName}</span>
-                <span className={styles.tagMuted}>{TYPE_LABEL[q.type]} · {catLabel(q.cat)}</span>
+                <span className={styles.tagMuted}>{TYPE_LABEL[q.type]} · {catLabel(q)}</span>
             </div>
         ) : (
             <div className={styles.tags}>
                 <span className={styles.chip}>{TYPE_ICON[q.type]}{TYPE_LABEL[q.type]}</span>
-                <span className={styles.tagMuted}>{catLabel(q.cat)}</span>
+                <span className={styles.tagMuted}>{catLabel(q)}</span>
             </div>
         )
         const title = <h1 className={styles.question}>{guessing ? <WithName text={q.other} name={oName} /> : q.own}</h1>
@@ -265,13 +265,13 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
                 <div className={styles.scroll}>
                     <div className={styles.tags} style={{ marginTop: 14 }}>
                         <span className={styles.chip}>{TYPE_ICON[q.type]}{TYPE_LABEL[q.type]}</span>
-                        <span className={styles.tagMuted}>{catLabel(q.cat)} · beides auf einem Bildschirm</span>
+                        <span className={styles.tagMuted}>{catLabel(q)} · beides auf einem Bildschirm</span>
                     </div>
                     <h1 className={styles.pairHead}><span className={styles.pairNum}>1</span>{q.own}</h1>
                     {tiles(sel, setSel, 'Deine Antwort')}
                     <div className={styles.pairDivider} />
                     <h2 className={styles.pairHead}><span className={styles.pairNumEmoji} aria-hidden="true">{other?.emoji}</span>
-                        <span>Und was {q.type === 'yesno' ? 'sagt' : 'wählt'} <span className={styles.who}>{oName}</span>?</span>
+                        <span><WithName text={q.other} name={oName} /></span>
                     </h2>
                     {tiles(gsel, setGsel, `Tipp für ${oName}`)}
                 </div>
@@ -293,9 +293,9 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
                 <div className={styles.scroll}>
                     <div className={styles.tags} style={{ marginTop: 14 }}>
                         <span className={styles.chip}>{TYPE_ICON.who}{TYPE_LABEL.who}</span>
-                        <span className={styles.tagMuted}>{catLabel(q.cat)} · ihr antwortet beide</span>
+                        <span className={styles.tagMuted}>{catLabel(q)} · ihr antwortet beide</span>
                     </div>
-                    <h1 className={styles.question}>{q.own}</h1>
+                    <h1 className={styles.question}><WithName text={q.own} name={oName} /></h1>
                     <div className={`${styles.pairGrid} ${styles.whoGrid}`} role="radiogroup" aria-label="Wer?">
                         {people.map(({ p, label }, i) => (
                             <button key={i} type="button" role="radio" aria-checked={sel === i}
@@ -411,8 +411,8 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
             <section className={styles.screen}>
                 {head}
                 <div className={styles.scroll}>
-                    <p className={styles.revealMeta}>{TYPE_LABEL.who} · {catLabel(q.cat)}</p>
-                    <h1 className={styles.revealQ}>{q.own}</h1>
+                    <p className={styles.revealMeta}>{TYPE_LABEL.who} · {catLabel(q)}</p>
+                    <h1 className={styles.revealQ}><WithName text={q.own} name={oName} /></h1>
                     {same ? (
                         <div className={styles.banner} role="status">
                             <p className={styles.bannerTitle}>Gleiche Wellenlänge! 💞</p>
@@ -448,7 +448,7 @@ export default function Round({ data, uid, me, other, doneLocal, onAnswer, onNex
         <section className={styles.screen}>
             {head}
             <div className={styles.scroll}>
-                <p className={styles.revealMeta}>{TYPE_LABEL[q.type]} · {catLabel(q.cat)}</p>
+                <p className={styles.revealMeta}>{TYPE_LABEL[q.type]} · {catLabel(q)}</p>
                 <h1 className={styles.revealQ}>{q.own}</h1>
                 {bothRight && (
                     <div className={styles.banner} role="status">

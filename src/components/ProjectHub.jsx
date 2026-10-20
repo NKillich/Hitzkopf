@@ -21,7 +21,7 @@ const GROUPS = [
     {
         label: 'Party & Quiz',
         games: [
-            { id: 'testify', name: 'Testify', emoji: '💞', tint: '#C791FF', description: 'Wie gut kennt ihr euch? Zwei Handys, eine Frage pro Runde.' },
+            { id: 'testify', name: 'Testify', emoji: '🧩', tint: '#C791FF', description: 'Wie gut kennt ihr euch? Zwei Handys, eine Frage pro Runde.' },
             { id: 'hitzkopf', name: 'Hitzkopf', emoji: '🔥', tint: '#FF3B30', description: 'Das explosive Partyspiel' },
             { id: 'quizroyale', name: 'Quiz Royale', emoji: '🧠', tint: '#C04CFD', description: 'Quiz mit Upgrades & Charakteren' }
         ]

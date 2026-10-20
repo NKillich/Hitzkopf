@@ -121,6 +121,12 @@
 .tf .setCardOn .setIcon { background: var(--tf-accent); color: var(--tf-on-accent); }
 .tf .setName { display: block; margin-top: 16px; font-family: var(--sr-display); font-size: 21px; font-weight: 800; letter-spacing: -0.02em; }
 .tf .setSub { display: block; margin-top: 4px; font-size: 15px; color: var(--sr-muted); }
+/* Themen-Chips (mehrere wählbar) */
+.tf .themeGrid { display: flex; flex-wrap: wrap; gap: 8px; }
+.tf .themeChip { gap: 7px; height: 40px; padding: 0 14px 0 12px; border-radius: 20px; background: var(--sr-surface); border: 1.5px solid transparent;
+    font-size: 15px; font-weight: 700; color: var(--sr-ink); transition: background 0.15s, border-color 0.15s; }
+.tf .themeChipOn { background: var(--tf-accent-soft); border-color: var(--tf-accent); }
+.tf .themeChip:not(.themeChipOn) > span { filter: grayscale(1); opacity: 0.7; }
 .tf .seg { display: flex; padding: 6px; border-radius: 20px; background: var(--sr-surface); }
 .tf .segBtn { flex: 1; height: 52px; border-radius: 14px; font-family: var(--sr-display); font-size: 22px; font-weight: 800; color: var(--sr-muted); }
 .tf .segOn { background: var(--sr-ink); color: var(--sr-bg); }

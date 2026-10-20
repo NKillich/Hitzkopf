@@ -53,7 +53,9 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   beide „Weiter“. Fragetypen Eins aus 4 / Dies oder das (beides auf einem Bildschirm) / Skala 1–5 (1 daneben = „knapp“, ½ Punkt).
   Ergebnis „X kennt Y zu …“ bereinigt um Zufallstreffer. „Nochmal“: Host stellt neu ein, Gast bestätigt „Nochmal spielen“.
 - Design nach `testify_screendesigns.pdf` (Akzent Lila `#C791FF`), Aufbau Start/Erstellen/Beitreten wie Amplify (Tier-Karussell geteilt).
-- Fragen vorerst fest in `Testify/questions.js` (Sets `freunde`/`paar`, neutral formuliert – kein Gendern). Logik ohne React: `testifyLogic.js`.
+- Feste Fragen in `Testify/questions.js` (Rückfall für KI-Fragen), sortiert nach **Themen** (`CATEGORIES`, Chips in „Spiel einrichten“,
+  mehrere wählbar, u. a. „Freundeskreis“ und „Paar & Liebe“ – kein Freunde/Paar-Set mehr). Jede Frage nennt eindeutig, um wen es geht:
+  `own` = „Hast du …?“, `other` = „Hat {n} …?“; Wer von uns? = „… – du oder {n}?“. Neutral formuliert, kein Gendern. Logik ohne React: `testifyLogic.js`.
   Typen: `pick4`, `pair`, `scale`, `emoji4` (Bildwahl 2 × 2), `yesno` (Schon mal …?), `who` (Wer von uns?: kein Tipp, zählt nur
   für den gemeinsamen Wert). Mischung pro Spiel `TYPE_MIX`. Ziel: ≥ 5 Spiele à 15 ohne Wiederholung – pro Typ genug Fragen
   (bei 15 Runden: 4 Eins aus 4, 3 Dies oder das, je 2 der übrigen). Gespielte Fragen merkt sich jedes Gerät

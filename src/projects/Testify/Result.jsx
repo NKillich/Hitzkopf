@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { IconX, IconShare, IconInfo, IconRetry } from '../../shared/ui/icons'
-import { SETS } from './questions'
-import { summary, answerText } from './testifyLogic'
+import { summary, answerText, themesText } from './testifyLogic'
 import styles from './Testify.module.css'
 
 // Zahl zählt beim Erscheinen von 0 hoch (ca. 1,2 s, wird zum Ende langsamer)
@@ -76,7 +75,7 @@ export default function Result({ data, uid, me, other, isHost, onAgain, onEnd, o
                         </span>
                     </div>
                     <h2 className={styles.heroTitle}>{s.title}</h2>
-                    <p className={styles.heroMeta}>{me?.emoji} {me?.name} & {other?.emoji} {oName} · {total} Fragen · {SETS[data.set]?.label}</p>
+                    <p className={styles.heroMeta}>{me?.emoji} {me?.name} & {other?.emoji} {oName} · {total} Fragen · {themesText(data.themes)}</p>
                 </div>
 
                 <div className={styles.knowCard}>
