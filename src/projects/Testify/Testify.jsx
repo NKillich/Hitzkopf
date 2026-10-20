@@ -15,7 +15,11 @@ import AvatarPicker from '../Amplify2/AvatarPicker'
 import { ANIMALS, randomAnimal } from '../Amplify2/avatars'
 import { IconFriends, IconGrid, IconSwap, IconScale, IconArrow, IconCards } from './icons'
 import { CATEGORIES, CATEGORY_ICON, DEFAULT_THEMES } from './questions'
-import { ROUND_OPTIONS, DEFAULT_ROUNDS, MAX_PLAYERS, cleanName, pairOf, startGame, answerUpdate, nextUpdate, themesText } from './testifyLogic'
+import {
+    ROUND_OPTIONS, DEFAULT_ROUNDS, MAX_PLAYERS, MAX_CUSTOM, cleanName, cleanTheme, pairOf, startGame, answerUpdate, nextUpdate, themesText,
+    genKey, genSettled,
+} from './testifyLogic'
+import { requestQuestions, voteQuestion } from './aiQuestions'
 import { lobbyCollection, CODE_RE, generateCode, inviteLink, codeFromQr } from './store'
 import Round from './Round'
 import Result from './Result'
@@ -48,6 +52,12 @@ const readThemes = () => {
         return ok.length ? ok : DEFAULT_THEMES
     } catch { return DEFAULT_THEMES }
 }
+// Eigene Themen und KI-Schalter (auf diesem Gerät gemerkt)
+const CUSTOM_KEY = 'tf_custom_v1'
+const readCustom = () => {
+    try { const a = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]'); return Array.isArray(a) ? a.map(cleanTheme).filter(Boolean).slice(0, MAX_CUSTOM) : [] } catch { return [] }
+}
+const readAi = () => ls.get('tf_ai') !== 'off'
 const NAME_RE = /^[\p{L}\p{N} ._-]+$/u
 const nameProblem = (s) => {
     const n = cleanName(s)
@@ -87,6 +97,9 @@ export default function Testify({ onBack, joinCode }) {
     const [nameDraft, setNameDraft] = useState(() => ls.get('tf_name') || '')
     const [emoji, setEmoji] = useState(storedEmoji)
     const [themes, setThemes] = useState(readThemes)
+    const [customThemes, setCustomThemes] = useState(readCustom)
+    const [customDraft, setCustomDraft] = useState('')
+    const [aiOn, setAiOn] = useState(readAi)
     const [rounds, setRounds] = useState(DEFAULT_ROUNDS)
     const [codeDraft, setCodeDraft] = useState('')
     const [codeCheck, setCodeCheck] = useState(null) // { code, state: checking|ok|missing|full|error, host }
@@ -275,6 +288,29 @@ export default function Testify({ onBack, joinCode }) {
         ls.set(THEMES_KEY, JSON.stringify(ordered))
         return ordered
     })
+    const saveCustom = (list) => { setCustomThemes(list); ls.set(CUSTOM_KEY, JSON.stringify(list)) }
+    const addCustom = (e) => {
+        e?.preventDefault()
+        const t = cleanTheme(customDraft)
+        if (t.length < 2 || customThemes.length >= MAX_CUSTOM) return
+        if (!customThemes.some(c => c.toLowerCase() === t.toLowerCase())) saveCustom([...customThemes, t])
+        setCustomDraft('')
+    }
+    const removeCustom = (t) => saveCustom(customThemes.filter(c => c !== t))
+    const toggleAi = () => setAiOn((on) => { ls.set('tf_ai', on ? 'off' : 'on'); return !on })
+    /** Einstellungen, die in die Lobby gehen (ohne KI keine eigenen Themen) */
+    const settings = () => ({ themes, rounds, ai: aiOn, customThemes: aiOn ? customThemes : [] })
+
+    // KI-Fragen für das nächste Spiel anstoßen; scheitert der Aufruf, markiert der Host die Lobby selbst (→ feste Fragen)
+    const generate = async (code, key) => {
+        try {
+            await requestQuestions(code)
+        } catch (e) {
+            console.warn('Testify: KI-Fragen nicht verfügbar', e)
+            await updateDoc(lobbyRef(code), { gen: { status: 'error', key, at: Date.now() } }).catch(() => { /* Lobby weg */ })
+        }
+    }
+
     const commitName = () => {
         const n = cleanName(nameDraft)
         if (nameProblem(n)) return null
@@ -291,9 +327,12 @@ export default function Testify({ onBack, joinCode }) {
             const me = await signedIn()
             let code = generateCode()
             for (let i = 0; i < 4 && (await getDoc(lobbyRef(code))).exists(); i++) code = generateCode()
+            const conf = settings()
+            const key = genKey({ ...conf, gameNo: 0 })
             await setDoc(lobbyRef(code), {
                 hostUid: me, createdAt: serverTimestamp(), lastActiveAt: Date.now(), status: 'open',
-                themes, rounds, phase: 'lobby', gameNo: 0, used: [], questions: [], idx: 0, log: [],
+                ...conf, gen: conf.ai ? { status: 'running', key, at: Date.now() } : null,
+                phase: 'lobby', gameNo: 0, used: [], questions: [], idx: 0, log: [],
                 round: { answers: {}, doneAt: null, next: {} }, again: {},
                 players: { [me]: { name, emoji, joinedAt: Date.now(), played: readPlayed() } },
             })
@@ -302,6 +341,7 @@ export default function Testify({ onBack, joinCode }) {
             setNotice(null)
             setScreen('room')
             subscribe(code)
+            if (conf.ai) generate(code, key)   // läuft im Hintergrund, während der Mitspieler beitritt
         } catch (e) {
             console.error('Testify: Erstellen fehlgeschlagen', e)
             showToast('Das Spiel konnte nicht erstellt werden. Bitte versuch es nochmal.')
@@ -352,10 +392,28 @@ export default function Testify({ onBack, joinCode }) {
         }
     }
 
-    const startNow = () => run((d) => {
-        if (Object.keys(d.players || {}).length < MAX_PLAYERS) return {}
-        return { update: startGame(d, d.phase === 'setup' ? themes : d.themes, d.phase === 'setup' ? rounds : d.rounds) }
-    }, 'Das Spiel konnte nicht gestartet werden.')
+    const startNow = async () => {
+        const res = await run((d) => {
+            if (Object.keys(d.players || {}).length < MAX_PLAYERS) return {}
+            return { update: startGame(d), wantedAi: d.ai !== false }
+        }, 'Das Spiel konnte nicht gestartet werden.')
+        if (res?.update && res.wantedAi && !res.update.aiUsed) showToast('KI-Fragen gerade nicht verfügbar – ihr spielt mit festen Fragen.')
+    }
+    // „Nochmal“: neue Einstellungen in die Lobby, KI-Fragen erstellen lassen (dauert ein paar Sekunden), dann starten
+    const startAgain = async () => {
+        if (busy) return
+        setBusy('gen')
+        try {
+            const conf = settings()
+            const key = genKey({ ...data, ...conf })
+            await run((d) => (d.phase === 'setup'
+                ? { update: { ...conf, gen: conf.ai ? { status: 'running', key, at: Date.now() } : null } } : {}))
+            if (conf.ai) await generate(roomId, key)
+            await startNow()
+        } catch { /* Hinweis kommt aus run() */ } finally {
+            setBusy(null)
+        }
+    }
 
     const answer = (patch) => run((d) => {
         const res = answerUpdate(d, uid, d.idx, patch)
@@ -368,6 +426,8 @@ export default function Testify({ onBack, joinCode }) {
         if (data?.hostUid === uid) {
             setThemes(data.themes?.length ? data.themes : readThemes())
             setRounds(data.rounds || DEFAULT_ROUNDS)
+            setAiOn(data.ai !== false)
+            if (data.ai !== false) setCustomThemes(data.customThemes || [])
             return run((d) => (d.phase === 'result' ? { update: { phase: 'setup' } } : {}))
         }
         return run(() => ({ update: { [`again.${uid}`]: true } }))
@@ -553,6 +613,32 @@ export default function Testify({ onBack, joinCode }) {
                     )
                 })}
             </div>
+            <h2 className={styles.secTitle}>Eigene Themen<span className={styles.secNote}>{customThemes.length} / {MAX_CUSTOM}</span></h2>
+            <form className={styles.customRow} onSubmit={addCustom}>
+                <input className={`${styles.input} ${styles.customInput}`} value={customDraft} maxLength={40} disabled={!aiOn || customThemes.length >= MAX_CUSTOM}
+                    onChange={(e) => setCustomDraft(e.target.value)} placeholder={aiOn ? 'z. B. Herr der Ringe' : 'Nur mit KI-Fragen'}
+                    aria-label="Eigenes Thema" enterKeyHint="done" autoComplete="off" />
+                <button type="submit" className={`${styles.btn} ${styles.addBtn}`} aria-label="Thema hinzufügen"
+                    disabled={!aiOn || cleanTheme(customDraft).length < 2 || customThemes.length >= MAX_CUSTOM}><IconPlus /></button>
+            </form>
+            {aiOn && customThemes.length > 0 && (
+                <div className={styles.themeGrid} style={{ marginTop: 10 }}>
+                    {customThemes.map(t => (
+                        <span key={t} className={`${styles.themeChip} ${styles.themeChipOn} ${styles.customChip}`}>
+                            <span aria-hidden="true">✨</span>{t}
+                            <button type="button" className={`${styles.btn} ${styles.chipX}`} onClick={() => removeCustom(t)} aria-label={`${t} entfernen`}><IconX size={14} /></button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            <button type="button" className={`${styles.btn} ${styles.aiRow}`} onClick={toggleAi} aria-pressed={aiOn}>
+                <span className={styles.aiIcon} aria-hidden="true">✨</span>
+                <span className={styles.aiText}>
+                    <span className={styles.aiName}>KI-Fragen</span>
+                    <span className={styles.aiSub}>{aiOn ? 'Neue Fragen zu euren Themen, auch zu eigenen' : 'Aus: nur feste Fragen, ohne Internet-Wartezeit'}</span>
+                </span>
+                <span className={`${styles.switch} ${aiOn ? styles.switchOn : ''}`} aria-hidden="true"><span /></span>
+            </button>
             <h2 className={styles.secTitle}>Runden</h2>
             <div className={styles.seg} role="radiogroup" aria-label="Runden">
                 {ROUND_OPTIONS.map(n => (
@@ -572,7 +658,8 @@ export default function Testify({ onBack, joinCode }) {
             </div>
         </>
     )
-    const summaryLine = <p className={styles.summaryLine}><IconCards />{rounds} Fragen · {themes.length} {themes.length === 1 ? 'Thema' : 'Themen'} · für 2 Handys</p>
+    const themeCount = themes.length + (aiOn ? customThemes.length : 0)
+    const summaryLine = <p className={styles.summaryLine}><IconCards />{rounds} Fragen · {themeCount} {themeCount === 1 ? 'Thema' : 'Themen'}{aiOn ? ' · ✨ KI' : ''}</p>
 
     if (screen === 'setup') {
         const creating = busy === 'create'
@@ -648,7 +735,7 @@ export default function Testify({ onBack, joinCode }) {
     if (data.phase === 'play' && data.questions?.[data.idx]) {
         return shell(
             <Round key={`${data.gameNo}-${data.idx}`} data={data} uid={uid} me={me} other={other} doneLocal={doneLocal}
-                onAnswer={answer} onNext={next} onLeave={askLeave} />
+                onAnswer={answer} onNext={next} onLeave={askLeave} onVote={(id, v) => voteQuestion(db, uid, id, v).catch(() => showToast('Die Bewertung hat nicht geklappt.'))} />
         )
     }
 
@@ -676,8 +763,8 @@ export default function Testify({ onBack, joinCode }) {
                 </div>
                 <div className={styles.footer}>
                     {summaryLine}
-                    <button type="button" className={`${styles.btn} ${guestReady ? styles.primary : styles.primaryOff}`} disabled={!guestReady} onClick={startNow}>
-                        {guestReady ? <><IconPlay />Neues Spiel starten</> : `Warte auf ${other?.name || 'dein Gegenüber'} …`}
+                    <button type="button" className={`${styles.btn} ${guestReady && !busy ? styles.primary : styles.primaryOff}`} disabled={!guestReady || !!busy} onClick={startAgain}>
+                        {busy === 'gen' ? '✨ Fragen werden erstellt …' : guestReady ? <><IconPlay />Neues Spiel starten</> : `Warte auf ${other?.name || 'dein Gegenüber'} …`}
                     </button>
                 </div>
             </section>
@@ -690,13 +777,19 @@ export default function Testify({ onBack, joinCode }) {
         .sort((a, b) => (a.uid === data.hostUid ? -1 : b.uid === data.hostUid ? 1 : (a.joinedAt || 0) - (b.joinedAt || 0)))
     const full = players.length >= MAX_PLAYERS
     const link = inviteLink(roomId)
+    const settled = genSettled(data)
+    const gen = data.gen?.key === genKey(data) ? data.gen : null
+    const genLine = data.ai === false ? null
+        : !gen || gen.status === 'running' ? { wait: true, text: '✨ Fragen werden erstellt …' }
+        : gen.status === 'error' || gen.limited ? { text: 'KI gerade nicht verfügbar – ihr spielt mit festen Fragen' }
+        : { ok: true, text: `✨ ${data.rounds} Fragen bereit${gen.fromPool ? ` · ${gen.fromPool} aus dem Fragen-Pool` : ''}` }
     return shell(
         <section className={styles.screen}>
             <header className={styles.header}>
                 <button type="button" className={`${styles.btn} ${styles.iconBtn}`} onClick={askLeave} aria-label="Spiel verlassen"><IconX size={20} /></button>
                 <div className={styles.headTitle}>
                     <h1>Warteraum</h1>
-                    <span className={styles.headSub}>{themesText(data.themes)} · {data.rounds} Fragen</span>
+                    <span className={styles.headSub}>{themesText(data.themes, data.customThemes)} · {data.rounds} Fragen</span>
                 </div>
                 <button type="button" className={`${styles.btn} ${styles.iconBtn}`} aria-label="Einladung teilen"
                     onClick={() => share(`Spiel mit mir Testify! Code: ${roomId}`, link)}><IconShare /></button>
@@ -728,8 +821,17 @@ export default function Testify({ onBack, joinCode }) {
                 </div>
             </div>
             <div className={styles.footer}>
+                {genLine && (
+                    <p className={styles.footNote} role="status">
+                        {genLine.wait ? <span className={`${styles.dots} ${styles.dotsSm}`} aria-hidden="true"><i /><i /><i /></span>
+                            : <span className={`${styles.dot} ${genLine.ok ? styles.dotOk : ''}`} />}
+                        {genLine.text}
+                    </p>
+                )}
                 {isHost
-                    ? <button type="button" className={`${styles.btn} ${full ? styles.primary : styles.primaryOff}`} disabled={!full} onClick={startNow}><IconPlay />Spiel starten</button>
+                    ? <button type="button" className={`${styles.btn} ${full && settled ? styles.primary : styles.primaryOff}`} disabled={!full || !settled} onClick={startNow}>
+                        {full && !settled ? 'Fragen werden erstellt …' : <><IconPlay />Spiel starten</>}
+                    </button>
                     : <button type="button" className={`${styles.btn} ${styles.primaryOff}`} disabled>Warte, bis {hostName} startet …</button>}
             </div>
         </section>
