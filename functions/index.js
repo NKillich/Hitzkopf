@@ -10,6 +10,9 @@ const db = admin.firestore();
 exports.spotifyToken = require('./spotifyToken').spotifyToken;
 exports.resolveSpotifyLink = require('./resolveSpotifyLink').resolveSpotifyLink;
 exports.lastfmTop = require('./lastfmTop').lastfmTop;
+// Testify: KI-Fragen (Pool + Claude)
+exports.testifyQuestions = require('./testifyQuestions').testifyQuestions;
+exports.testifyVote = require('./testifyVotes').testifyVote;
 
 // Fragekategorien - vollständig aus src/data/questionCategories.js kopiert
 const { questionCategories, getAllQuestions } = require('./questionCategories');

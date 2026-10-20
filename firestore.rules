@@ -85,6 +85,25 @@ service cloud.firestore {
       allow delete: if request.auth != null && resource.data.hostUid == request.auth.uid;
     }
 
+    // Testify-Fragenpool (KI-Fragen): lesen darf jeder angemeldete Spieler, schreiben nur die Firebase-Funktion
+    match /testifyPool/{questionId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+      // 👍/👎: eine Stimme pro Gerät und Frage (die Funktion testifyVote zählt sie)
+      match /votes/{uid} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow create, update: if request.auth != null && request.auth.uid == uid
+                              && request.resource.data.keys().hasOnly(['v', 'at'])
+                              && request.resource.data.v in [1, -1]
+                              && exists(/databases/$(database)/documents/testifyPool/$(questionId));
+        allow delete: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+    // Testify: Tageslimit der KI-Erzeugung pro Gerät – nur die Funktion
+    match /testifyUsage/{uid} {
+      allow read, write: if false;
+    }
+
     // Quiz Royale Lobbies
     match /quizLobbies/{lobbyId} {
       allow read: if request.auth != null;
