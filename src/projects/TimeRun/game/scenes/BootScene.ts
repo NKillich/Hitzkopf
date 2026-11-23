@@ -3,6 +3,7 @@ import Phaser from 'phaser'
 import { loadData } from '../../logic/data'
 import { PLAYER_SIZE } from '../config'
 import type { UiBridge } from '../bridge'
+import { generateSprites } from '../sprites'
 
 export class BootScene extends Phaser.Scene {
     constructor() { super('boot') }
@@ -42,6 +43,7 @@ export class BootScene extends Phaser.Scene {
         g.fillStyle(0x000000, 0.6).fillRect(8, 0, 8, 4).fillRect(0, 4, 8, 4)
         g.generateTexture('finish', 16, 8)
         g.destroy()
+        generateSprites(this)
 
         // Das Spiel startet erst mit „Run starten“ auf dem Startbildschirm (React)
         bridge.set({ ready: true })
