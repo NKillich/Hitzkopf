@@ -9,15 +9,16 @@ export class Joystick {
     private pointerId: number | null = null
     private baseX = 0
     private baseY = 0
-    private readonly base: Phaser.GameObjects.Arc
-    private readonly knob: Phaser.GameObjects.Arc
+    private readonly base: Phaser.GameObjects.Rectangle
+    private readonly knob: Phaser.GameObjects.Rectangle
     private readonly keys?: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd', Phaser.Input.Keyboard.Key>
     private readonly scene: Phaser.Scene
 
     constructor(scene: Phaser.Scene) {
         this.scene = scene
-        this.base = scene.add.circle(0, 0, JOYSTICK_RADIUS, 0xffffff, 0.1).setStrokeStyle(2, 0xffffff, 0.35)
-        this.knob = scene.add.circle(0, 0, 20, 0xffffff, 0.45)
+        // eckig im Pixel-Stil wie in der Vorlage: Basis 112 px, Knopf 36 px
+        this.base = scene.add.rectangle(0, 0, 112, 112, 0x0d0a12, 0.45).setStrokeStyle(4, 0xf4eedc, 0.5)
+        this.knob = scene.add.rectangle(0, 0, 36, 36, 0xf4eedc, 0.75)
         for (const o of [this.base, this.knob]) o.setScrollFactor(0).setDepth(1000).setVisible(false)
 
         scene.input.on('pointerdown', this.onDown, this)

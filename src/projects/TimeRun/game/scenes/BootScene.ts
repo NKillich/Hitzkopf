@@ -2,17 +2,19 @@
 import Phaser from 'phaser'
 import { loadData } from '../../logic/data'
 import { PLAYER_SIZE } from '../config'
+import type { UiBridge } from '../bridge'
 
 export class BootScene extends Phaser.Scene {
     constructor() { super('boot') }
 
     create() {
+        const bridge = this.registry.get('bridge') as UiBridge
         let data
         try {
             data = loadData()
         } catch (err) {
-            this.add.text(12, 12, String((err as Error).message), { fontSize: '12px', color: '#ff8080', wordWrap: { width: 366 } })
             console.error(err)
+            bridge.set({ error: String((err as Error).message) })
             return
         }
         this.registry.set('data', data)
@@ -26,9 +28,9 @@ export class BootScene extends Phaser.Scene {
         }
         // Weiße Vorlagen werden per Tint eingefärbt (Gegnerfarbe aus den Daten)
         rect('px', 8, 8, 0xffffff, 0xdddddd)
-        rect('player', PLAYER_SIZE, PLAYER_SIZE, 0x5ad1ff, 0xffffff)
+        rect('player', PLAYER_SIZE, PLAYER_SIZE, 0x3dcf9e, 0x0d0a12)
         rect('shot', 4, 4, 0xffffff)
-        rect('gem', 5, 5, 0x6bf0ff, 0xffffff)
+        rect('gem', 5, 5, 0xa6f7da, 0xffffff)
         rect('bar', 4, 4, 0xffffff)
         // Hintergrund-Kachel: Raster, damit man Bewegung sieht (Farbe kommt per Tint)
         g.clear()
@@ -41,6 +43,8 @@ export class BootScene extends Phaser.Scene {
         g.generateTexture('finish', 16, 8)
         g.destroy()
 
-        this.scene.start('game')
+        // Das Spiel startet erst mit „Run starten“ auf dem Startbildschirm (React)
+        bridge.set({ ready: true })
+        this.scene.stop()
     }
 }

@@ -1,0 +1,169 @@
+/* Ages Up – Oberfläche nach dem Klickdummy (Pixel-Stil).
+   Alles unter .trRoot .trUi, damit die globalen button-/input-Styles aus App.css nicht greifen. */
+
+.trRoot .trUi {
+    --bg: #14101E;
+    --panel: #2A2140;
+    --ink: #0D0A12;
+    --edge: #4E3F6B;
+    --mint: #3DCF9E;
+    --mint-d: #1E8A66;
+    --mint-l: #A6F7DA;
+    --gold: #FFD27A;
+    --amber: #FFB547;
+    --amber-d: #B86E12;
+    --amber-l: #FFE0A3;
+    --orange: #E8603B;
+    --red: #E8483B;
+    --text: #F4EEDC;
+    --muted: #B8AECB;
+    --muted2: #D9CFEA;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 390px;
+    height: 844px;
+    transform-origin: 0 0;
+    pointer-events: none;
+    font-family: 'Pixelify Sans', system-ui, sans-serif;
+    color: var(--text);
+    line-height: 1.2;
+    text-align: left;
+    -webkit-font-smoothing: antialiased;
+}
+
+.trRoot .trUi .tr-hit { pointer-events: auto; }
+.trRoot .trUi .tr-num { font-family: 'Silkscreen', monospace; }
+
+/* Panel */
+.trRoot .trUi .tr-pp {
+    background: var(--panel);
+    border: 4px solid var(--ink);
+    box-shadow: inset 0 0 0 3px var(--edge);
+    box-sizing: border-box;
+}
+
+/* Knöpfe: Reset der globalen Stile + Pixel-Kanten */
+.trRoot .trUi button {
+    width: auto;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    overflow: visible;
+    transition: none;
+    letter-spacing: normal;
+    font-family: 'Pixelify Sans', system-ui, sans-serif;
+    color: var(--text);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.trRoot .trUi button::before { display: none; }
+.trRoot .trUi button:hover:not(:disabled),
+.trRoot .trUi button:active:not(:disabled) { transform: none; }
+.trRoot .trUi button:disabled { opacity: 0.55; cursor: default; }
+.trRoot .trUi button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+.trRoot .trUi .tr-bt,
+.trRoot .trUi .tr-bt:hover:not(:disabled) {
+    background: var(--mint);
+    color: var(--ink);
+    border: 4px solid var(--ink);
+    box-shadow: inset -4px -5px 0 var(--mint-d), inset 4px 4px 0 var(--mint-l);
+}
+.trRoot .trUi .tr-bt:active:not(:disabled) { box-shadow: inset 4px 5px 0 var(--mint-d); }
+
+.trRoot .trUi .tr-ba,
+.trRoot .trUi .tr-ba:hover:not(:disabled) {
+    background: var(--amber);
+    color: var(--ink);
+    border: 4px solid var(--ink);
+    box-shadow: inset -4px -5px 0 var(--amber-d), inset 4px 4px 0 var(--amber-l);
+}
+
+.trRoot .trUi .tr-bg,
+.trRoot .trUi .tr-bg:hover:not(:disabled) {
+    background: #3A3150;
+    color: var(--text);
+    border: 4px solid var(--ink);
+    box-shadow: inset -4px -5px 0 #241D33, inset 4px 4px 0 #5D5078;
+}
+.trRoot .trUi .tr-bg:active:not(:disabled) { box-shadow: inset 4px 5px 0 #241D33; }
+
+.trRoot .trUi .tr-iconBtn,
+.trRoot .trUi .tr-iconBtn:hover:not(:disabled) {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--panel);
+    border: 4px solid var(--ink);
+    box-shadow: inset 0 0 0 3px var(--edge);
+}
+
+/* Achteck (Zelle) */
+.trRoot .trUi .tr-oc {
+    clip-path: polygon(30% 0, 70% 0, 70% 10%, 90% 10%, 90% 30%, 100% 30%, 100% 70%, 90% 70%, 90% 90%, 70% 90%, 70% 100%, 30% 100%, 30% 90%, 10% 90%, 10% 70%, 0 70%, 0 30%, 10% 30%, 10% 10%, 30% 10%);
+}
+
+/* Leisten */
+.trRoot .trUi .tr-bar { flex-grow: 1; height: 10px; background: var(--ink); padding: 2px; box-sizing: border-box; }
+.trRoot .trUi .tr-bar > div { height: 100%; }
+
+/* Chips & Badges */
+.trRoot .trUi .tr-chip { font-size: 11px; background: var(--ink); color: #E8D9BC; padding: 1px 5px; line-height: 1.3; }
+.trRoot .trUi .tr-tag { font-family: 'Silkscreen', monospace; font-size: 10px; padding: 3px 6px; background: var(--ink); line-height: 1.1; }
+.trRoot .trUi .tr-badge { font-family: 'Silkscreen', monospace; font-size: 10px; color: var(--ink); padding: 2px 6px; line-height: 1.2; }
+
+/* Ganze Bildschirme (Start, Auswahl, Ende) */
+.trRoot .trUi .tr-screen {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+.trRoot .trUi .tr-dim { background: rgba(10, 8, 16, 0.92); }
+
+.trRoot .trUi h1 { margin: 0; font-weight: 700; }
+.trRoot .trUi p { margin: 0; }
+
+/* Auswahlkarten */
+.trRoot .trUi .tr-card,
+.trRoot .trUi .tr-card:hover:not(:disabled) {
+    display: flex;
+    gap: 14px;
+    padding: 14px;
+    width: 100%;
+    text-align: left;
+    background: var(--panel);
+    outline: 4px solid var(--ink);
+    box-sizing: border-box;
+    align-items: flex-start;
+}
+.trRoot .trUi .tr-card.tr-col { flex-direction: column; gap: 10px; }
+.trRoot .trUi .tr-card:active:not(:disabled) { filter: brightness(1.15); }
+
+/* Infokarte zur Stufe: ein-, nach ein paar Sekunden ausblenden */
+@keyframes trStageCard {
+    0% { opacity: 0; transform: translateY(10px); }
+    6% { opacity: 1; transform: translateY(0); }
+    88% { opacity: 1; }
+    100% { opacity: 0; }
+}
+.trRoot .trUi .tr-stageCard { animation: trStageCard 6.5s ease forwards; }
+
+@keyframes trBanner {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+    12% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+.trRoot .trUi .tr-banner { animation: trBanner 2s ease forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+    .trRoot .trUi .tr-stageCard { animation-duration: 6.5s; animation-timing-function: steps(1); }
+    .trRoot .trUi .tr-banner { animation-timing-function: steps(1); }
+}

@@ -29,7 +29,7 @@ const GROUPS = [
     {
         label: 'Arcade',
         games: [
-            { id: 'timerun', name: 'TimeRun', emoji: '🧬', tint: '#4CD964', description: 'Von der Mikrobe bis ins Weltall – überlebe die Wellen und entwickle dich.' }
+            { id: 'timerun', name: 'Ages Up', emoji: '🧬', tint: '#4CD964', description: 'Von der Mikrobe bis ins Weltall – überlebe die Wellen und entwickle dich.' }
         ]
     }
 ]

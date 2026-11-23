@@ -1,21 +1,21 @@
 // Spielwelt: Spieler, Gegner-Wellen (Pool), Auto-Attack, XP-Kristalle, Level-up,
 // Höhe pro Epoche → Boss am oberen Ende → Evolutionswahl → nächste Epoche.
 import Phaser from 'phaser'
-import type { EnemyType, Epoch, EvolutionOption, Gene, GameData, GeneForm, PlayerStats, Upgrade, WeaponKind } from '../../logic/types'
+import type { EnemyType, Epoch, EvolutionOption, Gene, GameData, GeneForm, PlayerStats, Stat, Upgrade, WeaponKind } from '../../logic/types'
 import { computeStats, pickUpgrades, type OwnedUpgrades } from '../../logic/upgrades'
 import { spawnsDue, xpForLevel } from '../../logic/waves'
 import { availableEvolutions, applyEvolution } from '../../logic/evolution'
-import { formatYear, yearAt } from '../../logic/time'
+import { formatRange, formatYear, PRESENT_YEAR, yearAt } from '../../logic/time'
 import { activeForm, applyForm, canEat, canEatEnemy, playerSize, rangedActive, weaponKind, weaponLabel } from '../../logic/weapon'
 import {
-    buildTimeline, firstPlayable, heightProgress, nextPlayable, resolveEpoch, transitionStage, type TimelineEntry,
+    buildTimeline, firstPlayable, heightProgress, nextPlayable, resolveEpoch, sortedEpochs, transitionStage, type TimelineEntry,
 } from '../../logic/epochs'
 import {
     BITE_COOLDOWN_MS, BOSS_TRIGGER_DISTANCE, CLEAR_DELAY_MS, HEIGHT, HIT_COOLDOWN_MS, MAX_ENEMIES, MAX_GEMS, MAX_PROJECTILES,
     PLAYER_BASE, PLAYER_SIZE, RECYCLE_BELOW, WIDTH, hexToInt, smoothTexts,
 } from '../config'
 import { Joystick } from '../Joystick'
-import type { UIScene } from './UIScene'
+import { saveBest, type IconKey, type UiBridge } from '../bridge'
 
 class Enemy extends Phaser.Physics.Arcade.Image {
     declare body: Phaser.Physics.Arcade.Body
@@ -32,6 +32,14 @@ class Shot extends Phaser.Physics.Arcade.Image {
     expireAt = 0
     readonly hit = new Set<Enemy>()
 }
+
+const ICON_BY_STAT: Record<Stat, IconKey> = {
+    moveSpeed: 'speed', maxHp: 'heart', damage: 'damage', cooldown: 'cooldown', range: 'range', projectileSpeed: 'range',
+    xpGain: 'xp', projectiles: 'multi', pierce: 'pierce', regen: 'regen', pickupRadius: 'magnet',
+}
+const ICON_BY_PHASE: IconKey[] = ['cell', 'colony', 'fish', 'paw', 'tool', 'rocket']
+/** So oft pro Sekunde bekommt der HUD neue Werte (React muss nicht jedes Bild neu zeichnen). */
+const HUD_INTERVAL_MS = 100
 
 class Gem extends Phaser.GameObjects.Image {
     value = 0
@@ -117,8 +125,13 @@ export class GameScene extends Phaser.Scene {
     private effects: { kind: 'ring' | 'line'; x: number; y: number; x2: number; y2: number; r: number; until: number; color: number }[] = []
     /** Raster für das Abstoßen der Gegner untereinander */
     private readonly grid = new Map<number, Enemy[]>()
-    /** steigt bei jedem Epochenwechsel – das UI zeichnet dann den Zeitstrahl neu */
-    timelineVersion = 0
+    // Oberfläche (React) über die Brücke
+    private offeredUpgrades: Upgrade[] = []
+    private offeredEvos: EvolutionOption[] = []
+    private rerolls = 1
+    private lastHudAt = -Infinity
+    private stageCardId = 0
+    private bannerId = 0
     run!: RunInfo
 
     constructor() { super('game') }
@@ -139,6 +152,10 @@ export class GameScene extends Phaser.Scene {
         this.enemyCursor = 0
         this.boss = null
         this.effects = []
+        this.rerolls = 1
+        this.lastHudAt = -Infinity
+        this.offeredUpgrades = []
+        this.offeredEvos = []
         const stats = computeStats(PLAYER_BASE, this.gene.base, this.gd.upgrades, this.owned)
         const first = firstPlayable(this.gd.epochs)!
         this.run = {
@@ -153,7 +170,7 @@ export class GameScene extends Phaser.Scene {
         this.bg = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0).setDepth(-10)
         this.finishLine = this.add.tileSprite(0, 0, WIDTH, 8, 'finish').setOrigin(0, 1).setDepth(-5)
         this.finishText = this.add.text(WIDTH / 2, 0, '', {
-            fontFamily: 'ui-monospace, monospace', fontSize: '12px', color: '#ffffff', resolution: 2,
+            fontFamily: '"Pixelify Sans", ui-monospace, monospace', fontSize: '13px', color: '#ffffff', resolution: 2,
         }).setOrigin(0.5, 0).setAlpha(0.7).setDepth(-5)
         smoothTexts([this.finishText])
 
@@ -197,11 +214,86 @@ export class GameScene extends Phaser.Scene {
         cam.centerOn(this.player.x, this.player.y - HEIGHT * 0.18)
 
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.joystick.destroy())
-        this.scene.launch('ui')
+        this.registerActions()
+        this.bridge.set({ screen: 'run', overlay: null, banner: null })
+        this.publishStage()
+        this.publishHud()
     }
 
-    private get ui(): UIScene {
-        return this.scene.get('ui') as UIScene
+    private get bridge(): UiBridge {
+        return this.registry.get('bridge') as UiBridge
+    }
+
+    /** Aktionen, die die Oberfläche auslösen kann. */
+    private registerActions() {
+        const b = this.bridge
+        b.actions.pickUpgrade = (i: number) => { const u = this.offeredUpgrades[i]; if (u) this.chooseUpgrade(u) }
+        b.actions.reroll = () => this.reroll()
+        b.actions.pickEvolution = (i: number) => { const o = this.offeredEvos[i]; if (o) this.chooseEvolution(o) }
+        b.actions.pause = () => this.pauseRun()
+        b.actions.resume = () => this.resumeRun()
+        b.actions.restart = () => this.restartRun()
+        b.actions.toMenu = () => this.toMenu()
+        b.actions.debugBurst = () => this.spawnBurst(300)
+        b.actions.debugGoal = () => this.skipToGoal()
+    }
+
+    private publishHud() {
+        this.lastHudAt = this.timeMs
+        const tl = this.timeline()
+        const idx = tl.findIndex(t => t.status === 'current')
+        this.bridge.set({
+            hud: {
+                code: this.epoch.code,
+                name: this.epoch.shortName,
+                year: formatYear(this.run.year),
+                weapon: this.run.weaponName,
+                hp: Math.max(0, this.run.hp),
+                maxHp: this.run.stats.maxHp,
+                level: this.run.level,
+                xpFrac: Math.min(1, this.run.xp / this.run.xpNeeded),
+                timeSec: this.run.timeSec,
+                kills: this.run.kills,
+                tags: [...this.tags].slice(-4),
+                progress: this.run.progress,
+                stageIndex: idx + 1,
+                stageCount: tl.length,
+                timeline: tl.map(t => ({ code: t.code, status: t.status, real: !!this.choices[t.id]?.real })),
+                boss: this.boss?.active ? { name: this.boss.kind.name, frac: Math.max(0, this.boss.hp) / this.boss.kind.hp } : null,
+                fps: Math.round(this.game.loop.actualFps),
+                enemies: this.run.enemiesAlive,
+            },
+        })
+    }
+
+    /** Infokarte zur Stufe (React blendet sie ein und nach einigen Sekunden aus). */
+    private publishStage() {
+        const e = this.epoch
+        this.bridge.set({
+            stageCard: {
+                id: ++this.stageCardId, code: e.code, name: e.name, range: formatRange(e.fromYear, e.toYear),
+                weapon: this.run.weaponName, fact: e.fact, eating: this.eating,
+            },
+        })
+    }
+
+    private pauseRun() {
+        if (this.choosing || this.run.dead || this.run.won || this.scene.isPaused()) return
+        this.joystick.release()
+        this.scene.pause()
+        this.publishHud()
+        this.bridge.setOverlay({ type: 'pause' })
+    }
+
+    private resumeRun() {
+        if (this.bridge.getState().overlay?.type !== 'pause') return
+        this.bridge.setOverlay(null)
+        this.scene.resume()
+    }
+
+    private toMenu() {
+        this.bridge.set({ screen: 'start', overlay: null, hud: null, stageCard: null, banner: null })
+        this.scene.stop()
     }
 
     /** Neue Epoche ab der aktuellen Position des Spielers. */
@@ -234,7 +326,6 @@ export class GameScene extends Phaser.Scene {
         this.run.phase = 'climb'
         this.run.progress = 0
         this.run.boss = null
-        this.timelineVersion++
     }
 
     /** Waffe, Fressen und Größe nach Stufe, Tags, Upgrades und Level neu bestimmen. */
@@ -359,6 +450,8 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
+        if (now - this.lastHudAt >= HUD_INTERVAL_MS) this.publishHud()
+
         if (this.pendingLevelUps > 0 && !this.choosing) this.openLevelUp()
         else if (this.run.phase === 'cleared' && !this.choosing && this.pendingLevelUps === 0
             && now - this.clearedAt >= CLEAR_DELAY_MS && !this.gems.some(g => g.active)) {
@@ -375,7 +468,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.epoch.boss) { this.onStageCleared(); return }
         this.spawnBoss()
         this.cameras.main.shake(250, 0.006)
-        this.ui.showBanner(this.epoch.boss.name, '#ff8a8a')
+        this.bridge.set({ banner: { id: ++this.bannerId, text: this.epoch.boss.name } })
     }
 
     private spawnBoss() {
@@ -426,13 +519,29 @@ export class GameScene extends Phaser.Scene {
         const options = stage ? availableEvolutions(this.gd.evolutionOptions, stage.id, this.tags) : []
         if (!stage || !options.length) {
             this.startEpoch(next)
-            this.ui.showStage(this.epoch, this.run.weaponName)
+            this.publishStage()
             return
         }
         this.choosing = true
         this.joystick.release()
         this.scene.pause()
-        this.ui.showEvolution(options, this.epoch, stage)
+        // echte Option zuerst, damit man sie leicht findet
+        this.offeredEvos = [...options].sort((a, b) => Number(!!b.real) - Number(!!a.real)).slice(0, 4)
+        this.publishHud()
+        this.bridge.setOverlay({
+            type: 'evolution',
+            fromName: this.epoch.shortName,
+            toCode: stage.code,
+            toName: stage.name,
+            range: formatRange(stage.fromYear, stage.toYear),
+            future: stage.fromYear >= PRESENT_YEAR,
+            options: this.offeredEvos.map(o => ({
+                name: o.name, desc: o.description, grants: o.grants, real: !!o.real, general: !!o.general,
+                icon: ICON_BY_PHASE[stage.phase - 1] ?? 'cell',
+            })),
+            tags: [...this.tags],
+            path: this.run.path.map(p => p.name),
+        })
     }
 
     /** Vom UI aufgerufen, wenn eine Evolution gewählt wurde. */
@@ -443,15 +552,40 @@ export class GameScene extends Phaser.Scene {
         this.run.path = [...this.run.path, o]
         this.choosing = false
         if (next) this.startEpoch(next)
+        this.bridge.setOverlay(null)
         this.scene.resume()
-        this.ui.showStage(this.epoch, this.run.weaponName)
+        this.publishStage()
+        this.publishHud()
     }
 
     private win() {
         this.run.won = true
         this.joystick.release()
         this.physics.pause()
-        this.ui.showEnd(true)
+        this.endRun(true)
+    }
+
+    /** Run-Ende: Auswertung „Echte Zeitlinie“ und bester Run (auf dem Gerät). */
+    private endRun(won: boolean) {
+        const list = sortedEpochs(this.gd.epochs)
+        const stageIndex = list.findIndex(e => e.id === this.baseEpoch.id) + 1
+        const past = this.run.path.filter(p => this.stageFromYear(p.stage) < PRESENT_YEAR)
+        const realCount = past.filter(p => p.real).length
+        const prev = this.bridge.getState().best
+        const reached = won ? list.length : stageIndex
+        const newRecord = !prev || reached > prev.stageIndex
+        const best = newRecord
+            ? { stageIndex: reached, stageCount: list.length, code: this.epoch.code, name: this.epoch.shortName }
+            : prev
+        if (newRecord) saveBest(best)
+        this.publishHud()
+        this.bridge.set({ best, stageCard: null, banner: null })
+        this.bridge.setOverlay({
+            type: 'end', won, reachedCode: this.epoch.code, reachedName: this.epoch.shortName, year: formatYear(this.run.year),
+            stageIndex, stageCount: list.length, timeSec: this.run.timeSec, kills: this.run.kills, level: this.run.level,
+            realCount, pastCount: past.length, badge: won && past.length > 0 && realCount === past.length,
+            path: this.run.path.map(p => ({ name: p.name, real: !!p.real })), newRecord,
+        })
     }
 
     // ---- Gegner, Schüsse, XP ----
@@ -707,7 +841,7 @@ export class GameScene extends Phaser.Scene {
             this.run.dead = true
             this.joystick.release()
             this.physics.pause()
-            this.ui.showEnd(false)
+            this.endRun(false)
         }
     }
 
@@ -719,7 +853,35 @@ export class GameScene extends Phaser.Scene {
         this.choosing = true
         this.joystick.release()
         this.scene.pause()
-        this.ui.showLevelUp(choices, this.owned)
+        this.publishHud()
+        this.showUpgrades(choices)
+    }
+
+    private showUpgrades(choices: Upgrade[]) {
+        this.offeredUpgrades = choices
+        this.bridge.setOverlay({
+            type: 'levelup',
+            level: this.run.level,
+            rerolls: this.rerolls,
+            skills: Object.entries(this.owned).map(([id, level]) => ({ name: this.gd.upgrades.find(u => u.id === id)?.name ?? id, level })),
+            choices: choices.map(u => {
+                const lvl = this.owned[u.id] ?? 0
+                return {
+                    name: u.name, desc: u.description, rarity: u.rarity,
+                    levelText: lvl ? `Stufe ${lvl} → ${lvl + 1}` : 'Neu',
+                    icon: u.grants?.includes('toxin') ? 'toxin' : ICON_BY_STAT[u.effects[0]?.stat ?? 'damage'],
+                }
+            }),
+        })
+    }
+
+    /** „Neu würfeln“: einmal pro Run andere Upgrades anbieten. */
+    private reroll() {
+        if (this.rerolls <= 0 || this.bridge.getState().overlay?.type !== 'levelup') return
+        const next = pickUpgrades(this.gd.upgrades, this.owned, this.tags, Math.random, 3, this.baseEpoch.phase)
+        if (!next.length) return
+        this.rerolls--
+        this.showUpgrades(next)
     }
 
     /** Vom UI aufgerufen, wenn ein Upgrade gewählt wurde. */
@@ -733,15 +895,18 @@ export class GameScene extends Phaser.Scene {
         this.refreshWeapon()
         const next = this.pendingLevelUps > 0 ? pickUpgrades(this.gd.upgrades, this.owned, this.tags, Math.random, 3, this.baseEpoch.phase) : []
         if (next.length) {
-            this.ui.showLevelUp(next, this.owned)
+            this.showUpgrades(next)
             return
         }
         this.pendingLevelUps = 0
         this.choosing = false
+        this.bridge.setOverlay(null)
         this.scene.resume()
+        this.publishHud()
     }
 
     restartRun() {
+        this.bridge.set({ overlay: null, banner: null, stageCard: null })
         this.scene.restart()
     }
 }

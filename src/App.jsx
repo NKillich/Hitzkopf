@@ -27,7 +27,7 @@ const PROJECT_META = {
     live2:       { title: 'Amplify Live', emoji: '📺' },
     studio:      { title: 'Identify Studio', emoji: '🎛️' },
     testify:     { title: 'Testify', emoji: '🧩' },
-    timerun:     { title: 'TimeRun', emoji: '🧬' },
+    timerun:     { title: 'Ages Up', emoji: '🧬' },
 }
 
 const setPageMeta = (projectId) => {
@@ -62,7 +62,7 @@ const HASH_MAP = {
     live2:     'live2',        // #live2/RAUMCODE – Live-Board 2.0
     studio:    'studio',       // #studio – Identify Studio (Listen pflegen, nur für den Betreiber, nicht auf der Startseite)
     testify:   'testify',      // #testify/RAUMCODE – Testify (Wie gut kennt ihr euch?)
-    timerun:   'timerun',      // #timerun – TimeRun (Arbeitstitel), #timerun/debug mit FPS-Anzeige
+    timerun:   'timerun',      // #timerun – Ages Up (Code-Name TimeRun), #timerun/debug mit FPS-Anzeige
     identify:  'secondsound',  // Identify (früher „Song raten“) – steht zuletzt, damit die Adresse #identify lautet
 }
 const ID_TO_HASH = Object.fromEntries(Object.entries(HASH_MAP).map(([h, id]) => [id, h]))
