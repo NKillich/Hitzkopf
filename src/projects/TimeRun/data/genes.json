@@ -1,18 +1,53 @@
 {
-  "startGene": "giftstachel",
-  "genes": [
-    {
-      "id": "giftstachel",
-      "name": "Giftstachel",
-      "description": "Schießt automatisch auf den nächsten Gegner.",
-      "kind": "projectile",
-      "base": { "damage": 3, "cooldownMs": 650, "range": 230, "projectileSpeed": 320, "projectiles": 1, "pierce": 0 },
-      "forms": {
-        "ursuppe": { "name": "Giftstachel", "color": "#f4ff6b" },
-        "steinzeit": { "name": "Giftpfeil", "color": "#c8e05a" },
-        "mittelalter": { "name": "Giftbolzen", "color": "#9fe0c0" },
-        "zukunft": { "name": "Biowaffe", "color": "#6bffd8" }
-      }
+ "startGene": "urwaffe",
+ "genes": [
+  {
+   "id": "urwaffe",
+   "name": "Toxin",
+   "description": "Greift automatisch den nächsten Gegner an.",
+   "kind": "projectile",
+   "base": {
+    "damage": 3,
+    "cooldownMs": 650,
+    "range": 230,
+    "projectileSpeed": 320,
+    "projectiles": 1,
+    "pierce": 0
+   },
+   "forms": {
+    "urzellen": {
+     "name": "Toxin",
+     "color": "#f4ff6b"
+    },
+    "kambrium": {
+     "name": "Stachel",
+     "color": "#e8e0c0"
+    },
+    "landwirbeltiere": {
+     "name": "Biss",
+     "color": "#ffffff"
+    },
+    "dinosaurier": {
+     "name": "Klauen",
+     "color": "#ffe0b0"
+    },
+    "hominiden": {
+     "name": "Steinwurf",
+     "color": "#c8c0b0"
+    },
+    "jaeger-sammler": {
+     "name": "Speer",
+     "color": "#d8b080"
+    },
+    "zivilisation": {
+     "name": "Pfeil & Bogen",
+     "color": "#e0c090"
+    },
+    "erdorbit": {
+     "name": "Laser",
+     "color": "#6bffd8"
     }
-  ]
+   }
+  }
+ ]
 }

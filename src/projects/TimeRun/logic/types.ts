@@ -1,6 +1,5 @@
 // Datentypen für TimeRun – entsprechen den JSON-Dateien in ../data/
 
-export type Phase = 'biologisch' | 'kulturell'
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary'
 
 export interface EnemyType {
@@ -36,9 +35,20 @@ export interface EpochVariant {
 
 export interface Epoch {
     id: string
+    /** Stufe wie „2.3“ */
+    code: string
     order: number
+    /** Hauptphase 1–6 */
+    phase: number
+    phaseName: string
     name: string
-    phase: Phase
+    /** kurzer Name für den HUD */
+    shortName: string
+    /** Zeitraum als Kalenderjahr (negativ = v. Chr. / vor heute) */
+    fromYear: number
+    toYear: number
+    /** kurze, belegbare Info („Wusstest du?“) */
+    fact: string
     background: string
     gridColor: string
     enemies: EnemyType[]
@@ -102,6 +112,7 @@ export interface EvolutionOption {
     excludes: string[]
     grants: string[]
     general?: boolean      // immer wählbar, damit keine Sackgasse entsteht
+    real?: boolean         // so ist es in unserer Zeitlinie passiert
 }
 
 export interface GameData {

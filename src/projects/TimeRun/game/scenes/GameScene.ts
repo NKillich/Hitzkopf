@@ -5,12 +5,13 @@ import type { EnemyType, Epoch, EvolutionOption, Gene, GameData, PlayerStats, Up
 import { computeStats, pickUpgrades, type OwnedUpgrades } from '../../logic/upgrades'
 import { spawnsDue, xpForLevel } from '../../logic/waves'
 import { availableEvolutions, applyEvolution } from '../../logic/evolution'
+import { formatYear, yearAt } from '../../logic/time'
 import {
     buildTimeline, firstPlayable, heightProgress, nextPlayable, resolveEpoch, transitionStage, type TimelineEntry,
 } from '../../logic/epochs'
 import {
     BOSS_TRIGGER_DISTANCE, CLEAR_DELAY_MS, HEIGHT, HIT_COOLDOWN_MS, MAX_ENEMIES, MAX_GEMS, MAX_PROJECTILES,
-    PLAYER_BASE, PLAYER_SIZE, RECYCLE_BELOW, WIDTH, hexToInt,
+    PLAYER_BASE, PLAYER_SIZE, RECYCLE_BELOW, WIDTH, hexToInt, smoothTexts,
 } from '../config'
 import { Joystick } from '../Joystick'
 import type { UIScene } from './UIScene'
@@ -56,6 +57,8 @@ export interface RunInfo {
     boss: { name: string; hp: number; maxHp: number } | null
     /** gewählte Evolutionen in Reihenfolge */
     path: EvolutionOption[]
+    /** aktuelles Jahr (Kalenderjahr, negativ = v. Chr.) – läuft mit der Höhe */
+    year: number
     dead: boolean
     won: boolean
 }
@@ -126,7 +129,7 @@ export class GameScene extends Phaser.Scene {
         this.run = {
             epoch: first, weaponName: this.gene.name, timeSec: 0, level: 1, xp: 0,
             xpNeeded: xpForLevel(1), hp: stats.maxHp, stats, kills: 0, enemiesAlive: 0,
-            progress: 0, phase: 'climb', boss: null, path: [], dead: false, won: false,
+            progress: 0, phase: 'climb', boss: null, path: [], year: first.fromYear, dead: false, won: false,
         }
 
         this.physics.resume()   // nach Neustart war die Welt evtl. noch angehalten
@@ -137,6 +140,7 @@ export class GameScene extends Phaser.Scene {
         this.finishText = this.add.text(WIDTH / 2, 0, '', {
             fontFamily: 'ui-monospace, monospace', fontSize: '12px', color: '#ffffff', resolution: 2,
         }).setOrigin(0.5, 0).setAlpha(0.7).setDepth(-5)
+        smoothTexts([this.finishText])
 
         this.player = this.physics.add.image(WIDTH / 2, 0, 'player').setCollideWorldBounds(true).setDepth(10)
         this.hpBarBg = this.add.image(0, 0, 'bar').setDisplaySize(20, 3).setTint(0x400000).setDepth(11)
@@ -211,13 +215,19 @@ export class GameScene extends Phaser.Scene {
         this.endY = this.epochStartY - (this.epoch.height ?? 5000)
         this.physics.world.setBounds(0, -1e8, WIDTH, 2e8)
         this.finishLine.setPosition(0, this.endY).setVisible(true)
-        this.finishText.setPosition(WIDTH / 2, this.endY + 6).setText(`▲ Ende ${this.epoch.name}`).setVisible(true)
+        const goal = this.epoch.boss ? `Boss: ${this.epoch.boss.name}` : `Ende ${this.epoch.code}`
+        this.finishText.setPosition(WIDTH / 2, this.endY + 6).setText(`▲ ${goal} · ${formatYear(this.epoch.toYear)}`).setVisible(true)
 
         this.run.epoch = this.epoch
         this.run.phase = 'climb'
         this.run.progress = 0
         this.run.boss = null
         this.timelineVersion++
+    }
+
+    /** Beginn (Jahr) einer Stufe – für die Auswertung „Echte Zeitlinie“. */
+    stageFromYear(id: string): number {
+        return this.gd.epochs.find(e => e.id === id)?.fromYear ?? 0
     }
 
     timeline(): TimelineEntry[] {
@@ -249,7 +259,12 @@ export class GameScene extends Phaser.Scene {
 
         // Höhe → Boss
         this.run.progress = this.run.phase === 'climb' ? heightProgress(this.epochStartY, py, this.epoch.height ?? 5000) : 1
-        if (this.run.phase === 'climb' && py <= this.endY + BOSS_TRIGGER_DISTANCE) this.startBoss()
+        this.run.year = yearAt(this.epoch.fromYear, this.epoch.toYear, this.run.progress)
+        if (this.run.phase === 'climb') {
+            // Ende einer Hauptphase: Boss vor der Linie; sonst geht es an der Linie direkt zur Evolutionswahl
+            if (this.epoch.boss && py <= this.endY + BOSS_TRIGGER_DISTANCE) this.startBoss()
+            else if (!this.epoch.boss && py <= this.endY + PLAYER_SIZE) this.onStageCleared()
+        }
         else if (this.run.phase === 'boss' && !this.boss) this.spawnBoss()   // Sicherung, falls er nicht erscheinen konnte
 
         // Wellen nur beim Hochkämpfen – beim Boss kommen keine neuen Gegner dazu
@@ -324,7 +339,7 @@ export class GameScene extends Phaser.Scene {
         this.run.phase = 'boss'
         // Die Linie ist jetzt eine Wand, bis der Boss besiegt ist
         this.physics.world.setBounds(0, this.endY, WIDTH, 2e8)
-        if (!this.epoch.boss) { this.onBossDefeated(); return }
+        if (!this.epoch.boss) { this.onStageCleared(); return }
         this.spawnBoss()
         this.cameras.main.shake(250, 0.006)
         this.ui.showBanner(this.epoch.boss.name, '#ff8a8a')
@@ -353,7 +368,7 @@ export class GameScene extends Phaser.Scene {
         this.boss = e
     }
 
-    private onBossDefeated() {
+    private onStageCleared() {
         this.run.phase = 'cleared'
         this.clearedAt = this.timeMs
         this.boss = null
@@ -376,13 +391,13 @@ export class GameScene extends Phaser.Scene {
         const options = stage ? availableEvolutions(this.gd.evolutionOptions, stage.id, this.tags) : []
         if (!stage || !options.length) {
             this.startEpoch(next)
-            this.ui.showBanner(this.epoch.name, '#ffffff', this.run.weaponName)
+            this.ui.showStage(this.epoch, this.run.weaponName)
             return
         }
         this.choosing = true
         this.joystick.release()
         this.scene.pause()
-        this.ui.showEvolution(options, this.epoch.name, stage.name)
+        this.ui.showEvolution(options, this.epoch, stage)
     }
 
     /** Vom UI aufgerufen, wenn eine Evolution gewählt wurde. */
@@ -394,7 +409,7 @@ export class GameScene extends Phaser.Scene {
         this.choosing = false
         if (next) this.startEpoch(next)
         this.scene.resume()
-        this.ui.showBanner(this.epoch.name, '#ffffff', this.run.weaponName)
+        this.ui.showStage(this.epoch, this.run.weaponName)
     }
 
     private win() {
@@ -433,10 +448,10 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    /** Debug: kurz vor das Ende der Epoche springen. */
-    skipToBoss() {
+    /** Debug: kurz vor die Ziellinie springen. */
+    skipToGoal() {
         if (this.run.phase !== 'climb') return
-        this.player.body.reset(this.player.x, this.endY + BOSS_TRIGGER_DISTANCE + 120)
+        this.player.body.reset(this.player.x, this.endY + (this.epoch.boss ? BOSS_TRIGGER_DISTANCE : 0) + 120)
     }
 
     private nearestEnemy(x: number, y: number, range: number): Enemy | null {
@@ -495,7 +510,7 @@ export class GameScene extends Phaser.Scene {
         const wasBoss = e.isBoss
         e.isBoss = false
         e.disableBody(true, true)
-        if (wasBoss) this.onBossDefeated()
+        if (wasBoss) this.onStageCleared()
     }
 
     private dropGem(x: number, y: number, value: number) {

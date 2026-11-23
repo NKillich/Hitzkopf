@@ -3,7 +3,10 @@ import { rawData, validateData } from './data'
 import { availableEvolutions, applyEvolution } from './evolution'
 import { pickUpgrades, computeStats, eligibleUpgrades } from './upgrades'
 import { spawnsDue, xpForLevel } from './waves'
-import { buildTimeline, firstPlayable, heightProgress, nextPlayable, resolveEpoch, transitionStage } from './epochs'
+import {
+    buildTimeline, firstPlayable, heightProgress, isPlayable, nextPlayable, resolveEpoch, sortedEpochs, transitionStage,
+} from './epochs'
+import { formatRange, formatYear, yearAt } from './time'
 import type { EvolutionOption, Upgrade, Wave } from './types'
 
 describe('Daten', () => {
@@ -23,6 +26,18 @@ describe('Daten', () => {
         expect(errors).toContain('nirgendwo')
         expect(errors).toContain('requires und excludes')
         expect(errors).toContain('keine allgemeine Option')
+    })
+
+    it('meldet fehlende Höhe, falsche Zeiten und Codes', () => {
+        const d = rawData()
+        delete d.epochs[0].height
+        d.epochs[1].fromYear = 0
+        d.epochs[1].toYear = -1
+        d.epochs[2].code = '9.9'
+        const errors = validateData(d).join('\n')
+        expect(errors).toContain('height fehlt')
+        expect(errors).toContain('fromYear muss vor toYear')
+        expect(errors).toContain('code „9.9“')
     })
 })
 
@@ -54,15 +69,32 @@ describe('Evolution (Tags)', () => {
         const all = rawData().evolutionOptions
         let tags = new Set<string>()
         const path: [string, string][] = [
-            ['mehrzeller', 'jaeger-zellverband'], ['lebensraum', 'an-land'], ['tierklasse', 'panzerechse'],
-            ['intelligenz', 'werkzeuggebrauch'], ['steinzeit', 'kriegerstamm'], ['industrie', 'dampfmaschine'], ['zukunft', 'raumfahrt'],
+            ['stoffwechsel', 'archaee'], ['photosynthese', 'sauerstoff-ueberlebender'], ['endosymbiose', 'mitochondrien'],
+            ['kolonien', 'kragengeissel-kolonie'], ['mehrzeller', 'gewebe-nerven'], ['kambrium', 'chorda'], ['landgang', 'kiefer-knochen'],
+            ['landwirbeltiere', 'vierbeiner'], ['dinosaurier', 'krokodil-linie'], ['saeugetiere', 'krokodil-ueberlebt'],
+            ['primaten', 'gruppenleben'], ['hominiden', 'werkzeugnutzer'], ['jaeger-sammler', 'feuer-sprache'],
+            ['zivilisation', 'ackerbau-schrift'], ['erdorbit', 'satelliten'], ['mond-mars', 'mondstation'], ['tiefraum', 'krokodil-astronauten'],
         ]
         for (const [stage, id] of path) {
             const choice = availableEvolutions(all, stage, tags).find(o => o.id === id)
             expect(choice, `${id} in ${stage}`).toBeDefined()
             tags = applyEvolution(tags, choice!)
         }
-        for (const t of ['reptil', 'räuber', 'kriegerisch', 'raumfahrt']) expect(tags.has(t)).toBe(true)
+        for (const t of ['reptil', 'krokodil', 'räuber', 'raumfahrt', 'krokodil-astronaut']) expect(tags.has(t)).toBe(true)
+    })
+
+    it('die echte Zeitlinie ist immer durchspielbar (bis heute genau eine echte Option je Stufe)', () => {
+        const d = rawData()
+        let tags = new Set<string>()
+        for (const e of sortedEpochs(d.epochs).slice(1)) {
+            const offered = availableEvolutions(d.evolutionOptions, e.id, tags)
+            const real = offered.filter(o => o.real)
+            expect(offered.length, `${e.id}: echte Zeitlinie braucht eine Alternative`).toBeGreaterThanOrEqual(2)
+            if (e.fromYear < 2026) expect(real.map(o => o.id), e.id).toHaveLength(1)
+            else expect(real, e.id).toHaveLength(0)
+            tags = applyEvolution(tags, real[0] ?? offered.find(o => o.general)!)
+        }
+        expect(tags.has('raumfahrt')).toBe(true)
     })
 })
 
@@ -133,39 +165,53 @@ describe('Wellen', () => {
     })
 })
 
-describe('Epochen', () => {
+describe('Stufen (18 nach der Vorlage)', () => {
     const data = rawData()
 
-    it('Prototyp: Ursuppe → Steinzeit → Mittelalter, danach Ende', () => {
-        expect(firstPlayable(data.epochs)?.id).toBe('ursuppe')
-        expect(nextPlayable(data.epochs, 'ursuppe')?.id).toBe('steinzeit')
-        expect(nextPlayable(data.epochs, 'steinzeit')?.id).toBe('mittelalter')
-        expect(nextPlayable(data.epochs, 'mittelalter')).toBeUndefined()
+    it('18 Stufen 1.1–6.3, alle spielbar, Reihenfolge stimmt', () => {
+        const list = sortedEpochs(data.epochs)
+        expect(list.map(e => e.code)).toEqual(['1.1', '1.2', '1.3', '2.1', '2.2', '2.3', '3.1', '3.2', '3.3',
+            '4.1', '4.2', '4.3', '5.1', '5.2', '5.3', '6.1', '6.2', '6.3'])
+        expect(list.every(isPlayable)).toBe(true)
+        expect(firstPlayable(data.epochs)?.code).toBe('1.1')
+        expect(nextPlayable(data.epochs, 'urzellen')?.code).toBe('1.2')
+        expect(nextPlayable(data.epochs, 'tiefraum')).toBeUndefined()
+        expect(transitionStage(data.epochs, 'urzellen')?.id).toBe('stoffwechsel')
     })
 
-    it('am Ende einer Epoche gilt die direkt folgende Stufe (auch wenn nicht spielbar)', () => {
-        expect(transitionStage(data.epochs, 'ursuppe')?.id).toBe('mehrzeller')
-        expect(transitionStage(data.epochs, 'steinzeit')?.id).toBe('antike')
-        expect(transitionStage(data.epochs, 'zukunft')).toBeUndefined()
+    it('Zeiträume wie in der Vorlage', () => {
+        const by = Object.fromEntries(data.epochs.map(e => [e.code, e]))
+        const range = (c: string) => [by[c].fromYear, by[c].toYear]
+        expect(range('1.1')).toEqual([-4e9, -3.8e9])
+        expect(range('1.3')).toEqual([-2.7e9, -2.0e9])
+        expect(range('2.3')).toEqual([-800e6, -540e6])
+        expect(range('3.1')).toEqual([-541e6, -485e6])
+        expect(range('3.2')).toEqual([-470e6, -400e6])
+        expect(range('4.1')).toEqual([-320e6, -66e6])
+        expect(range('4.3')).toEqual([-55e6, -6e6])
+        expect(range('5.2')).toEqual([-1.8e6, -10000])
+        expect(range('5.3')).toEqual([-10000, 1957])
+        expect(range('6.1')).toEqual([1957, 2026])
     })
 
-    it('die zwei Mikroben-Pfade führen zu verschiedenen Steinzeit-Varianten', () => {
-        const stein = data.epochs.find(e => e.id === 'steinzeit')!
-        const opts = availableEvolutions(data.evolutionOptions, 'mehrzeller', new Set())
-        const jaeger = applyEvolution(new Set(), opts.find(o => o.id === 'jaeger-zellverband')!)
-        const filter = applyEvolution(new Set(), opts.find(o => o.id === 'filtrierer')!)
-        const kolonie = applyEvolution(new Set(), opts.find(o => o.id === 'zellkolonie')!)
-        expect(resolveEpoch(stein, jaeger).variantId).toBe('jaegerstamm')
-        expect(resolveEpoch(stein, filter).variantId).toBe('sammlerstamm')
-        expect(resolveEpoch(stein, kolonie).variantId).toBeUndefined()
-        expect(resolveEpoch(stein, jaeger).waves.length).toBe(stein.waves.length + 1)
+    it('Boss nur am Ende jeder Hauptphase', () => {
+        expect(sortedEpochs(data.epochs).filter(e => e.boss).map(e => e.code)).toEqual(['1.3', '2.3', '3.3', '4.3', '5.3', '6.3'])
     })
 
-    it('jede Wahl am Ende einer spielbaren Epoche hat mindestens 2 Optionen (ohne Tags)', () => {
-        for (const id of ['ursuppe', 'steinzeit']) {
-            const stage = transitionStage(data.epochs, id)!
-            expect(availableEvolutions(data.evolutionOptions, stage.id, new Set()).length).toBeGreaterThanOrEqual(2)
+    it('jede Stufe ab 1.2 hat mindestens 2 Optionen, eine davon allgemein', () => {
+        for (const e of sortedEpochs(data.epochs).slice(1)) {
+            expect(data.evolutionOptions.filter(o => o.stage === e.id).length, e.id).toBeGreaterThanOrEqual(2)
+            expect(availableEvolutions(data.evolutionOptions, e.id, new Set()).some(o => o.general), e.id).toBe(true)
         }
+    })
+
+    it('Varianten ändern Name, Farben und Wellen', () => {
+        const e = { ...data.epochs[0], variants: [{ id: 'v', name: 'Variante', requires: ['x'], background: '#000000', extraWaves: [data.epochs[0].waves[0]] }] }
+        expect(resolveEpoch(e, new Set()).variantId).toBeUndefined()
+        const r = resolveEpoch(e, new Set(['x']))
+        expect(r.variantId).toBe('v')
+        expect(r.name).toBe('Variante')
+        expect(r.waves.length).toBe(e.waves.length + 1)
     })
 
     it('Höhe: 0 am Start, 1 am Ziel, begrenzt', () => {
@@ -175,23 +221,42 @@ describe('Epochen', () => {
         expect(heightProgress(1000, 1200, 500)).toBe(0)
     })
 
-    it('Zeitstrahl: gespielt, aktuell, übersprungen, kommend + Wahl', () => {
-        const filtr = data.evolutionOptions.find(o => o.id === 'filtrierer')!
-        const tl = buildTimeline(data.epochs, 'steinzeit', ['ursuppe'], { mehrzeller: filtr })
+    it('Zeitstrahl: gespielt, aktuell, kommend + Wahl', () => {
+        const arch = data.evolutionOptions.find(o => o.id === 'archaee')!
+        const tl = buildTimeline(data.epochs, 'photosynthese', ['urzellen', 'stoffwechsel'], { stoffwechsel: arch })
         const by = Object.fromEntries(tl.map(t => [t.id, t]))
-        expect(by.ursuppe.status).toBe('done')
-        expect(by.mehrzeller.status).toBe('skipped')
-        expect(by.mehrzeller.choice).toBe('Filtrierer')
-        expect(by.steinzeit.status).toBe('current')
-        expect(by.mittelalter.status).toBe('future')
+        expect(by.urzellen.status).toBe('done')
+        expect(by.stoffwechsel.status).toBe('done')
+        expect(by.stoffwechsel.choice).toBe('Archaee')
+        expect(by.photosynthese.status).toBe('current')
+        expect(by.tiefraum.status).toBe('future')
+    })
+})
+
+describe('Zeitangaben', () => {
+    it('Jahr läuft gleichmäßig mit dem Fortschritt', () => {
+        expect(yearAt(-4e9, -3.8e9, 0)).toBe(-4e9)
+        expect(yearAt(-4e9, -3.8e9, 0.5)).toBe(-3.9e9)
+        expect(yearAt(-4e9, -3.8e9, 2)).toBe(-3.8e9)
     })
 
-    it('Datenprüfung meldet spielbare Epoche ohne Höhe/Boss', () => {
-        const d = rawData()
-        delete d.epochs[0].height
-        delete d.epochs[0].boss
-        const errors = validateData(d).join('\n')
-        expect(errors).toContain('height fehlt')
-        expect(errors).toContain('boss fehlt')
+    it('Anzeige in Mrd./Mio./Jahren, v. Chr., Jahreszahl, Zukunft', () => {
+        expect(formatYear(-3.42e9)).toBe('vor 3,42 Mrd. Jahren')
+        expect(formatYear(-480e6)).toBe('vor 480 Mio. Jahren')
+        expect(formatYear(-55e6)).toBe('vor 55,0 Mio. Jahren')
+        expect(formatYear(-3.2e6)).toBe('vor 3,20 Mio. Jahren')
+        expect(formatYear(-300000)).toBe('vor 302.000 Jahren')
+        expect(formatYear(-9500)).toBe('9.500 v. Chr.')
+        expect(formatYear(1969.4)).toBe('1969')
+        expect(formatYear(2400)).toBe('ferne Zukunft')
+    })
+
+    it('Zeitraum fasst gleiche Einheiten zusammen', () => {
+        expect(formatRange(-4e9, -3.8e9)).toBe('vor 4,00 – 3,80 Mrd. Jahren')
+        expect(formatRange(-800e6, -540e6)).toBe('vor 800 – 540 Mio. Jahren')
+        expect(formatRange(-2.0e9, -1.5e9)).toBe('vor 2,00 – 1,50 Mrd. Jahren')
+        expect(formatRange(-1.8e6, -10000)).toBe('vor 1,80 Mio. Jahren – vor 12.000 Jahren')
+        expect(formatRange(-10000, 1957)).toBe('vor 12.000 Jahren – 1957')
+        expect(formatRange(2055, 2300)).toBe('2055 – ferne Zukunft')
     })
 })

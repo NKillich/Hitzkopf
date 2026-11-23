@@ -1,56 +1,720 @@
 {
-  "_info": "stage = Epoche, die man mit der Wahl betritt (gewählt am oberen Ende der Epoche davor). requires: alle Tags nötig, excludes: keiner davon erlaubt, grants: neue Tags. general = immer verfügbar (keine Sackgasse).",
-  "options": [
-    { "id": "jaeger-zellverband", "stage": "mehrzeller", "name": "Jäger-Zellverband", "description": "Zellen jagen gemeinsam.",
-      "requires": [], "excludes": ["pflanzenfresser"], "grants": ["räuber", "rudel"] },
-    { "id": "filtrierer", "stage": "mehrzeller", "name": "Filtrierer", "description": "Lebt von dem, was die Strömung bringt.",
-      "requires": [], "excludes": ["räuber"], "grants": ["pflanzenfresser", "wasser"] },
-    { "id": "zellkolonie", "stage": "mehrzeller", "name": "Zellkolonie", "description": "Viele Zellen, ein Körper.",
-      "requires": [], "excludes": [], "grants": ["kolonie"], "general": true },
-
-    { "id": "ins-wasser", "stage": "lebensraum", "name": "Ozean", "description": "Bleibt im Wasser.",
-      "requires": [], "excludes": ["land", "luft"], "grants": ["wasser"] },
-    { "id": "an-land", "stage": "lebensraum", "name": "Ans Land", "description": "Erste Schritte an Land.",
-      "requires": [], "excludes": ["luft"], "grants": ["land"] },
-    { "id": "in-die-luft", "stage": "lebensraum", "name": "In die Luft", "description": "Flügel statt Flossen.",
-      "requires": ["land"], "excludes": [], "grants": ["luft"] },
-    { "id": "uferzone", "stage": "lebensraum", "name": "Uferzone", "description": "Halb Wasser, halb Land.",
-      "requires": [], "excludes": [], "grants": ["wasser", "land"], "general": true },
-
-    { "id": "panzerechse", "stage": "tierklasse", "name": "Panzerechse", "description": "Schuppen und Zähne.",
-      "requires": ["land", "räuber"], "excludes": [], "grants": ["reptil", "panzer"] },
-    { "id": "insektenstaat", "stage": "tierklasse", "name": "Insektenstaat", "description": "Tausende Geschwister.",
-      "requires": ["kolonie"], "excludes": [], "grants": ["insekt", "rudel"] },
-    { "id": "ursaeuger", "stage": "tierklasse", "name": "Ursäuger", "description": "Klein, warm, anpassungsfähig.",
-      "requires": [], "excludes": [], "grants": ["säuger"], "general": true },
-
-    { "id": "werkzeuggebrauch", "stage": "intelligenz", "name": "Werkzeuggebrauch", "description": "Stöcke und Steine.",
-      "requires": [], "excludes": [], "grants": ["intelligenz"], "general": true },
-    { "id": "schwarmintelligenz", "stage": "intelligenz", "name": "Schwarmintelligenz", "description": "Denken im Kollektiv.",
-      "requires": ["rudel"], "excludes": ["einzelgänger"], "grants": ["intelligenz", "schwarm"] },
-
-    { "id": "kriegerstamm", "stage": "steinzeit", "name": "Kriegerstamm", "description": "Wer stärker ist, hat recht.",
-      "requires": [], "excludes": ["händler"], "grants": ["kriegerisch"] },
-    { "id": "sammler", "stage": "steinzeit", "name": "Sammler", "description": "Beeren, Wurzeln, Vorräte.",
-      "requires": [], "excludes": [], "grants": ["sammler"], "general": true },
-
-    { "id": "unterwasserstaedte", "stage": "antike", "name": "Unterwasserstädte", "description": "Kuppeln am Meeresgrund.",
-      "requires": ["wasser", "intelligenz"], "excludes": [], "grants": ["tiefsee-zivilisation"] },
-    { "id": "eroberer", "stage": "antike", "name": "Eroberer-Reich", "description": "Legionen marschieren.",
-      "requires": ["kriegerisch"], "excludes": [], "grants": ["reich"] },
-    { "id": "seefahrer", "stage": "antike", "name": "Seefahrer", "description": "Häfen, Schiffe, ferne Küsten.",
-      "requires": [], "excludes": ["kriegerisch"], "grants": ["wasser", "händler"] },
-    { "id": "stadtstaaten", "stage": "antike", "name": "Stadtstaaten", "description": "Mauern, Märkte, Tempel.",
-      "requires": [], "excludes": [], "grants": ["stadt", "händler"], "general": true },
-
-    { "id": "dampfmaschine", "stage": "industrie", "name": "Dampfmaschine", "description": "Kohle und Stahl.",
-      "requires": [], "excludes": [], "grants": ["industrie"], "general": true },
-    { "id": "biotechnik", "stage": "industrie", "name": "Biotechnik", "description": "Gezüchtete Werkzeuge.",
-      "requires": ["insekt"], "excludes": [], "grants": ["industrie", "bio"] },
-
-    { "id": "raumfahrt", "stage": "zukunft", "name": "Raumfahrt", "description": "Ab ins All.",
-      "requires": ["industrie"], "excludes": [], "grants": ["raumfahrt"] },
-    { "id": "digitales-zeitalter", "stage": "zukunft", "name": "Digitales Zeitalter", "description": "Alles wird vernetzt.",
-      "requires": [], "excludes": [], "grants": ["digital"], "general": true }
-  ]
+ "_info": "stage = Stufe, die man mit der Wahl betritt. requires: alle Tags nötig, excludes: keiner erlaubt, grants: neue Tags. general = immer wählbar (keine Sackgasse). real = so ist es in unserer Zeitlinie passiert (nur bis heute).",
+ "options": [
+  {
+   "id": "archaee",
+   "stage": "stoffwechsel",
+   "name": "Archaee",
+   "description": "Lebt auch in heißen Quellen. Aus dieser Linie stammt später der Wirt unserer Zellen.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "archaee"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "bakterium",
+   "stage": "stoffwechsel",
+   "name": "Bakterium",
+   "description": "Die zweite große Linie der Einzeller – heute die häufigsten Lebewesen der Erde.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "bakterium"
+   ]
+  },
+  {
+   "id": "chemolithotroph",
+   "stage": "stoffwechsel",
+   "name": "Mineralien-Fresser",
+   "description": "Gewinnt Energie aus Mineralien, wie Mikroben an Schwarzen Rauchern der Tiefsee.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "chemo",
+    "tiefsee"
+   ]
+  },
+  {
+   "id": "sauerstoff-ueberlebender",
+   "stage": "photosynthese",
+   "name": "Sauerstoff-Überlebender",
+   "description": "Entwickelt Schutz vor dem giftigen Sauerstoff – und nutzt ihn später sogar.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "aerob"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "cyanobakterium",
+   "stage": "photosynthese",
+   "name": "Cyanobakterium",
+   "description": "Spaltet Wasser mit Sonnenlicht und setzt dabei Sauerstoff frei.",
+   "requires": [
+    "bakterium"
+   ],
+   "excludes": [],
+   "grants": [
+    "photosynthese",
+    "licht"
+   ]
+  },
+  {
+   "id": "anaerob",
+   "stage": "photosynthese",
+   "name": "Rückzug ohne Sauerstoff",
+   "description": "Weicht in sauerstofffreie Nischen aus – wie viele Archaeen bis heute.",
+   "requires": [],
+   "excludes": [
+    "photosynthese"
+   ],
+   "grants": [
+    "anaerob"
+   ]
+  },
+  {
+   "id": "mitochondrien",
+   "stage": "endosymbiose",
+   "name": "Mitochondrien aufnehmen",
+   "description": "Ein aufgenommenes Bakterium wird zum Kraftwerk der Zelle. Es entstehen Zellen mit Zellkern (Eukaryoten).",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "eukaryot",
+    "mitochondrien"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "chloroplasten",
+   "stage": "endosymbiose",
+   "name": "Cyanobakterium aufnehmen",
+   "description": "Ein aufgenommenes Cyanobakterium wird zum Chloroplasten – so entstehen Algen und später Pflanzen.",
+   "requires": [
+    "aerob"
+   ],
+   "excludes": [],
+   "grants": [
+    "eukaryot",
+    "chloroplast"
+   ]
+  },
+  {
+   "id": "prokaryot-bleiben",
+   "stage": "endosymbiose",
+   "name": "Einfach bleiben",
+   "description": "Bleibt ein schneller, einfacher Einzeller ohne Zellkern.",
+   "requires": [
+    "bakterium"
+   ],
+   "excludes": [],
+   "grants": [
+    "prokaryot"
+   ]
+  },
+  {
+   "id": "kragengeissel-kolonie",
+   "stage": "kolonien",
+   "name": "Kragengeißeltier-Kolonie",
+   "description": "Zellen bleiben nach der Teilung zusammen und tauschen Signale aus – Vorstufe der Tiere.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "kolonie",
+    "tier"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "rotalgen-verband",
+   "stage": "kolonien",
+   "name": "Rotalgen-Verband",
+   "description": "Wie Bangiomorpha: Zellen mit verteilten Aufgaben, die Licht zur Energie nutzen.",
+   "requires": [
+    "chloroplast"
+   ],
+   "excludes": [],
+   "grants": [
+    "kolonie",
+    "pflanze"
+   ]
+  },
+  {
+   "id": "pilzgeflecht",
+   "stage": "kolonien",
+   "name": "Pilzgeflecht",
+   "description": "Feine Zellfäden durchziehen den Untergrund und zersetzen totes Material.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "pilz"
+   ]
+  },
+  {
+   "id": "gewebe-nerven",
+   "stage": "mehrzeller",
+   "name": "Gewebe & Nervenzellen",
+   "description": "Spezialisierte Zellen bilden Gewebe; Nervenzellen leiten Signale durch den Körper.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "nerven",
+    "tier"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "schwamm",
+   "stage": "mehrzeller",
+   "name": "Schwamm",
+   "description": "Festsitzend, filtert Nahrung aus dem Wasser – eine der ältesten Tiergruppen.",
+   "requires": [
+    "tier"
+   ],
+   "excludes": [],
+   "grants": [
+    "filtrierer",
+    "sessil"
+   ]
+  },
+  {
+   "id": "ediacara-wedel",
+   "stage": "mehrzeller",
+   "name": "Ediacara-Wedel",
+   "description": "Wie Charnia: ein farnartiger Körper am Meeresboden.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "ediacara",
+    "sessil"
+   ]
+  },
+  {
+   "id": "chorda",
+   "stage": "kambrium",
+   "name": "Rückensaite (Chorda)",
+   "description": "Wie Pikaia: ein biegsamer Stab im Rücken – Vorläufer der Wirbelsäule.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "chordatier"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "gliederpanzer",
+   "stage": "kambrium",
+   "name": "Gliederfüßer-Panzer",
+   "description": "Ein Außenskelett mit Gelenkbeinen, wie bei Trilobiten.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "gliederfüsser",
+    "panzer"
+   ]
+  },
+  {
+   "id": "greifarme",
+   "stage": "kambrium",
+   "name": "Räuberische Greifarme",
+   "description": "Wie Anomalocaris: große Augen und Greifarme – einer der ersten Spitzenräuber.",
+   "requires": [
+    "nerven"
+   ],
+   "excludes": [],
+   "grants": [
+    "räuber"
+   ]
+  },
+  {
+   "id": "kiefer-knochen",
+   "stage": "landgang",
+   "name": "Kiefer & Knochen",
+   "description": "Im Meer entstehen Fische mit Kiefern und Knochen – unsere Vorfahren bleiben noch im Wasser.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "kiefer",
+    "fisch",
+    "wasser"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "an-land-kriechen",
+   "stage": "landgang",
+   "name": "An Land kriechen",
+   "description": "Gliederfüßer wie Tausendfüßer verlassen als erste Tiere das Wasser.",
+   "requires": [
+    "gliederfüsser"
+   ],
+   "excludes": [],
+   "grants": [
+    "land"
+   ]
+  },
+  {
+   "id": "panzerfisch",
+   "stage": "landgang",
+   "name": "Kieferloser Panzerfisch",
+   "description": "Fische ohne Kiefer, aber mit Knochenpanzer – sie lebten zu dieser Zeit in Meeren und Flüssen.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "fisch",
+    "panzer",
+    "wasser"
+   ]
+  },
+  {
+   "id": "landpflanze",
+   "stage": "landgang",
+   "name": "Landpflanze",
+   "description": "Mit Wachsschicht und Leitungsbahnen besiedeln Pflanzen das Festland.",
+   "requires": [
+    "chloroplast"
+   ],
+   "excludes": [],
+   "grants": [
+    "land",
+    "pflanze"
+   ]
+  },
+  {
+   "id": "vierbeiner",
+   "stage": "landwirbeltiere",
+   "name": "Fleischflosser an Land",
+   "description": "Kräftige Flossen werden zu Beinen, Lungen atmen Luft – wie bei Tiktaalik.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "land",
+    "vierbeiner",
+    "luftatmer"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "riesen-arthropode",
+   "stage": "landwirbeltiere",
+   "name": "Riesen-Gliederfüßer",
+   "description": "Riesen wie Arthropleura wurden bis 2,6 m lang – vermutlich half der hohe Sauerstoffgehalt der Luft.",
+   "requires": [
+    "gliederfüsser"
+   ],
+   "excludes": [],
+   "grants": [
+    "land",
+    "riese"
+   ]
+  },
+  {
+   "id": "hai",
+   "stage": "landwirbeltiere",
+   "name": "Im Meer bleiben (Hai)",
+   "description": "Knorpelfische wie Haie gibt es seit über 400 Mio. Jahren – bis heute.",
+   "requires": [
+    "kiefer"
+   ],
+   "excludes": [],
+   "grants": [
+    "wasser",
+    "räuber"
+   ]
+  },
+  {
+   "id": "synapside",
+   "stage": "dinosaurier",
+   "name": "Säugetierähnliche (Synapsiden)",
+   "description": "Aus Amnioten mit einem Schläfenfenster entwickeln sich die Vorfahren der Säugetiere.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "synapside",
+    "amniot"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "dinosaurier-linie",
+   "stage": "dinosaurier",
+   "name": "Dinosaurier",
+   "description": "Aufrechte Beine unter dem Körper – die Dinosaurier beherrschen das Land.",
+   "requires": [
+    "vierbeiner"
+   ],
+   "excludes": [],
+   "grants": [
+    "reptil",
+    "dinosaurier",
+    "amniot"
+   ]
+  },
+  {
+   "id": "krokodil-linie",
+   "stage": "dinosaurier",
+   "name": "Krokodil-Linie",
+   "description": "Panzerechsen mit kräftigem Biss – die Krokodile überdauern bis heute.",
+   "requires": [
+    "vierbeiner"
+   ],
+   "excludes": [],
+   "grants": [
+    "reptil",
+    "krokodil",
+    "räuber",
+    "amniot"
+   ]
+  },
+  {
+   "id": "kleiner-saeuger",
+   "stage": "saeugetiere",
+   "name": "Kleiner Säuger überlebt",
+   "description": "Klein, warmblütig, im Bau versteckt – Säugetiere überstehen den Einschlag.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "säuger",
+    "warmblut"
+   ],
+   "general": true,
+   "real": true
+  },
+  {
+   "id": "grosser-pflanzenfresser",
+   "stage": "saeugetiere",
+   "name": "Großer Pflanzenfresser",
+   "description": "Wie Coryphodon (vor ca. 58 Mio. Jahren): einer der ersten großen Säuger nach den Dinosauriern.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "säuger",
+    "gross",
+    "pflanzenfresser"
+   ]
+  },
+  {
+   "id": "vogel",
+   "stage": "saeugetiere",
+   "name": "Vögel (letzte Dinosaurier)",
+   "description": "Gefiederte Dinosaurier überleben als Vögel.",
+   "requires": [
+    "dinosaurier"
+   ],
+   "excludes": [],
+   "grants": [
+    "vogel",
+    "luft"
+   ]
+  },
+  {
+   "id": "krokodil-ueberlebt",
+   "stage": "saeugetiere",
+   "name": "Krokodile überleben",
+   "description": "Krokodile überstehen das Massenaussterben – vermutlich, weil sie lange ohne Nahrung auskommen.",
+   "requires": [
+    "krokodil"
+   ],
+   "excludes": [],
+   "grants": [
+    "krokodil"
+   ]
+  },
+  {
+   "id": "greifhaende",
+   "stage": "primaten",
+   "name": "Greifhände & räumliches Sehen",
+   "description": "Nach vorn gerichtete Augen und Hände mit Nägeln – ideal für das Leben in Bäumen.",
+   "requires": [
+    "säuger"
+   ],
+   "excludes": [],
+   "grants": [
+    "primat",
+    "greifhand"
+   ],
+   "real": true
+  },
+  {
+   "id": "gruppenleben",
+   "stage": "primaten",
+   "name": "Gruppenleben",
+   "description": "In der Gruppe ist man sicherer und findet besser Nahrung.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "sozial"
+   ],
+   "general": true
+  },
+  {
+   "id": "grosses-raubtier",
+   "stage": "primaten",
+   "name": "Großes Raubtier",
+   "description": "Wie Andrewsarchus: ein großer Fleischfresser an Land.",
+   "requires": [
+    "warmblut"
+   ],
+   "excludes": [],
+   "grants": [
+    "räuber",
+    "gross"
+   ]
+  },
+  {
+   "id": "aufrechter-gang",
+   "stage": "hominiden",
+   "name": "Aufrechter Gang & Steinwerkzeug",
+   "description": "Auf zwei Beinen sind die Hände frei: Steine werden zu Werkzeugen.",
+   "requires": [
+    "primat"
+   ],
+   "excludes": [],
+   "grants": [
+    "zweibeiner",
+    "werkzeug"
+   ],
+   "real": true
+  },
+  {
+   "id": "werkzeugnutzer",
+   "stage": "hominiden",
+   "name": "Werkzeugnutzer",
+   "description": "Auch Krähen, Otter und Schimpansen nutzen heute Werkzeuge.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "werkzeug"
+   ],
+   "general": true
+  },
+  {
+   "id": "schwarmjagd",
+   "stage": "hominiden",
+   "name": "Gemeinsame Jagd",
+   "description": "Wie Hyänen: im Rudel erlegt man größere Beute.",
+   "requires": [
+    "sozial"
+   ],
+   "excludes": [],
+   "grants": [
+    "rudel",
+    "jäger"
+   ]
+  },
+  {
+   "id": "feuer-sprache",
+   "stage": "jaeger-sammler",
+   "name": "Feuer & Sprache",
+   "description": "Gekochte Nahrung, Wärme und Schutz – und Sprache, um Wissen weiterzugeben.",
+   "requires": [
+    "werkzeug"
+   ],
+   "excludes": [],
+   "grants": [
+    "feuer",
+    "sprache"
+   ],
+   "real": true
+  },
+  {
+   "id": "jaeger-sammler-gruppe",
+   "stage": "jaeger-sammler",
+   "name": "Jäger und Sammler",
+   "description": "Wandert mit den Jahreszeiten und kennt jede Pflanze der Gegend.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "jäger",
+    "sammler"
+   ],
+   "general": true
+  },
+  {
+   "id": "kuestenleben",
+   "stage": "jaeger-sammler",
+   "name": "Leben an der Küste",
+   "description": "Muscheln und Fisch als Nahrung – Küsten waren wichtige Wanderwege.",
+   "requires": [
+    "werkzeug"
+   ],
+   "excludes": [],
+   "grants": [
+    "wasser",
+    "küste"
+   ]
+  },
+  {
+   "id": "ackerbau-schrift",
+   "stage": "zivilisation",
+   "name": "Ackerbau, Schrift & Industrie",
+   "description": "Felder, Städte, Schrift, Wissenschaft – und schließlich Maschinen.",
+   "requires": [
+    "sprache"
+   ],
+   "excludes": [],
+   "grants": [
+    "ackerbau",
+    "schrift",
+    "industrie"
+   ],
+   "real": true
+  },
+  {
+   "id": "handel-handwerk",
+   "stage": "zivilisation",
+   "name": "Handel & Handwerk",
+   "description": "Werkstätten und Handelswege verbinden Völker und Ideen.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "handel",
+    "industrie"
+   ],
+   "general": true
+  },
+  {
+   "id": "nomaden",
+   "stage": "zivilisation",
+   "name": "Nomaden-Kultur",
+   "description": "Mit Herden durch Steppen ziehen – wie viele Völker bis heute.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "nomade"
+   ]
+  },
+  {
+   "id": "satelliten",
+   "stage": "erdorbit",
+   "name": "Satelliten & Raumstationen",
+   "description": "Sputnik, Mondlandung, ISS: der Mensch verlässt die Erde.",
+   "requires": [
+    "industrie"
+   ],
+   "excludes": [],
+   "grants": [
+    "raumfahrt",
+    "orbit"
+   ],
+   "real": true
+  },
+  {
+   "id": "funkteleskope",
+   "stage": "erdorbit",
+   "name": "Teleskope & Sonden",
+   "description": "Unbemannte Sonden und Teleskope erkunden die Planeten.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "astronomie",
+    "raumfahrt"
+   ],
+   "general": true
+  },
+  {
+   "id": "meeresforschung",
+   "stage": "erdorbit",
+   "name": "Tiefsee-Forschung",
+   "description": "Tauchboote erreichen 1960 den tiefsten Punkt der Ozeane (Marianengraben).",
+   "requires": [
+    "wasser"
+   ],
+   "excludes": [],
+   "grants": [
+    "tiefsee",
+    "habitat"
+   ]
+  },
+  {
+   "id": "mondstation",
+   "stage": "mond-mars",
+   "name": "Mondstation",
+   "description": "Zukunft: eine dauerhafte Station am Mond-Südpol, wo Eis vermutet wird.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "mond"
+   ],
+   "general": true
+  },
+  {
+   "id": "mars-siedlung",
+   "stage": "mond-mars",
+   "name": "Mars-Siedlung",
+   "description": "Zukunft: Kuppeln mit Strahlungsschutz und Wasser aus dem Marseis.",
+   "requires": [
+    "raumfahrt"
+   ],
+   "excludes": [],
+   "grants": [
+    "mars"
+   ]
+  },
+  {
+   "id": "unterwasser-technik",
+   "stage": "mond-mars",
+   "name": "Habitat-Technik aus der Tiefsee",
+   "description": "Zukunft: Erfahrung mit Unterwasser-Habitaten hilft bei geschlossenen Kreisläufen.",
+   "requires": [
+    "habitat"
+   ],
+   "excludes": [],
+   "grants": [
+    "habitat",
+    "kreislauf"
+   ]
+  },
+  {
+   "id": "sonnensegel",
+   "stage": "tiefraum",
+   "name": "Sonnensegel-Sonden",
+   "description": "Zukunft: winzige Sonden, die vom Licht angetrieben werden.",
+   "requires": [],
+   "excludes": [],
+   "grants": [
+    "sonde"
+   ],
+   "general": true
+  },
+  {
+   "id": "generationenschiff",
+   "stage": "tiefraum",
+   "name": "Generationenschiff",
+   "description": "Zukunft: ein Schiff, auf dem viele Generationen leben, bis es ankommt.",
+   "requires": [
+    "raumfahrt"
+   ],
+   "excludes": [],
+   "grants": [
+    "interstellar"
+   ]
+  },
+  {
+   "id": "krokodil-astronauten",
+   "stage": "tiefraum",
+   "name": "Krokodil-Astronauten",
+   "description": "Eine andere Zeitlinie: Hier haben Krokodile die Raumfahrt erfunden.",
+   "requires": [
+    "krokodil",
+    "raumfahrt"
+   ],
+   "excludes": [],
+   "grants": [
+    "krokodil-astronaut"
+   ]
+  }
+ ]
 }
