@@ -1,0 +1,37 @@
+{
+  "epochs": [
+    {
+      "id": "ursuppe",
+      "order": 1,
+      "name": "Ursuppe",
+      "phase": "biologisch",
+      "background": "#0d2b2a",
+      "gridColor": "#164240",
+      "enemies": [
+        { "id": "bakterie", "name": "Bakterie", "color": "#7ddf64", "size": 10, "hp": 3, "speed": 38, "damage": 4, "xp": 1 },
+        { "id": "virus", "name": "Virus", "color": "#ff5d73", "size": 7, "hp": 2, "speed": 70, "damage": 3, "xp": 1 },
+        { "id": "amoebe", "name": "Amöbe", "color": "#c9a0ff", "size": 18, "hp": 14, "speed": 26, "damage": 8, "xp": 4 }
+      ],
+      "waves": [
+        { "enemy": "bakterie", "from": 0, "to": 900, "every": 1.5, "count": 2 },
+        { "enemy": "bakterie", "from": 30, "to": 900, "every": 1, "count": 3 },
+        { "enemy": "virus", "from": 60, "to": 900, "every": 2, "count": 3 },
+        { "enemy": "amoebe", "from": 90, "to": 900, "every": 4, "count": 2 },
+        { "enemy": "bakterie", "from": 150, "to": 900, "every": 0.5, "count": 4 },
+        { "enemy": "virus", "from": 210, "to": 900, "every": 1, "count": 4 },
+        { "enemy": "amoebe", "from": 300, "to": 900, "every": 2, "count": 3 }
+      ]
+    },
+    { "id": "mehrzeller", "order": 2, "name": "Mehrzeller", "phase": "biologisch", "background": "#102a3a", "gridColor": "#1a3d52", "enemies": [], "waves": [] },
+    { "id": "urtier", "order": 3, "name": "Urtier", "phase": "biologisch", "background": "#1d2a14", "gridColor": "#2c3e1f", "enemies": [], "waves": [] },
+    { "id": "lebensraum", "order": 4, "name": "Lebensraum", "phase": "biologisch", "background": "#14263a", "gridColor": "#203a55", "enemies": [], "waves": [] },
+    { "id": "tierklasse", "order": 5, "name": "Tierklasse", "phase": "biologisch", "background": "#2a2414", "gridColor": "#3e351f", "enemies": [], "waves": [] },
+    { "id": "intelligenz", "order": 6, "name": "Intelligenz", "phase": "biologisch", "background": "#26182e", "gridColor": "#3a2546", "enemies": [], "waves": [] },
+    { "id": "steinzeit", "order": 7, "name": "Steinzeit", "phase": "kulturell", "background": "#2b2119", "gridColor": "#3f3126", "enemies": [], "waves": [] },
+    { "id": "antike", "order": 8, "name": "Antike", "phase": "kulturell", "background": "#2e2a1c", "gridColor": "#463f2a", "enemies": [], "waves": [] },
+    { "id": "mittelalter", "order": 9, "name": "Mittelalter", "phase": "kulturell", "background": "#1f2124", "gridColor": "#2f3237", "enemies": [], "waves": [] },
+    { "id": "industrie", "order": 10, "name": "Industrie", "phase": "kulturell", "background": "#25201d", "gridColor": "#38302b", "enemies": [], "waves": [] },
+    { "id": "moderne", "order": 11, "name": "Moderne", "phase": "kulturell", "background": "#161c26", "gridColor": "#232c3b", "enemies": [], "waves": [] },
+    { "id": "zukunft", "order": 12, "name": "Zukunft / Weltall", "phase": "kulturell", "background": "#0a0a18", "gridColor": "#16163a", "enemies": [], "waves": [] }
+  ]
+}

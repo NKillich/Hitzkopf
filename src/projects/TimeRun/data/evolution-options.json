@@ -1,0 +1,52 @@
+{
+  "_info": "stage = Epoche, die man mit der Wahl betritt (gewählt am oberen Ende der Epoche davor). requires: alle Tags nötig, excludes: keiner davon erlaubt, grants: neue Tags. general = immer verfügbar (keine Sackgasse).",
+  "options": [
+    { "id": "jaeger-zellverband", "stage": "mehrzeller", "name": "Jäger-Zellverband", "description": "Zellen jagen gemeinsam.",
+      "requires": [], "excludes": ["pflanzenfresser"], "grants": ["räuber", "rudel"] },
+    { "id": "filtrierer", "stage": "mehrzeller", "name": "Filtrierer", "description": "Lebt von dem, was die Strömung bringt.",
+      "requires": [], "excludes": ["räuber"], "grants": ["pflanzenfresser", "wasser"] },
+    { "id": "zellkolonie", "stage": "mehrzeller", "name": "Zellkolonie", "description": "Viele Zellen, ein Körper.",
+      "requires": [], "excludes": [], "grants": ["kolonie"], "general": true },
+
+    { "id": "ins-wasser", "stage": "lebensraum", "name": "Ozean", "description": "Bleibt im Wasser.",
+      "requires": [], "excludes": ["land", "luft"], "grants": ["wasser"] },
+    { "id": "an-land", "stage": "lebensraum", "name": "Ans Land", "description": "Erste Schritte an Land.",
+      "requires": [], "excludes": ["luft"], "grants": ["land"] },
+    { "id": "in-die-luft", "stage": "lebensraum", "name": "In die Luft", "description": "Flügel statt Flossen.",
+      "requires": ["land"], "excludes": [], "grants": ["luft"] },
+    { "id": "uferzone", "stage": "lebensraum", "name": "Uferzone", "description": "Halb Wasser, halb Land.",
+      "requires": [], "excludes": [], "grants": ["wasser", "land"], "general": true },
+
+    { "id": "panzerechse", "stage": "tierklasse", "name": "Panzerechse", "description": "Schuppen und Zähne.",
+      "requires": ["land", "räuber"], "excludes": [], "grants": ["reptil", "panzer"] },
+    { "id": "insektenstaat", "stage": "tierklasse", "name": "Insektenstaat", "description": "Tausende Geschwister.",
+      "requires": ["kolonie"], "excludes": [], "grants": ["insekt", "rudel"] },
+    { "id": "ursaeuger", "stage": "tierklasse", "name": "Ursäuger", "description": "Klein, warm, anpassungsfähig.",
+      "requires": [], "excludes": [], "grants": ["säuger"], "general": true },
+
+    { "id": "werkzeuggebrauch", "stage": "intelligenz", "name": "Werkzeuggebrauch", "description": "Stöcke und Steine.",
+      "requires": [], "excludes": [], "grants": ["intelligenz"], "general": true },
+    { "id": "schwarmintelligenz", "stage": "intelligenz", "name": "Schwarmintelligenz", "description": "Denken im Kollektiv.",
+      "requires": ["rudel"], "excludes": ["einzelgänger"], "grants": ["intelligenz", "schwarm"] },
+
+    { "id": "kriegerstamm", "stage": "steinzeit", "name": "Kriegerstamm", "description": "Wer stärker ist, hat recht.",
+      "requires": [], "excludes": ["händler"], "grants": ["kriegerisch"] },
+    { "id": "sammler", "stage": "steinzeit", "name": "Sammler", "description": "Beeren, Wurzeln, Vorräte.",
+      "requires": [], "excludes": [], "grants": ["sammler"], "general": true },
+
+    { "id": "unterwasserstaedte", "stage": "antike", "name": "Unterwasserstädte", "description": "Kuppeln am Meeresgrund.",
+      "requires": ["wasser", "intelligenz"], "excludes": [], "grants": ["tiefsee-zivilisation"] },
+    { "id": "stadtstaaten", "stage": "antike", "name": "Stadtstaaten", "description": "Mauern, Märkte, Tempel.",
+      "requires": [], "excludes": [], "grants": ["stadt", "händler"], "general": true },
+
+    { "id": "dampfmaschine", "stage": "industrie", "name": "Dampfmaschine", "description": "Kohle und Stahl.",
+      "requires": [], "excludes": [], "grants": ["industrie"], "general": true },
+    { "id": "biotechnik", "stage": "industrie", "name": "Biotechnik", "description": "Gezüchtete Werkzeuge.",
+      "requires": ["insekt"], "excludes": [], "grants": ["industrie", "bio"] },
+
+    { "id": "raumfahrt", "stage": "zukunft", "name": "Raumfahrt", "description": "Ab ins All.",
+      "requires": ["industrie"], "excludes": [], "grants": ["raumfahrt"] },
+    { "id": "digitales-zeitalter", "stage": "zukunft", "name": "Digitales Zeitalter", "description": "Alles wird vernetzt.",
+      "requires": [], "excludes": [], "grants": ["digital"], "general": true }
+  ]
+}
