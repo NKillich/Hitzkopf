@@ -10,6 +10,7 @@ import Amplify2 from './projects/Amplify2/Amplify2'
 import LiveBoard2 from './projects/Amplify2/LiveBoard'
 import IdentifyStudio from './projects/IdentifyStudio/IdentifyStudio'
 import Testify from './projects/Testify/Testify'
+import TimeRun from './projects/TimeRun/TimeRun'
 import { lobbyCollection as testifyCollection } from './projects/Testify/store'
 import { getApp } from 'firebase/app'
 import { getAuth, signInAnonymously } from 'firebase/auth'
@@ -26,6 +27,7 @@ const PROJECT_META = {
     live2:       { title: 'Amplify Live', emoji: '📺' },
     studio:      { title: 'Identify Studio', emoji: '🎛️' },
     testify:     { title: 'Testify', emoji: '🧩' },
+    timerun:     { title: 'TimeRun', emoji: '🧬' },
 }
 
 const setPageMeta = (projectId) => {
@@ -60,6 +62,7 @@ const HASH_MAP = {
     live2:     'live2',        // #live2/RAUMCODE – Live-Board 2.0
     studio:    'studio',       // #studio – Identify Studio (Listen pflegen, nur für den Betreiber, nicht auf der Startseite)
     testify:   'testify',      // #testify/RAUMCODE – Testify (Wie gut kennt ihr euch?)
+    timerun:   'timerun',      // #timerun – TimeRun (Arbeitstitel), #timerun/debug mit FPS-Anzeige
     identify:  'secondsound',  // Identify (früher „Song raten“) – steht zuletzt, damit die Adresse #identify lautet
 }
 const ID_TO_HASH = Object.fromEntries(Object.entries(HASH_MAP).map(([h, id]) => [id, h]))
@@ -165,6 +168,10 @@ function App() {
 
             {currentProject === 'testify' && (
                 <Testify onBack={handleBackToHub} joinCode={hashParam} />
+            )}
+
+            {currentProject === 'timerun' && (
+                <TimeRun onBack={handleBackToHub} param={hashParam} />
             )}
         </div>
     )

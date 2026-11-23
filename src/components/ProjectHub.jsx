@@ -25,6 +25,12 @@ const GROUPS = [
             { id: 'hitzkopf', name: 'Hitzkopf', emoji: '🔥', tint: '#FF3B30', description: 'Das explosive Partyspiel' },
             { id: 'quizroyale', name: 'Quiz Royale', emoji: '🧠', tint: '#C04CFD', description: 'Quiz mit Upgrades & Charakteren' }
         ]
+    },
+    {
+        label: 'Arcade',
+        games: [
+            { id: 'timerun', name: 'TimeRun', emoji: '🧬', tint: '#4CD964', description: 'Von der Mikrobe bis ins Weltall – überlebe die Wellen und entwickle dich.' }
+        ]
     }
 ]
 

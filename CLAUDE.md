@@ -5,7 +5,7 @@ React + Vite, Firebase (anonymer Login + Firestore), Spotify Web API, veröffent
 die Seite neu (1–2 Minuten).
 
 Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= **Identify**, früher „Song raten“),
-`MusicVoter` (= Amplify 1.0), `Amplify2` (= **Amplify**, intern „Amplify 2.0“), `Testify`. Ordner- und Code-Namen bleiben so.
+`MusicVoter` (= Amplify 1.0), `Amplify2` (= **Amplify**, intern „Amplify 2.0“), `Testify`, `TimeRun` (Arbeitstitel). Ordner- und Code-Namen bleiben so.
 Startseite: `src/components/ProjectHub.jsx` (Raumcode/QR → erst Amplify, dann Testify; Spiele-Liste, Zahnrad = Hell/Dunkel),
 Routing per Hash in `src/App.jsx` (`#identify`, alter Link `#songraten` geht weiter).
 **Schwerpunkt: Amplify und Identify.** Hitzkopf ist auf Eis – keine Updates nötig, auch wenn es nicht mehr läuft.
@@ -71,6 +71,17 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
 - Firestore `testifyLobbies`, Spieler-Schlüssel = UID (nicht der Name). Countdown synchron über `round.doneAt` (Serverzeit) + Uhrabgleich.
 - Testen ohne zweites Handy: `scripts/testify-test.mjs` (Bot spielt mit). Vor dem Veröffentlichen der Regeln im Dev-Modus
   `localStorage.tf_dev_col = 'lobbies'` setzen (offene Hitzkopf-Sammlung) und das Skript mit `TF_COL=lobbies` starten; Lobbys danach löschen.
+
+### TimeRun (Arbeitstitel, `#timerun`, Pitch „Ages Up“: Survivors-like von der Mikrobe bis ins Weltall)
+- **Phaser 4 + TypeScript** in `src/projects/TimeRun/` – einziges TS-Projekt im Repo; React-Hülle `TimeRun.jsx` lädt Phaser erst beim Öffnen
+  (eigener Bundle-Teil). Fläche 390×844, `Scale.FIT`, `pixelArt`. Szenen: `boot` (Daten prüfen, Platzhalter-Texturen) → `game` → `ui` (HUD,
+  Level-up, Run-Ende; liegt darüber, Spielszene pausiert beim Level-up).
+- Daten datengetrieben in `TimeRun/data/*.json` (`epochs`, `genes`, `upgrades`, `evolution-options` mit `requires`/`excludes`/`grants`,
+  `stage` = Epoche, die man mit der Wahl betritt, `general` = immer wählbar); beim Start geprüft (`logic/data.ts`, Fehler stehen im Bild).
+  Logik ohne Phaser in `logic/` mit Vitest-Tests (`npm test`), Typprüfung `npm run typecheck:timerun` (ESLint prüft nur JS/JSX).
+- Leistung: Gegner/Geschosse/XP aus festen Pools (`game/config.ts`), Gegner kollidieren nicht untereinander. `#timerun/debug` zeigt FPS +
+  Knopf „+300 Gegner“ und legt das Spiel als `window.__timerun` ab (für Tests in der Konsole).
+- Phase 1 = nur Kern-Loop in der Ursuppe; Evolutionswahl, Epochenwechsel, Meta-Progression, Grafiken kommen später.
 
 ## Arbeitsweise
 

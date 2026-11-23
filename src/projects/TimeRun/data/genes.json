@@ -1,0 +1,17 @@
+{
+  "startGene": "giftstachel",
+  "genes": [
+    {
+      "id": "giftstachel",
+      "name": "Giftstachel",
+      "description": "Schießt automatisch auf den nächsten Gegner.",
+      "kind": "projectile",
+      "base": { "damage": 3, "cooldownMs": 650, "range": 230, "projectileSpeed": 320, "projectiles": 1, "pierce": 0 },
+      "forms": {
+        "ursuppe": { "name": "Giftstachel", "color": "#f4ff6b" },
+        "steinzeit": { "name": "Giftpfeil", "color": "#c8e05a" },
+        "zukunft": { "name": "Biowaffe", "color": "#6bffd8" }
+      }
+    }
+  ]
+}
