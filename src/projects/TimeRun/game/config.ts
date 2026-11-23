@@ -14,6 +14,8 @@ export const PLAYER_SIZE = 14
 export const PLAYER_BASE: BasePlayer = { maxHp: 50, moveSpeed: 115, pickupRadius: 64, xpGain: 1, regen: 0 }
 /** Unverwundbar nach einem Treffer (ms) */
 export const HIT_COOLDOWN_MS = 450
+/** Fress-Phasen: so oft kann man größere Gegner/Bosse anknabbern (ms) */
+export const BITE_COOLDOWN_MS = 250
 
 /** Gegner, die so weit unter dem Bildschirm sind, werden wieder oben eingesetzt. */
 export const RECYCLE_BELOW = 160

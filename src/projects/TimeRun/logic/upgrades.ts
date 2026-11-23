@@ -14,16 +14,17 @@ export interface BasePlayer {
     regen: number
 }
 
-/** Upgrades, die gerade angeboten werden dürfen (nicht ausgereizt, Tags passen). */
-export function eligibleUpgrades(all: Upgrade[], owned: OwnedUpgrades, tags: ReadonlySet<string>): Upgrade[] {
-    return all.filter(u => (owned[u.id] ?? 0) < u.maxLevel && meetsTags(u, tags))
+/** Upgrades, die gerade angeboten werden dürfen (nicht ausgereizt, Tags passen, passende Hauptphase). */
+export function eligibleUpgrades(all: Upgrade[], owned: OwnedUpgrades, tags: ReadonlySet<string>, phase?: number): Upgrade[] {
+    return all.filter(u => (owned[u.id] ?? 0) < u.maxLevel && meetsTags(u, tags)
+        && (phase === undefined || !u.phases || u.phases.includes(phase)))
 }
 
 /** Bis zu `n` verschiedene Upgrades, gewichtet nach Seltenheit (ohne Zurücklegen). */
 export function pickUpgrades(
-    all: Upgrade[], owned: OwnedUpgrades, tags: ReadonlySet<string>, rng: () => number = Math.random, n = 3,
+    all: Upgrade[], owned: OwnedUpgrades, tags: ReadonlySet<string>, rng: () => number = Math.random, n = 3, phase?: number,
 ): Upgrade[] {
-    const pool = eligibleUpgrades(all, owned, tags)
+    const pool = eligibleUpgrades(all, owned, tags, phase)
     const picked: Upgrade[] = []
     while (picked.length < n && pool.length > 0) {
         const total = pool.reduce((s, u) => s + RARITY_WEIGHT[u.rarity], 0)

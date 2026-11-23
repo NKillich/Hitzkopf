@@ -256,8 +256,9 @@ export class UIScene extends Phaser.Scene {
     /** Infokarte beim Betreten einer Stufe: Name, echter Zeitraum, belegbare Info. */
     showStage(epoch: Epoch, weaponName: string) {
         this.stageTitle.setText(`${epoch.code} ${epoch.name}`)
+        const hint = weaponName.startsWith('Fressen') ? ' (Kleinere berühren, Größere anknabbern)' : ''
         this.stageRange.setText(`${formatRange(epoch.fromYear, epoch.toYear)}
-Waffe: ${weaponName}`).setY(this.stageTitle.y + this.stageTitle.height + 4)
+Waffe: ${weaponName}${hint}`).setY(this.stageTitle.y + this.stageTitle.height + 4)
         this.stageFact.setText(epoch.fact).setY(this.stageRange.y + this.stageRange.height + 8)
         this.stageBg.setSize(340, this.stageFact.y + this.stageFact.height + 12)
         this.tweens.killTweensOf(this.stageCard)

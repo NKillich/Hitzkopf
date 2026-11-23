@@ -72,13 +72,18 @@ export function validateData(d: GameData): string[] {
     for (const id of duplicates(d.genes.map(g => g.id))) errors.push(`genes: id „${id}“ doppelt`)
     if (!d.genes.some(g => g.id === d.startGene)) errors.push(`genes: startGene „${d.startGene}“ fehlt`)
     for (const g of d.genes) {
-        for (const ep of Object.keys(g.forms)) if (!epochIds.has(ep)) errors.push(`genes/${g.id}: Form für unbekannte Epoche „${ep}“`)
+        for (const [ep, f] of Object.entries(g.forms)) {
+            if (!epochIds.has(ep)) errors.push(`genes/${g.id}: Form für unbekannte Epoche „${ep}“`)
+            if (f.kind && !['projectile', 'melee', 'beam'].includes(f.kind)) errors.push(`genes/${g.id}/${ep}: Art „${f.kind}“ unbekannt`)
+            if (!COLOR_RE.test(f.color)) errors.push(`genes/${g.id}/${ep}: Farbe ungültig`)
+        }
     }
 
     for (const id of duplicates(d.upgrades.map(u => u.id))) errors.push(`upgrades: id „${id}“ doppelt`)
     for (const u of d.upgrades) {
         if (!RARITIES.includes(u.rarity)) errors.push(`upgrades/${u.id}: Seltenheit „${u.rarity}“ unbekannt`)
         if (!(u.maxLevel >= 1)) errors.push(`upgrades/${u.id}: maxLevel muss ≥ 1 sein`)
+        if (u.phases && !u.phases.every(p => Number.isInteger(p) && p >= 1 && p <= 6)) errors.push(`upgrades/${u.id}: phases nur 1–6`)
         if (!u.effects.length) errors.push(`upgrades/${u.id}: keine Effekte`)
         for (const e of u.effects) {
             if (!STATS.includes(e.stat)) errors.push(`upgrades/${u.id}: Wert „${e.stat}“ unbekannt`)
