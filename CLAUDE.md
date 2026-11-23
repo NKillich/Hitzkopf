@@ -90,7 +90,7 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
 - Evolutionsoptionen: Optionen der Stufe, die man betritt; `real: true` = so passiert (★ Echte Zeitlinie, bis heute genau eine
   je Stufe, Tests prüfen, dass sie immer erreichbar ist und es eine Alternative gibt). Ende: Auswertung „Echte Zeitlinie x von y“
   + Abzeichen. Infokarte beim Betreten jeder Stufe (Zeitraum, Waffe, Fakt). Level, Upgrades, Tags bleiben über Stufen.
-- **Kampf je Phase** (`logic/weapon.ts`, `genes.json`): Phase 1–2 = **Fressen** – Kleinere durch Berührung fressen (XP direkt),
+- **Kampf je Phase** (`logic/weapon.ts`, `genes.json`): Phase 1–2 = **Fressen** – nur in Bewegung (Phagozytose, `EAT_REACH`), danach Verdauen (`DIGEST_MS`), keine Heilung; kleine/mittlere Gegner treiben harmlos (`behavior: drift`), nur große jagen. Kleinere fressen (XP direkt),
   Größere/Bosse anknabbern (`BITE_COOLDOWN_MS`); man wächst mit dem Level (`playerSize`). Fernwaffe dort erst mit Upgrade
   „Toxin-Ausstoß“ (Tag `toxin`). Bosse 1.3/2.3 sind harmlos (Stromatolith steht still, Dickinsonia hatte keinen Mund) – Bosse
   erscheinen knapp unter der Linie. Ab Phase 3 Waffenformen aus `forms` (gilt ab ihrer Stufe): Stachel → Biss/Klauen (`melee`,
@@ -102,6 +102,10 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   Aktionen pickUpgrade/reroll/pickEvolution/pause/…). Ebene skaliert wie Phaser FIT. Klassen immer mit Präfix `tr-` –
   globale Klassen anderer Spiele (z. B. `.screen { display:none }`) greifen sonst. Startscreen → „Run starten“ startet die
   Szene `game`; bester Run im localStorage `ages_up_best_v1`. Level-up: „Neu würfeln“ 1× pro Run.
+- **Wellen nach Höhe**: `waves` from/to/every = Anteil der Stufenhöhe (nur neue Höhe zählt → Stehenbleiben bringt nichts),
+  `ambient` nach Zeit (wenige Jäger). **Boden statt Infokarte:** Zeitstrahl als Lineal am linken Rand (Striche + Jahre), Stufenname
+  am Start, `facts` (3 je Stufe, belegbar) als Bodentexte bei 12/42/72 % der Höhe. Daten werden mit einem Skript erzeugt
+  (nur epochs/evolution-options; `genes.json` von Hand) – bei Handänderungen am JSON das Skript nicht mehr blind laufen lassen.
 - Texte: wegen `pixelArt` werden Texte per `smoothTexts()` (config.ts) linear gefiltert, sonst verschwinden „-“, „–“, „→“.
 - Debug `#timerun/debug`: „[Ziel]“ springt vor die Ziellinie. Tests in der versteckten Browser-Ansicht: rAF ist gedrosselt →
   Spiel per `__timerun.step(t, 16.67)` mit stetig steigendem `t` antreiben, Steuerung per W/A/S/D-KeyboardEvents.

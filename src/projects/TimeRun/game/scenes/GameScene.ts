@@ -11,7 +11,7 @@ import {
     buildTimeline, firstPlayable, heightProgress, nextPlayable, resolveEpoch, sortedEpochs, transitionStage, type TimelineEntry,
 } from '../../logic/epochs'
 import {
-    BITE_COOLDOWN_MS, BOSS_TRIGGER_DISTANCE, CLEAR_DELAY_MS, HEIGHT, HIT_COOLDOWN_MS, MAX_ENEMIES, MAX_GEMS, MAX_PROJECTILES,
+    BITE_COOLDOWN_MS, DIGEST_MS, EAT_REACH, BOSS_TRIGGER_DISTANCE, CLEAR_DELAY_MS, HEIGHT, HIT_COOLDOWN_MS, MAX_ENEMIES, MAX_GEMS, MAX_PROJECTILES,
     PLAYER_BASE, PLAYER_SIZE, RECYCLE_BELOW, WIDTH, hexToInt, smoothTexts,
 } from '../config'
 import { Joystick } from '../Joystick'
@@ -23,6 +23,8 @@ class Enemy extends Phaser.Physics.Arcade.Image {
     hp = 0
     flashUntil = 0
     isBoss = false
+    /** Phase für das seitliche Schlingern treibender Gegner */
+    wobble = 0
 }
 
 class Shot extends Phaser.Physics.Arcade.Image {
@@ -120,6 +122,12 @@ export class GameScene extends Phaser.Scene {
     private eating = false
     private playerSz = PLAYER_SIZE
     private biteReadyAt = 0
+    private eatReadyAt = 0
+    /** höchste erreichte Höhe in der Stufe (px) – Wellen kommen nur beim Hochkämpfen */
+    private climbMax = 0
+    /** Lineal + Bodentexte der aktuellen und der vorigen Stufe */
+    private worldObjs: Phaser.GameObjects.GameObject[] = []
+    private prevWorldObjs: Phaser.GameObjects.GameObject[] = []
     /** Effekte für Nahkampf/Strahl (werden pro Bild neu gezeichnet) */
     private fx!: Phaser.GameObjects.Graphics
     private effects: { kind: 'ring' | 'line'; x: number; y: number; x2: number; y2: number; r: number; until: number; color: number }[] = []
@@ -130,7 +138,6 @@ export class GameScene extends Phaser.Scene {
     private offeredEvos: EvolutionOption[] = []
     private rerolls = 1
     private lastHudAt = -Infinity
-    private stageCardId = 0
     private bannerId = 0
     run!: RunInfo
 
@@ -153,6 +160,9 @@ export class GameScene extends Phaser.Scene {
         this.boss = null
         this.effects = []
         this.rerolls = 1
+        this.eatReadyAt = 0
+        this.worldObjs = []
+        this.prevWorldObjs = []
         this.lastHudAt = -Infinity
         this.offeredUpgrades = []
         this.offeredEvos = []
@@ -216,7 +226,6 @@ export class GameScene extends Phaser.Scene {
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.joystick.destroy())
         this.registerActions()
         this.bridge.set({ screen: 'run', overlay: null, banner: null })
-        this.publishStage()
         this.publishHud()
     }
 
@@ -266,17 +275,6 @@ export class GameScene extends Phaser.Scene {
         })
     }
 
-    /** Infokarte zur Stufe (React blendet sie ein und nach einigen Sekunden aus). */
-    private publishStage() {
-        const e = this.epoch
-        this.bridge.set({
-            stageCard: {
-                id: ++this.stageCardId, code: e.code, name: e.name, range: formatRange(e.fromYear, e.toYear),
-                weapon: this.run.weaponName, fact: e.fact, eating: this.eating,
-            },
-        })
-    }
-
     private pauseRun() {
         if (this.choosing || this.run.dead || this.run.won || this.scene.isPaused()) return
         this.joystick.release()
@@ -292,7 +290,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     private toMenu() {
-        this.bridge.set({ screen: 'start', overlay: null, hud: null, stageCard: null, banner: null })
+        this.bridge.set({ screen: 'start', overlay: null, hud: null, banner: null })
         this.scene.stop()
     }
 
@@ -321,11 +319,63 @@ export class GameScene extends Phaser.Scene {
         this.finishLine.setPosition(0, this.endY).setVisible(true)
         const goal = this.epoch.boss ? `Boss: ${this.epoch.boss.name}` : `Ende ${this.epoch.code}`
         this.finishText.setPosition(WIDTH / 2, this.endY + 6).setText(`▲ ${goal} · ${formatYear(this.epoch.toYear)}`).setVisible(true)
+        this.climbMax = 0
+        this.buildStageWorld()
 
         this.run.epoch = this.epoch
         this.run.phase = 'climb'
         this.run.progress = 0
         this.run.boss = null
+    }
+
+    /**
+     * Boden der Stufe: Zeitstrahl als Lineal am linken Rand (Striche + Jahresangaben),
+     * Stufenname am Anfang und die Fakten als Inschriften, über die Höhe verteilt.
+     */
+    private buildStageWorld() {
+        for (const o of this.prevWorldObjs) o.destroy()
+        this.prevWorldObjs = this.worldObjs
+        this.worldObjs = []
+        const e = this.epoch
+        const h = e.height ?? 5000
+        const bottom = this.epochStartY
+        const font = '"Pixelify Sans", ui-monospace, monospace'
+        const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => { this.worldObjs.push(o); return o }
+
+        const g = add(this.add.graphics().setDepth(-6))
+        g.fillStyle(0xf4eedc, 0.16).fillRect(6, bottom - h, 2, h)
+        for (let i = 0; i <= 20; i++) {
+            const y = bottom - (h * i) / 20
+            const major = i % 5 === 0
+            g.fillStyle(0xf4eedc, major ? 0.32 : 0.18).fillRect(6, y - 1, major ? 12 : 6, 2)
+            if (major && i < 20) {
+                add(this.add.text(22, y, formatYear(yearAt(e.fromYear, e.toYear, i / 20)), {
+                    fontFamily: font, fontSize: '11px', color: '#F4EEDC', resolution: 2,
+                }).setOrigin(0, 0.5).setAlpha(0.4).setDepth(-4))
+            }
+        }
+
+        // Stufenname kurz über dem Start
+        add(this.add.text(WIDTH / 2, bottom - 150, `${e.code} ${e.name}`, {
+            fontFamily: font, fontSize: '18px', fontStyle: 'bold', color: '#FFD27A', align: 'center', wordWrap: { width: 300 }, resolution: 2,
+        }).setOrigin(0.5, 1).setAlpha(0.55).setDepth(-4))
+        add(this.add.text(WIDTH / 2, bottom - 144, formatRange(e.fromYear, e.toYear), {
+            fontFamily: font, fontSize: '12px', color: '#A6F7DA', align: 'center', resolution: 2,
+        }).setOrigin(0.5, 0).setAlpha(0.5).setDepth(-4))
+
+        // Fakten gleichmäßig über die Stufe verteilt
+        const n = e.facts.length
+        e.facts.forEach((fact, i) => {
+            // nicht auf den Hauptstrichen des Lineals (0/25/50/75 %)
+            const y = bottom - h * (0.12 + (0.6 * i) / Math.max(1, n - 1))
+            add(this.add.text(WIDTH / 2 + 6, y - 6, 'Wusstest du?', {
+                fontFamily: font, fontSize: '11px', color: '#FFD27A', resolution: 2,
+            }).setOrigin(0.5, 1).setAlpha(0.45).setDepth(-4))
+            add(this.add.text(WIDTH / 2 + 6, y, fact, {
+                fontFamily: font, fontSize: '14px', color: '#F4EEDC', align: 'center', wordWrap: { width: 300 }, lineSpacing: 3, resolution: 2,
+            }).setOrigin(0.5, 0).setAlpha(0.55).setDepth(-4))
+        })
+        smoothTexts(this.worldObjs)
     }
 
     /** Waffe, Fressen und Größe nach Stufe, Tags, Upgrades und Level neu bestimmen. */
@@ -382,11 +432,28 @@ export class GameScene extends Phaser.Scene {
         }
         else if (this.run.phase === 'boss' && !this.boss) this.spawnBoss()   // Sicherung, falls er nicht erscheinen konnte
 
-        // Wellen nur beim Hochkämpfen – beim Boss kommen keine neuen Gegner dazu
+        // Wellen nur beim Hochkämpfen (nach erreichter Höhe), dazu wenige nach Zeit – beim Boss nichts Neues
         if (this.run.phase === 'climb') {
-            for (const req of spawnsDue(this.epoch.waves, prevEpochSec, this.epochTimeMs / 1000)) {
+            const h = this.epoch.height ?? 5000
+            const climb = Math.max(this.climbMax, this.epochStartY - py)
+            const due = [
+                ...spawnsDue(this.epoch.waves, this.climbMax / h, climb / h),
+                ...spawnsDue(this.epoch.ambient ?? [], prevEpochSec, this.epochTimeMs / 1000),
+            ]
+            this.climbMax = climb
+            for (const req of due) {
                 const type = this.enemyTypes.get(req.enemy)
                 if (type) for (let i = 0; i < req.count; i++) this.spawnEnemy(type)
+            }
+        }
+
+        // Fress-Phasen: in Bewegung wird kleine Beute im Umkreis geschluckt (Phagozytose)
+        if (this.eating && this.timeMs >= this.eatReadyAt && this.move.lengthSq() > 0.12) {
+            const reach = this.playerSz / 2 + EAT_REACH
+            for (const e of this.enemies) {
+                if (!e.active || !canEatEnemy(this.playerSz, e.kind.size, e.isBoss)) continue
+                const rr = reach + e.kind.size / 2
+                if ((e.x - px) ** 2 + (e.y - py) ** 2 <= rr * rr) { this.eatEnemy(e); break }
             }
         }
 
@@ -397,13 +464,21 @@ export class GameScene extends Phaser.Scene {
         for (const e of this.enemies) {
             if (!e.active) continue
             alive++
+            const drift = e.kind.behavior === 'drift'
             if (e.y > bottom && !e.isBoss) {
+                // Treibende sind vorbeigezogen; Jäger kommen von oben wieder
+                if (drift) { e.disableBody(true, true); alive--; continue }
                 e.body.reset(Phaser.Math.Between(8, WIDTH - 8), cam.scrollY - Phaser.Math.Between(20, 100))
             }
-            const dx = px - e.x
-            const dy = py - e.y
-            const len = Math.hypot(dx, dy) || 1
-            e.body.velocity.set((dx / len) * e.kind.speed, (dy / len) * e.kind.speed)
+            if (drift) {
+                // mit der Strömung nach unten, leicht schlingernd
+                e.body.velocity.set(Math.sin(now / 700 + e.wobble) * 14, e.kind.speed * 0.3)
+            } else {
+                const dx = px - e.x
+                const dy = py - e.y
+                const len = Math.hypot(dx, dy) || 1
+                e.body.velocity.set((dx / len) * e.kind.speed, (dy / len) * e.kind.speed)
+            }
             if (!e.isBoss) this.separate(e)
             if (e.flashUntil && now > e.flashUntil) {
                 e.flashUntil = 0
@@ -519,7 +594,6 @@ export class GameScene extends Phaser.Scene {
         const options = stage ? availableEvolutions(this.gd.evolutionOptions, stage.id, this.tags) : []
         if (!stage || !options.length) {
             this.startEpoch(next)
-            this.publishStage()
             return
         }
         this.choosing = true
@@ -554,7 +628,6 @@ export class GameScene extends Phaser.Scene {
         if (next) this.startEpoch(next)
         this.bridge.setOverlay(null)
         this.scene.resume()
-        this.publishStage()
         this.publishHud()
     }
 
@@ -579,7 +652,7 @@ export class GameScene extends Phaser.Scene {
             : prev
         if (newRecord) saveBest(best)
         this.publishHud()
-        this.bridge.set({ best, stageCard: null, banner: null })
+        this.bridge.set({ best, banner: null })
         this.bridge.setOverlay({
             type: 'end', won, reachedCode: this.epoch.code, reachedName: this.epoch.shortName, year: formatYear(this.run.year),
             stageIndex, stageCount: list.length, timeSec: this.run.timeSec, kills: this.run.kills, level: this.run.level,
@@ -604,6 +677,7 @@ export class GameScene extends Phaser.Scene {
         e.hp = type.hp
         e.flashUntil = 0
         e.isBoss = false
+        e.wobble = Math.random() * Math.PI * 2
         e.setDisplaySize(type.size, type.size).setTintMode(Phaser.TintModes.MULTIPLY).setTint(hexToInt(type.color)).setDepth(6)
         return e
     }
@@ -714,6 +788,13 @@ export class GameScene extends Phaser.Scene {
 
     private drawEffects(now: number) {
         this.fx.clear()
+        // Verdauen: Ring um die Zelle läuft zu
+        if (this.eating && this.timeMs < this.eatReadyAt) {
+            const left = (this.eatReadyAt - this.timeMs) / DIGEST_MS
+            const r = this.playerSz / 2 + 5
+            this.fx.lineStyle(2, 0xa6f7da, 0.8).beginPath()
+                .arc(this.player.x, this.player.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left).strokePath()
+        }
         if (!this.effects.length) return
         this.effects = this.effects.filter(f => f.until > now)
         for (const f of this.effects) {
@@ -816,23 +897,30 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    /** Beute schlucken: XP direkt, danach kurz verdauen (keine Heilung). */
+    private eatEnemy(e: Enemy) {
+        this.eatReadyAt = this.timeMs + DIGEST_MS
+        this.run.kills++
+        e.disableBody(true, true)
+        this.addXp(e.kind.xp)
+    }
+
     private onPlayerHit(e: Enemy) {
         if (!e.active || this.run.dead) return
-        // Fress-Phasen: Kleinere werden gefressen (gibt XP und etwas Leben)
-        if (this.eating && canEatEnemy(this.playerSz, e.kind.size, e.isBoss)) {
-            this.run.kills++
-            e.disableBody(true, true)
-            this.addXp(e.kind.xp)
-            this.run.hp = Math.min(this.run.stats.maxHp, this.run.hp + 1)
-            return
+        if (this.eating) {
+            // Fressen ist aktiv (Phagozytose): nur in Bewegung, danach kurz verdauen
+            const moving = this.move.lengthSq() > 0.12
+            const small = canEatEnemy(this.playerSz, e.kind.size, e.isBoss)
+            if (moving && small && this.timeMs >= this.eatReadyAt) { this.eatEnemy(e); return }
+            // Größere Gegner und Bosse kann man in Bewegung anknabbern
+            if (moving && !small && this.timeMs >= this.biteReadyAt) {
+                this.biteReadyAt = this.timeMs + BITE_COOLDOWN_MS
+                this.damageEnemy(e, this.wstats.damage * 2)
+                if (!e.active) return
+            }
         }
-        // Größere Gegner und Bosse kann man anknabbern
-        if (this.eating && this.timeMs >= this.biteReadyAt) {
-            this.biteReadyAt = this.timeMs + BITE_COOLDOWN_MS
-            this.damageEnemy(e, this.wstats.damage * 2)
-            if (!e.active) return
-        }
-        if (e.kind.damage <= 0 || this.timeMs < this.invulnUntil) return
+        // Treibende Beute ist harmlos
+        if (e.kind.behavior === 'drift' || e.kind.damage <= 0 || this.timeMs < this.invulnUntil) return
         this.invulnUntil = this.timeMs + HIT_COOLDOWN_MS
         this.run.hp -= e.kind.damage
         this.cameras.main.shake(90, 0.004)
@@ -906,7 +994,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     restartRun() {
-        this.bridge.set({ overlay: null, banner: null, stageCard: null })
+        this.bridge.set({ overlay: null, banner: null })
         this.scene.restart()
     }
 }

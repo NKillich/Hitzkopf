@@ -11,6 +11,8 @@ export interface EnemyType {
     speed: number      // Pixel pro Sekunde
     damage: number     // Schaden bei Berührung
     xp: number         // Wert des XP-Kristalls
+    /** drift = treibt mit der Strömung und ist harmlos (frühe Einzeller), sonst jagt der Gegner */
+    behavior?: 'chase' | 'drift'
 }
 
 /** Ab Sekunde `from` bis vor `to` erscheinen alle `every` Sekunden `count` Gegner vom Typ `enemy`. */
@@ -47,12 +49,15 @@ export interface Epoch {
     /** Zeitraum als Kalenderjahr (negativ = v. Chr. / vor heute) */
     fromYear: number
     toYear: number
-    /** kurze, belegbare Info („Wusstest du?“) */
-    fact: string
+    /** kurze, belegbare Infos – stehen als Text auf dem Boden, über die Stufe verteilt */
+    facts: string[]
     background: string
     gridColor: string
     enemies: EnemyType[]
+    /** nach HÖHE: from/to/every als Anteil der Stufenhöhe (0…1) */
     waves: Wave[]
+    /** nach ZEIT (Sekunden): wenige Gegner, auch wenn man stehen bleibt */
+    ambient?: Wave[]
     /** Strecke nach oben bis zum Ende der Epoche (nur spielbare Epochen) */
     height?: number
     /** wartet am oberen Ende; besiegt → Evolutionswahl */
