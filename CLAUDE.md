@@ -5,7 +5,7 @@ React + Vite, Firebase (anonymer Login + Firestore), Spotify Web API, veröffent
 die Seite neu (1–2 Minuten).
 
 Projekte unter `src/projects/`: `Hitzkopf`, `QuizGame`, `SecondSound` (= **Identify**, früher „Song raten“),
-`MusicVoter` (= Amplify 1.0), `Amplify2` (= **Amplify**, intern „Amplify 2.0“), `Testify`, `TimeRun` (Arbeitstitel). Ordner- und Code-Namen bleiben so.
+`MusicVoter` (= Amplify 1.0), `Amplify2` (= **Amplify**, intern „Amplify 2.0“), `Testify`, `TimeRun` (= **Ages Up**). Ordner- und Code-Namen bleiben so.
 Startseite: `src/components/ProjectHub.jsx` (Raumcode/QR → erst Amplify, dann Testify; Spiele-Liste, Zahnrad = Hell/Dunkel),
 Routing per Hash in `src/App.jsx` (`#identify`, alter Link `#songraten` geht weiter).
 **Schwerpunkt: Amplify und Identify.** Hitzkopf ist auf Eis – keine Updates nötig, auch wenn es nicht mehr läuft.
@@ -97,6 +97,11 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   Rundumschlag) → Steinwurf → Speer → Pfeil & Bogen → Laser (`beam`, trifft alles auf der Linie); `mod` = Faktoren.
   Upgrades mit `phases` werden nur in diesen Hauptphasen angeboten (themenpassend), gewählte wirken weiter.
 - Gegner stoßen sich über ein Raster (24 px) leicht ab – kostet bei 450 Gegnern ca. 0,1 ms pro Bild.
+- **Oberfläche = React über Phaser** (`TimeRun/ui/`, Design nach Klickdummy „Ages Up“: Pixelify Sans/Silkscreen per Fontsource,
+  Panels `#2A2140` mit Pixel-Kanten). Spiel ↔ UI über `game/bridge.ts` (`UiBridge`: Zustand per `useSyncExternalStore`, HUD 10×/s,
+  Aktionen pickUpgrade/reroll/pickEvolution/pause/…). Ebene skaliert wie Phaser FIT. Klassen immer mit Präfix `tr-` –
+  globale Klassen anderer Spiele (z. B. `.screen { display:none }`) greifen sonst. Startscreen → „Run starten“ startet die
+  Szene `game`; bester Run im localStorage `ages_up_best_v1`. Level-up: „Neu würfeln“ 1× pro Run.
 - Texte: wegen `pixelArt` werden Texte per `smoothTexts()` (config.ts) linear gefiltert, sonst verschwinden „-“, „–“, „→“.
 - Debug `#timerun/debug`: „[Ziel]“ springt vor die Ziellinie. Tests in der versteckten Browser-Ansicht: rAF ist gedrosselt →
   Spiel per `__timerun.step(t, 16.67)` mit stetig steigendem `t` antreiben, Steuerung per W/A/S/D-KeyboardEvents.
