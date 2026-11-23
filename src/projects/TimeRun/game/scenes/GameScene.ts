@@ -16,6 +16,8 @@ import {
 } from '../config'
 import { Joystick } from '../Joystick'
 import { saveBest, type IconKey, type UiBridge } from '../bridge'
+import { bodyFor, groundFor, outfitFor, PLAYER_TINT, type Shape } from '../../logic/appearance'
+import { outfitKey, shapeKey } from '../sprites'
 
 class Enemy extends Phaser.Physics.Arcade.Image {
     declare body: Phaser.Physics.Arcade.Body
@@ -84,6 +86,9 @@ export class GameScene extends Phaser.Scene {
     private enemyTypes = new Map<string, EnemyType>()
 
     private player!: Phaser.Types.Physics.Arcade.ImageWithDynamicBody
+    /** Ausrüstung der Epoche (Umhang, Kleidung, Raumanzug) über dem Körper */
+    private outfitImg!: Phaser.GameObjects.Image
+    private body_: Shape = 'cell'
     private hpBarBg!: Phaser.GameObjects.Image
     private hpBarFill!: Phaser.GameObjects.Image
     private bg!: Phaser.GameObjects.TileSprite
@@ -184,7 +189,8 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5, 0).setAlpha(0.7).setDepth(-5)
         smoothTexts([this.finishText])
 
-        this.player = this.physics.add.image(WIDTH / 2, 0, 'player').setCollideWorldBounds(true).setDepth(10)
+        this.player = this.physics.add.image(WIDTH / 2, 0, shapeKey('cell')).setCollideWorldBounds(true).setDepth(10)
+        this.outfitImg = this.add.image(0, 0, shapeKey('cell')).setDepth(10.5).setVisible(false)
         this.hpBarBg = this.add.image(0, 0, 'bar').setDisplaySize(20, 3).setTint(0x400000).setDepth(11)
         this.hpBarFill = this.add.image(0, 0, 'bar').setOrigin(0, 0.5).setDisplaySize(20, 3).setTint(0x4cff6a).setDepth(12)
         cam.startFollow(this.player, true, 1, 0.12)
@@ -305,13 +311,14 @@ export class GameScene extends Phaser.Scene {
 
         const cam = this.cameras.main
         cam.setBackgroundColor(this.epoch.background)
-        this.bg.setTint(hexToInt(this.epoch.gridColor))
+        this.bg.setTexture(groundFor(base.phase, base.code)).setTint(hexToInt(this.epoch.gridColor))
 
         // Waffe nimmt die Form der Stufe an (gilt bis zur nächsten Form)
         this.form = activeForm(this.gene, this.gd.epochs, base.id)
         const tint = hexToInt(this.form?.color ?? '#ffffff')
         for (const s of this.shots) s.setTint(tint)
         this.refreshWeapon()
+        this.refreshAppearance()
 
         this.epochStartY = this.player.y
         this.endY = this.epochStartY - (this.epoch.height ?? 5000)
@@ -378,6 +385,19 @@ export class GameScene extends Phaser.Scene {
         smoothTexts(this.worldObjs)
     }
 
+    /** Körper nach Phase/Evolution, Ausrüstung nach Epoche. */
+    private refreshAppearance() {
+        const e = this.baseEpoch
+        this.body_ = bodyFor(e.phase, e.code, this.tags)
+        this.player.setTexture(shapeKey(this.body_)).setTint(PLAYER_TINT[this.body_] ?? 0x3dcf9e)
+        this.player.setDisplaySize(this.playerSz, this.playerSz)
+        const outfit = outfitFor(e.code)
+        const key = outfitKey(this.body_, outfit)
+        const has = outfit !== 'none' && this.textures.exists(key)
+        this.outfitImg.setVisible(has)
+        if (has) this.outfitImg.setTexture(key)
+    }
+
     /** Waffe, Fressen und Größe nach Stufe, Tags, Upgrades und Level neu bestimmen. */
     private refreshWeapon() {
         const phase = this.baseEpoch.phase
@@ -414,8 +434,14 @@ export class GameScene extends Phaser.Scene {
         this.player.setVelocity(this.move.x * stats.moveSpeed, this.move.y * stats.moveSpeed)
         if (stats.regen > 0) this.run.hp = Math.min(stats.maxHp, this.run.hp + stats.regen * dt)
         this.player.setAlpha(now < this.invulnUntil ? 0.55 : 1)
+        if (this.move.x < -0.1) this.player.setFlipX(true)
+        else if (this.move.x > 0.1) this.player.setFlipX(false)
         const px = this.player.x
         const py = this.player.y
+        if (this.outfitImg.visible) {
+            this.outfitImg.setPosition(px, py).setDisplaySize(this.playerSz, this.playerSz).setFlipX(this.player.flipX)
+                .setAlpha(this.player.alpha)
+        }
         this.hpBarBg.setPosition(px, py - this.playerSz / 2 - 6)
         this.hpBarFill.setPosition(px - 10, py - this.playerSz / 2 - 6).setDisplaySize(20 * Math.max(0, this.run.hp / stats.maxHp), 3)
 
@@ -480,6 +506,8 @@ export class GameScene extends Phaser.Scene {
                 e.body.velocity.set((dx / len) * e.kind.speed, (dy / len) * e.kind.speed)
             }
             if (!e.isBoss) this.separate(e)
+            if (e.body.velocity.x < -4) e.setFlipX(true)
+            else if (e.body.velocity.x > 4) e.setFlipX(false)
             if (e.flashUntil && now > e.flashUntil) {
                 e.flashUntil = 0
                 e.setTintMode(Phaser.TintModes.MULTIPLY).setTint(hexToInt(e.kind.color))
@@ -678,6 +706,7 @@ export class GameScene extends Phaser.Scene {
         e.flashUntil = 0
         e.isBoss = false
         e.wobble = Math.random() * Math.PI * 2
+        e.setTexture(shapeKey((type.shape as Shape | undefined) ?? 'blob'))
         e.setDisplaySize(type.size, type.size).setTintMode(Phaser.TintModes.MULTIPLY).setTint(hexToInt(type.color)).setDepth(6)
         return e
     }

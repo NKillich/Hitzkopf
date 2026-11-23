@@ -106,6 +106,11 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   `ambient` nach Zeit (wenige Jäger). **Boden statt Infokarte:** Zeitstrahl als Lineal am linken Rand (Striche + Jahre), Stufenname
   am Start, `facts` (3 je Stufe, belegbar) als Bodentexte bei 12/42/72 % der Höhe. Daten werden mit einem Skript erzeugt
   (nur epochs/evolution-options; `genes.json` von Hand) – bei Handänderungen am JSON das Skript nicht mehr blind laufen lassen.
+- **Grafik (im Code gezeichnet):** `game/sprites.ts` = 16×16-Raster für 16 Formen (`SHAPES` in `logic/appearance.ts`), graustufig →
+  Gegner per Tint in ihrer Datenfarbe (`shape` je Gegner in epochs.json). Spieler-Körper nach Phase + Evolutions-Tags (`bodyFor`:
+  Zelle → Kolonie → Fisch/Gliederfüßer/Vierbeiner → Säuger/Reptil/Vogel → Mensch nur mit `primat`), darüber Ausrüstung je
+  Epoche (`outfitFor`: 5.2 Fell, 5.3 Kleidung, 6.x Raumanzug). Bodenmuster je Stufe (`groundFor`, Wege erst ab 5.3).
+  Sprites schauen nach rechts, gespiegelt per flipX. Pixel-Schrift: Ligaturen „fi/fl“ per `noLigatures` brechen.
 - Texte: wegen `pixelArt` werden Texte per `smoothTexts()` (config.ts) linear gefiltert, sonst verschwinden „-“, „–“, „→“.
 - Debug `#timerun/debug`: „[Ziel]“ springt vor die Ziellinie. Tests in der versteckten Browser-Ansicht: rAF ist gedrosselt →
   Spiel per `__timerun.step(t, 16.67)` mit stetig steigendem `t` antreiben, Steuerung per W/A/S/D-KeyboardEvents.

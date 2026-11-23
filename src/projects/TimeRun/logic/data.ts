@@ -4,6 +4,7 @@ import genesJson from '../data/genes.json'
 import upgradesJson from '../data/upgrades.json'
 import evolutionJson from '../data/evolution-options.json'
 import type { GameData, Rarity, Stat } from './types'
+import { SHAPES } from './appearance'
 
 const RARITIES: Rarity[] = ['common', 'rare', 'epic', 'legendary']
 const STATS: Stat[] = ['maxHp', 'moveSpeed', 'pickupRadius', 'xpGain', 'regen',
@@ -39,6 +40,7 @@ export function validateData(d: GameData): string[] {
         for (const x of e.enemies) {
             if (!COLOR_RE.test(x.color)) errors.push(`epochs/${e.id}/${x.id}: Farbe ungültig`)
             if (!(x.hp > 0 && x.size > 0 && x.speed >= 0 && x.xp >= 0)) errors.push(`epochs/${e.id}/${x.id}: Werte ungültig`)
+            if (x.shape && !(SHAPES as readonly string[]).includes(x.shape)) errors.push(`epochs/${e.id}/${x.id}: Form „${x.shape}“ unbekannt`)
         }
         const checkWaves = (waves: typeof e.waves, where: string) => {
             for (const w of waves) {
