@@ -71,14 +71,37 @@ export interface WeaponStats {
     pierce: number
 }
 
-/** Fähigkeit, die über die Epochen mitwandert und je Epoche eine andere Form hat. */
+export type WeaponKind = 'projectile' | 'melee' | 'beam'
+
+/** Faktoren einer Waffenform: damage/cooldown/range/speed multiplizieren, pierce/projectiles addieren. */
+export interface FormMod {
+    damage?: number
+    cooldown?: number
+    range?: number
+    speed?: number
+    pierce?: number
+    projectiles?: number
+}
+
+export interface GeneForm {
+    name: string
+    color: string
+    kind?: WeaponKind
+    mod?: FormMod
+}
+
+/** Waffe, die über die Stufen mitwandert und ab bestimmten Stufen eine andere Form hat. */
 export interface Gene {
     id: string
     name: string
     description: string
-    kind: 'projectile'
+    kind: WeaponKind
+    /** bis zu dieser Hauptphase frisst man kleinere Gegner durch Berührung */
+    eatUntilPhase?: number
+    /** in den Fress-Phasen gibt es die Fernwaffe erst mit diesem Tag */
+    unlockTag?: string
     base: WeaponStats
-    forms: Record<string, { name: string; color: string }>
+    forms: Record<string, GeneForm>
 }
 
 export type Stat =
@@ -101,6 +124,8 @@ export interface Upgrade {
     requires?: string[]
     excludes?: string[]
     grants?: string[]
+    /** nur in diesen Hauptphasen anbieten (fehlt = immer) */
+    phases?: number[]
 }
 
 export interface EvolutionOption {

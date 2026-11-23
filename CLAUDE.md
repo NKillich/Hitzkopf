@@ -90,6 +90,13 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
 - Evolutionsoptionen: Optionen der Stufe, die man betritt; `real: true` = so passiert (★ Echte Zeitlinie, bis heute genau eine
   je Stufe, Tests prüfen, dass sie immer erreichbar ist und es eine Alternative gibt). Ende: Auswertung „Echte Zeitlinie x von y“
   + Abzeichen. Infokarte beim Betreten jeder Stufe (Zeitraum, Waffe, Fakt). Level, Upgrades, Tags bleiben über Stufen.
+- **Kampf je Phase** (`logic/weapon.ts`, `genes.json`): Phase 1–2 = **Fressen** – Kleinere durch Berührung fressen (XP direkt),
+  Größere/Bosse anknabbern (`BITE_COOLDOWN_MS`); man wächst mit dem Level (`playerSize`). Fernwaffe dort erst mit Upgrade
+  „Toxin-Ausstoß“ (Tag `toxin`). Bosse 1.3/2.3 sind harmlos (Stromatolith steht still, Dickinsonia hatte keinen Mund) – Bosse
+  erscheinen knapp unter der Linie. Ab Phase 3 Waffenformen aus `forms` (gilt ab ihrer Stufe): Stachel → Biss/Klauen (`melee`,
+  Rundumschlag) → Steinwurf → Speer → Pfeil & Bogen → Laser (`beam`, trifft alles auf der Linie); `mod` = Faktoren.
+  Upgrades mit `phases` werden nur in diesen Hauptphasen angeboten (themenpassend), gewählte wirken weiter.
+- Gegner stoßen sich über ein Raster (24 px) leicht ab – kostet bei 450 Gegnern ca. 0,1 ms pro Bild.
 - Texte: wegen `pixelArt` werden Texte per `smoothTexts()` (config.ts) linear gefiltert, sonst verschwinden „-“, „–“, „→“.
 - Debug `#timerun/debug`: „[Ziel]“ springt vor die Ziellinie. Tests in der versteckten Browser-Ansicht: rAF ist gedrosselt →
   Spiel per `__timerun.step(t, 16.67)` mit stetig steigendem `t` antreiben, Steuerung per W/A/S/D-KeyboardEvents.

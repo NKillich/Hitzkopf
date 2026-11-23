@@ -7,6 +7,7 @@ import {
     buildTimeline, firstPlayable, heightProgress, isPlayable, nextPlayable, resolveEpoch, sortedEpochs, transitionStage,
 } from './epochs'
 import { formatRange, formatYear, yearAt } from './time'
+import { activeForm, applyForm, canEat, canEatEnemy, playerSize, rangedActive, weaponKind, weaponLabel } from './weapon'
 import type { EvolutionOption, Upgrade, Wave } from './types'
 
 describe('Daten', () => {
@@ -258,5 +259,63 @@ describe('Zeitangaben', () => {
         expect(formatRange(-1.8e6, -10000)).toBe('vor 1,80 Mio. Jahren – vor 12.000 Jahren')
         expect(formatRange(-10000, 1957)).toBe('vor 12.000 Jahren – 1957')
         expect(formatRange(2055, 2300)).toBe('2055 – ferne Zukunft')
+    })
+})
+
+describe('Waffen je Stufe & Fressen', () => {
+    const data = rawData()
+    const gene = data.genes.find(g => g.id === data.startGene)!
+    const base = { maxHp: 50, moveSpeed: 100, pickupRadius: 50, xpGain: 1, regen: 0, ...gene.base }
+
+    it('Form gilt ab ihrer Stufe, bis die nächste kommt', () => {
+        expect(activeForm(gene, data.epochs, 'urzellen')?.name).toBe('Toxin')
+        expect(activeForm(gene, data.epochs, 'mehrzeller')?.name).toBe('Toxin')
+        expect(activeForm(gene, data.epochs, 'kambrium')?.name).toBe('Stachel')
+        expect(activeForm(gene, data.epochs, 'landgang')?.name).toBe('Stachel')
+        expect(activeForm(gene, data.epochs, 'saeugetiere')?.name).toBe('Klauen')
+        expect(activeForm(gene, data.epochs, 'tiefraum')?.name).toBe('Laser')
+        expect(weaponKind(gene, activeForm(gene, data.epochs, 'landwirbeltiere'))).toBe('melee')
+        expect(weaponKind(gene, activeForm(gene, data.epochs, 'erdorbit'))).toBe('beam')
+    })
+
+    it('Phase 1–2: fressen, Fernwaffe erst mit Toxin; ab Phase 3 immer', () => {
+        expect(canEat(gene, 1)).toBe(true)
+        expect(canEat(gene, 2)).toBe(true)
+        expect(canEat(gene, 3)).toBe(false)
+        expect(rangedActive(gene, 1, new Set())).toBe(false)
+        expect(rangedActive(gene, 1, new Set(['toxin']))).toBe(true)
+        expect(rangedActive(gene, 3, new Set())).toBe(true)
+        expect(weaponLabel(gene, activeForm(gene, data.epochs, 'urzellen'), 1, new Set())).toBe('Fressen')
+        expect(weaponLabel(gene, activeForm(gene, data.epochs, 'urzellen'), 1, new Set(['toxin']))).toBe('Fressen + Toxin')
+        expect(weaponLabel(gene, activeForm(gene, data.epochs, 'jaeger-sammler'), 5, new Set())).toBe('Speer')
+    })
+
+    it('man wächst mit dem Level und frisst nur Kleinere, nie Bosse', () => {
+        expect(playerSize(1, true)).toBe(10)
+        expect(playerSize(50, true)).toBe(26)
+        expect(playerSize(5, false)).toBe(14)
+        expect(canEatEnemy(10, 7, false)).toBe(true)
+        expect(canEatEnemy(10, 11, false)).toBe(false)
+        expect(canEatEnemy(26, 18, true)).toBe(false)
+    })
+
+    it('Faktoren der Form wirken auf die Werte', () => {
+        const s = applyForm(base, gene.forms['zivilisation'])
+        expect(s.damage).toBeCloseTo(3 * 1.6)
+        expect(s.range).toBeCloseTo(230 * 1.4)
+        expect(s.projectiles).toBe(2)
+        expect(applyForm(base, undefined)).toBe(base)
+    })
+
+    it('Upgrades nur in ihren Phasen; Toxin-Ausstoß schaltet Stärkeres Toxin frei', () => {
+        const ids = (phase: number, tags = new Set<string>()) => eligibleUpgrades(data.upgrades, {}, tags, phase).map(u => u.id)
+        expect(ids(1)).toContain('toxin')
+        expect(ids(1)).not.toContain('staerkeres-toxin')
+        expect(ids(1, new Set(['toxin']))).toContain('staerkeres-toxin')
+        expect(ids(1, new Set(['toxin']))).not.toContain('toxin')
+        expect(ids(5)).toContain('ausdauerlauf')
+        expect(ids(5)).not.toContain('geissel')
+        expect(ids(6)).toContain('anpassung')
+        for (let p = 1; p <= 6; p++) expect(ids(p).length, `Phase ${p}`).toBeGreaterThanOrEqual(5)
     })
 })
