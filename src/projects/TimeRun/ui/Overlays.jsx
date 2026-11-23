@@ -1,0 +1,222 @@
+import { PixelIcon } from './icons'
+import { cap, formatTime, GUARD_MS } from './format'
+
+const RARITY = {
+    common: { label: 'NORMAL', border: '#8F86A3', inner: '#4E3F6B', badge: '#B8AECB', iconBg: '#4E3F6B', iconShade: '#33294A', icon: '#D9CFEA' },
+    rare: { label: 'SELTEN', border: '#4EA8FF', inner: '#1F4E80', badge: '#4EA8FF', iconBg: '#1F4E80', iconShade: '#133357', icon: '#BFE0FF' },
+    epic: { label: 'EPISCH', border: '#B57CFF', inner: '#5B3A8A', badge: '#B57CFF', iconBg: '#5B3A8A', iconShade: '#3A2259', icon: '#E3CCFF' },
+    legendary: { label: 'LEGENDÄR', border: '#FFB547', inner: '#8A5A1B', badge: '#FFB547', iconBg: '#8A5A1B', iconShade: '#5E3C10', icon: '#FFE0A3' },
+}
+
+// Evolutionskarten: Farben wie in der Vorlage (orange, mint, grün, blau)
+const EVO_COLORS = [
+    { border: '#3DCF9E', inner: '#1E8A66', fill: '#3DCF9E', shade: '#1E8A66', light: '#A6F7DA', tag: '#A6F7DA' },
+    { border: '#E8603B', inner: '#7A2E1E', fill: '#E8603B', shade: '#A33A20', light: '#FF9C7A', tag: '#FF9C7A' },
+    { border: '#A6F07A', inner: '#4E8A2E', fill: '#7FD86B', shade: '#4E8A2E', light: '#C6F7A6', tag: '#C6F7A6' },
+    { border: '#4EA8FF', inner: '#1F4E80', fill: '#4EA8FF', shade: '#1F4E80', light: '#BFE0FF', tag: '#BFE0FF' },
+]
+
+/** Klick nur, wenn die Auswahl schon kurz offen ist (Finger vom Joystick). */
+function guarded(state, fn) {
+    return () => { if (performance.now() - state.overlayAt >= GUARD_MS) fn() }
+}
+
+export function LevelUp({ state, bridge }) {
+    const o = state.overlay
+    return (
+        <div className="tr-screen tr-dim">
+            <div style={{ position: 'relative', height: '100%', boxSizing: 'border-box', padding: '70px 24px 36px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+                    <span className="tr-num" style={{ fontSize: 14, color: '#0D0A12', background: '#3DCF9E', padding: '4px 10px' }}>LEVEL {o.level}</span>
+                    <h1 style={{ fontSize: 40, color: '#FFD27A', textShadow: '4px 4px 0 #0D0A12' }}>Wähle ein Upgrade</h1>
+                    <p style={{ fontSize: 16, color: '#B8C9C4' }}>Das Spiel pausiert, bis du gewählt hast.</p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '0 4px' }}>
+                    {o.choices.map((c, i) => {
+                        const r = RARITY[c.rarity] ?? RARITY.common
+                        return (
+                            <button key={`${c.name}-${i}`} type="button" className="tr-card"
+                                style={{ border: `4px solid ${r.border}`, boxShadow: `inset 0 0 0 3px ${r.inner}` }}
+                                onClick={guarded(state, () => bridge.call('pickUpgrade', i))}>
+                                <div style={{ width: 60, height: 60, flexShrink: 0, background: r.iconBg, boxShadow: `inset -4px -4px 0 ${r.iconShade}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <PixelIcon name={c.icon} size={28} color={r.icon} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: 21, fontWeight: 700 }}>{c.name}</span>
+                                        <span className="tr-badge" style={{ background: r.badge }}>{r.label}</span>
+                                    </div>
+                                    <span style={{ fontSize: 15, color: '#D9CFEA', lineHeight: 1.3 }}>{c.desc}</span>
+                                    <span style={{ fontSize: 12, color: '#B8AECB' }}>{c.levelText}</span>
+                                </div>
+                            </button>
+                        )
+                    })}
+                </div>
+
+                <div style={{ flexGrow: 1 }} />
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {o.skills.length > 0 && (
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: 14, color: '#B8C9C4' }}>Fähigkeiten:</span>
+                            {o.skills.map(s => <span key={s.name} style={{ fontSize: 14, background: '#0D0A12', padding: '2px 8px' }}>{s.name} Lv{s.level}</span>)}
+                        </div>
+                    )}
+                    <button type="button" className="tr-bg" disabled={o.rerolls <= 0}
+                        style={{ height: 56, fontSize: 19, fontWeight: 600 }}
+                        onClick={guarded(state, () => bridge.call('reroll'))}>
+                        Neu würfeln ({o.rerolls} übrig)
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export function Evolution({ state, bridge }) {
+    const o = state.overlay
+    return (
+        <div className="tr-screen tr-dim" style={{ background: 'rgba(20, 16, 30, 0.96)' }}>
+            <div style={{ height: '100%', boxSizing: 'border-box', padding: '56px 24px 30px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 16, color: '#B8AECB' }}>{o.fromName}</span>
+                    <svg width="36" height="12" viewBox="0 0 12 4" shapeRendering="crispEdges" fill="#3DCF9E" aria-hidden="true"><path d="M0 1h9V0h1v1h1v1h1v1h-1v1h-1V3H9V2H0z" /></svg>
+                    <span style={{ fontSize: 16, color: '#3DCF9E', fontWeight: 700 }}>{o.toCode} {o.toName}</span>
+                </div>
+                <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <h1 style={{ fontSize: 36, lineHeight: 1.05, color: '#FFD27A', textShadow: '4px 4px 0 #0D0A12' }}>Wohin entwickelst du dich?</h1>
+                    <p style={{ fontSize: 15, color: '#B8AECB' }}>{o.range}</p>
+                    {o.future && <p style={{ fontSize: 14, color: '#FFB547' }}>Ab hier ist alles Zukunft – es gibt keine echte Zeitlinie.</p>}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px' }}>
+                    {o.options.map((c, i) => {
+                        const col = EVO_COLORS[i % EVO_COLORS.length]
+                        return (
+                            <button key={`${c.name}-${i}`} type="button" className="tr-card tr-col"
+                                style={{ border: `4px solid ${col.border}`, boxShadow: `inset 0 0 0 3px ${col.inner}` }}
+                                onClick={guarded(state, () => bridge.call('pickEvolution', i))}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <div className="tr-oc" style={{ width: 48, height: 48, flexShrink: 0, background: col.fill, boxShadow: `inset -5px -5px 0 ${col.shade}, inset 5px 5px 0 ${col.light}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <PixelIcon name={c.icon} size={22} color="#0D0A12" />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                                        <span style={{ fontSize: 21, fontWeight: 700, lineHeight: 1.1 }}>{c.name}</span>
+                                        <span style={{ fontSize: 14, color: '#D9CFEA', lineHeight: 1.3 }}>{c.desc}</span>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', width: '100%' }}>
+                                    {c.grants.length > 0 && <span style={{ fontSize: 13, color: '#B8AECB' }}>gibt</span>}
+                                    {c.grants.map(g => <span key={g} className="tr-tag" style={{ color: col.tag }}>{g}</span>)}
+                                    {c.real && <span className="tr-num" style={{ fontSize: 9, color: '#0D0A12', background: '#FFB547', padding: '3px 6px', marginLeft: 'auto' }}>★ ECHTE ZEITLINIE</span>}
+                                    {!c.real && c.general && <span className="tr-num" style={{ fontSize: 9, color: '#0D0A12', background: '#B8AECB', padding: '3px 6px', marginLeft: 'auto' }}>ALLGEMEIN</span>}
+                                </div>
+                            </button>
+                        )
+                    })}
+                </div>
+
+                <div style={{ flexGrow: 1 }} />
+
+                <div className="tr-pp" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px' }}>
+                    <span style={{ fontSize: 14, color: '#B8AECB' }}>Deine Tags bisher</span>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {o.tags.length ? o.tags.map(t => <span key={t} className="tr-tag" style={{ color: '#F4EEDC' }}>{t}</span>)
+                            : <span style={{ fontSize: 13, color: '#8F86A3' }}>noch keine</span>}
+                    </div>
+                    {o.path.length > 0 && <span style={{ fontSize: 12, color: '#8F86A3', lineHeight: 1.3 }}>Bisher: {o.path.join(' → ')}</span>}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export function PauseMenu({ state, bridge }) {
+    const hud = state.hud
+    return (
+        <div className="tr-screen tr-dim" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <div className="tr-pp" style={{ width: '100%', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 14, textAlign: 'center' }}>
+                <h1 style={{ fontSize: 40, color: '#FFD27A', textShadow: '4px 4px 0 #0D0A12' }}>Pause</h1>
+                {hud && (
+                    <p style={{ fontSize: 15, color: '#D9CFEA' }}>
+                        {hud.code} {hud.name} · {hud.year}<br />
+                        <span style={{ color: '#B8AECB' }}>Level {hud.level} · {formatTime(hud.timeSec)}</span>
+                    </p>
+                )}
+                <button type="button" className="tr-bt" style={{ height: 64, fontSize: 23, fontWeight: 700, color: '#0D0A12', marginTop: 6 }} onClick={() => bridge.call('resume')}>WEITER</button>
+                <button type="button" className="tr-bg" style={{ height: 56, fontSize: 19, fontWeight: 600 }} onClick={() => bridge.call('restart')}>Neu starten</button>
+                <button type="button" className="tr-bg" style={{ height: 56, fontSize: 19, fontWeight: 600 }} onClick={() => bridge.call('toMenu')}>Zum Startbildschirm</button>
+            </div>
+        </div>
+    )
+}
+
+export function EndScreen({ state, bridge }) {
+    const o = state.overlay
+    const segs = Array.from({ length: o.stageCount }, (_, i) => {
+        const n = i + 1
+        if (o.won || n < o.stageIndex) return '#3DCF9E'
+        if (n === o.stageIndex) return '#FFB547'
+        return '#0D0A12'
+    })
+    return (
+        <div className="tr-screen" style={{ background: '#14101E' }}>
+            <div style={{ height: '100%', boxSizing: 'border-box', padding: '60px 22px 30px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
+                <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+                    <span className="tr-num" style={{ fontSize: 13, color: '#0D0A12', background: o.won ? '#3DCF9E' : '#E8603B', padding: '4px 10px' }}>
+                        {o.won ? 'GESCHAFFT' : 'RUN BEENDET'}
+                    </span>
+                    <h1 style={{ fontSize: 38, lineHeight: 1.05, color: '#FFD27A', textShadow: '4px 4px 0 #0D0A12' }}>
+                        {o.won ? 'Ankunft in den Sternen!' : `Bis ${o.reachedCode} ${o.reachedName}`}
+                    </h1>
+                    <p style={{ fontSize: 16, color: '#B8AECB' }}>
+                        Stufe {o.won ? o.stageCount : o.stageIndex} von {o.stageCount}{o.newRecord ? ' · Neuer Rekord' : ''}
+                    </p>
+                    <p style={{ fontSize: 13, color: '#8F86A3' }}>{o.year}</p>
+                </div>
+
+                <div className="tr-pp" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#B8AECB' }}><span>Ur-Zellen</span><span>Tiefe Raumfahrt</span></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${o.stageCount}, minmax(0, 1fr))`, gap: 3 }}>
+                        {segs.map((c, i) => <div key={i} style={{ height: 12, background: c }} />)}
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+                    {[[formatTime(o.timeSec), 'Zeit'], [o.kills, 'Besiegt'], [o.level, 'Level']].map(([v, l]) => (
+                        <div key={l} className="tr-pp" style={{ padding: '12px 6px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span className="tr-num" style={{ fontSize: 18 }}>{v}</span>
+                            <span style={{ fontSize: 13, color: '#B8AECB' }}>{l}</span>
+                        </div>
+                    ))}
+                </div>
+
+                {o.pastCount > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 16px', background: '#3A2A10', border: '4px solid #0D0A12', boxShadow: 'inset 0 0 0 3px #FFB547' }}>
+                        <span className="tr-num" style={{ fontSize: 10, color: '#FFB547' }}>ECHTE ZEITLINIE</span>
+                        <span style={{ fontSize: 19, fontWeight: 700 }}>{o.realCount} von {o.pastCount} Entscheidungen</span>
+                        {o.badge && <span style={{ fontSize: 14, color: '#FFE0A3' }}>★ Abzeichen: genau wie in Wirklichkeit!</span>}
+                    </div>
+                )}
+
+                {o.path.length > 0 && (
+                    <div className="tr-pp" style={{ padding: '10px 14px', fontSize: 13, color: '#D9CFEA', lineHeight: 1.45 }}>
+                        <span style={{ color: '#B8AECB' }}>Dein Weg: </span>
+                        {o.path.map((p, i) => (
+                            <span key={i}>{i > 0 && ' → '}<span style={{ color: p.real ? '#FFD27A' : '#D9CFEA' }}>{p.real ? '★ ' : ''}{cap(p.name)}</span></span>
+                        ))}
+                    </div>
+                )}
+
+                <div style={{ flexGrow: 1 }} />
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <button type="button" className="tr-bt" style={{ height: 64, fontSize: 23, fontWeight: 700, color: '#0D0A12' }} onClick={() => bridge.call('restart')}>NOCHMAL</button>
+                    <button type="button" className="tr-bg" style={{ height: 56, fontSize: 19, fontWeight: 600 }} onClick={() => bridge.call('toMenu')}>Startbildschirm</button>
+                </div>
+            </div>
+        </div>
+    )
+}
