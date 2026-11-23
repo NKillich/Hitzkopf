@@ -36,6 +36,10 @@
 
     { "id": "unterwasserstaedte", "stage": "antike", "name": "Unterwasserstädte", "description": "Kuppeln am Meeresgrund.",
       "requires": ["wasser", "intelligenz"], "excludes": [], "grants": ["tiefsee-zivilisation"] },
+    { "id": "eroberer", "stage": "antike", "name": "Eroberer-Reich", "description": "Legionen marschieren.",
+      "requires": ["kriegerisch"], "excludes": [], "grants": ["reich"] },
+    { "id": "seefahrer", "stage": "antike", "name": "Seefahrer", "description": "Häfen, Schiffe, ferne Küsten.",
+      "requires": [], "excludes": ["kriegerisch"], "grants": ["wasser", "händler"] },
     { "id": "stadtstaaten", "stage": "antike", "name": "Stadtstaaten", "description": "Mauern, Märkte, Tempel.",
       "requires": [], "excludes": [], "grants": ["stadt", "händler"], "general": true },
 

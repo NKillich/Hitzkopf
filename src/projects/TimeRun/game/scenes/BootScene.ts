@@ -34,6 +34,11 @@ export class BootScene extends Phaser.Scene {
         g.clear()
         g.fillStyle(0xffffff, 1).fillRect(0, 0, 32, 1).fillRect(0, 0, 1, 32)
         g.generateTexture('grid', 32, 32)
+        // Ziellinie am Ende einer Epoche (Schachbrett)
+        g.clear()
+        g.fillStyle(0xffffff, 0.85).fillRect(0, 0, 8, 4).fillRect(8, 4, 8, 4)
+        g.fillStyle(0x000000, 0.6).fillRect(8, 0, 8, 4).fillRect(0, 4, 8, 4)
+        g.generateTexture('finish', 16, 8)
         g.destroy()
 
         this.scene.start('game')

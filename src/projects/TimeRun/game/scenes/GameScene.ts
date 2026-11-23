@@ -1,11 +1,16 @@
-// Spielwelt: Spieler, Gegner-Wellen (Pool), Auto-Attack, XP-Kristalle, Level-up.
+// Spielwelt: Spieler, Gegner-Wellen (Pool), Auto-Attack, XP-Kristalle, Level-up,
+// Höhe pro Epoche → Boss am oberen Ende → Evolutionswahl → nächste Epoche.
 import Phaser from 'phaser'
-import type { EnemyType, Epoch, Gene, GameData, PlayerStats, Upgrade } from '../../logic/types'
+import type { EnemyType, Epoch, EvolutionOption, Gene, GameData, PlayerStats, Upgrade } from '../../logic/types'
 import { computeStats, pickUpgrades, type OwnedUpgrades } from '../../logic/upgrades'
 import { spawnsDue, xpForLevel } from '../../logic/waves'
+import { availableEvolutions, applyEvolution } from '../../logic/evolution'
 import {
-    HEIGHT, HIT_COOLDOWN_MS, MAX_ENEMIES, MAX_GEMS, MAX_PROJECTILES, PLAYER_BASE, PLAYER_SIZE,
-    RECYCLE_BELOW, WIDTH, hexToInt,
+    buildTimeline, firstPlayable, heightProgress, nextPlayable, resolveEpoch, transitionStage, type TimelineEntry,
+} from '../../logic/epochs'
+import {
+    BOSS_TRIGGER_DISTANCE, CLEAR_DELAY_MS, HEIGHT, HIT_COOLDOWN_MS, MAX_ENEMIES, MAX_GEMS, MAX_PROJECTILES,
+    PLAYER_BASE, PLAYER_SIZE, RECYCLE_BELOW, WIDTH, hexToInt,
 } from '../config'
 import { Joystick } from '../Joystick'
 import type { UIScene } from './UIScene'
@@ -15,6 +20,7 @@ class Enemy extends Phaser.Physics.Arcade.Image {
     kind!: EnemyType
     hp = 0
     flashUntil = 0
+    isBoss = false
 }
 
 class Shot extends Phaser.Physics.Arcade.Image {
@@ -30,6 +36,9 @@ class Gem extends Phaser.GameObjects.Image {
     magnet = false
 }
 
+/** climb = nach oben kämpfen, boss = Boss ist da, cleared = Boss besiegt (gleich kommt die Wahl) */
+export type EpochPhase = 'climb' | 'boss' | 'cleared'
+
 export interface RunInfo {
     epoch: Epoch
     weaponName: string
@@ -41,11 +50,21 @@ export interface RunInfo {
     stats: PlayerStats
     kills: number
     enemiesAlive: number
+    /** geschaffte Höhe der aktuellen Epoche, 0…1 */
+    progress: number
+    phase: EpochPhase
+    boss: { name: string; hp: number; maxHp: number } | null
+    /** gewählte Evolutionen in Reihenfolge */
+    path: EvolutionOption[]
     dead: boolean
+    won: boolean
 }
 
 export class GameScene extends Phaser.Scene {
     private gd!: GameData
+    /** Epoche wie in den Daten (ohne Variante) – für den Ablauf */
+    private baseEpoch!: Epoch
+    /** mit Variante – für Gegner, Wellen, Farben */
     private epoch!: Epoch
     private gene!: Gene
     private enemyTypes = new Map<string, EnemyType>()
@@ -54,6 +73,8 @@ export class GameScene extends Phaser.Scene {
     private hpBarBg!: Phaser.GameObjects.Image
     private hpBarFill!: Phaser.GameObjects.Image
     private bg!: Phaser.GameObjects.TileSprite
+    private finishLine!: Phaser.GameObjects.TileSprite
+    private finishText!: Phaser.GameObjects.Text
     private joystick!: Joystick
     private readonly move = new Phaser.Math.Vector2()
 
@@ -66,47 +87,58 @@ export class GameScene extends Phaser.Scene {
 
     // Laufzeit-Zustand
     private timeMs = 0
+    private epochTimeMs = 0
+    private epochStartY = 0
+    private endY = 0
+    private clearedAt = 0
+    private boss: Enemy | null = null
     private fireTimer = 0
     private invulnUntil = 0
     private owned: OwnedUpgrades = {}
     private tags = new Set<string>()
+    private visited: string[] = []
+    private choices: Record<string, EvolutionOption> = {}
     private pendingLevelUps = 0
     private choosing = false
+    /** steigt bei jedem Epochenwechsel – das UI zeichnet dann den Zeitstrahl neu */
+    timelineVersion = 0
     run!: RunInfo
 
     constructor() { super('game') }
 
     create() {
         this.gd = this.registry.get('data') as GameData
-        this.epoch = [...this.gd.epochs].sort((a, b) => a.order - b.order)[0]
         this.gene = this.gd.genes.find(g => g.id === this.gd.startGene)!
-        this.enemyTypes = new Map(this.epoch.enemies.map(e => [e.id, e]))
 
         this.timeMs = 0
         this.fireTimer = 0
         this.invulnUntil = 0
         this.owned = {}
         this.tags = new Set()
+        this.visited = []
+        this.choices = {}
         this.pendingLevelUps = 0
         this.choosing = false
         this.enemyCursor = 0
+        this.boss = null
         const stats = computeStats(PLAYER_BASE, this.gene.base, this.gd.upgrades, this.owned)
-        const form = this.gene.forms[this.epoch.id]
+        const first = firstPlayable(this.gd.epochs)!
         this.run = {
-            epoch: this.epoch, weaponName: form?.name ?? this.gene.name, timeSec: 0, level: 1, xp: 0,
-            xpNeeded: xpForLevel(1), hp: stats.maxHp, stats, kills: 0, enemiesAlive: 0, dead: false,
+            epoch: first, weaponName: this.gene.name, timeSec: 0, level: 1, xp: 0,
+            xpNeeded: xpForLevel(1), hp: stats.maxHp, stats, kills: 0, enemiesAlive: 0,
+            progress: 0, phase: 'climb', boss: null, path: [], dead: false, won: false,
         }
 
         this.physics.resume()   // nach Neustart war die Welt evtl. noch angehalten
-        // Welt: nach oben offen, Breite = Bildschirm
-        this.physics.world.setBounds(0, -1e7, WIDTH, 2e7)
         const cam = this.cameras.main
-        cam.setBackgroundColor(this.epoch.background)
-        cam.setBounds(0, -1e7, WIDTH, 2e7)
-        this.bg = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0)
-            .setTint(hexToInt(this.epoch.gridColor)).setDepth(-10)
+        cam.setBounds(0, -1e8, WIDTH, 2e8)
+        this.bg = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0).setDepth(-10)
+        this.finishLine = this.add.tileSprite(0, 0, WIDTH, 8, 'finish').setOrigin(0, 1).setDepth(-5)
+        this.finishText = this.add.text(WIDTH / 2, 0, '', {
+            fontFamily: 'ui-monospace, monospace', fontSize: '12px', color: '#ffffff', resolution: 2,
+        }).setOrigin(0.5, 0).setAlpha(0.7).setDepth(-5)
 
-        this.player = this.physics.add.image(WIDTH / 2, HEIGHT * 0.7, 'player').setCollideWorldBounds(true).setDepth(10)
+        this.player = this.physics.add.image(WIDTH / 2, 0, 'player').setCollideWorldBounds(true).setDepth(10)
         this.hpBarBg = this.add.image(0, 0, 'bar').setDisplaySize(20, 3).setTint(0x400000).setDepth(11)
         this.hpBarFill = this.add.image(0, 0, 'bar').setOrigin(0, 0.5).setDisplaySize(20, 3).setTint(0x4cff6a).setDepth(12)
         cam.startFollow(this.player, true, 1, 0.12)
@@ -124,10 +156,9 @@ export class GameScene extends Phaser.Scene {
         }
         this.shotGroup = this.physics.add.group({ classType: Shot, maxSize: MAX_PROJECTILES })
         this.shots = []
-        const shotTint = hexToInt(form?.color ?? '#ffffff')
         for (let i = 0; i < MAX_PROJECTILES; i++) {
             const s = this.shotGroup.create(0, 0, 'shot') as Shot
-            s.setTint(shotTint).setDepth(8)
+            s.setDepth(8)
             s.disableBody(true, true)
             this.shots.push(s)
         }
@@ -142,6 +173,9 @@ export class GameScene extends Phaser.Scene {
         this.physics.add.overlap(this.shotGroup, this.enemyGroup, (a, b) => this.onShotHit(a as unknown as Shot, b as unknown as Enemy))
         this.physics.add.overlap(this.player, this.enemyGroup, (_p, e) => this.onPlayerHit(e as unknown as Enemy))
 
+        this.startEpoch(first)
+        cam.centerOn(this.player.x, this.player.y - HEIGHT * 0.18)
+
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.joystick.destroy())
         this.scene.launch('ui')
     }
@@ -150,14 +184,54 @@ export class GameScene extends Phaser.Scene {
         return this.scene.get('ui') as UIScene
     }
 
+    /** Neue Epoche ab der aktuellen Position des Spielers. */
+    private startEpoch(base: Epoch) {
+        this.baseEpoch = base
+        this.epoch = resolveEpoch(base, this.tags)
+        this.visited.push(base.id)
+        this.enemyTypes = new Map(this.epoch.enemies.map(e => [e.id, e]))
+        this.epochTimeMs = 0
+        this.boss = null
+
+        const cam = this.cameras.main
+        cam.setBackgroundColor(this.epoch.background)
+        this.bg.setTint(hexToInt(this.epoch.gridColor))
+
+        // Waffe nimmt die Form der Epoche an (sonst bleibt die bisherige)
+        const form = this.gene.forms[base.id]
+        if (form) {
+            this.run.weaponName = form.name
+            const tint = hexToInt(form.color)
+            for (const s of this.shots) s.setTint(tint)
+        } else if (this.visited.length === 1) {
+            for (const s of this.shots) s.setTint(0xffffff)
+        }
+
+        this.epochStartY = this.player.y
+        this.endY = this.epochStartY - (this.epoch.height ?? 5000)
+        this.physics.world.setBounds(0, -1e8, WIDTH, 2e8)
+        this.finishLine.setPosition(0, this.endY).setVisible(true)
+        this.finishText.setPosition(WIDTH / 2, this.endY + 6).setText(`▲ Ende ${this.epoch.name}`).setVisible(true)
+
+        this.run.epoch = this.epoch
+        this.run.phase = 'climb'
+        this.run.progress = 0
+        this.run.boss = null
+        this.timelineVersion++
+    }
+
+    timeline(): TimelineEntry[] {
+        return buildTimeline(this.gd.epochs, this.baseEpoch.id, this.visited.slice(0, -1), this.choices)
+    }
+
     update(_time: number, deltaMs: number) {
-        if (this.run.dead) return
+        if (this.run.dead || this.run.won) return
         const dt = Math.min(deltaMs, 50) / 1000   // große Sprünge (Tab im Hintergrund) abfangen
-        const prevSec = this.timeMs / 1000
+        const prevEpochSec = this.epochTimeMs / 1000
         this.timeMs += dt * 1000
+        this.epochTimeMs += dt * 1000
         const now = this.timeMs
-        const t = now / 1000
-        this.run.timeSec = t
+        this.run.timeSec = now / 1000
         const stats = this.run.stats
 
         // Spieler
@@ -173,10 +247,17 @@ export class GameScene extends Phaser.Scene {
         const cam = this.cameras.main
         this.bg.tilePositionY = cam.scrollY
 
-        // Wellen
-        for (const req of spawnsDue(this.epoch.waves, prevSec, t)) {
-            const type = this.enemyTypes.get(req.enemy)
-            if (type) for (let i = 0; i < req.count; i++) this.spawnEnemy(type)
+        // Höhe → Boss
+        this.run.progress = this.run.phase === 'climb' ? heightProgress(this.epochStartY, py, this.epoch.height ?? 5000) : 1
+        if (this.run.phase === 'climb' && py <= this.endY + BOSS_TRIGGER_DISTANCE) this.startBoss()
+        else if (this.run.phase === 'boss' && !this.boss) this.spawnBoss()   // Sicherung, falls er nicht erscheinen konnte
+
+        // Wellen nur beim Hochkämpfen – beim Boss kommen keine neuen Gegner dazu
+        if (this.run.phase === 'climb') {
+            for (const req of spawnsDue(this.epoch.waves, prevEpochSec, this.epochTimeMs / 1000)) {
+                const type = this.enemyTypes.get(req.enemy)
+                if (type) for (let i = 0; i < req.count; i++) this.spawnEnemy(type)
+            }
         }
 
         // Gegner laufen auf den Spieler zu (keine Kollision untereinander – spart Rechenzeit)
@@ -185,7 +266,7 @@ export class GameScene extends Phaser.Scene {
         for (const e of this.enemies) {
             if (!e.active) continue
             alive++
-            if (e.y > bottom) {
+            if (e.y > bottom && !e.isBoss) {
                 e.body.reset(Phaser.Math.Between(8, WIDTH - 8), cam.scrollY - Phaser.Math.Between(20, 100))
             }
             const dx = px - e.x
@@ -198,6 +279,7 @@ export class GameScene extends Phaser.Scene {
             }
         }
         this.run.enemiesAlive = alive
+        if (this.boss) this.run.boss = { name: this.boss.kind.name, hp: Math.max(0, this.boss.hp), maxHp: this.boss.kind.hp }
 
         // Auto-Attack
         this.fireTimer += dt * 1000
@@ -223,29 +305,123 @@ export class GameScene extends Phaser.Scene {
             if (g.magnet || d2 < r2) {
                 g.magnet = true
                 const len = Math.sqrt(d2)
-                const step = Math.min(len, 420 * dt)
+                const step = Math.min(len, (this.run.phase === 'cleared' ? 900 : 420) * dt)
                 g.x += (dx / len) * step
                 g.y += (dy / len) * step
             }
         }
 
         if (this.pendingLevelUps > 0 && !this.choosing) this.openLevelUp()
+        else if (this.run.phase === 'cleared' && !this.choosing && this.pendingLevelUps === 0
+            && now - this.clearedAt >= CLEAR_DELAY_MS && !this.gems.some(g => g.active)) {
+            this.openEvolution()
+        }
     }
 
-    private spawnEnemy(type: EnemyType, y?: number) {
+    // ---- Boss ----
+
+    private startBoss() {
+        this.run.phase = 'boss'
+        // Die Linie ist jetzt eine Wand, bis der Boss besiegt ist
+        this.physics.world.setBounds(0, this.endY, WIDTH, 2e8)
+        if (!this.epoch.boss) { this.onBossDefeated(); return }
+        this.spawnBoss()
+        this.cameras.main.shake(250, 0.006)
+        this.ui.showBanner(this.epoch.boss.name, '#ff8a8a')
+    }
+
+    private spawnBoss() {
+        const type = this.epoch.boss!
+        let e = this.spawnEnemy(type, this.endY - type.size)
+        if (!e) {
+            // Pool voll: dem Boss Platz machen (der Gegner, der am weitesten weg ist, verschwindet)
+            let far: Enemy | null = null
+            let farD = -1
+            for (const c of this.enemies) {
+                if (!c.active) continue
+                const d = Math.abs(c.y - this.player.y)
+                if (d > farD) { farD = d; far = c }
+            }
+            far?.disableBody(true, true)
+            e = this.spawnEnemy(type, this.endY - type.size)
+        }
+        if (!e) return
+        e.isBoss = true
+        e.x = WIDTH / 2
+        e.body.reset(WIDTH / 2, this.endY - type.size)
+        e.setDepth(7)
+        this.boss = e
+    }
+
+    private onBossDefeated() {
+        this.run.phase = 'cleared'
+        this.clearedAt = this.timeMs
+        this.boss = null
+        this.run.boss = null
+        this.invulnUntil = this.timeMs + CLEAR_DELAY_MS + 1000
+        // restliche Gegner verschwinden, alle Kristalle fliegen zum Spieler
+        for (const e of this.enemies) if (e.active) e.disableBody(true, true)
+        for (const g of this.gems) if (g.active) g.magnet = true
+        this.finishLine.setVisible(false)
+        this.finishText.setVisible(false)
+        this.physics.world.setBounds(0, -1e8, WIDTH, 2e8)
+    }
+
+    // ---- Evolution / Epochenwechsel ----
+
+    private openEvolution() {
+        const next = nextPlayable(this.gd.epochs, this.baseEpoch.id)
+        if (!next) { this.win(); return }
+        const stage = transitionStage(this.gd.epochs, this.baseEpoch.id)
+        const options = stage ? availableEvolutions(this.gd.evolutionOptions, stage.id, this.tags) : []
+        if (!stage || !options.length) {
+            this.startEpoch(next)
+            this.ui.showBanner(this.epoch.name, '#ffffff', this.run.weaponName)
+            return
+        }
+        this.choosing = true
+        this.joystick.release()
+        this.scene.pause()
+        this.ui.showEvolution(options, this.epoch.name, stage.name)
+    }
+
+    /** Vom UI aufgerufen, wenn eine Evolution gewählt wurde. */
+    chooseEvolution(o: EvolutionOption) {
+        const next = nextPlayable(this.gd.epochs, this.baseEpoch.id)
+        this.tags = applyEvolution(this.tags, o)
+        this.choices[o.stage] = o
+        this.run.path = [...this.run.path, o]
+        this.choosing = false
+        if (next) this.startEpoch(next)
+        this.scene.resume()
+        this.ui.showBanner(this.epoch.name, '#ffffff', this.run.weaponName)
+    }
+
+    private win() {
+        this.run.won = true
+        this.joystick.release()
+        this.physics.pause()
+        this.ui.showEnd(true)
+    }
+
+    // ---- Gegner, Schüsse, XP ----
+
+    private spawnEnemy(type: EnemyType, y?: number): Enemy | undefined {
         let e: Enemy | undefined
         for (let i = 0; i < this.enemies.length; i++) {
             const c = this.enemies[(this.enemyCursor + i) % this.enemies.length]
             if (!c.active) { e = c; this.enemyCursor = (this.enemyCursor + i + 1) % this.enemies.length; break }
         }
-        if (!e) return   // Pool voll
+        if (!e) return undefined   // Pool voll
         const cam = this.cameras.main
         const x = Phaser.Math.Between(type.size, WIDTH - type.size)
         e.enableBody(true, x, y ?? cam.scrollY - Phaser.Math.Between(16, 90), true, true)
         e.kind = type
         e.hp = type.hp
         e.flashUntil = 0
+        e.isBoss = false
         e.setDisplaySize(type.size, type.size).setTintMode(Phaser.TintModes.MULTIPLY).setTint(hexToInt(type.color)).setDepth(6)
+        return e
     }
 
     /** Debug: viele Gegner auf einmal (oberhalb und im oberen Drittel). */
@@ -257,7 +433,19 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    /** Debug: kurz vor das Ende der Epoche springen. */
+    skipToBoss() {
+        if (this.run.phase !== 'climb') return
+        this.player.body.reset(this.player.x, this.endY + BOSS_TRIGGER_DISTANCE + 120)
+    }
+
     private nearestEnemy(x: number, y: number, range: number): Enemy | null {
+        // Im Bosskampf hat der Boss Vorrang, sobald er in Reichweite ist
+        const b = this.boss
+        if (b?.active) {
+            const r = range + b.kind.size / 2
+            if ((b.x - x) ** 2 + (b.y - y) ** 2 <= r * r) return b
+        }
         let best: Enemy | null = null
         let bestD = range * range
         for (const e of this.enemies) {
@@ -304,7 +492,10 @@ export class GameScene extends Phaser.Scene {
     private killEnemy(e: Enemy) {
         this.run.kills++
         this.dropGem(e.x, e.y, e.kind.xp)
+        const wasBoss = e.isBoss
+        e.isBoss = false
         e.disableBody(true, true)
+        if (wasBoss) this.onBossDefeated()
     }
 
     private dropGem(x: number, y: number, value: number) {
@@ -317,7 +508,7 @@ export class GameScene extends Phaser.Scene {
             any.setScale(Math.min(2, any.scale + 0.1))
             return
         }
-        g.setPosition(x, y).setActive(true).setVisible(true).setScale(value >= 4 ? 1.6 : 1)
+        g.setPosition(x, y).setActive(true).setVisible(true).setScale(value >= 20 ? 2.4 : value >= 4 ? 1.6 : 1)
         g.value = value
         g.magnet = false
     }
@@ -343,7 +534,7 @@ export class GameScene extends Phaser.Scene {
             this.run.dead = true
             this.joystick.release()
             this.physics.pause()
-            this.ui.showGameOver()
+            this.ui.showEnd(false)
         }
     }
 

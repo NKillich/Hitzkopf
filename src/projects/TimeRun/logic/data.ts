@@ -32,11 +32,30 @@ export function validateData(d: GameData): string[] {
             if (!COLOR_RE.test(x.color)) errors.push(`epochs/${e.id}/${x.id}: Farbe ungültig`)
             if (!(x.hp > 0 && x.size > 0 && x.speed >= 0 && x.xp >= 0)) errors.push(`epochs/${e.id}/${x.id}: Werte ungültig`)
         }
-        for (const w of e.waves) {
-            if (!enemyIds.has(w.enemy)) errors.push(`epochs/${e.id}: Welle nennt unbekannten Gegner „${w.enemy}“`)
-            if (!(w.every > 0 && w.count > 0 && w.to > w.from)) errors.push(`epochs/${e.id}: Welle „${w.enemy}“ ab ${w.from} s ungültig`)
+        const checkWaves = (waves: typeof e.waves, where: string) => {
+            for (const w of waves) {
+                if (!enemyIds.has(w.enemy)) errors.push(`${where}: Welle nennt unbekannten Gegner „${w.enemy}“`)
+                if (!(w.every > 0 && w.count > 0 && w.to > w.from)) errors.push(`${where}: Welle „${w.enemy}“ ab ${w.from} s ungültig`)
+            }
+        }
+        checkWaves(e.waves, `epochs/${e.id}`)
+        if (e.enemies.length > 0) {
+            // spielbar → braucht Höhe und Boss
+            if (!(typeof e.height === 'number' && e.height > 0)) errors.push(`epochs/${e.id}: height fehlt oder ≤ 0`)
+            if (!e.boss) errors.push(`epochs/${e.id}: boss fehlt`)
+            else {
+                if (!COLOR_RE.test(e.boss.color)) errors.push(`epochs/${e.id}/boss: Farbe ungültig`)
+                if (!(e.boss.hp > 0 && e.boss.size > 0)) errors.push(`epochs/${e.id}/boss: Werte ungültig`)
+            }
+        }
+        for (const v of e.variants ?? []) {
+            if ((v.background && !COLOR_RE.test(v.background)) || (v.gridColor && !COLOR_RE.test(v.gridColor))) {
+                errors.push(`epochs/${e.id}/${v.id}: Farbe ungültig`)
+            }
+            checkWaves(v.extraWaves ?? [], `epochs/${e.id}/${v.id}`)
         }
     }
+    if (!d.epochs.some(e => e.enemies.length > 0)) errors.push('epochs: keine spielbare Epoche (mit Gegnern)')
 
     for (const id of duplicates(d.genes.map(g => g.id))) errors.push(`genes: id „${id}“ doppelt`)
     if (!d.genes.some(g => g.id === d.startGene)) errors.push(`genes: startGene „${d.startGene}“ fehlt`)

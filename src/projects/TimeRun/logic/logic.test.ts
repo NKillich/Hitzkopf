@@ -3,6 +3,7 @@ import { rawData, validateData } from './data'
 import { availableEvolutions, applyEvolution } from './evolution'
 import { pickUpgrades, computeStats, eligibleUpgrades } from './upgrades'
 import { spawnsDue, xpForLevel } from './waves'
+import { buildTimeline, firstPlayable, heightProgress, nextPlayable, resolveEpoch, transitionStage } from './epochs'
 import type { EvolutionOption, Upgrade, Wave } from './types'
 
 describe('Daten', () => {
@@ -129,5 +130,68 @@ describe('Wellen', () => {
 
     it('XP-Kurve steigt', () => {
         for (let l = 1; l < 30; l++) expect(xpForLevel(l + 1)).toBeGreaterThan(xpForLevel(l))
+    })
+})
+
+describe('Epochen', () => {
+    const data = rawData()
+
+    it('Prototyp: Ursuppe → Steinzeit → Mittelalter, danach Ende', () => {
+        expect(firstPlayable(data.epochs)?.id).toBe('ursuppe')
+        expect(nextPlayable(data.epochs, 'ursuppe')?.id).toBe('steinzeit')
+        expect(nextPlayable(data.epochs, 'steinzeit')?.id).toBe('mittelalter')
+        expect(nextPlayable(data.epochs, 'mittelalter')).toBeUndefined()
+    })
+
+    it('am Ende einer Epoche gilt die direkt folgende Stufe (auch wenn nicht spielbar)', () => {
+        expect(transitionStage(data.epochs, 'ursuppe')?.id).toBe('mehrzeller')
+        expect(transitionStage(data.epochs, 'steinzeit')?.id).toBe('antike')
+        expect(transitionStage(data.epochs, 'zukunft')).toBeUndefined()
+    })
+
+    it('die zwei Mikroben-Pfade führen zu verschiedenen Steinzeit-Varianten', () => {
+        const stein = data.epochs.find(e => e.id === 'steinzeit')!
+        const opts = availableEvolutions(data.evolutionOptions, 'mehrzeller', new Set())
+        const jaeger = applyEvolution(new Set(), opts.find(o => o.id === 'jaeger-zellverband')!)
+        const filter = applyEvolution(new Set(), opts.find(o => o.id === 'filtrierer')!)
+        const kolonie = applyEvolution(new Set(), opts.find(o => o.id === 'zellkolonie')!)
+        expect(resolveEpoch(stein, jaeger).variantId).toBe('jaegerstamm')
+        expect(resolveEpoch(stein, filter).variantId).toBe('sammlerstamm')
+        expect(resolveEpoch(stein, kolonie).variantId).toBeUndefined()
+        expect(resolveEpoch(stein, jaeger).waves.length).toBe(stein.waves.length + 1)
+    })
+
+    it('jede Wahl am Ende einer spielbaren Epoche hat mindestens 2 Optionen (ohne Tags)', () => {
+        for (const id of ['ursuppe', 'steinzeit']) {
+            const stage = transitionStage(data.epochs, id)!
+            expect(availableEvolutions(data.evolutionOptions, stage.id, new Set()).length).toBeGreaterThanOrEqual(2)
+        }
+    })
+
+    it('Höhe: 0 am Start, 1 am Ziel, begrenzt', () => {
+        expect(heightProgress(1000, 1000, 500)).toBe(0)
+        expect(heightProgress(1000, 750, 500)).toBe(0.5)
+        expect(heightProgress(1000, 0, 500)).toBe(1)
+        expect(heightProgress(1000, 1200, 500)).toBe(0)
+    })
+
+    it('Zeitstrahl: gespielt, aktuell, übersprungen, kommend + Wahl', () => {
+        const filtr = data.evolutionOptions.find(o => o.id === 'filtrierer')!
+        const tl = buildTimeline(data.epochs, 'steinzeit', ['ursuppe'], { mehrzeller: filtr })
+        const by = Object.fromEntries(tl.map(t => [t.id, t]))
+        expect(by.ursuppe.status).toBe('done')
+        expect(by.mehrzeller.status).toBe('skipped')
+        expect(by.mehrzeller.choice).toBe('Filtrierer')
+        expect(by.steinzeit.status).toBe('current')
+        expect(by.mittelalter.status).toBe('future')
+    })
+
+    it('Datenprüfung meldet spielbare Epoche ohne Höhe/Boss', () => {
+        const d = rawData()
+        delete d.epochs[0].height
+        delete d.epochs[0].boss
+        const errors = validateData(d).join('\n')
+        expect(errors).toContain('height fehlt')
+        expect(errors).toContain('boss fehlt')
     })
 })
