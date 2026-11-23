@@ -40,7 +40,7 @@ export function createGame(parent: HTMLElement, options: GameOptions): Phaser.Ga
     })
     // „Run starten“ – startet die Spielszene (läuft sie schon, wird sie neu gestartet)
     bridge.actions.startRun = () => {
-        bridge.set({ overlay: null, stageCard: null, banner: null })
+        bridge.set({ overlay: null, banner: null })
         game.scene.start('game')
     }
     // Im Debug-Modus für Tests in der Konsole erreichbar

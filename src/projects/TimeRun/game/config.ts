@@ -16,6 +16,10 @@ export const PLAYER_BASE: BasePlayer = { maxHp: 50, moveSpeed: 115, pickupRadius
 export const HIT_COOLDOWN_MS = 450
 /** Fress-Phasen: so oft kann man größere Gegner/Bosse anknabbern (ms) */
 export const BITE_COOLDOWN_MS = 250
+/** Fress-Phasen: Verdauungspause nach jedem Bissen (ms) */
+export const DIGEST_MS = 400
+/** Fress-Phasen: so weit (px) über den Zellrand hinaus wird Beute in Bewegung geschluckt */
+export const EAT_REACH = 10
 
 /** Gegner, die so weit unter dem Bildschirm sind, werden wieder oben eingesetzt. */
 export const RECYCLE_BELOW = 160

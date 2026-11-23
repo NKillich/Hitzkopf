@@ -51,8 +51,6 @@ export type Overlay =
         realCount: number; pastCount: number; badge: boolean; path: { name: string; real: boolean }[]; newRecord: boolean
     }
 
-export interface StageCard { id: number; code: string; name: string; range: string; weapon: string; fact: string; eating: boolean }
-
 export interface BestRun { stageIndex: number; stageCount: number; code: string; name: string }
 
 export interface UiState {
@@ -63,7 +61,6 @@ export interface UiState {
     overlay: Overlay | null
     /** Zeitpunkt (performance.now) des letzten Öffnens – kurze Klicksperre gegen versehentliches Wählen */
     overlayAt: number
-    stageCard: StageCard | null
     banner: { id: number; text: string } | null
     best: BestRun | null
     debug: boolean
@@ -103,7 +100,7 @@ export class UiBridge {
     constructor(debug = false) {
         this.state = {
             screen: 'start', ready: false, error: null, hud: null, overlay: null, overlayAt: 0,
-            stageCard: null, banner: null, best: loadBest(), debug,
+            banner: null, best: loadBest(), debug,
         }
     }
 

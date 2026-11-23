@@ -31,7 +31,7 @@ export function validateData(d: GameData): string[] {
         if (!(typeof e.fromYear === 'number' && typeof e.toYear === 'number' && e.fromYear < e.toYear)) {
             errors.push(`epochs/${e.id}: fromYear muss vor toYear liegen`)
         }
-        if (!e.fact?.trim()) errors.push(`epochs/${e.id}: fact fehlt`)
+        if (!e.facts?.length || e.facts.some(f => !f?.trim())) errors.push(`epochs/${e.id}: facts fehlen`)
         if (!e.shortName?.trim()) errors.push(`epochs/${e.id}: shortName fehlt`)
         if (!COLOR_RE.test(e.background) || !COLOR_RE.test(e.gridColor)) errors.push(`epochs/${e.id}: Farbe ungültig`)
         const enemyIds = new Set(e.enemies.map(x => x.id))
@@ -47,6 +47,8 @@ export function validateData(d: GameData): string[] {
             }
         }
         checkWaves(e.waves, `epochs/${e.id}`)
+        checkWaves(e.ambient ?? [], `epochs/${e.id}/ambient`)
+        for (const w of e.waves) if (w.from < 0 || w.to > 1) errors.push(`epochs/${e.id}: Welle „${w.enemy}“ muss in 0…1 (Höhe) liegen`)
         if (e.enemies.length > 0 && !(typeof e.height === 'number' && e.height > 0)) {
             errors.push(`epochs/${e.id}: height fehlt oder ≤ 0`)   // spielbar → braucht eine Höhe
         }
