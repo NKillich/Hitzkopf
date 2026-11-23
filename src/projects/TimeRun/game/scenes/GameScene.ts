@@ -1,16 +1,18 @@
 // Spielwelt: Spieler, Gegner-Wellen (Pool), Auto-Attack, XP-Kristalle, Level-up,
 // Höhe pro Epoche → Boss am oberen Ende → Evolutionswahl → nächste Epoche.
 import Phaser from 'phaser'
-import type { EnemyType, Epoch, EvolutionOption, Gene, GameData, PlayerStats, Upgrade } from '../../logic/types'
+import type { EnemyType, Epoch, EvolutionOption, Gene, GameData, GeneForm, PlayerStats, Upgrade, WeaponKind } from '../../logic/types'
 import { computeStats, pickUpgrades, type OwnedUpgrades } from '../../logic/upgrades'
 import { spawnsDue, xpForLevel } from '../../logic/waves'
 import { availableEvolutions, applyEvolution } from '../../logic/evolution'
+import { formatYear, yearAt } from '../../logic/time'
+import { activeForm, applyForm, canEat, canEatEnemy, playerSize, rangedActive, weaponKind, weaponLabel } from '../../logic/weapon'
 import {
     buildTimeline, firstPlayable, heightProgress, nextPlayable, resolveEpoch, transitionStage, type TimelineEntry,
 } from '../../logic/epochs'
 import {
-    BOSS_TRIGGER_DISTANCE, CLEAR_DELAY_MS, HEIGHT, HIT_COOLDOWN_MS, MAX_ENEMIES, MAX_GEMS, MAX_PROJECTILES,
-    PLAYER_BASE, PLAYER_SIZE, RECYCLE_BELOW, WIDTH, hexToInt,
+    BITE_COOLDOWN_MS, BOSS_TRIGGER_DISTANCE, CLEAR_DELAY_MS, HEIGHT, HIT_COOLDOWN_MS, MAX_ENEMIES, MAX_GEMS, MAX_PROJECTILES,
+    PLAYER_BASE, PLAYER_SIZE, RECYCLE_BELOW, WIDTH, hexToInt, smoothTexts,
 } from '../config'
 import { Joystick } from '../Joystick'
 import type { UIScene } from './UIScene'
@@ -56,6 +58,8 @@ export interface RunInfo {
     boss: { name: string; hp: number; maxHp: number } | null
     /** gewählte Evolutionen in Reihenfolge */
     path: EvolutionOption[]
+    /** aktuelles Jahr (Kalenderjahr, negativ = v. Chr.) – läuft mit der Höhe */
+    year: number
     dead: boolean
     won: boolean
 }
@@ -100,6 +104,19 @@ export class GameScene extends Phaser.Scene {
     private choices: Record<string, EvolutionOption> = {}
     private pendingLevelUps = 0
     private choosing = false
+    // Waffe der aktuellen Stufe
+    private form: GeneForm | undefined
+    private wstats!: PlayerStats
+    private wkind: WeaponKind = 'projectile'
+    private ranged = true
+    private eating = false
+    private playerSz = PLAYER_SIZE
+    private biteReadyAt = 0
+    /** Effekte für Nahkampf/Strahl (werden pro Bild neu gezeichnet) */
+    private fx!: Phaser.GameObjects.Graphics
+    private effects: { kind: 'ring' | 'line'; x: number; y: number; x2: number; y2: number; r: number; until: number; color: number }[] = []
+    /** Raster für das Abstoßen der Gegner untereinander */
+    private readonly grid = new Map<number, Enemy[]>()
     /** steigt bei jedem Epochenwechsel – das UI zeichnet dann den Zeitstrahl neu */
     timelineVersion = 0
     run!: RunInfo
@@ -121,12 +138,13 @@ export class GameScene extends Phaser.Scene {
         this.choosing = false
         this.enemyCursor = 0
         this.boss = null
+        this.effects = []
         const stats = computeStats(PLAYER_BASE, this.gene.base, this.gd.upgrades, this.owned)
         const first = firstPlayable(this.gd.epochs)!
         this.run = {
             epoch: first, weaponName: this.gene.name, timeSec: 0, level: 1, xp: 0,
             xpNeeded: xpForLevel(1), hp: stats.maxHp, stats, kills: 0, enemiesAlive: 0,
-            progress: 0, phase: 'climb', boss: null, path: [], dead: false, won: false,
+            progress: 0, phase: 'climb', boss: null, path: [], year: first.fromYear, dead: false, won: false,
         }
 
         this.physics.resume()   // nach Neustart war die Welt evtl. noch angehalten
@@ -137,6 +155,7 @@ export class GameScene extends Phaser.Scene {
         this.finishText = this.add.text(WIDTH / 2, 0, '', {
             fontFamily: 'ui-monospace, monospace', fontSize: '12px', color: '#ffffff', resolution: 2,
         }).setOrigin(0.5, 0).setAlpha(0.7).setDepth(-5)
+        smoothTexts([this.finishText])
 
         this.player = this.physics.add.image(WIDTH / 2, 0, 'player').setCollideWorldBounds(true).setDepth(10)
         this.hpBarBg = this.add.image(0, 0, 'bar').setDisplaySize(20, 3).setTint(0x400000).setDepth(11)
@@ -145,6 +164,7 @@ export class GameScene extends Phaser.Scene {
         cam.setFollowOffset(0, HEIGHT * 0.18)   // Spieler etwas unter der Mitte → mehr Sicht nach oben
 
         this.joystick = new Joystick(this)
+        this.fx = this.add.graphics().setDepth(9)
 
         // Pools vorab anlegen, damit beim Spielen nichts neu erzeugt wird
         this.enemyGroup = this.physics.add.group({ classType: Enemy, maxSize: MAX_ENEMIES })
@@ -197,27 +217,41 @@ export class GameScene extends Phaser.Scene {
         cam.setBackgroundColor(this.epoch.background)
         this.bg.setTint(hexToInt(this.epoch.gridColor))
 
-        // Waffe nimmt die Form der Epoche an (sonst bleibt die bisherige)
-        const form = this.gene.forms[base.id]
-        if (form) {
-            this.run.weaponName = form.name
-            const tint = hexToInt(form.color)
-            for (const s of this.shots) s.setTint(tint)
-        } else if (this.visited.length === 1) {
-            for (const s of this.shots) s.setTint(0xffffff)
-        }
+        // Waffe nimmt die Form der Stufe an (gilt bis zur nächsten Form)
+        this.form = activeForm(this.gene, this.gd.epochs, base.id)
+        const tint = hexToInt(this.form?.color ?? '#ffffff')
+        for (const s of this.shots) s.setTint(tint)
+        this.refreshWeapon()
 
         this.epochStartY = this.player.y
         this.endY = this.epochStartY - (this.epoch.height ?? 5000)
         this.physics.world.setBounds(0, -1e8, WIDTH, 2e8)
         this.finishLine.setPosition(0, this.endY).setVisible(true)
-        this.finishText.setPosition(WIDTH / 2, this.endY + 6).setText(`▲ Ende ${this.epoch.name}`).setVisible(true)
+        const goal = this.epoch.boss ? `Boss: ${this.epoch.boss.name}` : `Ende ${this.epoch.code}`
+        this.finishText.setPosition(WIDTH / 2, this.endY + 6).setText(`▲ ${goal} · ${formatYear(this.epoch.toYear)}`).setVisible(true)
 
         this.run.epoch = this.epoch
         this.run.phase = 'climb'
         this.run.progress = 0
         this.run.boss = null
         this.timelineVersion++
+    }
+
+    /** Waffe, Fressen und Größe nach Stufe, Tags, Upgrades und Level neu bestimmen. */
+    private refreshWeapon() {
+        const phase = this.baseEpoch.phase
+        this.eating = canEat(this.gene, phase)
+        this.ranged = rangedActive(this.gene, phase, this.tags)
+        this.wkind = weaponKind(this.gene, this.form)
+        this.wstats = applyForm(this.run.stats, this.form)
+        this.run.weaponName = weaponLabel(this.gene, this.form, phase, this.tags)
+        this.playerSz = playerSize(this.run.level, this.eating)
+        this.player.setDisplaySize(this.playerSz, this.playerSz)
+    }
+
+    /** Beginn (Jahr) einer Stufe – für die Auswertung „Echte Zeitlinie“. */
+    stageFromYear(id: string): number {
+        return this.gd.epochs.find(e => e.id === id)?.fromYear ?? 0
     }
 
     timeline(): TimelineEntry[] {
@@ -241,15 +275,20 @@ export class GameScene extends Phaser.Scene {
         this.player.setAlpha(now < this.invulnUntil ? 0.55 : 1)
         const px = this.player.x
         const py = this.player.y
-        this.hpBarBg.setPosition(px, py - PLAYER_SIZE)
-        this.hpBarFill.setPosition(px - 10, py - PLAYER_SIZE).setDisplaySize(20 * Math.max(0, this.run.hp / stats.maxHp), 3)
+        this.hpBarBg.setPosition(px, py - this.playerSz / 2 - 6)
+        this.hpBarFill.setPosition(px - 10, py - this.playerSz / 2 - 6).setDisplaySize(20 * Math.max(0, this.run.hp / stats.maxHp), 3)
 
         const cam = this.cameras.main
         this.bg.tilePositionY = cam.scrollY
 
         // Höhe → Boss
         this.run.progress = this.run.phase === 'climb' ? heightProgress(this.epochStartY, py, this.epoch.height ?? 5000) : 1
-        if (this.run.phase === 'climb' && py <= this.endY + BOSS_TRIGGER_DISTANCE) this.startBoss()
+        this.run.year = yearAt(this.epoch.fromYear, this.epoch.toYear, this.run.progress)
+        if (this.run.phase === 'climb') {
+            // Ende einer Hauptphase: Boss vor der Linie; sonst geht es an der Linie direkt zur Evolutionswahl
+            if (this.epoch.boss && py <= this.endY + BOSS_TRIGGER_DISTANCE) this.startBoss()
+            else if (!this.epoch.boss && py <= this.endY + this.playerSz) this.onStageCleared()
+        }
         else if (this.run.phase === 'boss' && !this.boss) this.spawnBoss()   // Sicherung, falls er nicht erscheinen konnte
 
         // Wellen nur beim Hochkämpfen – beim Boss kommen keine neuen Gegner dazu
@@ -260,7 +299,8 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        // Gegner laufen auf den Spieler zu (keine Kollision untereinander – spart Rechenzeit)
+        // Gegner laufen auf den Spieler zu und stoßen sich gegenseitig leicht ab (Raster, damit es schnell bleibt)
+        this.buildGrid()
         const bottom = cam.scrollY + HEIGHT + RECYCLE_BELOW
         let alive = 0
         for (const e of this.enemies) {
@@ -273,6 +313,7 @@ export class GameScene extends Phaser.Scene {
             const dy = py - e.y
             const len = Math.hypot(dx, dy) || 1
             e.body.velocity.set((dx / len) * e.kind.speed, (dy / len) * e.kind.speed)
+            if (!e.isBoss) this.separate(e)
             if (e.flashUntil && now > e.flashUntil) {
                 e.flashUntil = 0
                 e.setTintMode(Phaser.TintModes.MULTIPLY).setTint(hexToInt(e.kind.color))
@@ -281,15 +322,22 @@ export class GameScene extends Phaser.Scene {
         this.run.enemiesAlive = alive
         if (this.boss) this.run.boss = { name: this.boss.kind.name, hp: Math.max(0, this.boss.hp), maxHp: this.boss.kind.hp }
 
-        // Auto-Attack
+        // Auto-Attack (in den Fress-Phasen erst mit Toxin)
+        const w = this.wstats
         this.fireTimer += dt * 1000
-        if (this.fireTimer >= stats.cooldownMs) {
-            const target = this.nearestEnemy(px, py, stats.range)
-            if (target) {
-                this.fire(px, py, target, stats, now)
-                this.fireTimer = 0
+        if (this.ranged && this.fireTimer >= w.cooldownMs) {
+            if (this.wkind === 'melee') {
+                if (this.meleeAttack(px, py, w, now)) this.fireTimer = 0
+            } else {
+                const target = this.nearestEnemy(px, py, w.range)
+                if (target) {
+                    if (this.wkind === 'beam') this.beamAttack(px, py, target, w, now)
+                    else this.fire(px, py, target, w, now)
+                    this.fireTimer = 0
+                }
             }
         }
+        this.drawEffects(now)
         for (const s of this.shots) {
             if (s.active && now > s.expireAt) s.disableBody(true, true)
         }
@@ -324,7 +372,7 @@ export class GameScene extends Phaser.Scene {
         this.run.phase = 'boss'
         // Die Linie ist jetzt eine Wand, bis der Boss besiegt ist
         this.physics.world.setBounds(0, this.endY, WIDTH, 2e8)
-        if (!this.epoch.boss) { this.onBossDefeated(); return }
+        if (!this.epoch.boss) { this.onStageCleared(); return }
         this.spawnBoss()
         this.cameras.main.shake(250, 0.006)
         this.ui.showBanner(this.epoch.boss.name, '#ff8a8a')
@@ -332,7 +380,9 @@ export class GameScene extends Phaser.Scene {
 
     private spawnBoss() {
         const type = this.epoch.boss!
-        let e = this.spawnEnemy(type, this.endY - type.size)
+        // knapp unter der Linie, damit auch ein stillstehender Boss (Stromatolith) erreichbar ist
+        const by = this.endY + type.size * 0.6
+        let e = this.spawnEnemy(type, by)
         if (!e) {
             // Pool voll: dem Boss Platz machen (der Gegner, der am weitesten weg ist, verschwindet)
             let far: Enemy | null = null
@@ -343,17 +393,17 @@ export class GameScene extends Phaser.Scene {
                 if (d > farD) { farD = d; far = c }
             }
             far?.disableBody(true, true)
-            e = this.spawnEnemy(type, this.endY - type.size)
+            e = this.spawnEnemy(type, by)
         }
         if (!e) return
         e.isBoss = true
         e.x = WIDTH / 2
-        e.body.reset(WIDTH / 2, this.endY - type.size)
+        e.body.reset(WIDTH / 2, by)
         e.setDepth(7)
         this.boss = e
     }
 
-    private onBossDefeated() {
+    private onStageCleared() {
         this.run.phase = 'cleared'
         this.clearedAt = this.timeMs
         this.boss = null
@@ -376,13 +426,13 @@ export class GameScene extends Phaser.Scene {
         const options = stage ? availableEvolutions(this.gd.evolutionOptions, stage.id, this.tags) : []
         if (!stage || !options.length) {
             this.startEpoch(next)
-            this.ui.showBanner(this.epoch.name, '#ffffff', this.run.weaponName)
+            this.ui.showStage(this.epoch, this.run.weaponName)
             return
         }
         this.choosing = true
         this.joystick.release()
         this.scene.pause()
-        this.ui.showEvolution(options, this.epoch.name, stage.name)
+        this.ui.showEvolution(options, this.epoch, stage)
     }
 
     /** Vom UI aufgerufen, wenn eine Evolution gewählt wurde. */
@@ -394,7 +444,7 @@ export class GameScene extends Phaser.Scene {
         this.choosing = false
         if (next) this.startEpoch(next)
         this.scene.resume()
-        this.ui.showBanner(this.epoch.name, '#ffffff', this.run.weaponName)
+        this.ui.showStage(this.epoch, this.run.weaponName)
     }
 
     private win() {
@@ -433,10 +483,10 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    /** Debug: kurz vor das Ende der Epoche springen. */
-    skipToBoss() {
+    /** Debug: kurz vor die Ziellinie springen. */
+    skipToGoal() {
         if (this.run.phase !== 'climb') return
-        this.player.body.reset(this.player.x, this.endY + BOSS_TRIGGER_DISTANCE + 120)
+        this.player.body.reset(this.player.x, this.endY + (this.epoch.boss ? BOSS_TRIGGER_DISTANCE : 0) + 120)
     }
 
     private nearestEnemy(x: number, y: number, range: number): Enemy | null {
@@ -479,14 +529,112 @@ export class GameScene extends Phaser.Scene {
     private onShotHit(s: Shot, e: Enemy) {
         if (!s.active || !e.active || s.hit.has(e)) return
         s.hit.add(e)
-        e.hp -= s.damage
+        this.damageEnemy(e, s.damage)
+        if (s.pierceLeft > 0) s.pierceLeft--
+        else s.disableBody(true, true)
+    }
+
+    private damageEnemy(e: Enemy, dmg: number) {
+        e.hp -= dmg
         if (e.hp <= 0) this.killEnemy(e)
         else {
             e.flashUntil = this.timeMs + 70
             e.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
         }
-        if (s.pierceLeft > 0) s.pierceLeft--
-        else s.disableBody(true, true)
+    }
+
+    /** Nahkampf (Biss, Klauen): trifft alle Gegner im Umkreis. */
+    private meleeAttack(x: number, y: number, w: PlayerStats, now: number): boolean {
+        const r = w.range
+        let hit = false
+        for (const e of this.enemies) {
+            if (!e.active) continue
+            const rr = r + e.kind.size / 2
+            if ((e.x - x) ** 2 + (e.y - y) ** 2 <= rr * rr) { this.damageEnemy(e, w.damage); hit = true }
+        }
+        if (hit) this.effects.push({ kind: 'ring', x, y, x2: 0, y2: 0, r, until: now + 120, color: hexToInt(this.form?.color ?? '#ffffff') })
+        return hit
+    }
+
+    /** Strahl (Laser): trifft alle Gegner auf der Linie zum Ziel; mehrere Strahlen leicht gefächert. */
+    private beamAttack(x: number, y: number, target: Enemy, w: PlayerStats, now: number) {
+        const base = Math.atan2(target.y - y, target.x - x)
+        const n = w.projectiles
+        const color = hexToInt(this.form?.color ?? '#ffffff')
+        for (let i = 0; i < n; i++) {
+            const a = base + (i - (n - 1) / 2) * 0.18
+            const ux = Math.cos(a)
+            const uy = Math.sin(a)
+            for (const e of this.enemies) {
+                if (!e.active) continue
+                const ex = e.x - x
+                const ey = e.y - y
+                const along = ex * ux + ey * uy
+                if (along < 0 || along > w.range) continue
+                const across = Math.abs(ex * uy - ey * ux)
+                if (across <= e.kind.size / 2 + 3) this.damageEnemy(e, w.damage)
+            }
+            this.effects.push({ kind: 'line', x, y, x2: x + ux * w.range, y2: y + uy * w.range, r: 0, until: now + 90, color })
+        }
+    }
+
+    private drawEffects(now: number) {
+        this.fx.clear()
+        if (!this.effects.length) return
+        this.effects = this.effects.filter(f => f.until > now)
+        for (const f of this.effects) {
+            if (f.kind === 'ring') this.fx.lineStyle(3, f.color, 0.8).strokeCircle(f.x, f.y, f.r)
+            else this.fx.lineStyle(3, f.color, 0.9).lineBetween(f.x, f.y, f.x2, f.y2)
+        }
+    }
+
+    // ---- Abstoßen der Gegner (Raster) ----
+
+    private static readonly CELL = 24
+
+    private cellKey(x: number, y: number): number {
+        return Math.floor(y / GameScene.CELL) * 64 + Math.floor(x / GameScene.CELL)
+    }
+
+    private buildGrid() {
+        for (const list of this.grid.values()) list.length = 0
+        for (const e of this.enemies) {
+            if (!e.active) continue
+            const k = this.cellKey(e.x, e.y)
+            let list = this.grid.get(k)
+            if (!list) { list = []; this.grid.set(k, list) }
+            list.push(e)
+        }
+        if (this.grid.size > 2000) this.grid.clear()   // leere Zellen nicht endlos sammeln
+    }
+
+    private separate(e: Enemy) {
+        const cx = Math.floor(e.x / GameScene.CELL)
+        const cy = Math.floor(e.y / GameScene.CELL)
+        let pushX = 0
+        let pushY = 0
+        for (let oy = -1; oy <= 1; oy++) {
+            for (let ox = -1; ox <= 1; ox++) {
+                const list = this.grid.get((cy + oy) * 64 + cx + ox)
+                if (!list) continue
+                for (const o of list) {
+                    if (o === e) continue
+                    const dx = e.x - o.x
+                    const dy = e.y - o.y
+                    const min = (e.kind.size + o.kind.size) * 0.45
+                    const d2 = dx * dx + dy * dy
+                    if (d2 >= min * min) continue
+                    const d = Math.sqrt(d2) || 0.01
+                    const f = (min - d) / d
+                    pushX += dx * f
+                    pushY += dy * f
+                }
+            }
+        }
+        if (pushX || pushY) {
+            e.body.velocity.x += pushX * 8
+            e.body.velocity.y += pushY * 8
+        }
     }
 
     private killEnemy(e: Enemy) {
@@ -495,7 +643,7 @@ export class GameScene extends Phaser.Scene {
         const wasBoss = e.isBoss
         e.isBoss = false
         e.disableBody(true, true)
-        if (wasBoss) this.onBossDefeated()
+        if (wasBoss) this.onStageCleared()
     }
 
     private dropGem(x: number, y: number, value: number) {
@@ -515,17 +663,42 @@ export class GameScene extends Phaser.Scene {
 
     private collectGem(g: Gem) {
         g.setActive(false).setVisible(false)
-        this.run.xp += g.value * this.run.stats.xpGain
+        this.addXp(g.value)
+    }
+
+    private addXp(value: number) {
+        const before = this.run.level
+        this.run.xp += value * this.run.stats.xpGain
         while (this.run.xp >= this.run.xpNeeded) {
             this.run.xp -= this.run.xpNeeded
             this.run.level++
             this.run.xpNeeded = xpForLevel(this.run.level)
             this.pendingLevelUps++
         }
+        // in den Fress-Phasen wächst man mit dem Level
+        if (this.run.level !== before && this.eating) {
+            this.playerSz = playerSize(this.run.level, true)
+            this.player.setDisplaySize(this.playerSz, this.playerSz)
+        }
     }
 
     private onPlayerHit(e: Enemy) {
-        if (!e.active || this.run.dead || this.timeMs < this.invulnUntil) return
+        if (!e.active || this.run.dead) return
+        // Fress-Phasen: Kleinere werden gefressen (gibt XP und etwas Leben)
+        if (this.eating && canEatEnemy(this.playerSz, e.kind.size, e.isBoss)) {
+            this.run.kills++
+            e.disableBody(true, true)
+            this.addXp(e.kind.xp)
+            this.run.hp = Math.min(this.run.stats.maxHp, this.run.hp + 1)
+            return
+        }
+        // Größere Gegner und Bosse kann man anknabbern
+        if (this.eating && this.timeMs >= this.biteReadyAt) {
+            this.biteReadyAt = this.timeMs + BITE_COOLDOWN_MS
+            this.damageEnemy(e, this.wstats.damage * 2)
+            if (!e.active) return
+        }
+        if (e.kind.damage <= 0 || this.timeMs < this.invulnUntil) return
         this.invulnUntil = this.timeMs + HIT_COOLDOWN_MS
         this.run.hp -= e.kind.damage
         this.cameras.main.shake(90, 0.004)
@@ -541,7 +714,7 @@ export class GameScene extends Phaser.Scene {
     // ---- Level-up ----
 
     private openLevelUp() {
-        const choices = pickUpgrades(this.gd.upgrades, this.owned, this.tags)
+        const choices = pickUpgrades(this.gd.upgrades, this.owned, this.tags, Math.random, 3, this.baseEpoch.phase)
         if (!choices.length) { this.pendingLevelUps = 0; return }
         this.choosing = true
         this.joystick.release()
@@ -557,7 +730,8 @@ export class GameScene extends Phaser.Scene {
         this.run.stats = computeStats(PLAYER_BASE, this.gene.base, this.gd.upgrades, this.owned)
         if (this.run.stats.maxHp > before) this.run.hp += this.run.stats.maxHp - before
         this.pendingLevelUps--
-        const next = this.pendingLevelUps > 0 ? pickUpgrades(this.gd.upgrades, this.owned, this.tags) : []
+        this.refreshWeapon()
+        const next = this.pendingLevelUps > 0 ? pickUpgrades(this.gd.upgrades, this.owned, this.tags, Math.random, 3, this.baseEpoch.phase) : []
         if (next.length) {
             this.ui.showLevelUp(next, this.owned)
             return

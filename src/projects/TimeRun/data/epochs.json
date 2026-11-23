@@ -1,90 +1,1829 @@
 {
-  "_info": "Spielbar ist eine Epoche, wenn sie Gegner hat. height = Strecke nach oben bis zum Ende (Spielpixel), oben wartet der boss. waves zählen ab Beginn der Epoche (Sekunden). variants: erste passende Variante (requires/excludes auf die Tags) ändert Name/Farben und fügt extraWaves hinzu.",
-  "epochs": [
+ "_info": "Stufen nach der Evolution (1.1–6.3). fromYear/toYear = Kalenderjahre (negativ = v. Chr. bzw. vor heute), innerhalb einer Stufe läuft die Zeit gleichmäßig mit der Höhe. height = Strecke bis zur Ziellinie; boss nur am Ende einer Hauptphase. waves zählen ab Beginn der Stufe (Sekunden). variants (optional): erste passende Variante ändert Name/Farben/Wellen.",
+ "epochs": [
+  {
+   "id": "urzellen",
+   "code": "1.1",
+   "order": 1,
+   "phase": 1,
+   "phaseName": "Die Welt der Einzeller",
+   "name": "Präbiotische Chemie & Ur-Zellen",
+   "shortName": "Ur-Zellen",
+   "fromYear": -4000000000.0,
+   "toYear": -3800000000.0,
+   "fact": "Fettsäuren bilden im Wasser von selbst Bläschen – ein Modell für die ersten Zellhüllen. RNA kann Information speichern und zugleich Reaktionen beschleunigen („RNA-Welt“).",
+   "background": "#0b2427",
+   "gridColor": "#123a3d",
+   "height": 4000,
+   "enemies": [
     {
-      "id": "ursuppe",
-      "order": 1,
-      "name": "Ursuppe",
-      "phase": "biologisch",
-      "background": "#0d2b2a",
-      "gridColor": "#164240",
-      "height": 12000,
-      "enemies": [
-        { "id": "bakterie", "name": "Bakterie", "color": "#7ddf64", "size": 10, "hp": 3, "speed": 38, "damage": 4, "xp": 1 },
-        { "id": "virus", "name": "Virus", "color": "#ff5d73", "size": 7, "hp": 2, "speed": 70, "damage": 3, "xp": 1 },
-        { "id": "amoebe", "name": "Amöbe", "color": "#c9a0ff", "size": 18, "hp": 14, "speed": 26, "damage": 8, "xp": 4 }
-      ],
-      "boss": { "id": "riesenamoebe", "name": "Riesenamöbe", "color": "#b07cff", "size": 46, "hp": 260, "speed": 30, "damage": 14, "xp": 30 },
-      "waves": [
-        { "enemy": "bakterie", "from": 0, "to": 900, "every": 1.5, "count": 2 },
-        { "enemy": "bakterie", "from": 30, "to": 900, "every": 1, "count": 3 },
-        { "enemy": "virus", "from": 60, "to": 900, "every": 2, "count": 3 },
-        { "enemy": "amoebe", "from": 90, "to": 900, "every": 4, "count": 2 },
-        { "enemy": "bakterie", "from": 150, "to": 900, "every": 0.5, "count": 4 },
-        { "enemy": "virus", "from": 210, "to": 900, "every": 1, "count": 4 },
-        { "enemy": "amoebe", "from": 300, "to": 900, "every": 2, "count": 3 }
-      ]
+     "id": "aminosaeure",
+     "name": "Aminosäure",
+     "color": "#9fe3c8",
+     "size": 7,
+     "hp": 3.0,
+     "speed": 68,
+     "damage": 3.0,
+     "xp": 1
     },
-    { "id": "mehrzeller", "order": 2, "name": "Mehrzeller", "phase": "biologisch", "background": "#102a3a", "gridColor": "#1a3d52", "enemies": [], "waves": [] },
-    { "id": "urtier", "order": 3, "name": "Urtier", "phase": "biologisch", "background": "#1d2a14", "gridColor": "#2c3e1f", "enemies": [], "waves": [] },
-    { "id": "lebensraum", "order": 4, "name": "Lebensraum", "phase": "biologisch", "background": "#14263a", "gridColor": "#203a55", "enemies": [], "waves": [] },
-    { "id": "tierklasse", "order": 5, "name": "Tierklasse", "phase": "biologisch", "background": "#2a2414", "gridColor": "#3e351f", "enemies": [], "waves": [] },
-    { "id": "intelligenz", "order": 6, "name": "Intelligenz", "phase": "biologisch", "background": "#26182e", "gridColor": "#3a2546", "enemies": [], "waves": [] },
     {
-      "id": "steinzeit",
-      "order": 7,
-      "name": "Steinzeit",
-      "phase": "kulturell",
-      "background": "#2b2119",
-      "gridColor": "#3f3126",
-      "height": 14000,
-      "enemies": [
-        { "id": "wolf", "name": "Wolf", "color": "#a9b4c2", "size": 11, "hp": 8, "speed": 74, "damage": 6, "xp": 2 },
-        { "id": "saebelzahn", "name": "Säbelzahnkatze", "color": "#e0a85a", "size": 14, "hp": 16, "speed": 58, "damage": 9, "xp": 3 },
-        { "id": "mammut", "name": "Mammut", "color": "#8a5a3c", "size": 26, "hp": 45, "speed": 26, "damage": 14, "xp": 8 }
-      ],
-      "boss": { "id": "hoehlenbaer", "name": "Höhlenbär", "color": "#6e4a32", "size": 50, "hp": 700, "speed": 36, "damage": 20, "xp": 60 },
-      "waves": [
-        { "enemy": "wolf", "from": 0, "to": 900, "every": 1.5, "count": 2 },
-        { "enemy": "saebelzahn", "from": 20, "to": 900, "every": 3, "count": 2 },
-        { "enemy": "wolf", "from": 45, "to": 900, "every": 1, "count": 3 },
-        { "enemy": "mammut", "from": 70, "to": 900, "every": 5, "count": 1 },
-        { "enemy": "saebelzahn", "from": 120, "to": 900, "every": 1.5, "count": 3 },
-        { "enemy": "wolf", "from": 180, "to": 900, "every": 0.5, "count": 3 }
-      ],
-      "variants": [
-        { "id": "jaegerstamm", "name": "Steinzeit · Jägerstamm", "requires": ["räuber"], "background": "#2e1a14", "gridColor": "#47271d",
-          "extraWaves": [{ "enemy": "mammut", "from": 30, "to": 900, "every": 4, "count": 1 }] },
-        { "id": "sammlerstamm", "name": "Steinzeit · Sammlerstamm", "requires": ["pflanzenfresser"], "background": "#1b2a17", "gridColor": "#2b4224",
-          "extraWaves": [{ "enemy": "wolf", "from": 30, "to": 900, "every": 2, "count": 2 }] }
-      ]
+     "id": "rna-strang",
+     "name": "RNA-Strang",
+     "color": "#f2c46b",
+     "size": 11,
+     "hp": 8.0,
+     "speed": 44,
+     "damage": 5.0,
+     "xp": 2
     },
-    { "id": "antike", "order": 8, "name": "Antike", "phase": "kulturell", "background": "#2e2a1c", "gridColor": "#463f2a", "enemies": [], "waves": [] },
     {
-      "id": "mittelalter",
-      "order": 9,
-      "name": "Mittelalter",
-      "phase": "kulturell",
-      "background": "#1f2124",
-      "gridColor": "#2f3237",
-      "height": 16000,
-      "enemies": [
-        { "id": "ratte", "name": "Pestratte", "color": "#7a7f6a", "size": 7, "hp": 7, "speed": 88, "damage": 5, "xp": 2 },
-        { "id": "soeldner", "name": "Söldner", "color": "#c45a4a", "size": 14, "hp": 28, "speed": 46, "damage": 11, "xp": 4 },
-        { "id": "ritter", "name": "Ritter", "color": "#c9ced6", "size": 20, "hp": 75, "speed": 32, "damage": 17, "xp": 9 }
-      ],
-      "boss": { "id": "schwarzer-ritter", "name": "Schwarzer Ritter", "color": "#3a3f4a", "size": 48, "hp": 1400, "speed": 40, "damage": 26, "xp": 100 },
-      "waves": [
-        { "enemy": "ratte", "from": 0, "to": 900, "every": 1, "count": 3 },
-        { "enemy": "soeldner", "from": 15, "to": 900, "every": 2.5, "count": 2 },
-        { "enemy": "ritter", "from": 50, "to": 900, "every": 5, "count": 1 },
-        { "enemy": "ratte", "from": 90, "to": 900, "every": 0.4, "count": 3 },
-        { "enemy": "soeldner", "from": 140, "to": 900, "every": 1, "count": 3 },
-        { "enemy": "ritter", "from": 200, "to": 900, "every": 2, "count": 2 }
-      ]
+     "id": "protozelle",
+     "name": "Protozelle",
+     "color": "#7fc9e8",
+     "size": 18,
+     "hp": 20.0,
+     "speed": 27,
+     "damage": 9.0,
+     "xp": 5
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "aminosaeure",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
     },
-    { "id": "industrie", "order": 10, "name": "Industrie", "phase": "kulturell", "background": "#25201d", "gridColor": "#38302b", "enemies": [], "waves": [] },
-    { "id": "moderne", "order": 11, "name": "Moderne", "phase": "kulturell", "background": "#161c26", "gridColor": "#232c3b", "enemies": [], "waves": [] },
-    { "id": "zukunft", "order": 12, "name": "Zukunft / Weltall", "phase": "kulturell", "background": "#0a0a18", "gridColor": "#16163a", "enemies": [], "waves": [] }
-  ]
+    {
+     "enemy": "rna-strang",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "aminosaeure",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "protozelle",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "rna-strang",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "aminosaeure",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "protozelle",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "stoffwechsel",
+   "code": "1.2",
+   "order": 2,
+   "phase": 1,
+   "phaseName": "Die Welt der Einzeller",
+   "name": "Stoffwechsel & Archaeen/Bakterien",
+   "shortName": "Archaeen & Bakterien",
+   "fromYear": -3800000000.0,
+   "toYear": -2700000000.0,
+   "fact": "Archaeen und Bakterien trennten sich sehr früh. Zu den ältesten Fossilien gehören Stromatolithen – von Mikroben aufgebaute Kalkschichten, ca. 3,5 Mrd. Jahre alt (Australien).",
+   "background": "#0d2b2a",
+   "gridColor": "#164240",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "bakterium",
+     "name": "Bakterium",
+     "color": "#7ddf64",
+     "size": 7,
+     "hp": 4.0,
+     "speed": 69,
+     "damage": 3.7,
+     "xp": 1
+    },
+    {
+     "id": "archaee",
+     "name": "Archaee",
+     "color": "#e0905a",
+     "size": 11,
+     "hp": 10.6,
+     "speed": 45,
+     "damage": 6.1,
+     "xp": 2
+    },
+    {
+     "id": "bakterienmatte",
+     "name": "Bakterienmatte",
+     "color": "#5f9e6e",
+     "size": 18,
+     "hp": 26.4,
+     "speed": 28,
+     "damage": 11.0,
+     "xp": 6
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "bakterium",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "archaee",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "bakterium",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "bakterienmatte",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "archaee",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "bakterium",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "bakterienmatte",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "photosynthese",
+   "code": "1.3",
+   "order": 3,
+   "phase": 1,
+   "phaseName": "Die Welt der Einzeller",
+   "name": "Sauerstoff-Photosynthese",
+   "shortName": "Sauerstoff-Photosynthese",
+   "fromYear": -2700000000.0,
+   "toYear": -2000000000.0,
+   "fact": "Cyanobakterien setzen bei der Photosynthese Sauerstoff frei. Vor ca. 2,4 Mrd. Jahren reicherte er sich in der Luft an – für viele damalige Lebewesen war er giftig.",
+   "background": "#0e2e24",
+   "gridColor": "#17473a",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "sauerstoffradikal",
+     "name": "Sauerstoff-Radikal",
+     "color": "#ff6b6b",
+     "size": 7,
+     "hp": 4.9,
+     "speed": 71,
+     "damage": 4.3,
+     "xp": 1
+    },
+    {
+     "id": "purpurbakterium",
+     "name": "Purpurbakterium",
+     "color": "#c27ae0",
+     "size": 11,
+     "hp": 13.1,
+     "speed": 46,
+     "damage": 7.2,
+     "xp": 3
+    },
+    {
+     "id": "cyanokolonie",
+     "name": "Cyanobakterien-Kolonie",
+     "color": "#3fbf9f",
+     "size": 18,
+     "hp": 32.8,
+     "speed": 28,
+     "damage": 13.0,
+     "xp": 6
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "sauerstoffradikal",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "purpurbakterium",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "sauerstoffradikal",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "cyanokolonie",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "purpurbakterium",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "sauerstoffradikal",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "cyanokolonie",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ],
+   "boss": {
+    "id": "stromatolith",
+    "name": "Stromatolith",
+    "color": "#8fae7a",
+    "size": 48,
+    "hp": 492,
+    "speed": 0,
+    "damage": 0,
+    "xp": 48
+   }
+  },
+  {
+   "id": "endosymbiose",
+   "code": "2.1",
+   "order": 4,
+   "phase": 2,
+   "phaseName": "Zelluläre Komplexität & Vielzelligkeit",
+   "name": "Endosymbiose & Zellkern",
+   "shortName": "Endosymbiose & Zellkern",
+   "fromYear": -2000000000.0,
+   "toYear": -1500000000.0,
+   "fact": "Eine Archaee nahm ein Bakterium auf, ohne es zu verdauen: Daraus wurden die Mitochondrien – die Kraftwerke in jeder deiner Zellen.",
+   "background": "#102a3a",
+   "gridColor": "#1a3d52",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "alphaproteobakterium",
+     "name": "Alphaproteobakterium",
+     "color": "#ffb86b",
+     "size": 7,
+     "hp": 5.9,
+     "speed": 72,
+     "damage": 5.0,
+     "xp": 1
+    },
+    {
+     "id": "asgard-archaee",
+     "name": "Asgard-Archaee",
+     "color": "#d98cff",
+     "size": 11,
+     "hp": 15.7,
+     "speed": 47,
+     "damage": 8.3,
+     "xp": 3
+    },
+    {
+     "id": "grypania",
+     "name": "Grypania",
+     "color": "#6bc4a6",
+     "size": 18,
+     "hp": 39.2,
+     "speed": 29,
+     "damage": 14.9,
+     "xp": 7
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "alphaproteobakterium",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "asgard-archaee",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "alphaproteobakterium",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "grypania",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "asgard-archaee",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "alphaproteobakterium",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "grypania",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "kolonien",
+   "code": "2.2",
+   "order": 5,
+   "phase": 2,
+   "phaseName": "Zelluläre Komplexität & Vielzelligkeit",
+   "name": "Koloniebildung & Zellkommunikation",
+   "shortName": "Kolonien",
+   "fromYear": -1500000000.0,
+   "toYear": -800000000.0,
+   "fact": "Bangiomorpha, eine Rotalge von vor ca. 1 Mrd. Jahren, ist einer der ältesten bekannten Mehrzeller mit verschiedenen Zelltypen. Kragengeißeltiere sind die nächsten einzelligen Verwandten der Tiere.",
+   "background": "#0f2638",
+   "gridColor": "#1b3a54",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "kragengeisseltier",
+     "name": "Kragengeißeltier",
+     "color": "#a6e0ff",
+     "size": 7,
+     "hp": 6.8,
+     "speed": 73,
+     "damage": 5.6,
+     "xp": 2
+    },
+    {
+     "id": "bangiomorpha",
+     "name": "Bangiomorpha (Rotalge)",
+     "color": "#e06b8a",
+     "size": 11,
+     "hp": 18.2,
+     "speed": 48,
+     "damage": 9.4,
+     "xp": 3
+    },
+    {
+     "id": "tappania",
+     "name": "Tappania",
+     "color": "#c9b46b",
+     "size": 18,
+     "hp": 45.6,
+     "speed": 29,
+     "damage": 16.9,
+     "xp": 8
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "kragengeisseltier",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "bangiomorpha",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "kragengeisseltier",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "tappania",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "bangiomorpha",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "kragengeisseltier",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "tappania",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "mehrzeller",
+   "code": "2.3",
+   "order": 6,
+   "phase": 2,
+   "phaseName": "Zelluläre Komplexität & Vielzelligkeit",
+   "name": "Echte Mehrzeller & Gewebe",
+   "shortName": "Mehrzeller & Gewebe",
+   "fromYear": -800000000.0,
+   "toYear": -540000000.0,
+   "fact": "Die Ediacara-Fauna (ca. 575–540 Mio. Jahre) zeigt die ersten großen Lebewesen. Dickinsonia wurde bis 1,4 m groß – Fettmoleküle im Fossil zeigen, dass sie ein Tier war.",
+   "background": "#13263a",
+   "gridColor": "#213b55",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "cloudina",
+     "name": "Cloudina",
+     "color": "#e8e2c8",
+     "size": 7,
+     "hp": 7.8,
+     "speed": 75,
+     "damage": 6.3,
+     "xp": 2
+    },
+    {
+     "id": "kimberella",
+     "name": "Kimberella",
+     "color": "#c98a5a",
+     "size": 11,
+     "hp": 20.8,
+     "speed": 48,
+     "damage": 10.5,
+     "xp": 4
+    },
+    {
+     "id": "charnia",
+     "name": "Charnia",
+     "color": "#8ac98a",
+     "size": 18,
+     "hp": 52.0,
+     "speed": 30,
+     "damage": 18.9,
+     "xp": 9
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "cloudina",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "kimberella",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "cloudina",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "charnia",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "kimberella",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "cloudina",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "charnia",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ],
+   "boss": {
+    "id": "dickinsonia",
+    "name": "Dickinsonia",
+    "color": "#d9a66b",
+    "size": 48,
+    "hp": 780,
+    "speed": 6,
+    "damage": 0,
+    "xp": 75
+   }
+  },
+  {
+   "id": "kambrium",
+   "code": "3.1",
+   "order": 7,
+   "phase": 3,
+   "phaseName": "Ozean-Explosion & Landgang",
+   "name": "Kambrische Diversifizierung",
+   "shortName": "Kambrium",
+   "fromYear": -541000000.0,
+   "toYear": -485000000.0,
+   "fact": "In der Kambrischen Explosion entstanden in wenigen Millionen Jahren fast alle heutigen Tierstämme. Trilobiten hatten schon Facettenaugen mit Linsen aus Kalkspat.",
+   "background": "#0c2340",
+   "gridColor": "#16365e",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "hallucigenia",
+     "name": "Hallucigenia",
+     "color": "#ff9ab0",
+     "size": 7,
+     "hp": 8.8,
+     "speed": 76,
+     "damage": 7.0,
+     "xp": 2
+    },
+    {
+     "id": "trilobit",
+     "name": "Trilobit",
+     "color": "#b89a6b",
+     "size": 11,
+     "hp": 23.4,
+     "speed": 49,
+     "damage": 11.6,
+     "xp": 4
+    },
+    {
+     "id": "anomalocaris",
+     "name": "Anomalocaris",
+     "color": "#e0603a",
+     "size": 18,
+     "hp": 58.4,
+     "speed": 30,
+     "damage": 20.9,
+     "xp": 10
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "hallucigenia",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "trilobit",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "hallucigenia",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "anomalocaris",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "trilobit",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "hallucigenia",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "anomalocaris",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "landgang",
+   "code": "3.2",
+   "order": 8,
+   "phase": 3,
+   "phaseName": "Ozean-Explosion & Landgang",
+   "name": "Eroberung des Festlands",
+   "shortName": "Landgang",
+   "fromYear": -470000000.0,
+   "toYear": -400000000.0,
+   "fact": "Pflanzen und Pilze besiedelten zuerst das Land, dann folgten Gliederfüßer: Der Tausendfüßer Pneumodesmus lebte vor über 410 Mio. Jahren und ist eines der ältesten bekannten Landtiere.",
+   "background": "#1d2a17",
+   "gridColor": "#2c4022",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "rhyniella",
+     "name": "Springschwanz (Rhyniella)",
+     "color": "#d8d8a0",
+     "size": 7,
+     "hp": 9.7,
+     "speed": 78,
+     "damage": 7.6,
+     "xp": 2
+    },
+    {
+     "id": "pneumodesmus",
+     "name": "Tausendfüßer (Pneumodesmus)",
+     "color": "#a8643c",
+     "size": 11,
+     "hp": 25.9,
+     "speed": 50,
+     "damage": 12.7,
+     "xp": 4
+    },
+    {
+     "id": "eurypterus",
+     "name": "Seeskorpion (Eurypterus)",
+     "color": "#7a8a5a",
+     "size": 18,
+     "hp": 64.8,
+     "speed": 31,
+     "damage": 22.9,
+     "xp": 10
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "rhyniella",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "pneumodesmus",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "rhyniella",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "eurypterus",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "pneumodesmus",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "rhyniella",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "eurypterus",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "landwirbeltiere",
+   "code": "3.3",
+   "order": 9,
+   "phase": 3,
+   "phaseName": "Ozean-Explosion & Landgang",
+   "name": "Landwirbeltiere & Samenpflanzen",
+   "shortName": "Landwirbeltiere",
+   "fromYear": -380000000.0,
+   "toYear": -320000000.0,
+   "fact": "Tiktaalik (ca. 375 Mio. Jahre) war ein Fisch mit Hals und kräftigen Flossen – ein Übergang zu den Vierbeinern. Samen und das Amniotenei machten Pflanzen und Tiere vom offenen Wasser unabhängig.",
+   "background": "#1a2814",
+   "gridColor": "#2a3e1f",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "acanthostega",
+     "name": "Acanthostega",
+     "color": "#8ab06b",
+     "size": 7,
+     "hp": 10.7,
+     "speed": 79,
+     "damage": 8.3,
+     "xp": 2
+    },
+    {
+     "id": "pulmonoscorpius",
+     "name": "Riesenskorpion (Pulmonoscorpius)",
+     "color": "#c08a4a",
+     "size": 11,
+     "hp": 28.5,
+     "speed": 51,
+     "damage": 13.8,
+     "xp": 4
+    },
+    {
+     "id": "arthropleura",
+     "name": "Arthropleura",
+     "color": "#6b5a3a",
+     "size": 18,
+     "hp": 71.2,
+     "speed": 31,
+     "damage": 24.8,
+     "xp": 11
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "acanthostega",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "pulmonoscorpius",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "acanthostega",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "arthropleura",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "pulmonoscorpius",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "acanthostega",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "arthropleura",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ],
+   "boss": {
+    "id": "dunkleosteus",
+    "name": "Dunkleosteus",
+    "color": "#6b7f99",
+    "size": 48,
+    "hp": 1068,
+    "speed": 37,
+    "damage": 39,
+    "xp": 102
+   }
+  },
+  {
+   "id": "dinosaurier",
+   "code": "4.1",
+   "order": 10,
+   "phase": 4,
+   "phaseName": "Wirbeltier-Entfaltung & Primatenlinie",
+   "name": "Amnioten, Dinosaurier & frühe Säuger",
+   "shortName": "Dinosaurier",
+   "fromYear": -320000000.0,
+   "toYear": -66000000.0,
+   "fact": "Dinosaurier gab es ca. 165 Mio. Jahre lang. Die ersten Säugetiere lebten schon neben ihnen – meist klein und nachtaktiv.",
+   "background": "#24261a",
+   "gridColor": "#383b26",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "compsognathus",
+     "name": "Compsognathus",
+     "color": "#a6c46b",
+     "size": 7,
+     "hp": 11.6,
+     "speed": 80,
+     "damage": 8.9,
+     "xp": 2
+    },
+    {
+     "id": "velociraptor",
+     "name": "Velociraptor",
+     "color": "#c9935a",
+     "size": 11,
+     "hp": 31.0,
+     "speed": 52,
+     "damage": 14.9,
+     "xp": 5
+    },
+    {
+     "id": "triceratops",
+     "name": "Triceratops",
+     "color": "#8a7a5a",
+     "size": 18,
+     "hp": 77.6,
+     "speed": 32,
+     "damage": 26.8,
+     "xp": 12
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "compsognathus",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "velociraptor",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "compsognathus",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "triceratops",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "velociraptor",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "compsognathus",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "triceratops",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "saeugetiere",
+   "code": "4.2",
+   "order": 11,
+   "phase": 4,
+   "phaseName": "Wirbeltier-Entfaltung & Primatenlinie",
+   "name": "Säugetier-Aufstieg & Warmblütigkeit",
+   "shortName": "Säugetier-Aufstieg",
+   "fromYear": -66000000.0,
+   "toYear": -55000000.0,
+   "fact": "Vor 66 Mio. Jahren schlug bei Chicxulub (Mexiko) ein Asteroid ein. Die Nicht-Vogel-Dinosaurier starben aus, die Säugetiere breiteten sich aus. Vögel sind die überlebenden Dinosaurier.",
+   "background": "#26221a",
+   "gridColor": "#3b3426",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "purgatorius",
+     "name": "Purgatorius",
+     "color": "#b89a7a",
+     "size": 7,
+     "hp": 12.6,
+     "speed": 82,
+     "damage": 9.6,
+     "xp": 2
+    },
+    {
+     "id": "gastornis",
+     "name": "Gastornis",
+     "color": "#7a6b8a",
+     "size": 11,
+     "hp": 33.6,
+     "speed": 53,
+     "damage": 16.0,
+     "xp": 5
+    },
+    {
+     "id": "titanoboa",
+     "name": "Titanoboa",
+     "color": "#5a7a4a",
+     "size": 18,
+     "hp": 84.0,
+     "speed": 32,
+     "damage": 28.8,
+     "xp": 12
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "purgatorius",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "gastornis",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "purgatorius",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "titanoboa",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "gastornis",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "purgatorius",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "titanoboa",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "primaten",
+   "code": "4.3",
+   "order": 12,
+   "phase": 4,
+   "phaseName": "Wirbeltier-Entfaltung & Primatenlinie",
+   "name": "Primaten, Greifhände & Sozialität",
+   "shortName": "Primaten",
+   "fromYear": -55000000.0,
+   "toYear": -6000000.0,
+   "fact": "Primaten entwickelten nach vorn gerichtete Augen für räumliches Sehen und Greifhände mit Nägeln statt Krallen. Vor ca. 7–6 Mio. Jahren trennten sich die Linien von Schimpanse und Mensch.",
+   "background": "#1c2a1a",
+   "gridColor": "#2c4128",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "hyaenodon",
+     "name": "Hyaenodon",
+     "color": "#9a8a6a",
+     "size": 7,
+     "hp": 13.6,
+     "speed": 83,
+     "damage": 10.3,
+     "xp": 3
+    },
+    {
+     "id": "entelodont",
+     "name": "Entelodont",
+     "color": "#7a5a4a",
+     "size": 11,
+     "hp": 36.2,
+     "speed": 54,
+     "damage": 17.1,
+     "xp": 5
+    },
+    {
+     "id": "deinotherium",
+     "name": "Deinotherium",
+     "color": "#8a8a8a",
+     "size": 18,
+     "hp": 90.4,
+     "speed": 33,
+     "damage": 30.8,
+     "xp": 13
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "hyaenodon",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "entelodont",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "hyaenodon",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "deinotherium",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "entelodont",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "hyaenodon",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "deinotherium",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ],
+   "boss": {
+    "id": "andrewsarchus",
+    "name": "Andrewsarchus",
+    "color": "#6a4a3a",
+    "size": 48,
+    "hp": 1356,
+    "speed": 39,
+    "damage": 48,
+    "xp": 129
+   }
+  },
+  {
+   "id": "hominiden",
+   "code": "5.1",
+   "order": 13,
+   "phase": 5,
+   "phaseName": "Hominiden, Kultur & Technik",
+   "name": "Aufrechter Gang & Steinwerkzeuge",
+   "shortName": "Aufrechter Gang",
+   "fromYear": -6000000.0,
+   "toYear": -1800000.0,
+   "fact": "Lucy (Australopithecus afarensis, ca. 3,2 Mio. Jahre) ging schon aufrecht. Die ältesten bekannten Steinwerkzeuge sind ca. 3,3 Mio. Jahre alt (Lomekwi, Kenia).",
+   "background": "#2b2419",
+   "gridColor": "#403526",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "pachycrocuta",
+     "name": "Riesenhyäne (Pachycrocuta)",
+     "color": "#b0a07a",
+     "size": 7,
+     "hp": 14.5,
+     "speed": 84,
+     "damage": 10.9,
+     "xp": 3
+    },
+    {
+     "id": "dinofelis",
+     "name": "Dinofelis",
+     "color": "#d0a04a",
+     "size": 11,
+     "hp": 38.7,
+     "speed": 55,
+     "damage": 18.2,
+     "xp": 6
+    },
+    {
+     "id": "homotherium",
+     "name": "Homotherium",
+     "color": "#a0804a",
+     "size": 18,
+     "hp": 96.8,
+     "speed": 33,
+     "damage": 32.8,
+     "xp": 14
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "pachycrocuta",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "dinofelis",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "pachycrocuta",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "homotherium",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "dinofelis",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "pachycrocuta",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "homotherium",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "jaeger-sammler",
+   "code": "5.2",
+   "order": 14,
+   "phase": 5,
+   "phaseName": "Hominiden, Kultur & Technik",
+   "name": "Sprache, Feuer & Jäger-Sammler-Kulturen",
+   "shortName": "Feuer & Sprache",
+   "fromYear": -1800000.0,
+   "toYear": -10000,
+   "fact": "Homo erectus nutzte wohl als Erster das Feuer und verließ Afrika. Unsere Art, Homo sapiens, entstand vor ca. 300.000 Jahren in Afrika.",
+   "background": "#2b2119",
+   "gridColor": "#3f3126",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "hoehlenhyaene",
+     "name": "Höhlenhyäne",
+     "color": "#a9a088",
+     "size": 7,
+     "hp": 15.5,
+     "speed": 86,
+     "damage": 11.6,
+     "xp": 3
+    },
+    {
+     "id": "hoehlenbaer",
+     "name": "Höhlenbär",
+     "color": "#6e4a32",
+     "size": 11,
+     "hp": 41.3,
+     "speed": 55,
+     "damage": 19.3,
+     "xp": 6
+    },
+    {
+     "id": "wollnashorn",
+     "name": "Wollnashorn",
+     "color": "#8a7660",
+     "size": 18,
+     "hp": 103.2,
+     "speed": 34,
+     "damage": 34.7,
+     "xp": 15
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "hoehlenhyaene",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "hoehlenbaer",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "hoehlenhyaene",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "wollnashorn",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "hoehlenbaer",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "hoehlenhyaene",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "wollnashorn",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "zivilisation",
+   "code": "5.3",
+   "order": 15,
+   "phase": 5,
+   "phaseName": "Hominiden, Kultur & Technik",
+   "name": "Sesshaftigkeit, Schrift & Industrie/Digitaltechnik",
+   "shortName": "Sesshaftigkeit & Industrie",
+   "fromYear": -10000,
+   "toYear": 1957,
+   "fact": "Ab ca. 9.500 v. Chr. begann im Fruchtbaren Halbmond die Landwirtschaft. Schrift gibt es seit ca. 3.300 v. Chr. (Mesopotamien), Dampfmaschinen seit dem 18. Jahrhundert.",
+   "background": "#24231f",
+   "gridColor": "#3a382f",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "hausratte",
+     "name": "Hausratte",
+     "color": "#8a8378",
+     "size": 7,
+     "hp": 16.4,
+     "speed": 87,
+     "damage": 12.2,
+     "xp": 3
+    },
+    {
+     "id": "heuschrecken",
+     "name": "Heuschreckenschwarm",
+     "color": "#b5b04a",
+     "size": 11,
+     "hp": 43.8,
+     "speed": 56,
+     "damage": 20.4,
+     "xp": 6
+    },
+    {
+     "id": "auerochse",
+     "name": "Auerochse",
+     "color": "#5a4030",
+     "size": 18,
+     "hp": 109.6,
+     "speed": 35,
+     "damage": 36.7,
+     "xp": 16
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "hausratte",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "heuschrecken",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "hausratte",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "auerochse",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "heuschrecken",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "hausratte",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "auerochse",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ],
+   "boss": {
+    "id": "pest",
+    "name": "Schwarzer Tod (Pest)",
+    "color": "#3a3f4a",
+    "size": 48,
+    "hp": 1644,
+    "speed": 41,
+    "damage": 57,
+    "xp": 156
+   }
+  },
+  {
+   "id": "erdorbit",
+   "code": "6.1",
+   "order": 16,
+   "phase": 6,
+   "phaseName": "Raumfahrt & interplanetarer Aufbruch",
+   "name": "Erdorbit & unbemannte Erkundung",
+   "shortName": "Erdorbit",
+   "fromYear": 1957,
+   "toYear": 2026,
+   "fact": "Am 4. Oktober 1957 startete Sputnik 1, der erste Satellit. 1969 betraten Menschen den Mond, seit dem Jahr 2000 ist die ISS dauerhaft bewohnt.",
+   "background": "#0c0f1e",
+   "gridColor": "#171c33",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "mikrometeoroid",
+     "name": "Mikrometeoroid",
+     "color": "#c8c8d8",
+     "size": 7,
+     "hp": 17.4,
+     "speed": 88,
+     "damage": 12.9,
+     "xp": 3
+    },
+    {
+     "id": "weltraumschrott",
+     "name": "Weltraumschrott",
+     "color": "#9aa0aa",
+     "size": 11,
+     "hp": 46.4,
+     "speed": 57,
+     "damage": 21.5,
+     "xp": 6
+    },
+    {
+     "id": "raketenstufe",
+     "name": "Ausgebrannte Raketenstufe",
+     "color": "#d0d4dc",
+     "size": 18,
+     "hp": 116.0,
+     "speed": 35,
+     "damage": 38.7,
+     "xp": 16
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "mikrometeoroid",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "weltraumschrott",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "mikrometeoroid",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "raketenstufe",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "weltraumschrott",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "mikrometeoroid",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "raketenstufe",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "mond-mars",
+   "code": "6.2",
+   "order": 17,
+   "phase": 6,
+   "phaseName": "Raumfahrt & interplanetarer Aufbruch",
+   "name": "Mond, Mars & geschlossene Lebenserhaltung",
+   "shortName": "Mond & Mars",
+   "fromYear": 2026,
+   "toYear": 2055,
+   "fact": "Zukunft – noch nicht passiert. Geplant sind Stationen auf dem Mond; auf dem Mars bräuchte man Strahlungsschutz und Wasser aus dem Eis im Boden.",
+   "background": "#1a1010",
+   "gridColor": "#2e1c1a",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "mondstaub",
+     "name": "Mondstaub",
+     "color": "#c8c0b0",
+     "size": 7,
+     "hp": 18.4,
+     "speed": 90,
+     "damage": 13.6,
+     "xp": 3
+    },
+    {
+     "id": "staubteufel",
+     "name": "Marsstaubteufel",
+     "color": "#c0603a",
+     "size": 11,
+     "hp": 49.0,
+     "speed": 58,
+     "damage": 22.6,
+     "xp": 7
+    },
+    {
+     "id": "sonnensturm",
+     "name": "Sonnensturm-Teilchen",
+     "color": "#ffd060",
+     "size": 18,
+     "hp": 122.4,
+     "speed": 36,
+     "damage": 40.7,
+     "xp": 17
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "mondstaub",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "staubteufel",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "mondstaub",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "sonnensturm",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "staubteufel",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "mondstaub",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "sonnensturm",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "id": "tiefraum",
+   "code": "6.3",
+   "order": 18,
+   "phase": 6,
+   "phaseName": "Raumfahrt & interplanetarer Aufbruch",
+   "name": "Interplanetare & tiefe Raumfahrt",
+   "shortName": "Tiefe Raumfahrt",
+   "fromYear": 2055,
+   "toYear": 2300,
+   "fact": "Zukunft – noch nicht passiert. Selbst Licht braucht zum nächsten Stern (Proxima Centauri) über 4 Jahre. Voyager 1 ist seit 1977 unterwegs und erreichte 2012 den interstellaren Raum.",
+   "background": "#07071a",
+   "gridColor": "#14143a",
+   "height": 4000,
+   "enemies": [
+    {
+     "id": "kosmische-strahlung",
+     "name": "Kosmische Strahlung",
+     "color": "#a0e0ff",
+     "size": 7,
+     "hp": 19.3,
+     "speed": 91,
+     "damage": 14.2,
+     "xp": 4
+    },
+    {
+     "id": "kometenbrocken",
+     "name": "Kometenbrocken",
+     "color": "#d8f0ff",
+     "size": 11,
+     "hp": 51.5,
+     "speed": 59,
+     "damage": 23.7,
+     "xp": 7
+    },
+    {
+     "id": "eisasteroid",
+     "name": "Eisasteroid",
+     "color": "#90a8c0",
+     "size": 18,
+     "hp": 128.8,
+     "speed": 36,
+     "damage": 42.7,
+     "xp": 18
+    }
+   ],
+   "waves": [
+    {
+     "enemy": "kosmische-strahlung",
+     "from": 0,
+     "to": 900,
+     "every": 1.2,
+     "count": 2
+    },
+    {
+     "enemy": "kometenbrocken",
+     "from": 8,
+     "to": 900,
+     "every": 2.5,
+     "count": 2
+    },
+    {
+     "enemy": "kosmische-strahlung",
+     "from": 20,
+     "to": 900,
+     "every": 0.8,
+     "count": 3
+    },
+    {
+     "enemy": "eisasteroid",
+     "from": 25,
+     "to": 900,
+     "every": 5,
+     "count": 1
+    },
+    {
+     "enemy": "kometenbrocken",
+     "from": 40,
+     "to": 900,
+     "every": 1.5,
+     "count": 2
+    },
+    {
+     "enemy": "kosmische-strahlung",
+     "from": 45,
+     "to": 900,
+     "every": 0.5,
+     "count": 3
+    },
+    {
+     "enemy": "eisasteroid",
+     "from": 60,
+     "to": 900,
+     "every": 3,
+     "count": 1
+    }
+   ],
+   "boss": {
+    "id": "asteroid",
+    "name": "Erdnaher Asteroid",
+    "color": "#7a6a5a",
+    "size": 48,
+    "hp": 1932,
+    "speed": 43,
+    "damage": 66,
+    "xp": 183
+   }
+  }
+ ]
 }

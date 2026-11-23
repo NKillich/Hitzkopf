@@ -24,7 +24,15 @@ export function validateData(d: GameData): string[] {
 
     for (const id of duplicates(d.epochs.map(e => e.id))) errors.push(`epochs: id „${id}“ doppelt`)
     for (const e of d.epochs) {
-        if (e.phase !== 'biologisch' && e.phase !== 'kulturell') errors.push(`epochs/${e.id}: phase „${e.phase}“ unbekannt`)
+        if (!(Number.isInteger(e.phase) && e.phase >= 1 && e.phase <= 6)) errors.push(`epochs/${e.id}: phase muss 1–6 sein`)
+        if (!/^[1-6]\.[1-9]$/.test(e.code ?? '') || Number(e.code[0]) !== e.phase) {
+            errors.push(`epochs/${e.id}: code „${e.code}“ passt nicht zur Phase`)
+        }
+        if (!(typeof e.fromYear === 'number' && typeof e.toYear === 'number' && e.fromYear < e.toYear)) {
+            errors.push(`epochs/${e.id}: fromYear muss vor toYear liegen`)
+        }
+        if (!e.fact?.trim()) errors.push(`epochs/${e.id}: fact fehlt`)
+        if (!e.shortName?.trim()) errors.push(`epochs/${e.id}: shortName fehlt`)
         if (!COLOR_RE.test(e.background) || !COLOR_RE.test(e.gridColor)) errors.push(`epochs/${e.id}: Farbe ungültig`)
         const enemyIds = new Set(e.enemies.map(x => x.id))
         for (const id of duplicates(e.enemies.map(x => x.id))) errors.push(`epochs/${e.id}: Gegner „${id}“ doppelt`)
@@ -39,14 +47,12 @@ export function validateData(d: GameData): string[] {
             }
         }
         checkWaves(e.waves, `epochs/${e.id}`)
-        if (e.enemies.length > 0) {
-            // spielbar → braucht Höhe und Boss
-            if (!(typeof e.height === 'number' && e.height > 0)) errors.push(`epochs/${e.id}: height fehlt oder ≤ 0`)
-            if (!e.boss) errors.push(`epochs/${e.id}: boss fehlt`)
-            else {
-                if (!COLOR_RE.test(e.boss.color)) errors.push(`epochs/${e.id}/boss: Farbe ungültig`)
-                if (!(e.boss.hp > 0 && e.boss.size > 0)) errors.push(`epochs/${e.id}/boss: Werte ungültig`)
-            }
+        if (e.enemies.length > 0 && !(typeof e.height === 'number' && e.height > 0)) {
+            errors.push(`epochs/${e.id}: height fehlt oder ≤ 0`)   // spielbar → braucht eine Höhe
+        }
+        if (e.boss) {
+            if (!COLOR_RE.test(e.boss.color)) errors.push(`epochs/${e.id}/boss: Farbe ungültig`)
+            if (!(e.boss.hp > 0 && e.boss.size > 0)) errors.push(`epochs/${e.id}/boss: Werte ungültig`)
         }
         for (const v of e.variants ?? []) {
             if ((v.background && !COLOR_RE.test(v.background)) || (v.gridColor && !COLOR_RE.test(v.gridColor))) {
@@ -56,17 +62,28 @@ export function validateData(d: GameData): string[] {
         }
     }
     if (!d.epochs.some(e => e.enemies.length > 0)) errors.push('epochs: keine spielbare Epoche (mit Gegnern)')
+    for (const o of duplicates(d.epochs.map(e => String(e.order)))) errors.push(`epochs: order ${o} doppelt`)
+    // in der Reihenfolge muss auch die Zeit vorwärts laufen
+    const sorted = [...d.epochs].sort((a, b) => a.order - b.order)
+    for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i].fromYear < sorted[i - 1].fromYear) errors.push(`epochs/${sorted[i].id}: beginnt früher als die Stufe davor`)
+    }
 
     for (const id of duplicates(d.genes.map(g => g.id))) errors.push(`genes: id „${id}“ doppelt`)
     if (!d.genes.some(g => g.id === d.startGene)) errors.push(`genes: startGene „${d.startGene}“ fehlt`)
     for (const g of d.genes) {
-        for (const ep of Object.keys(g.forms)) if (!epochIds.has(ep)) errors.push(`genes/${g.id}: Form für unbekannte Epoche „${ep}“`)
+        for (const [ep, f] of Object.entries(g.forms)) {
+            if (!epochIds.has(ep)) errors.push(`genes/${g.id}: Form für unbekannte Epoche „${ep}“`)
+            if (f.kind && !['projectile', 'melee', 'beam'].includes(f.kind)) errors.push(`genes/${g.id}/${ep}: Art „${f.kind}“ unbekannt`)
+            if (!COLOR_RE.test(f.color)) errors.push(`genes/${g.id}/${ep}: Farbe ungültig`)
+        }
     }
 
     for (const id of duplicates(d.upgrades.map(u => u.id))) errors.push(`upgrades: id „${id}“ doppelt`)
     for (const u of d.upgrades) {
         if (!RARITIES.includes(u.rarity)) errors.push(`upgrades/${u.id}: Seltenheit „${u.rarity}“ unbekannt`)
         if (!(u.maxLevel >= 1)) errors.push(`upgrades/${u.id}: maxLevel muss ≥ 1 sein`)
+        if (u.phases && !u.phases.every(p => Number.isInteger(p) && p >= 1 && p <= 6)) errors.push(`upgrades/${u.id}: phases nur 1–6`)
         if (!u.effects.length) errors.push(`upgrades/${u.id}: keine Effekte`)
         for (const e of u.effects) {
             if (!STATS.includes(e.stat)) errors.push(`upgrades/${u.id}: Wert „${e.stat}“ unbekannt`)
@@ -92,13 +109,14 @@ export function validateData(d: GameData): string[] {
 
 /** Rohdaten aus den JSON-Dateien (ungeprüft). */
 export function rawData(): GameData {
-    return {
+    // Kopie, damit Änderungen (z. B. in Tests) die geladenen JSON-Daten nicht verändern
+    return structuredClone({
         epochs: epochsJson.epochs as GameData['epochs'],
         genes: genesJson.genes as GameData['genes'],
         startGene: genesJson.startGene,
         upgrades: upgradesJson.upgrades as GameData['upgrades'],
         evolutionOptions: evolutionJson.options as GameData['evolutionOptions'],
-    }
+    })
 }
 
 /** Geprüfte Daten – wirft mit allen Fehlern auf einmal, wenn etwas nicht stimmt. */

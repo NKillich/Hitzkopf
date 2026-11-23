@@ -81,15 +81,25 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   Logik ohne Phaser in `logic/` mit Vitest-Tests (`npm test`), Typprüfung `npm run typecheck:timerun` (ESLint prüft nur JS/JSX).
 - Leistung: Gegner/Geschosse/XP aus festen Pools (`game/config.ts`), Gegner kollidieren nicht untereinander. `#timerun/debug` zeigt FPS +
   Knopf „+300 Gegner“ und legt das Spiel als `window.__timerun` ab (für Tests in der Konsole).
-- **Epochen enden nach Höhe (nicht Zeit):** `height` pro Epoche, nahe der Ziellinie erscheint der `boss` (Linie wird zur Wand,
-  keine neuen Wellen, Auto-Attack zielt zuerst auf den Boss) → besiegt → Evolutionswahl → nächste **spielbare** Epoche (= hat Gegner;
-  Prototyp: Ursuppe → Steinzeit → Mittelalter → „Prototyp geschafft“). Angeboten werden die Optionen der direkt folgenden Stufe
-  (`transitionStage`, auch wenn sie nicht spielbar ist, z. B. Mehrzeller nach der Ursuppe). Epochen-`variants` (requires/excludes)
-  ändern Name/Farben/Wellen je nach Tags (Steinzeit als Jäger- oder Sammlerstamm). Zeitstrahl rechts: gespielt/aktuell/übersprungen,
-  goldene Marke = Entscheidung. Level, Upgrades und Tags bleiben über Epochen; Waffe nimmt die Form aus `genes.forms` an.
-- Debug `#timerun/debug`: Knopf „[Boss]“ springt vor die Ziellinie. Tests in der versteckten Browser-Ansicht: rAF ist gedrosselt →
+- **18 Stufen nach echter Evolution** (1.1 Präbiotische Chemie … 6.3 Tiefe Raumfahrt, Liste vom User): jede Stufe hat
+  `code`, `phase` (1–6), `fromYear`/`toYear` (Kalenderjahr, negativ = vor heute), `shortName`, `fact` (belegbare Info) und
+  Gegner aus genau diesem Zeitraum. **Das Spiel soll lehren → alles muss fachlich stimmen** (Namen, Zeiträume, Fakten;
+  im Zweifel „vermutlich“/„ca.“ schreiben). Zeit im HUD läuft mit der Höhe (`logic/time.ts`: „vor 3,42 Mrd. Jahren“ … „1969“
+  … „ferne Zukunft“). Höhe 4000 pro Stufe; an der Linie direkt Evolutionswahl, **Boss nur am Ende jeder Hauptphase**
+  (1.3, 2.3, …; Linie wird zur Wand, keine neuen Wellen, Auto-Attack zielt zuerst auf den Boss).
+- Evolutionsoptionen: Optionen der Stufe, die man betritt; `real: true` = so passiert (★ Echte Zeitlinie, bis heute genau eine
+  je Stufe, Tests prüfen, dass sie immer erreichbar ist und es eine Alternative gibt). Ende: Auswertung „Echte Zeitlinie x von y“
+  + Abzeichen. Infokarte beim Betreten jeder Stufe (Zeitraum, Waffe, Fakt). Level, Upgrades, Tags bleiben über Stufen.
+- **Kampf je Phase** (`logic/weapon.ts`, `genes.json`): Phase 1–2 = **Fressen** – Kleinere durch Berührung fressen (XP direkt),
+  Größere/Bosse anknabbern (`BITE_COOLDOWN_MS`); man wächst mit dem Level (`playerSize`). Fernwaffe dort erst mit Upgrade
+  „Toxin-Ausstoß“ (Tag `toxin`). Bosse 1.3/2.3 sind harmlos (Stromatolith steht still, Dickinsonia hatte keinen Mund) – Bosse
+  erscheinen knapp unter der Linie. Ab Phase 3 Waffenformen aus `forms` (gilt ab ihrer Stufe): Stachel → Biss/Klauen (`melee`,
+  Rundumschlag) → Steinwurf → Speer → Pfeil & Bogen → Laser (`beam`, trifft alles auf der Linie); `mod` = Faktoren.
+  Upgrades mit `phases` werden nur in diesen Hauptphasen angeboten (themenpassend), gewählte wirken weiter.
+- Gegner stoßen sich über ein Raster (24 px) leicht ab – kostet bei 450 Gegnern ca. 0,1 ms pro Bild.
+- Texte: wegen `pixelArt` werden Texte per `smoothTexts()` (config.ts) linear gefiltert, sonst verschwinden „-“, „–“, „→“.
+- Debug `#timerun/debug`: „[Ziel]“ springt vor die Ziellinie. Tests in der versteckten Browser-Ansicht: rAF ist gedrosselt →
   Spiel per `__timerun.step(t, 16.67)` mit stetig steigendem `t` antreiben, Steuerung per W/A/S/D-KeyboardEvents.
-- Noch offen: Fressen durch Berührung (Mikrobe), Waffen/Upgrades je Epoche, Meta-Progression, Grafiken, Zeitreise.
 
 ## Arbeitsweise
 

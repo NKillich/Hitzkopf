@@ -57,6 +57,7 @@ export type TimelineStatus = 'done' | 'current' | 'skipped' | 'future'
 
 export interface TimelineEntry {
     id: string
+    code: string
     name: string
     status: TimelineStatus
     /** Name der gewählten Evolution-Option für diese Stufe */
@@ -75,6 +76,6 @@ export function buildTimeline(
         if (e.id === currentId) status = 'current'
         else if (visited.includes(e.id)) status = 'done'
         else if (e.order < currentOrder) status = 'skipped'
-        return { id: e.id, name: e.name, status, choice: choices[e.id]?.name }
+        return { id: e.id, code: e.code, name: e.name, status, choice: choices[e.id]?.name }
     })
 }

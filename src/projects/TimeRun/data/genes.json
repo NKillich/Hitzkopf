@@ -1,18 +1,25 @@
 {
-  "startGene": "giftstachel",
-  "genes": [
-    {
-      "id": "giftstachel",
-      "name": "Giftstachel",
-      "description": "Schießt automatisch auf den nächsten Gegner.",
-      "kind": "projectile",
-      "base": { "damage": 3, "cooldownMs": 650, "range": 230, "projectileSpeed": 320, "projectiles": 1, "pierce": 0 },
-      "forms": {
-        "ursuppe": { "name": "Giftstachel", "color": "#f4ff6b" },
-        "steinzeit": { "name": "Giftpfeil", "color": "#c8e05a" },
-        "mittelalter": { "name": "Giftbolzen", "color": "#9fe0c0" },
-        "zukunft": { "name": "Biowaffe", "color": "#6bffd8" }
-      }
-    }
-  ]
+ "_info": "Waffe, die durch alle Stufen mitwandert. Bis Phase eatUntilPhase frisst man kleinere Gegner durch Berührung; die Fernwaffe gibt es dort erst mit dem Tag unlockTag (Upgrade). forms: ab dieser Stufe gilt Name/Farbe/Art (projectile = Geschoss, melee = Rundumschlag, beam = Strahl) mit Faktoren mod (damage/cooldown/range/speed multiplizieren, pierce/projectiles addieren).",
+ "startGene": "urwaffe",
+ "genes": [
+  {
+   "id": "urwaffe",
+   "name": "Fressen",
+   "description": "Kleinere Gegner werden durch Berührung gefressen.",
+   "kind": "projectile",
+   "eatUntilPhase": 2,
+   "unlockTag": "toxin",
+   "base": { "damage": 3, "cooldownMs": 650, "range": 230, "projectileSpeed": 320, "projectiles": 1, "pierce": 0 },
+   "forms": {
+    "urzellen": { "name": "Toxin", "color": "#f4ff6b", "kind": "projectile" },
+    "kambrium": { "name": "Stachel", "color": "#e8e0c0", "kind": "projectile", "mod": { "pierce": 1 } },
+    "landwirbeltiere": { "name": "Biss", "color": "#ffffff", "kind": "melee", "mod": { "damage": 2.5, "range": 0.2 } },
+    "dinosaurier": { "name": "Klauen", "color": "#ffe0b0", "kind": "melee", "mod": { "damage": 2.2, "cooldown": 0.75, "range": 0.22 } },
+    "hominiden": { "name": "Steinwurf", "color": "#c8c0b0", "kind": "projectile", "mod": { "damage": 1.6, "cooldown": 1.1 } },
+    "jaeger-sammler": { "name": "Speer", "color": "#d8b080", "kind": "projectile", "mod": { "damage": 1.8, "pierce": 2, "speed": 1.3 } },
+    "zivilisation": { "name": "Pfeil & Bogen", "color": "#e0c090", "kind": "projectile", "mod": { "damage": 1.6, "range": 1.4, "speed": 1.6, "projectiles": 1 } },
+    "erdorbit": { "name": "Laser", "color": "#6bffd8", "kind": "beam", "mod": { "damage": 2.2, "cooldown": 1.2, "range": 1.3 } }
+   }
+  }
+ ]
 }
