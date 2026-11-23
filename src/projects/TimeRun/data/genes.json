@@ -10,6 +10,7 @@
       "forms": {
         "ursuppe": { "name": "Giftstachel", "color": "#f4ff6b" },
         "steinzeit": { "name": "Giftpfeil", "color": "#c8e05a" },
+        "mittelalter": { "name": "Giftbolzen", "color": "#9fe0c0" },
         "zukunft": { "name": "Biowaffe", "color": "#6bffd8" }
       }
     }

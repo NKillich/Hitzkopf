@@ -17,6 +17,11 @@ export const HIT_COOLDOWN_MS = 450
 /** Gegner, die so weit unter dem Bildschirm sind, werden wieder oben eingesetzt. */
 export const RECYCLE_BELOW = 160
 
+/** So nah an der Ziellinie erscheint der Boss (Spielpixel). */
+export const BOSS_TRIGGER_DISTANCE = 350
+/** Pause nach dem Boss, bevor die Evolutionswahl kommt (Kristalle fliegen noch ein). */
+export const CLEAR_DELAY_MS = 1200
+
 export const JOYSTICK_RADIUS = 52
 export const JOYSTICK_DEADZONE = 0.12
 

@@ -81,7 +81,15 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
   Logik ohne Phaser in `logic/` mit Vitest-Tests (`npm test`), Typprüfung `npm run typecheck:timerun` (ESLint prüft nur JS/JSX).
 - Leistung: Gegner/Geschosse/XP aus festen Pools (`game/config.ts`), Gegner kollidieren nicht untereinander. `#timerun/debug` zeigt FPS +
   Knopf „+300 Gegner“ und legt das Spiel als `window.__timerun` ab (für Tests in der Konsole).
-- Phase 1 = nur Kern-Loop in der Ursuppe; Evolutionswahl, Epochenwechsel, Meta-Progression, Grafiken kommen später.
+- **Epochen enden nach Höhe (nicht Zeit):** `height` pro Epoche, nahe der Ziellinie erscheint der `boss` (Linie wird zur Wand,
+  keine neuen Wellen, Auto-Attack zielt zuerst auf den Boss) → besiegt → Evolutionswahl → nächste **spielbare** Epoche (= hat Gegner;
+  Prototyp: Ursuppe → Steinzeit → Mittelalter → „Prototyp geschafft“). Angeboten werden die Optionen der direkt folgenden Stufe
+  (`transitionStage`, auch wenn sie nicht spielbar ist, z. B. Mehrzeller nach der Ursuppe). Epochen-`variants` (requires/excludes)
+  ändern Name/Farben/Wellen je nach Tags (Steinzeit als Jäger- oder Sammlerstamm). Zeitstrahl rechts: gespielt/aktuell/übersprungen,
+  goldene Marke = Entscheidung. Level, Upgrades und Tags bleiben über Epochen; Waffe nimmt die Form aus `genes.forms` an.
+- Debug `#timerun/debug`: Knopf „[Boss]“ springt vor die Ziellinie. Tests in der versteckten Browser-Ansicht: rAF ist gedrosselt →
+  Spiel per `__timerun.step(t, 16.67)` mit stetig steigendem `t` antreiben, Steuerung per W/A/S/D-KeyboardEvents.
+- Noch offen: Fressen durch Berührung (Mikrobe), Waffen/Upgrades je Epoche, Meta-Progression, Grafiken, Zeitreise.
 
 ## Arbeitsweise
 

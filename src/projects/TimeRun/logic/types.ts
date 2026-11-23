@@ -23,6 +23,17 @@ export interface Wave {
     count: number
 }
 
+/** Abwandlung einer Epoche je nach Tags (z. B. Steinzeit als Jäger- oder Sammlerstamm). */
+export interface EpochVariant {
+    id: string
+    name: string
+    requires?: string[]
+    excludes?: string[]
+    background?: string
+    gridColor?: string
+    extraWaves?: Wave[]
+}
+
 export interface Epoch {
     id: string
     order: number
@@ -32,6 +43,13 @@ export interface Epoch {
     gridColor: string
     enemies: EnemyType[]
     waves: Wave[]
+    /** Strecke nach oben bis zum Ende der Epoche (nur spielbare Epochen) */
+    height?: number
+    /** wartet am oberen Ende; besiegt → Evolutionswahl */
+    boss?: EnemyType
+    variants?: EpochVariant[]
+    /** gesetzt, wenn eine Variante angewendet wurde */
+    variantId?: string
 }
 
 export interface WeaponStats {
