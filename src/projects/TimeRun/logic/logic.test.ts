@@ -8,6 +8,7 @@ import {
 } from './epochs'
 import { formatRange, formatYear, yearAt } from './time'
 import { activeForm, applyForm, canEat, canEatEnemy, playerSize, rangedActive, weaponKind, weaponLabel } from './weapon'
+import { bodyFor, groundFor, outfitFor, SHAPES } from './appearance'
 import type { EvolutionOption, Upgrade, Wave } from './types'
 
 describe('Daten', () => {
@@ -291,12 +292,12 @@ describe('Waffen je Stufe & Fressen', () => {
     })
 
     it('man wächst mit dem Level und frisst nur Kleinere, nie Bosse', () => {
-        expect(playerSize(1, true)).toBe(10)
-        expect(playerSize(50, true)).toBe(26)
-        expect(playerSize(5, false)).toBe(14)
-        expect(canEatEnemy(10, 7, false)).toBe(true)
-        expect(canEatEnemy(10, 11, false)).toBe(false)
-        expect(canEatEnemy(26, 18, true)).toBe(false)
+        expect(playerSize(1, true)).toBe(13)
+        expect(playerSize(50, true)).toBe(34)
+        expect(playerSize(5, false)).toBe(20)
+        expect(canEatEnemy(13, 10, false)).toBe(true)
+        expect(canEatEnemy(13, 15, false)).toBe(false)
+        expect(canEatEnemy(34, 24, true)).toBe(false)
     })
 
     it('Faktoren der Form wirken auf die Werte', () => {
@@ -317,5 +318,46 @@ describe('Waffen je Stufe & Fressen', () => {
         expect(ids(5)).not.toContain('geissel')
         expect(ids(6)).toContain('anpassung')
         for (let p = 1; p <= 6; p++) expect(ids(p).length, `Phase ${p}`).toBeGreaterThanOrEqual(5)
+    })
+})
+
+describe('Aussehen', () => {
+    const t = (...tags: string[]) => new Set(tags)
+
+    it('Körper folgt Phase und Evolution', () => {
+        expect(bodyFor(1, '1.2', t())).toBe('cell')
+        expect(bodyFor(2, '2.3', t())).toBe('colony')
+        expect(bodyFor(3, '3.1', t())).toBe('fish')
+        expect(bodyFor(3, '3.3', t('vierbeiner'))).toBe('tetrapod')
+        expect(bodyFor(3, '3.2', t('gliederfüsser'))).toBe('arthropod')
+        expect(bodyFor(4, '4.1', t('vierbeiner', 'synapside'))).toBe('mammal')
+        expect(bodyFor(4, '4.1', t('vierbeiner', 'krokodil', 'reptil'))).toBe('reptile')
+        expect(bodyFor(4, '4.2', t('dinosaurier', 'vogel'))).toBe('bird')
+        expect(bodyFor(5, '5.1', t('säuger', 'primat'))).toBe('human')
+        expect(bodyFor(6, '6.3', t('krokodil', 'raumfahrt'))).toBe('reptile')   // Krokodil-Astronaut
+    })
+
+    it('echte Zeitlinie wird zum Menschen, Ausrüstung je Epoche', () => {
+        const d = rawData()
+        let tags = new Set<string>()
+        for (const e of sortedEpochs(d.epochs).slice(1)) {
+            const real = availableEvolutions(d.evolutionOptions, e.id, tags).find(o => o.real)
+            if (real) tags = applyEvolution(tags, real)
+        }
+        expect(bodyFor(5, '5.3', tags)).toBe('human')
+        expect(outfitFor('5.1')).toBe('none')
+        expect(outfitFor('5.2')).toBe('cloak')
+        expect(outfitFor('5.3')).toBe('tunic')
+        expect(outfitFor('6.2')).toBe('suit')
+        // Wege/Pflaster erst ab Sesshaftigkeit, vorher Grasland
+        expect(groundFor(5, '5.1')).toBe('ground4')
+        expect(groundFor(5, '5.3')).toBe('ground5')
+        expect(groundFor(6, '6.1')).toBe('ground6')
+    })
+
+    it('jeder Gegner und Boss hat eine bekannte Form', () => {
+        for (const e of rawData().epochs) {
+            for (const x of [...e.enemies, ...(e.boss ? [e.boss] : [])]) expect(SHAPES, x.id).toContain(x.shape)
+        }
     })
 })

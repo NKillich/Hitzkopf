@@ -24,33 +24,36 @@
      "id": "aminosaeure",
      "name": "Aminosäure",
      "color": "#9fe3c8",
-     "size": 7,
+     "size": 10,
      "hp": 3.0,
      "speed": 68,
      "damage": 3.0,
      "xp": 1,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "blob"
     },
     {
      "id": "rna-strang",
      "name": "RNA-Strang",
      "color": "#f2c46b",
-     "size": 11,
+     "size": 15,
      "hp": 8.0,
      "speed": 44,
      "damage": 5.0,
      "xp": 2,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "worm"
     },
     {
      "id": "protozelle",
      "name": "Protozelle",
      "color": "#7fc9e8",
-     "size": 18,
+     "size": 24,
      "hp": 20.0,
      "speed": 27,
      "damage": 9.0,
-     "xp": 5
+     "xp": 5,
+     "shape": "cell"
     }
    ],
    "waves": [
@@ -130,33 +133,36 @@
      "id": "bakterium",
      "name": "Bakterium",
      "color": "#7ddf64",
-     "size": 7,
+     "size": 10,
      "hp": 4.0,
      "speed": 69,
      "damage": 3.7,
      "xp": 1,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "rod"
     },
     {
      "id": "archaee",
      "name": "Archaee",
      "color": "#e0905a",
-     "size": 11,
+     "size": 15,
      "hp": 10.6,
      "speed": 45,
      "damage": 6.1,
      "xp": 2,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "blob"
     },
     {
      "id": "bakterienmatte",
      "name": "Bakterienmatte",
      "color": "#5f9e6e",
-     "size": 18,
+     "size": 24,
      "hp": 26.4,
      "speed": 28,
      "damage": 11.0,
-     "xp": 6
+     "xp": 6,
+     "shape": "colony"
     }
    ],
    "waves": [
@@ -236,33 +242,36 @@
      "id": "sauerstoffradikal",
      "name": "Sauerstoff-Radikal",
      "color": "#ff6b6b",
-     "size": 7,
+     "size": 10,
      "hp": 4.9,
      "speed": 71,
      "damage": 4.3,
      "xp": 1,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "blob"
     },
     {
      "id": "purpurbakterium",
      "name": "Purpurbakterium",
      "color": "#c27ae0",
-     "size": 11,
+     "size": 15,
      "hp": 13.1,
      "speed": 46,
      "damage": 7.2,
      "xp": 3,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "rod"
     },
     {
      "id": "cyanokolonie",
      "name": "Cyanobakterien-Kolonie",
      "color": "#3fbf9f",
-     "size": 18,
+     "size": 24,
      "hp": 32.8,
      "speed": 28,
      "damage": 13.0,
-     "xp": 6
+     "xp": 6,
+     "shape": "colony"
     }
    ],
    "waves": [
@@ -322,7 +331,8 @@
     "id": "stromatolith",
     "name": "Stromatolith",
     "color": "#8fae7a",
-    "size": 48,
+    "size": 60,
+    "shape": "rock",
     "hp": 492,
     "speed": 0,
     "damage": 0,
@@ -352,33 +362,36 @@
      "id": "alphaproteobakterium",
      "name": "Alphaproteobakterium",
      "color": "#ffb86b",
-     "size": 7,
+     "size": 10,
      "hp": 5.9,
      "speed": 72,
      "damage": 5.0,
      "xp": 1,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "rod"
     },
     {
      "id": "asgard-archaee",
      "name": "Asgard-Archaee",
      "color": "#d98cff",
-     "size": 11,
+     "size": 15,
      "hp": 15.7,
      "speed": 47,
      "damage": 8.3,
      "xp": 3,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "blob"
     },
     {
      "id": "grypania",
      "name": "Grypania",
      "color": "#6bc4a6",
-     "size": 18,
+     "size": 24,
      "hp": 39.2,
      "speed": 29,
      "damage": 14.9,
-     "xp": 7
+     "xp": 7,
+     "shape": "worm"
     }
    ],
    "waves": [
@@ -458,33 +471,36 @@
      "id": "kragengeisseltier",
      "name": "Kragengeißeltier",
      "color": "#a6e0ff",
-     "size": 7,
+     "size": 10,
      "hp": 6.8,
      "speed": 73,
      "damage": 5.6,
      "xp": 2,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "cell"
     },
     {
      "id": "bangiomorpha",
      "name": "Bangiomorpha (Rotalge)",
      "color": "#e06b8a",
-     "size": 11,
+     "size": 15,
      "hp": 18.2,
      "speed": 48,
      "damage": 9.4,
      "xp": 3,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "worm"
     },
     {
      "id": "tappania",
      "name": "Tappania",
      "color": "#c9b46b",
-     "size": 18,
+     "size": 24,
      "hp": 45.6,
      "speed": 29,
      "damage": 16.9,
-     "xp": 8
+     "xp": 8,
+     "shape": "colony"
     }
    ],
    "waves": [
@@ -564,33 +580,36 @@
      "id": "cloudina",
      "name": "Cloudina",
      "color": "#e8e2c8",
-     "size": 7,
+     "size": 10,
      "hp": 7.8,
      "speed": 75,
      "damage": 6.3,
      "xp": 2,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "worm"
     },
     {
      "id": "kimberella",
      "name": "Kimberella",
      "color": "#c98a5a",
-     "size": 11,
+     "size": 15,
      "hp": 20.8,
      "speed": 48,
      "damage": 10.5,
      "xp": 4,
-     "behavior": "drift"
+     "behavior": "drift",
+     "shape": "blob"
     },
     {
      "id": "charnia",
      "name": "Charnia",
      "color": "#8ac98a",
-     "size": 18,
+     "size": 24,
      "hp": 52.0,
      "speed": 30,
      "damage": 18.9,
-     "xp": 9
+     "xp": 9,
+     "shape": "frond"
     }
    ],
    "waves": [
@@ -650,7 +669,8 @@
     "id": "dickinsonia",
     "name": "Dickinsonia",
     "color": "#d9a66b",
-    "size": 48,
+    "size": 60,
+    "shape": "frond",
     "hp": 780,
     "speed": 6,
     "damage": 0,
@@ -680,31 +700,34 @@
      "id": "hallucigenia",
      "name": "Hallucigenia",
      "color": "#ff9ab0",
-     "size": 7,
+     "size": 10,
      "hp": 8.8,
      "speed": 76,
      "damage": 7.0,
-     "xp": 2
+     "xp": 2,
+     "shape": "worm"
     },
     {
      "id": "trilobit",
      "name": "Trilobit",
      "color": "#b89a6b",
-     "size": 11,
+     "size": 15,
      "hp": 23.4,
      "speed": 49,
      "damage": 11.6,
-     "xp": 4
+     "xp": 4,
+     "shape": "arthropod"
     },
     {
      "id": "anomalocaris",
      "name": "Anomalocaris",
      "color": "#e0603a",
-     "size": 18,
+     "size": 24,
      "hp": 58.4,
      "speed": 30,
      "damage": 20.9,
-     "xp": 10
+     "xp": 10,
+     "shape": "arthropod"
     }
    ],
    "waves": [
@@ -784,31 +807,34 @@
      "id": "rhyniella",
      "name": "Springschwanz (Rhyniella)",
      "color": "#d8d8a0",
-     "size": 7,
+     "size": 10,
      "hp": 9.7,
      "speed": 78,
      "damage": 7.6,
-     "xp": 2
+     "xp": 2,
+     "shape": "arthropod"
     },
     {
      "id": "pneumodesmus",
      "name": "Tausendfüßer (Pneumodesmus)",
      "color": "#a8643c",
-     "size": 11,
+     "size": 15,
      "hp": 25.9,
      "speed": 50,
      "damage": 12.7,
-     "xp": 4
+     "xp": 4,
+     "shape": "worm"
     },
     {
      "id": "eurypterus",
      "name": "Seeskorpion (Eurypterus)",
      "color": "#7a8a5a",
-     "size": 18,
+     "size": 24,
      "hp": 64.8,
      "speed": 31,
      "damage": 22.9,
-     "xp": 10
+     "xp": 10,
+     "shape": "arthropod"
     }
    ],
    "waves": [
@@ -888,31 +914,34 @@
      "id": "acanthostega",
      "name": "Acanthostega",
      "color": "#8ab06b",
-     "size": 7,
+     "size": 10,
      "hp": 10.7,
      "speed": 79,
      "damage": 8.3,
-     "xp": 2
+     "xp": 2,
+     "shape": "tetrapod"
     },
     {
      "id": "pulmonoscorpius",
      "name": "Riesenskorpion (Pulmonoscorpius)",
      "color": "#c08a4a",
-     "size": 11,
+     "size": 15,
      "hp": 28.5,
      "speed": 51,
      "damage": 13.8,
-     "xp": 4
+     "xp": 4,
+     "shape": "arthropod"
     },
     {
      "id": "arthropleura",
      "name": "Arthropleura",
      "color": "#6b5a3a",
-     "size": 18,
+     "size": 24,
      "hp": 71.2,
      "speed": 31,
      "damage": 24.8,
-     "xp": 11
+     "xp": 11,
+     "shape": "worm"
     }
    ],
    "waves": [
@@ -972,7 +1001,8 @@
     "id": "dunkleosteus",
     "name": "Dunkleosteus",
     "color": "#6b7f99",
-    "size": 48,
+    "size": 60,
+    "shape": "fish",
     "hp": 1068,
     "speed": 37,
     "damage": 39,
@@ -1002,31 +1032,34 @@
      "id": "compsognathus",
      "name": "Compsognathus",
      "color": "#a6c46b",
-     "size": 7,
+     "size": 10,
      "hp": 11.6,
      "speed": 80,
      "damage": 8.9,
-     "xp": 2
+     "xp": 2,
+     "shape": "reptile"
     },
     {
      "id": "velociraptor",
      "name": "Velociraptor",
      "color": "#c9935a",
-     "size": 11,
+     "size": 15,
      "hp": 31.0,
      "speed": 52,
      "damage": 14.9,
-     "xp": 5
+     "xp": 5,
+     "shape": "reptile"
     },
     {
      "id": "triceratops",
      "name": "Triceratops",
      "color": "#8a7a5a",
-     "size": 18,
+     "size": 24,
      "hp": 77.6,
      "speed": 32,
      "damage": 26.8,
-     "xp": 12
+     "xp": 12,
+     "shape": "reptile"
     }
    ],
    "waves": [
@@ -1106,31 +1139,34 @@
      "id": "purgatorius",
      "name": "Purgatorius",
      "color": "#b89a7a",
-     "size": 7,
+     "size": 10,
      "hp": 12.6,
      "speed": 82,
      "damage": 9.6,
-     "xp": 2
+     "xp": 2,
+     "shape": "mammal"
     },
     {
      "id": "gastornis",
      "name": "Gastornis",
      "color": "#7a6b8a",
-     "size": 11,
+     "size": 15,
      "hp": 33.6,
      "speed": 53,
      "damage": 16.0,
-     "xp": 5
+     "xp": 5,
+     "shape": "bird"
     },
     {
      "id": "titanoboa",
      "name": "Titanoboa",
      "color": "#5a7a4a",
-     "size": 18,
+     "size": 24,
      "hp": 84.0,
      "speed": 32,
      "damage": 28.8,
-     "xp": 12
+     "xp": 12,
+     "shape": "worm"
     }
    ],
    "waves": [
@@ -1210,31 +1246,34 @@
      "id": "hyaenodon",
      "name": "Hyaenodon",
      "color": "#9a8a6a",
-     "size": 7,
+     "size": 10,
      "hp": 13.6,
      "speed": 83,
      "damage": 10.3,
-     "xp": 3
+     "xp": 3,
+     "shape": "mammal"
     },
     {
      "id": "entelodont",
      "name": "Entelodont",
      "color": "#7a5a4a",
-     "size": 11,
+     "size": 15,
      "hp": 36.2,
      "speed": 54,
      "damage": 17.1,
-     "xp": 5
+     "xp": 5,
+     "shape": "mammal"
     },
     {
      "id": "deinotherium",
      "name": "Deinotherium",
      "color": "#8a8a8a",
-     "size": 18,
+     "size": 24,
      "hp": 90.4,
      "speed": 33,
      "damage": 30.8,
-     "xp": 13
+     "xp": 13,
+     "shape": "mammal"
     }
    ],
    "waves": [
@@ -1294,7 +1333,8 @@
     "id": "andrewsarchus",
     "name": "Andrewsarchus",
     "color": "#6a4a3a",
-    "size": 48,
+    "size": 60,
+    "shape": "mammal",
     "hp": 1356,
     "speed": 39,
     "damage": 48,
@@ -1324,31 +1364,34 @@
      "id": "pachycrocuta",
      "name": "Riesenhyäne (Pachycrocuta)",
      "color": "#b0a07a",
-     "size": 7,
+     "size": 10,
      "hp": 14.5,
      "speed": 84,
      "damage": 10.9,
-     "xp": 3
+     "xp": 3,
+     "shape": "mammal"
     },
     {
      "id": "dinofelis",
      "name": "Dinofelis",
      "color": "#d0a04a",
-     "size": 11,
+     "size": 15,
      "hp": 38.7,
      "speed": 55,
      "damage": 18.2,
-     "xp": 6
+     "xp": 6,
+     "shape": "mammal"
     },
     {
      "id": "homotherium",
      "name": "Homotherium",
      "color": "#a0804a",
-     "size": 18,
+     "size": 24,
      "hp": 96.8,
      "speed": 33,
      "damage": 32.8,
-     "xp": 14
+     "xp": 14,
+     "shape": "mammal"
     }
    ],
    "waves": [
@@ -1428,31 +1471,34 @@
      "id": "hoehlenhyaene",
      "name": "Höhlenhyäne",
      "color": "#a9a088",
-     "size": 7,
+     "size": 10,
      "hp": 15.5,
      "speed": 86,
      "damage": 11.6,
-     "xp": 3
+     "xp": 3,
+     "shape": "mammal"
     },
     {
      "id": "hoehlenbaer",
      "name": "Höhlenbär",
      "color": "#6e4a32",
-     "size": 11,
+     "size": 15,
      "hp": 41.3,
      "speed": 55,
      "damage": 19.3,
-     "xp": 6
+     "xp": 6,
+     "shape": "mammal"
     },
     {
      "id": "wollnashorn",
      "name": "Wollnashorn",
      "color": "#8a7660",
-     "size": 18,
+     "size": 24,
      "hp": 103.2,
      "speed": 34,
      "damage": 34.7,
-     "xp": 15
+     "xp": 15,
+     "shape": "mammal"
     }
    ],
    "waves": [
@@ -1532,31 +1578,34 @@
      "id": "hausratte",
      "name": "Hausratte",
      "color": "#8a8378",
-     "size": 7,
+     "size": 10,
      "hp": 16.4,
      "speed": 87,
      "damage": 12.2,
-     "xp": 3
+     "xp": 3,
+     "shape": "mammal"
     },
     {
      "id": "heuschrecken",
      "name": "Heuschreckenschwarm",
      "color": "#b5b04a",
-     "size": 11,
+     "size": 15,
      "hp": 43.8,
      "speed": 56,
      "damage": 20.4,
-     "xp": 6
+     "xp": 6,
+     "shape": "swarm"
     },
     {
      "id": "auerochse",
      "name": "Auerochse",
      "color": "#5a4030",
-     "size": 18,
+     "size": 24,
      "hp": 109.6,
      "speed": 35,
      "damage": 36.7,
-     "xp": 16
+     "xp": 16,
+     "shape": "mammal"
     }
    ],
    "waves": [
@@ -1616,7 +1665,8 @@
     "id": "pest",
     "name": "Schwarzer Tod (Pest)",
     "color": "#3a3f4a",
-    "size": 48,
+    "size": 60,
+    "shape": "swarm",
     "hp": 1644,
     "speed": 41,
     "damage": 57,
@@ -1646,31 +1696,34 @@
      "id": "mikrometeoroid",
      "name": "Mikrometeoroid",
      "color": "#c8c8d8",
-     "size": 7,
+     "size": 10,
      "hp": 17.4,
      "speed": 88,
      "damage": 12.9,
-     "xp": 3
+     "xp": 3,
+     "shape": "rock"
     },
     {
      "id": "weltraumschrott",
      "name": "Weltraumschrott",
      "color": "#9aa0aa",
-     "size": 11,
+     "size": 15,
      "hp": 46.4,
      "speed": 57,
      "damage": 21.5,
-     "xp": 6
+     "xp": 6,
+     "shape": "debris"
     },
     {
      "id": "raketenstufe",
      "name": "Ausgebrannte Raketenstufe",
      "color": "#d0d4dc",
-     "size": 18,
+     "size": 24,
      "hp": 116.0,
      "speed": 35,
      "damage": 38.7,
-     "xp": 16
+     "xp": 16,
+     "shape": "debris"
     }
    ],
    "waves": [
@@ -1750,31 +1803,34 @@
      "id": "mondstaub",
      "name": "Mondstaub",
      "color": "#c8c0b0",
-     "size": 7,
+     "size": 10,
      "hp": 18.4,
      "speed": 90,
      "damage": 13.6,
-     "xp": 3
+     "xp": 3,
+     "shape": "swarm"
     },
     {
      "id": "staubteufel",
      "name": "Marsstaubteufel",
      "color": "#c0603a",
-     "size": 11,
+     "size": 15,
      "hp": 49.0,
      "speed": 58,
      "damage": 22.6,
-     "xp": 7
+     "xp": 7,
+     "shape": "swarm"
     },
     {
      "id": "sonnensturm",
      "name": "Sonnensturm-Teilchen",
      "color": "#ffd060",
-     "size": 18,
+     "size": 24,
      "hp": 122.4,
      "speed": 36,
      "damage": 40.7,
-     "xp": 17
+     "xp": 17,
+     "shape": "swarm"
     }
    ],
    "waves": [
@@ -1854,31 +1910,34 @@
      "id": "kosmische-strahlung",
      "name": "Kosmische Strahlung",
      "color": "#a0e0ff",
-     "size": 7,
+     "size": 10,
      "hp": 19.3,
      "speed": 91,
      "damage": 14.2,
-     "xp": 4
+     "xp": 4,
+     "shape": "swarm"
     },
     {
      "id": "kometenbrocken",
      "name": "Kometenbrocken",
      "color": "#d8f0ff",
-     "size": 11,
+     "size": 15,
      "hp": 51.5,
      "speed": 59,
      "damage": 23.7,
-     "xp": 7
+     "xp": 7,
+     "shape": "rock"
     },
     {
      "id": "eisasteroid",
      "name": "Eisasteroid",
      "color": "#90a8c0",
-     "size": 18,
+     "size": 24,
      "hp": 128.8,
      "speed": 36,
      "damage": 42.7,
-     "xp": 18
+     "xp": 18,
+     "shape": "rock"
     }
    ],
    "waves": [
@@ -1938,7 +1997,8 @@
     "id": "asteroid",
     "name": "Erdnaher Asteroid",
     "color": "#7a6a5a",
-    "size": 48,
+    "size": 60,
+    "shape": "rock",
     "hp": 1932,
     "speed": 43,
     "damage": 66,

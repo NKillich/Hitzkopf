@@ -13,6 +13,8 @@ export interface EnemyType {
     xp: number         // Wert des XP-Kristalls
     /** drift = treibt mit der Strömung und ist harmlos (frühe Einzeller), sonst jagt der Gegner */
     behavior?: 'chase' | 'drift'
+    /** Pixel-Form (siehe logic/appearance.ts SHAPES) */
+    shape?: string
 }
 
 /** Ab Sekunde `from` bis vor `to` erscheinen alle `every` Sekunden `count` Gegner vom Typ `enemy`. */
