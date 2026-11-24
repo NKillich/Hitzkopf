@@ -80,3 +80,12 @@ export function splitDescription(desc: string): { effect: string; fact: string }
     }
     return { effect: text, fact: '' }
 }
+
+/** Durchbruch je Evolution: +20 % Schaden und +10 % Leben pro erreichter Evolutionsstufe (wie eine Waffen-Evolution). */
+export const BREAKTHROUGH_DAMAGE = 0.2
+export const BREAKTHROUGH_HP = 0.1
+
+export function applyBreakthroughs<T extends { damage: number; maxHp: number }>(stats: T, count: number): T {
+    if (count <= 0) return stats
+    return { ...stats, damage: stats.damage * (1 + BREAKTHROUGH_DAMAGE * count), maxHp: Math.round(stats.maxHp * (1 + BREAKTHROUGH_HP * count)) }
+}

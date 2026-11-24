@@ -55,6 +55,49 @@ export const HERO_BODIES: Record<string, { grid: Grid; motion: Motion }> = {
     },
 }
 
+/**
+ * Echte Zeitlinie in Phase 3–4: eigene Form je Stufe, wenn der Körper der Hauptfigur passt –
+ * so wird das neue Merkmal sichtbar (3.1 Chorda/Kiemenspalten, 3.2 Kiefer + Fleischflossen,
+ * 4.1 frühes Säugetier mit Schnurrhaaren und langem Schwanz, 4.3 Primat mit großen Augen vorn und Greifhänden).
+ */
+export const HERO_STAGE_FORMS: Record<string, { body: string; grid: Grid; motion: Motion }> = {
+    kambrium: {
+        body: 'fish',
+        motion: 'bob',
+        grid: [
+            '................', '................', '................', '............Y.Y.', '............D.D.', '.............D..',
+            '..........OOOO..', 'OO.....OOOLBWWO.', 'OLO..OOLBBBBWKBO', 'OBBOOBSBSBSBBBMO', 'OLO..OODDDODODO.', 'OO.....OOOOOOOO.',
+        ],
+    },
+    landgang: {
+        body: 'fish',
+        motion: 'bob',
+        grid: [
+            '..........Y.Y...', '..........D.D...', '...........D....', '.......OOOOOO...', '.O....OLLBBBBO..', '.OO..OLBBBBWWBO.',
+            '.ODO.OBBBBBWKBBO', '.ODDOBBSBBBBBMMO', '.ODDOBBBBBBSBWWO', '.ODO.OBBBBBBMMO.', '.OO...ODDDDDDO..', '.O.....OLLOOO...',
+            '........OLLO....', '.........OO.....',
+        ],
+    },
+    dinosaurier: {
+        body: 'mammal',
+        motion: 'walk',
+        grid: [
+            '................', '................', '...........Y.Y..', '...........D.D..', '..........OOOO..', '.........OLWWBO.',
+            '.........OBWKBBO', 'O.......OBBBBBMW', 'OO..OOOOBBBBBBO.', '.OOOLBBBBSBBBO..', '...OBBSBBBBBBO..', '...ODDDDDDDDO...',
+            '...ODO.O.ODO....', '...OO..O.OO.....',
+        ],
+    },
+    primaten: {
+        body: 'mammal',
+        motion: 'walk',
+        grid: [
+            '..........Y.Y...', '..........D.D...', '.........OOOOO..', '........OLWWWWO.', '........OBWKWKO.', '........OBBBMBO.',
+            '..O.....OOBBBOO.', '.OBO...OBBBBBO..', '.OBO..OBBBSBBOO.', '.OBOOOBBBBBBOAO.', '..OBBBBSBBBO.AA.', '...ODDDDDDO.....',
+            '...ODO..ODO.....', '...OAA..OAA.....',
+        ],
+    },
+}
+
 /** Tiere als Gegner (Farben aus den Daten). */
 export const ANIMAL_ART: Record<string, { grid: Grid; motion: Motion }> = {
     hallucigenia: {

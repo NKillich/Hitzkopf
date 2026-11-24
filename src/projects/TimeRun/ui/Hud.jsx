@@ -84,6 +84,26 @@ export function Hud({ state, bridge }) {
                 </div>
             )}
 
+            {/* Hinweis (Onboarding, Easter Egg) unter der Figur */}
+            {state.hint && !compact && (
+                <div className="tr-hint" key={state.hint.text}>
+                    {state.hint.swipe && <div className="tr-hint-stick" aria-hidden="true"><div /></div>}
+                    <span>{state.hint.text}</span>
+                </div>
+            )}
+
+            {/* Leiste unten: bisherige Upgrades mit Level (lässt Berührungen durch → Joystick geht auch hier) */}
+            {!compact && hud.owned.length > 0 && (
+                <div className="tr-owned" style={{ bottom: state.debug ? 28 : 12 }} aria-label="Deine Upgrades">
+                    {hud.owned.map(u => (
+                        <div key={u.id} className="tr-owned-slot" title={`${u.name} Level ${u.level}`}>
+                            <PixelIcon name={u.icon} size={16} color="#E8D9F5" />
+                            <span className={`tr-num tr-owned-lv${u.level >= u.maxLevel ? ' tr-max' : ''}`}>{u.level >= u.maxLevel ? 'MAX' : u.level}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {state.debug && (
                 <div style={{ position: 'absolute', left: 8, bottom: 4, right: 8, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#FFD27A' }}>
                     <span className="tr-num" style={{ flexGrow: 1 }}>{hud.fps} FPS · {hud.enemies} Gegner</span>

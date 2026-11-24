@@ -393,7 +393,19 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
 - **Tempo/ruhiger Start:** Wellen je Stufe erst nur die kleinsten Gegner, ab 25 % Mittlere, ab 60 % Jäger; Stufe 1.1 ganz ohne
   Jäger (nur treibende Beute), Jäger nach Zeit (`ambient`) erst ab 20 s. Hauptfigur in Phase 1–2 je Stufe eigene Form
   (`MICROBE_FORMS` in `microbes.ts`, 2.1 = Vorlage). **Parallax:** zwei Teilchen-Ebenen (`nearA` 1,35×, `nearB` 1,8× ganz vorn,
-  Art je Stufe `particleKindFor`), Boden 1× (Texte stehen darauf), im All (6.1/6.3) Sternenkachel 0,35×.
+  Art je Stufe `particleKindFor`), Boden 1× (Texte stehen darauf), im All (6.1/6.3) Sternenkachel 0,35×. Teilchen bewegen sich
+  **nicht von selbst** – nur mit Kamera (hoch/runter) und Figur (seitlich).
+- **Doppelte Auflösung:** Spielbild 780 × 1688 (`RES = 2`, Kamera-Zoom 2), Welt bleibt 390 × 844. Bildschirmfeste Objekte und
+  Joystick liegen bei `VIEW_OX/VIEW_OY` (Zoom um die Kameramitte), oberer Bildrand = `cam.scrollY + VIEW_OY`. Figur genau mittig.
+- **Hintergrund nach Höhe** (`updateBackground`): an der nächsten Stufengrenze ±300 px Überblendung (Kachel, Grundfarbe, Teilchen),
+  auch rückwärts in die vorige Stufe. **Goldene Linie** mit Schild „↑ 1.2 … 3,80 MRD.“ am Ende jeder Stufe (`buildGoalLine`).
+- **Evolution mit „Tada“:** Blitz, Strahlen, alte Form flackert in die neue, dann Karte (`Evolved`: alt → neu, „Neu: …“,
+  **Durchbruch** +20 % Schaden / +10 % Leben je Evolution (`applyBreakthroughs`), volle LP, ggf. „Waffe entwickelt“). Phase 3–4:
+  eigene Heldenform je Stufe der echten Linie (`HERO_STAGE_FORMS`: 3.1 Chordatier, 3.2 Kiefer + Fleischflossen, 4.1 frühes
+  Säugetier, 4.3 Primat). Sterbeanimation (rot blinken, in Pixel zerplatzen). Leiste unten: eigene Upgrades mit Level.
+- **Onboarding** beim ersten Run (`ages_up_onboard_v1`): Hinweis „Zieh …“ bis zur Bewegung, dann „Fressen“, Bodentext zur Linie.
+  **Easter Egg:** in 1.1 nach unten schwimmen → Zeit rückwärts (`logic/bigbang.ts`, Stationen Mond/Erde/Sonne/erste Sterne) bis
+  zum Urknall (Blitz, Abzeichen `ages_up_bigbang_v1`, zurück zum Start).
 - **Teleporter** (nur `#timerun/debug`, im Pausenmenü): jede Stufe Start/Mitte/Ende bzw. Boss, Weg über die echte Zeitlinie
   (`logic/teleport.ts`), Level/Upgrades passend zur Stufe.
 - Gegner stoßen sich über ein Raster (24 px) leicht ab – kostet bei 450 Gegnern ca. 0,1 ms pro Bild.
@@ -429,8 +441,8 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
 
 
   am Start, `texts` (2 je Stufe: beschreiben, was passiert – **keine Fun-Facts**, Zukunft mit „Zukunft:“) als Bodentexte
-  (140 px / 300 px über dem Start und bei 62 %). **Bodentexte sind HTML** (`ui/Floor.jsx`, `FloorItem` über die Brücke),
-  verschoben per `bridge.setFloorScroll` nach jedem Bild – im 390-px-Phaser-Bild wären sie unscharf. Boden gedämpft (`BG_ALPHA`).
+  (140 px / 300 px über dem Start und bei 62 %). Bodentexte sind Phaser-Texte (`resolution: RES`) mit Kasten, **unter** Figur und
+  Gegnern – scharf dank doppelter Auflösung. Boden gedämpft (`BG_ALPHA`).
   HUD nach Vorlage: Stufe/Zeit/Pause, darunter volle Breite Leben + LV + XP-Zahl, dann 18 Fortschritts-Kästchen; Waffe/Tags im
   Pausenmenü. Level-up nach Entwurf „03 Level-up“: 3 Karten nebeneinander, Antippen wählt aus, grüner Knopf übernimmt. Daten werden mit einem Skript erzeugt
 
@@ -468,7 +480,7 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
 
 
 
-  Bosse 84). Jede Stufe hat eine **eigene Pixel-Kachel + Deko** (`game/art/backgrounds.ts`, 64×64, 2× gezeigt); **keine Ziellinie mehr** –
+  Bosse 84). Jede Stufe hat eine **eigene Pixel-Kachel + Deko** (`game/art/backgrounds.ts`, 64×64, 2× gezeigt); Ziellinie = goldene Linie –
 
 
 

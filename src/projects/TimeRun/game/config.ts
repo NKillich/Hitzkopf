@@ -4,6 +4,17 @@ import type { BasePlayer } from '../logic/upgrades'
 
 export const WIDTH = 390
 export const HEIGHT = 844
+/**
+ * Das Spielbild wird in doppelter Auflösung gezeichnet (780 × 1688, Kamera-Zoom 2),
+ * damit Texte auf dem Boden scharf bleiben. Welt-Koordinaten bleiben 390 × 844.
+ */
+export const RES = 2
+/**
+ * Bildschirmfeste Objekte (scrollFactor 0) werden um die Kameramitte gezoomt →
+ * die sichtbare Fläche beginnt bei (VIEW_OX, VIEW_OY); ebenso liegt der obere Bildrand bei scrollY + VIEW_OY.
+ */
+export const VIEW_OX = (WIDTH * (RES - 1)) / 2
+export const VIEW_OY = (HEIGHT * (RES - 1)) / 2
 
 /** Pool-Größen – mehr gleichzeitig gibt es nicht (Gegner darüber hinaus werden ausgelassen). */
 export const MAX_ENEMIES = 450

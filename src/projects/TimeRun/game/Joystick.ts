@@ -1,7 +1,7 @@
 // Virtueller Joystick: erscheint dort, wo der Finger (oder die Maus) aufsetzt.
 // Zusätzlich WASD/Pfeiltasten für den PC.
 import Phaser from 'phaser'
-import { JOYSTICK_DEADZONE, JOYSTICK_RADIUS } from './config'
+import { JOYSTICK_DEADZONE, JOYSTICK_RADIUS, RES, VIEW_OX, VIEW_OY } from './config'
 
 export class Joystick {
     /** Richtung, Länge 0…1 */
@@ -36,17 +36,18 @@ export class Joystick {
     private onDown(p: Phaser.Input.Pointer) {
         if (this.pointerId !== null) return
         this.pointerId = p.id
-        this.baseX = p.x
-        this.baseY = p.y
-        this.base.setPosition(p.x, p.y).setVisible(true)
-        this.knob.setPosition(p.x, p.y).setVisible(true)
+        // Zeiger in Spielbild-Pixeln (doppelte Auflösung) → bildschirmfeste Welt-Koordinaten
+        this.baseX = VIEW_OX + p.x / RES
+        this.baseY = VIEW_OY + p.y / RES
+        this.base.setPosition(this.baseX, this.baseY).setVisible(true)
+        this.knob.setPosition(this.baseX, this.baseY).setVisible(true)
         this.vector.set(0, 0)
     }
 
     private onMove(p: Phaser.Input.Pointer) {
         if (p.id !== this.pointerId) return
-        const dx = p.x - this.baseX
-        const dy = p.y - this.baseY
+        const dx = VIEW_OX + p.x / RES - this.baseX
+        const dy = VIEW_OY + p.y / RES - this.baseY
         const len = Math.hypot(dx, dy)
         const clamped = Math.min(len, JOYSTICK_RADIUS)
         const nx = len > 0 ? dx / len : 0

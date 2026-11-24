@@ -3,7 +3,7 @@
 // W = weiß, K = schwarz, Y = gelb, A = Akzent, M = Mund, . = leer.
 // Die Hauptfigur hat feste Farben, Gegner leiten ihre Töne aus der Datenfarbe ab.
 import type Phaser from 'phaser'
-import { ANIMAL_ART, HERO_BODIES as ANIMAL_BODIES, type Grid, type Motion } from './animals'
+import { ANIMAL_ART, HERO_BODIES as ANIMAL_BODIES, HERO_STAGE_FORMS, type Grid, type Motion } from './animals'
 import { HERO_ANCHORS, HERO_HUMAN, MODERN_ART } from './modern'
 
 const HERO_BODIES: Record<string, { grid: Grid; motion: Motion }> = { ...ANIMAL_BODIES, human: HERO_HUMAN }
@@ -261,6 +261,12 @@ function drawOutfit(
 /** Hauptfigur: „microbe“ (Phase 1–2) oder ein Körper (fish … human), mit Ausrüstung als „human-suit“ usw. */
 export const heroKey = (body: string, frame: number) => `hero_${body}_${frame}`
 export const HERO_BODY_KEYS = ['microbe', ...Object.keys(HERO_BODIES)]
+
+/** Eigene Form der Stufe (Phase 3–4, echte Zeitlinie), falls der Körper passt – sonst null. */
+export function stageFormBody(stageId: string, body: string): string | null {
+    const f = HERO_STAGE_FORMS[stageId]
+    return f && f.body === body ? `stage-${stageId}` : null
+}
 export const mobKey = (id: string, frame: number) => `mob_${id}_${frame}`
 export const ART_KEYS = [...Object.keys(ART), ...Object.keys(MOB_ART)]
 
@@ -277,6 +283,9 @@ export function generateMicrobeArt(scene: Phaser.Scene, mobs: { id: string; art:
             else drawFrame(g, frames[0], HERO_COLORS, motion, f)
             g.generateTexture(heroKey(`microbe-${id}`, f), 16, 16)
         }
+    }
+    for (const [id, { grid, motion }] of Object.entries(HERO_STAGE_FORMS)) {
+        for (const f of [0, 1]) { g.clear(); drawFrame(g, grid, HERO_COLORS, motion, f); g.generateTexture(heroKey(`stage-${id}`, f), 16, 16) }
     }
     for (const [body, { grid, motion }] of Object.entries(HERO_BODIES)) {
         for (const f of [0, 1]) { g.clear(); drawFrame(g, grid, HERO_COLORS, motion, f); g.generateTexture(heroKey(body, f), 16, 16) }

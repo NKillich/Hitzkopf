@@ -1,7 +1,7 @@
 // Startet das Phaser-Spiel in einem Container-Element (wird von TimeRun.jsx erst bei Bedarf geladen).
 // Die Oberfläche (HUD, Menüs) ist React; beide sprechen über die UiBridge miteinander.
 import Phaser from 'phaser'
-import { HEIGHT, WIDTH } from './config'
+import { HEIGHT, RES, WIDTH } from './config'
 import { BootScene } from './scenes/BootScene'
 import { GameScene } from './scenes/GameScene'
 import type { UiBridge } from './bridge'
@@ -16,8 +16,8 @@ export function createGame(parent: HTMLElement, options: GameOptions): Phaser.Ga
     const game = new Phaser.Game({
         type: Phaser.AUTO,
         parent,
-        width: WIDTH,
-        height: HEIGHT,
+        width: WIDTH * RES,
+        height: HEIGHT * RES,
         backgroundColor: '#14101E',
         pixelArt: true,
         roundPixels: true,

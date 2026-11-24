@@ -36,7 +36,11 @@ export interface HudState {
     boss: { name: string; frac: number } | null
     fps: number
     enemies: number
+    /** bisherige Upgrades mit Level (Leiste unten) */
+    owned: OwnedUpgradeView[]
 }
+
+export interface OwnedUpgradeView { id: string; name: string; icon: IconKey; level: number; maxLevel: number }
 
 export interface UpgradeCard {
     name: string
@@ -61,6 +65,11 @@ export type Overlay =
     }
     | { type: 'pause'; stages?: TeleportStage[] }
     | {
+        /** „Tada“ nach der Evolution: alte → neue Form, neues Merkmal, Durchbruch-Boni */
+        type: 'evolved'; code: string; stageName: string; trait: string; desc: string; real: boolean
+        oldImg: string; newImg: string; bonuses: string[]
+    }
+    | {
         type: 'end'; won: boolean; reachedCode: string; reachedName: string; year: string
         stageIndex: number; stageCount: number; timeSec: number; kills: number; level: number
         realCount: number; pastCount: number; badge: boolean; path: { name: string; real: boolean }[]; newRecord: boolean
@@ -69,18 +78,6 @@ export type Overlay =
 /** Teleporter (nur Debug): Stufen, zu denen man springen kann */
 export interface TeleportStage { id: string; code: string; name: string; phase: number; boss: boolean }
 
-/** Text auf dem Boden der Spielwelt (y = Weltkoordinate). Liegt als HTML über dem Spiel, damit er scharf bleibt. */
-export interface FloorItem {
-    id: string
-    y: number
-    kind: 'title' | 'text' | 'year'
-    text: string
-    /** zweite Zeile (beim Titel: Zeitraum) */
-    sub?: string
-    /** heller Boden → dunkle Schrift */
-    light: boolean
-}
-
 export interface BestRun { stageIndex: number; stageCount: number; code: string; name: string }
 
 export interface UiState {
@@ -88,8 +85,8 @@ export interface UiState {
     ready: boolean
     error: string | null
     hud: HudState | null
-    /** Bodentexte der aktuellen und der vorigen Stufe */
-    floor: FloorItem[]
+    /** Hinweis unten (Onboarding, Easter Egg); swipe = Wisch-Hand zeigen */
+    hint: { text: string; swipe: boolean } | null
     overlay: Overlay | null
     /** Zeitpunkt (performance.now) des letzten Öffnens – kurze Klicksperre gegen versehentliches Wählen */
     overlayAt: number
@@ -111,6 +108,8 @@ export interface UiActions {
     debugGoal(): void
     /** Debug: zu Stufe `id` springen, `at` = Anteil der Höhe (0 = Start, 0.5 = Mitte, 1 = vor Ende/Boss) */
     teleport(id: string, at: number): void
+    /** nach der Tada-Karte weiterspielen */
+    continueEvolution(): void
 }
 
 const BEST_KEY = 'ages_up_best_v1'
@@ -133,7 +132,7 @@ export class UiBridge {
 
     constructor(debug = false) {
         this.state = {
-            screen: 'start', ready: false, error: null, hud: null, floor: [], overlay: null, overlayAt: 0,
+            screen: 'start', ready: false, error: null, hud: null, hint: null, overlay: null, overlayAt: 0,
             banner: null, best: loadBest(), debug,
         }
     }
@@ -148,23 +147,6 @@ export class UiBridge {
     set(patch: Partial<UiState>) {
         this.state = { ...this.state, ...patch }
         for (const fn of this.listeners) fn()
-    }
-
-    /** Ebene der Bodentexte (setzt die React-Oberfläche) – wird jedes Bild direkt verschoben, ohne React neu zu zeichnen. */
-    floorEl: HTMLElement | null = null
-    private floorY = NaN
-
-    setFloorScroll(scrollY: number) {
-        const y = Math.round(scrollY)
-        if (y === this.floorY || !this.floorEl) return
-        this.floorY = y
-        this.floorEl.style.transform = `translate3d(0, ${-y}px, 0)`
-    }
-
-    /** Neue Ebene (z. B. nach dem Neuladen der Oberfläche) → Position beim nächsten Bild neu setzen. */
-    attachFloor(el: HTMLElement | null) {
-        this.floorEl = el
-        this.floorY = NaN
     }
 
     setOverlay(overlay: Overlay | null) {
