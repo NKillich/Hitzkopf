@@ -1,12 +1,6 @@
+import { useState } from 'react'
 import { PixelIcon } from './icons'
 import { cap, formatTime, GUARD_MS } from './format'
-
-const RARITY = {
-    common: { label: 'NORMAL', border: '#8F86A3', inner: '#4E3F6B', badge: '#B8AECB', iconBg: '#4E3F6B', iconShade: '#33294A', icon: '#D9CFEA' },
-    rare: { label: 'SELTEN', border: '#4EA8FF', inner: '#1F4E80', badge: '#4EA8FF', iconBg: '#1F4E80', iconShade: '#133357', icon: '#BFE0FF' },
-    epic: { label: 'EPISCH', border: '#B57CFF', inner: '#5B3A8A', badge: '#B57CFF', iconBg: '#5B3A8A', iconShade: '#3A2259', icon: '#E3CCFF' },
-    legendary: { label: 'LEGENDÄR', border: '#FFB547', inner: '#8A5A1B', badge: '#FFB547', iconBg: '#8A5A1B', iconShade: '#5E3C10', icon: '#FFE0A3' },
-}
 
 // Evolutionskarten: Farben wie in der Vorlage (orange, mint, grün, blau)
 const EVO_COLORS = [
@@ -21,57 +15,98 @@ function guarded(state, fn) {
     return () => { if (performance.now() - state.overlayAt >= GUARD_MS) fn() }
 }
 
+const RARITY_CARD = {
+    common: { label: 'NORMAL', rc: '#B8AECB', ib: '#4E3F6B', bg: '#2A2140', icon: '#E8D9F5' },
+    rare: { label: 'SELTEN', rc: '#4EA8FF', ib: '#1F4E80', bg: '#1A2340', icon: '#BFE0FF' },
+    epic: { label: 'EPISCH', rc: '#B57CFF', ib: '#5B3A8A', bg: '#2A1A40', icon: '#E3CCFF' },
+    legendary: { label: 'LEGENDÄR', rc: '#FFB547', ib: '#8A5A1B', bg: '#2E2214', icon: '#FFE0A3' },
+}
+
+// Level-up nach Entwurf „03 Level-up“: Spiel bleibt oben sichtbar, unten 3 Karten nebeneinander.
+// Antippen wählt aus (Details oben), erst der grüne Knopf übernimmt.
 export function LevelUp({ state, bridge }) {
     const o = state.overlay
+    // Neue Karten (Neu würfeln / nächstes Level) → Auswahl zurücksetzen
+    return <LevelUpPanel key={state.overlayAt} o={o} state={state} bridge={bridge} />
+}
+
+function LevelUpPanel({ o, state, bridge }) {
+    const [sel, setSel] = useState(null)
+    const s = sel === null ? null : o.choices[sel]
     return (
-        <div className="tr-screen tr-dim">
-            <div style={{ position: 'relative', height: '100%', boxSizing: 'border-box', padding: '70px 24px 36px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-                    <span className="tr-num" style={{ fontSize: 14, color: '#0D0A12', background: '#3DCF9E', padding: '4px 10px' }}>LEVEL {o.level}</span>
-                    <h1 style={{ fontSize: 40, color: '#FFD27A', textShadow: '4px 4px 0 #0D0A12' }}>Wähle ein Upgrade</h1>
-                    <p style={{ fontSize: 16, color: '#B8C9C4' }}>Das Spiel pausiert, bis du gewählt hast.</p>
+        <div className="tr-screen tr-lv">
+            <div className="tr-lv-shade" />
+            <div className="tr-lv-panel" />
+            <div className="tr-lv-head">
+                <div className="tr-lv-title">
+                    <span className="tr-num tr-lv-level">LEVEL {o.level}</span>
+                    <h1>Wähle ein Upgrade</h1>
+                </div>
+            </div>
+
+            <div className="tr-lv-body">
+                <div className="tr-pp tr-lv-detail" aria-live="polite">
+                    {!s && <span className="tr-lv-hint">Tippe auf eine Karte für Details</span>}
+                    {s && (
+                        <>
+                            <div className="tr-lv-dHead">
+                                <span className="tr-lv-dName">{s.name}</span>
+                                <span className="tr-num tr-lv-dLv">{s.level === 0 ? 'NEU · LV 1' : `LV ${s.level} → ${s.level + 1} / ${s.maxLevel}`}</span>
+                            </div>
+                            <span className="tr-lv-dEffect">{s.effect.replace(/\.$/, '')}</span>
+                            {s.fact && <span className="tr-lv-dFact">Fakt: {s.fact}</span>}
+                        </>
+                    )}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '0 4px' }}>
-                    {o.choices.map((c, i) => {
-                        const r = RARITY[c.rarity] ?? RARITY.common
-                        return (
-                            <button key={`${c.name}-${i}`} type="button" className="tr-card"
-                                style={{ border: `4px solid ${r.border}`, boxShadow: `inset 0 0 0 3px ${r.inner}` }}
-                                onClick={guarded(state, () => bridge.call('pickUpgrade', i))}>
-                                <div style={{ width: 60, height: 60, flexShrink: 0, background: r.iconBg, boxShadow: `inset -4px -4px 0 ${r.iconShade}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <PixelIcon name={c.icon} size={28} color={r.icon} />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                        <span style={{ fontSize: 21, fontWeight: 700 }}>{c.name}</span>
-                                        <span className="tr-badge" style={{ background: r.badge }}>{r.label}</span>
-                                    </div>
-                                    <span style={{ fontSize: 15, color: '#D9CFEA', lineHeight: 1.3 }}>{c.desc}</span>
-                                    <span style={{ fontSize: 12, color: '#B8AECB' }}>{c.levelText}</span>
-                                </div>
-                            </button>
-                        )
-                    })}
+                <div className="tr-lv-cards">
+                    {o.choices.map((c, i) => <UpgradeCardView key={`${c.name}-${i}`} c={c} on={sel === i} dim={sel !== null && sel !== i} onPick={() => setSel(i)} />)}
                 </div>
 
                 <div style={{ flexGrow: 1 }} />
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {o.skills.length > 0 && (
-                        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span style={{ fontSize: 14, color: '#B8C9C4' }}>Fähigkeiten:</span>
-                            {o.skills.map(s => <span key={s.name} style={{ fontSize: 14, background: '#0D0A12', padding: '2px 8px' }}>{s.name} Lv{s.level}</span>)}
-                        </div>
-                    )}
-                    <button type="button" className="tr-bg" disabled={o.rerolls <= 0}
-                        style={{ height: 56, fontSize: 19, fontWeight: 600 }}
+                <div className="tr-lv-actions">
+                    <button type="button" className="tr-bg tr-lv-reroll" disabled={o.rerolls <= 0}
+                        aria-label={`Neu würfeln, ${o.rerolls} übrig`}
                         onClick={guarded(state, () => bridge.call('reroll'))}>
-                        Neu würfeln ({o.rerolls} übrig)
+                        <svg width="24" height="24" viewBox="0 0 8 8" shapeRendering="crispEdges" fill="#F4EEDC" aria-hidden="true"><path d="M2 0h4v1h1v1H6v1H5V2H2v1H1v2h1v1h3V5h1v1h1v1H6v1H2V7H1V6H0V2h1V1h1zM5 0h3v3H7V1H5z" /></svg>
+                        <span className="tr-num tr-lv-rerollN">{o.rerolls}</span>
                     </button>
+                    {s
+                        ? <button type="button" className="tr-bt tr-lv-go" onClick={guarded(state, () => bridge.call('pickUpgrade', sel))}>
+                            {s.level === 0 ? `${s.name} lernen` : `${s.name} verbessern`}
+                        </button>
+                        : <div className="tr-lv-wait">Karte antippen</div>}
                 </div>
             </div>
         </div>
+    )
+}
+
+function UpgradeCardView({ c, on, dim, onPick }) {
+    const r = RARITY_CARD[c.rarity] ?? RARITY_CARD.common
+    const isNew = c.level === 0
+    const pips = Array.from({ length: Math.max(1, c.maxLevel) }, (_, i) => i < c.level ? 'done' : i === c.level ? 'next' : 'open')
+    return (
+        <button type="button" className={`tr-lv-card${on ? ' tr-on' : ''}${dim ? ' tr-dimmed' : ''}`} aria-pressed={on}
+            aria-label={`${c.name}, ${isNew ? 'neu' : `Level ${c.level} auf ${c.level + 1}`}`}
+            style={{ '--rc': r.rc, '--ib': r.ib, '--cbg': r.bg }}
+            onClick={onPick}>
+            {c.rarity !== 'common' && <div className="tr-lv-band" />}
+            <div className="tr-lv-icon"><PixelIcon name={c.icon} size={28} color={r.icon} /></div>
+            <span className="tr-lv-name">{c.name}</span>
+            <span className="tr-num tr-lv-chip" style={{ color: '#0D0A12', background: r.rc }}>{r.label}</span>
+            <div className="tr-lv-pips">{pips.map((p, i) => <div key={i} className={`tr-pip tr-pip-${p}`} />)}</div>
+            <span className="tr-num" style={{ fontSize: 11, color: isNew ? '#FFD27A' : '#3DCF9E' }}>{isNew ? 'NEU' : `LV ${c.level}→${c.level + 1}`}</span>
+            <span className="tr-num tr-lv-chip" style={c.kind === 'weapon' ? { color: '#FFB199', background: '#3A1A14' } : { color: '#A6F7DA', background: '#123A30' }}>
+                {c.kind === 'weapon' ? 'WAFFE' : 'PASSIV'}
+            </span>
+            {on && (
+                <div className="tr-lv-check">
+                    <svg width="12" height="10" viewBox="0 0 7 6" shapeRendering="crispEdges" fill="#0D0A12" aria-hidden="true"><path d="M6 0h1v2H6v1H5v1H4v1H3v1H2V5H1V4H0V2h1v1h1v1h1V3h1V2h1V1h1z" /></svg>
+                </div>
+            )}
+        </button>
     )
 }
 
@@ -144,6 +179,12 @@ export function PauseMenu({ state, bridge }) {
                         {hud.code} {hud.name} · {hud.year}<br />
                         <span style={{ color: '#B8AECB' }}>Level {hud.level} · {formatTime(hud.timeSec)}</span>
                     </p>
+                )}
+                {hud && (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+                        <span className="tr-chip" style={{ color: '#FFD27A' }}>{hud.weapon}</span>
+                        {hud.tags.map(t => <span key={t} className="tr-chip">{cap(t)}</span>)}
+                    </div>
                 )}
                 <button type="button" className="tr-bt" style={{ height: 64, fontSize: 23, fontWeight: 700, color: '#0D0A12', marginTop: 6 }} onClick={() => bridge.call('resume')}>WEITER</button>
                 <button type="button" className="tr-bg" style={{ height: 56, fontSize: 19, fontWeight: 600 }} onClick={() => bridge.call('restart')}>Neu starten</button>

@@ -15,67 +15,49 @@ PHASES = {
     6: 'Raumfahrt & interplanetarer Aufbruch',
 }
 
-# id, code, name, short, from, to (Kalenderjahr; negativ = vor Christus/vor heute), bg, grid, fact,
+# id, code, name, short, from, to (Kalenderjahr; negativ = vor Christus/vor heute), bg, grid,
 # Gegner [klein, mittel, groß] als (id, name, farbe), boss (id, name, farbe) oder None
 S = [
  ('urzellen', '1.1', 'Präbiotische Chemie & Ur-Zellen', 'Ur-Zellen', -4.0e9, -3.8e9, '#0b2427', '#123a3d',
-  'Fettsäuren bilden im Wasser von selbst Bläschen – ein Modell für die ersten Zellhüllen. RNA kann Information speichern und zugleich Reaktionen beschleunigen („RNA-Welt“).',
   [('aminosaeure', 'Aminosäure', '#9fe3c8'), ('rna-strang', 'RNA-Strang', '#f2c46b'), ('protozelle', 'Protozelle', '#7fc9e8')], None),
  ('stoffwechsel', '1.2', 'Stoffwechsel & Archaeen/Bakterien', 'Archaeen & Bakterien', -3.8e9, -2.7e9, '#0d2b2a', '#164240',
-  'Archaeen und Bakterien trennten sich sehr früh. Zu den ältesten Fossilien gehören Stromatolithen – von Mikroben aufgebaute Kalkschichten, ca. 3,5 Mrd. Jahre alt (Australien).',
   [('bakterium', 'Bakterium', '#7ddf64'), ('archaee', 'Archaee', '#e0905a'), ('bakterienmatte', 'Bakterienmatte', '#5f9e6e')], None),
- ('photosynthese', '1.3', 'Sauerstoff-Photosynthese', 'Sauerstoff-Photosynthese', -2.7e9, -2.0e9, '#0e2e24', '#17473a',
-  'Cyanobakterien setzen bei der Photosynthese Sauerstoff frei. Vor ca. 2,4 Mrd. Jahren reicherte er sich in der Luft an – für viele damalige Lebewesen war er giftig.',
+ ('photosynthese', '1.3', 'Sauerstoff-Photosynthese', 'Photosynthese', -2.7e9, -2.0e9, '#0e2e24', '#17473a',
   [('sauerstoffradikal', 'Sauerstoff-Radikal', '#ff6b6b'), ('purpurbakterium', 'Purpurbakterium', '#c27ae0'), ('cyanokolonie', 'Cyanobakterien-Kolonie', '#3fbf9f')],
   ('stromatolith', 'Stromatolith', '#8fae7a')),
- ('endosymbiose', '2.1', 'Endosymbiose & Zellkern', 'Endosymbiose & Zellkern', -2.0e9, -1.5e9, '#102a3a', '#1a3d52',
-  'Eine Archaee nahm ein Bakterium auf, ohne es zu verdauen: Daraus wurden die Mitochondrien – die Kraftwerke in jeder deiner Zellen.',
+ ('endosymbiose', '2.1', 'Endosymbiose & Zellkern', 'Endosymbiose', -2.0e9, -1.5e9, '#102a3a', '#1a3d52',
   [('alphaproteobakterium', 'Alphaproteobakterium', '#ffb86b'), ('asgard-archaee', 'Asgard-Archaee', '#d98cff'), ('grypania', 'Grypania', '#6bc4a6')], None),
  ('kolonien', '2.2', 'Koloniebildung & Zellkommunikation', 'Kolonien', -1.5e9, -0.8e9, '#0f2638', '#1b3a54',
-  'Bangiomorpha, eine Rotalge von vor ca. 1 Mrd. Jahren, ist einer der ältesten bekannten Mehrzeller mit verschiedenen Zelltypen. Kragengeißeltiere sind die nächsten einzelligen Verwandten der Tiere.',
   [('kragengeisseltier', 'Kragengeißeltier', '#a6e0ff'), ('bangiomorpha', 'Bangiomorpha (Rotalge)', '#e06b8a'), ('tappania', 'Tappania', '#c9b46b')], None),
  ('mehrzeller', '2.3', 'Echte Mehrzeller & Gewebe', 'Mehrzeller & Gewebe', -800e6, -540e6, '#13263a', '#213b55',
-  'Die Ediacara-Fauna (ca. 575–540 Mio. Jahre) zeigt die ersten großen Lebewesen. Dickinsonia wurde bis 1,4 m groß – Fettmoleküle im Fossil zeigen, dass sie ein Tier war.',
   [('cloudina', 'Cloudina', '#e8e2c8'), ('kimberella', 'Kimberella', '#c98a5a'), ('charnia', 'Charnia', '#8ac98a')],
   ('dickinsonia', 'Dickinsonia', '#d9a66b')),
  ('kambrium', '3.1', 'Kambrische Diversifizierung', 'Kambrium', -541e6, -485e6, '#0c2340', '#16365e',
-  'In der Kambrischen Explosion entstanden in wenigen Millionen Jahren fast alle heutigen Tierstämme. Trilobiten hatten schon Facettenaugen mit Linsen aus Kalkspat.',
   [('hallucigenia', 'Hallucigenia', '#ff9ab0'), ('trilobit', 'Trilobit', '#b89a6b'), ('anomalocaris', 'Anomalocaris', '#e0603a')], None),
  ('landgang', '3.2', 'Eroberung des Festlands', 'Landgang', -470e6, -400e6, '#1d2a17', '#2c4022',
-  'Pflanzen und Pilze besiedelten zuerst das Land, dann folgten Gliederfüßer: Der Tausendfüßer Pneumodesmus lebte vor über 410 Mio. Jahren und ist eines der ältesten bekannten Landtiere.',
   [('rhyniella', 'Springschwanz (Rhyniella)', '#d8d8a0'), ('pneumodesmus', 'Tausendfüßer (Pneumodesmus)', '#a8643c'), ('eurypterus', 'Seeskorpion (Eurypterus)', '#7a8a5a')], None),
  ('landwirbeltiere', '3.3', 'Landwirbeltiere & Samenpflanzen', 'Landwirbeltiere', -380e6, -320e6, '#1a2814', '#2a3e1f',
-  'Tiktaalik (ca. 375 Mio. Jahre) war ein Fisch mit Hals und kräftigen Flossen – ein Übergang zu den Vierbeinern. Samen und das Amniotenei machten Pflanzen und Tiere vom offenen Wasser unabhängig.',
   [('acanthostega', 'Acanthostega', '#8ab06b'), ('pulmonoscorpius', 'Riesenskorpion (Pulmonoscorpius)', '#c08a4a'), ('arthropleura', 'Arthropleura', '#6b5a3a')],
   ('dunkleosteus', 'Dunkleosteus', '#6b7f99')),
  ('dinosaurier', '4.1', 'Amnioten, Dinosaurier & frühe Säuger', 'Dinosaurier', -320e6, -66e6, '#24261a', '#383b26',
-  'Dinosaurier gab es ca. 165 Mio. Jahre lang. Die ersten Säugetiere lebten schon neben ihnen – meist klein und nachtaktiv.',
   [('compsognathus', 'Compsognathus', '#a6c46b'), ('velociraptor', 'Velociraptor', '#c9935a'), ('triceratops', 'Triceratops', '#8a7a5a')], None),
  ('saeugetiere', '4.2', 'Säugetier-Aufstieg & Warmblütigkeit', 'Säugetier-Aufstieg', -66e6, -55e6, '#26221a', '#3b3426',
-  'Vor 66 Mio. Jahren schlug bei Chicxulub (Mexiko) ein Asteroid ein. Die Nicht-Vogel-Dinosaurier starben aus, die Säugetiere breiteten sich aus. Vögel sind die überlebenden Dinosaurier.',
   [('purgatorius', 'Purgatorius', '#b89a7a'), ('gastornis', 'Gastornis', '#7a6b8a'), ('titanoboa', 'Titanoboa', '#5a7a4a')], None),
  ('primaten', '4.3', 'Primaten, Greifhände & Sozialität', 'Primaten', -55e6, -6e6, '#1c2a1a', '#2c4128',
-  'Primaten entwickelten nach vorn gerichtete Augen für räumliches Sehen und Greifhände mit Nägeln statt Krallen. Vor ca. 7–6 Mio. Jahren trennten sich die Linien von Schimpanse und Mensch.',
   [('hyaenodon', 'Hyaenodon', '#9a8a6a'), ('entelodont', 'Entelodont', '#7a5a4a'), ('deinotherium', 'Deinotherium', '#8a8a8a')],
   ('andrewsarchus', 'Andrewsarchus', '#6a4a3a')),
  ('hominiden', '5.1', 'Aufrechter Gang & Steinwerkzeuge', 'Aufrechter Gang', -6e6, -1.8e6, '#2b2419', '#403526',
-  'Lucy (Australopithecus afarensis, ca. 3,2 Mio. Jahre) ging schon aufrecht. Die ältesten bekannten Steinwerkzeuge sind ca. 3,3 Mio. Jahre alt (Lomekwi, Kenia).',
   [('pachycrocuta', 'Riesenhyäne (Pachycrocuta)', '#b0a07a'), ('dinofelis', 'Dinofelis', '#d0a04a'), ('homotherium', 'Homotherium', '#a0804a')], None),
  ('jaeger-sammler', '5.2', 'Sprache, Feuer & Jäger-Sammler-Kulturen', 'Feuer & Sprache', -1.8e6, -10000, '#2b2119', '#3f3126',
-  'Homo erectus nutzte wohl als Erster das Feuer und verließ Afrika. Unsere Art, Homo sapiens, entstand vor ca. 300.000 Jahren in Afrika.',
   [('hoehlenhyaene', 'Höhlenhyäne', '#a9a088'), ('hoehlenbaer', 'Höhlenbär', '#6e4a32'), ('wollnashorn', 'Wollnashorn', '#8a7660')], None),
- ('zivilisation', '5.3', 'Sesshaftigkeit, Schrift & Industrie/Digitaltechnik', 'Sesshaftigkeit & Industrie', -10000, 1957, '#24231f', '#3a382f',
-  'Ab ca. 9.500 v. Chr. begann im Fruchtbaren Halbmond die Landwirtschaft. Schrift gibt es seit ca. 3.300 v. Chr. (Mesopotamien), Dampfmaschinen seit dem 18. Jahrhundert.',
+ ('zivilisation', '5.3', 'Sesshaftigkeit, Schrift & Industrie/Digitaltechnik', 'Zivilisation', -10000, 1957, '#24231f', '#3a382f',
   [('hausratte', 'Hausratte', '#8a8378'), ('heuschrecken', 'Heuschreckenschwarm', '#b5b04a'), ('auerochse', 'Auerochse', '#5a4030')],
   ('pest', 'Schwarzer Tod (Pest)', '#7a8a5a')),
  ('erdorbit', '6.1', 'Erdorbit & unbemannte Erkundung', 'Erdorbit', 1957, 2026, '#0c0f1e', '#171c33',
-  'Am 4. Oktober 1957 startete Sputnik 1, der erste Satellit. 1969 betraten Menschen den Mond, seit dem Jahr 2000 ist die ISS dauerhaft bewohnt.',
   [('mikrometeoroid', 'Mikrometeoroid', '#c8c8d8'), ('weltraumschrott', 'Weltraumschrott', '#9aa0aa'), ('raketenstufe', 'Ausgebrannte Raketenstufe', '#d0d4dc')], None),
  ('mond-mars', '6.2', 'Mond, Mars & geschlossene Lebenserhaltung', 'Mond & Mars', 2026, 2055, '#1a1010', '#2e1c1a',
-  'Zukunft – noch nicht passiert. Geplant sind Stationen auf dem Mond; auf dem Mars bräuchte man Strahlungsschutz und Wasser aus dem Eis im Boden.',
   [('mondstaub', 'Mondstaub', '#c8c0b0'), ('staubteufel', 'Marsstaubteufel', '#c0603a'), ('sonnensturm', 'Sonnensturm-Teilchen', '#ffd060')], None),
  ('tiefraum', '6.3', 'Interplanetare & tiefe Raumfahrt', 'Tiefe Raumfahrt', 2055, 2300, '#07071a', '#14143a',
-  'Zukunft – noch nicht passiert. Selbst Licht braucht zum nächsten Stern (Proxima Centauri) über 4 Jahre. Voyager 1 ist seit 1977 unterwegs und erreichte 2012 den interstellaren Raum.',
   [('kosmische-strahlung', 'Kosmische Strahlung', '#a0e0ff'), ('kometenbrocken', 'Kometenbrocken', '#d8f0ff'), ('eisasteroid', 'Eisasteroid', '#90a8c0')],
   ('asteroid', 'Erdnaher Asteroid', '#7a6a5a')),
 ]
@@ -112,47 +94,49 @@ def ambient(ids, first):
         return []
     return [{'enemy': ids[2], 'from': 20, 'to': 100000, 'every': 8, 'count': 1}]
 
-FACTS = {
- 'urzellen': ['Die Erde ist rund 4,5 Mrd. Jahre alt. Winzige Zirkon-Kristalle aus Australien sind etwa 4,4 Mrd. Jahre alt und deuten auf frühe Ozeane hin.',
-              'Im Miller-Urey-Versuch (1953 veröffentlicht) entstanden aus Gasen, Wasser und künstlichen Blitzen von selbst Aminosäuren – Bausteine des Lebens.'],
- 'stoffwechsel': ['Alles heutige Leben hat einen gemeinsamen Vorfahren, genannt LUCA. Er lebte vermutlich vor mehr als 3,5 Mrd. Jahren – manche Studien schätzen sogar über 4 Mrd.',
-                  'Viele frühe Mikroben lebten ohne Sauerstoff, etwa von Wasserstoff, Schwefel oder Eisen – so wie heute noch Mikroben an heißen Quellen der Tiefsee.'],
- 'photosynthese': ['Durch den Sauerstoff rostete gelöstes Eisen im Meer und sank zu Boden. So entstanden gebänderte Eisenerze – bis heute eine wichtige Quelle für Eisen.',
-                   'Aus Sauerstoff bildete sich hoch in der Atmosphäre die Ozonschicht. Sie hält UV-Strahlung ab und machte später das Leben an Land möglich.'],
- 'endosymbiose': ['Mitochondrien haben bis heute ein eigenes kleines Erbgut – ein Hinweis darauf, dass sie einmal eigenständige Bakterien waren.',
-                  'Algen und Pflanzen nahmen zusätzlich ein Cyanobakterium auf. Daraus wurden die Chloroplasten, in denen die Photosynthese stattfindet.'],
- 'kolonien': ['Bangiomorpha ist auch der älteste bekannte Hinweis auf geschlechtliche Fortpflanzung – also das Mischen des Erbguts zweier Eltern.',
-              'Der Schleimpilz Dictyostelium lebt als Einzeller. Bei Nahrungsmangel schließen sich viele Zellen über Botenstoffe zu einem gemeinsamen Körper zusammen.'],
- 'mehrzeller': ['Vor etwa 720–635 Mio. Jahren war die Erde vermutlich mehrmals fast ganz vereist („Schneeball-Erde“). Danach breiteten sich größere Lebewesen aus.',
-                'Schwämme gehören zu den ältesten Tiergruppen. Sie haben weder Organe noch Nerven – ihre Zellen arbeiten trotzdem zusammen.'],
- 'kambrium': ['Im Burgess-Schiefer (Kanada, ca. 508 Mio. Jahre) sind Fossilien so gut erhalten, dass sogar Weichteile zu sehen sind.',
-              'Pikaia und Haikouichthys gehören zu den frühesten bekannten Chordatieren – der Gruppe, zu der auch alle Wirbeltiere und damit du gehören.'],
- 'landgang': ['Die ersten Landpflanzen waren winzig und hatten noch keine echten Wurzeln und Blätter – ähnlich wie heutige Moose.',
-              'Pilze halfen den Pflanzen beim Landgang: Ihre Fäden versorgen Wurzeln mit Wasser und Mineralien (Mykorrhiza) – eine Partnerschaft bis heute.'],
- 'landwirbeltiere': ['Im Karbon (ca. 359–299 Mio. Jahre) wuchsen riesige Sumpfwälder aus Bärlappbäumen und Farnen. Aus ihnen entstand ein großer Teil der Steinkohle.',
-                     'Acanthostega hatte schon Beine mit acht Fingern, lebte aber noch hauptsächlich im Wasser.'],
- 'dinosaurier': ['Vor 252 Mio. Jahren starben beim größten Massenaussterben der Erdgeschichte rund 80–90 % der Meeresarten aus (Perm-Trias-Grenze).',
-                 'Vögel stammen von kleinen gefiederten Dinosauriern ab. Archaeopteryx (ca. 150 Mio. Jahre) zeigt Merkmale von beiden.'],
- 'saeugetiere': ['Vor etwa 56 Mio. Jahren erwärmte sich die Erde rasch um mehrere Grad. In dieser Zeit tauchen viele heutige Säugetiergruppen auf, auch die ersten echten Primaten.',
-                 'Gastornis war ein bis zu 2 m großer, flugunfähiger Vogel. Lange galt er als Raubtier – heute vermuten Forscher, dass er Pflanzen fraß.'],
- 'primaten': ['Wale stammen von Landtieren ab: Pakicetus (ca. 50 Mio. Jahre) lief noch auf vier Beinen. Die nächsten heutigen Verwandten der Wale sind Flusspferde.',
-              'Vor etwa 34 Mio. Jahren kühlte die Erde stark ab, und in der Antarktis bildeten sich dauerhafte Eisschilde.'],
- 'hominiden': ['In Laetoli (Tansania) sind 3,66 Mio. Jahre alte Fußspuren erhalten – Vormenschen liefen dort aufrecht durch frische Vulkanasche.',
-               'Vor etwa 2,8 Mio. Jahren taucht die Gattung Homo auf. Homo habilis („geschickter Mensch“) stellte einfache Steinwerkzeuge her.'],
- 'jaeger-sammler': ['Die ältesten bekannten Höhlenmalereien sind über 40.000 Jahre alt, zum Beispiel auf der indonesischen Insel Sulawesi.',
-                    'Neandertaler lebten bis vor etwa 40.000 Jahren in Europa. Menschen außerhalb Afrikas tragen heute noch etwa 1–2 % Neandertaler-Erbgut in sich.'],
- 'zivilisation': ['Die Pyramiden von Gizeh entstanden vor etwa 4.500 Jahren. Damals lebten auf der Wrangel-Insel (Sibirien) noch Wollhaarmammuts.',
-                  '1928 entdeckte Alexander Fleming das Penicillin. Das erste Antibiotikum veränderte die Medizin.'],
- 'erdorbit': ['Seit 1990 umkreist das Hubble-Teleskop die Erde. Seit 2022 liefert das James-Webb-Teleskop Bilder aus der Frühzeit des Universums.',
-              'Um die Erde kreisen rund eine Million Teile Weltraumschrott, die größer als 1 cm sind. Schon so ein Splitter kann einen Satelliten beschädigen.'],
- 'mond-mars': ['Ein Flug zum Mars dauert mit heutigen Raketen etwa 6–9 Monate. Funksignale brauchen je nach Abstand 3 bis 22 Minuten.',
-               'Auf dem Mars beträgt der Luftdruck weniger als 1 % des Drucks auf der Erde – ohne Druckanzug könnte man dort nicht überleben.'],
- 'tiefraum': ['Mit heutigen Raumsonden würde ein Flug zu Proxima Centauri über 70.000 Jahre dauern.',
-              'Forscher haben schon über 5.000 Planeten bei anderen Sternen entdeckt, sogenannte Exoplaneten.'],
+# Bodentexte je Stufe: beschreiben, was in diesem Zeitraum passiert (1. am Anfang, 2. etwa in der Mitte).
+# Fachlich belegbar, Zukunft ausdrücklich als solche benannt.
+TEXTS = {
+ 'urzellen': ['Die junge Erde: heiße Meere, Vulkane, kaum Sauerstoff in der Luft. Im Wasser entstehen aus einfachen Stoffen die Bausteine des Lebens.',
+              'Fettbläschen umschließen Erbmoleküle wie RNA. Aus solchen Ur-Zellen ging vermutlich das erste Leben hervor.'],
+ 'stoffwechsel': ['Die ersten echten Zellen: winzig und ohne Zellkern. Sie gewinnen Energie aus Wasserstoff, Schwefel oder Eisen – ganz ohne Sauerstoff.',
+                  'Das Leben teilt sich in zwei große Gruppen: Bakterien und Archaeen. Mikrobenmatten bauen die ersten Stromatolithen.'],
+ 'photosynthese': ['Cyanobakterien nutzen Sonnenlicht und spalten dabei Wasser. Als Abfall geben sie Sauerstoff ab.',
+                   'Vor ca. 2,4 Mrd. Jahren reichert sich Sauerstoff in der Luft an. Für viele Mikroben ist er giftig – wer überlebt, passt sich an.'],
+ 'endosymbiose': ['Eine Archaee nimmt ein Bakterium auf, ohne es zu verdauen. Daraus werden die Mitochondrien – die Kraftwerke der Zelle.',
+                  'Das Erbgut bekommt eine eigene Hülle, den Zellkern. So entstehen die Eukaryoten, die Vorfahren von Pflanzen, Pilzen und Tieren.'],
+ 'kolonien': ['Zellen bleiben nach der Teilung zusammen und bilden Kolonien. Sie verständigen sich über Botenstoffe.',
+              'Erste Mehrzeller wie Rotalgen haben schon verschiedene Zelltypen, die sich die Arbeit teilen.'],
+ 'mehrzeller': ['Nach der Schneeball-Erde werden Lebewesen größer: Zellen bilden Gewebe, die ersten Tiere entstehen.',
+                'In der Ediacara-Zeit liegen große, weiche Lebewesen am Meeresboden. Manche hatten noch keinen Mund.'],
+ 'kambrium': ['In wenigen Millionen Jahren entstehen fast alle heutigen Tierstämme. Tiere bekommen Augen, Panzer und Beine.',
+              'Jäger und Beute rüsten auf: Anomalocaris jagt, Trilobiten tragen Panzer. Auch die ersten Chordatiere schwimmen hier.'],
+ 'landgang': ['Pflanzen und Pilze besiedeln das Ufer. Die Ozonschicht hält genug UV-Strahlung ab, damit Leben an Land möglich ist.',
+              'Gliederfüßer wie Tausendfüßer und Springschwänze gehen als erste Tiere an Land. Im Wasser jagen Seeskorpione.'],
+ 'landwirbeltiere': ['Fische mit kräftigen Flossen wagen sich ins flache Wasser. Aus ihnen werden die ersten Vierbeiner.',
+                     'Riesige Sumpfwälder wachsen. Samen und Eier mit Schale machen Pflanzen und Tiere unabhängig vom Wasser.'],
+ 'dinosaurier': ['Reptilien und die Vorfahren der Säuger breiten sich an Land aus. Später herrschen rund 165 Mio. Jahre lang die Dinosaurier.',
+                 'Die ersten Säugetiere leben im Schatten der Dinosaurier: klein, mit Fell und meist nachts aktiv.'],
+ 'saeugetiere': ['Ein Asteroid beendet die Zeit der Dinosaurier – nur die Vögel überleben. Säugetiere erobern die frei gewordenen Lebensräume.',
+                 'Säuger sind warmblütig und halten ihre Körperwärme selbst. Bald gibt es sie in vielen neuen Formen und Größen.'],
+ 'primaten': ['Primaten leben in den Bäumen: Greifhände, Nägel statt Krallen und nach vorn gerichtete Augen für räumliches Sehen.',
+              'Sie leben in Gruppen und lernen voneinander. Am Ende trennen sich die Linien von Schimpanse und Mensch.'],
+ 'hominiden': ['Vormenschen gehen aufrecht und haben die Hände frei. In der Savanne müssen sie sich vor großen Raubtieren hüten.',
+               'Mit geschlagenen Steinen schneiden sie Fleisch und knacken Knochen. Die ältesten Werkzeuge sind ca. 3,3 Mio. Jahre alt.'],
+ 'jaeger-sammler': ['Homo erectus nutzt vermutlich schon Feuer und verlässt Afrika. Später entsteht in Afrika unsere Art, Homo sapiens.',
+                    'Menschen jagen und sammeln in Gruppen, sprechen miteinander, malen in Höhlen und überstehen die Eiszeiten.'],
+ 'zivilisation': ['Menschen werden sesshaft: Ackerbau, Viehzucht, Dörfer und später Städte. Mit der Schrift beginnt die Geschichtsschreibung.',
+                  'Maschinen, Elektrizität und Computer verändern die Welt – bis die ersten Raketen ins All fliegen.'],
+ 'erdorbit': ['Satelliten umkreisen die Erde, Menschen fliegen ins All und landen 1969 auf dem Mond.',
+              'Raumstationen werden dauerhaft bewohnt, Sonden erkunden die Planeten. Gleichzeitig wächst der Weltraumschrott.'],
+ 'mond-mars': ['Zukunft: Menschen bauen Stationen auf Mond und Mars. Luft und Wasser müssen dort immer wieder aufbereitet werden.',
+               'Zukunft: Dicke Wände schützen vor Strahlung und Staubstürmen. Wasser kommt aus dem Eis im Boden.'],
+ 'tiefraum': ['Zukunft: Raumschiffe fliegen jahrelang zu fernen Planeten – an Bord ein eigener kleiner Kreislauf aus Luft, Wasser und Nahrung.',
+              'Zukunft: Selbst Licht braucht über 4 Jahre zum nächsten Stern. Eine Reise dorthin würde vermutlich Generationen dauern.'],
 }
 
 epochs = []
-for i, (eid, code, name, short, f, t, bg, grid, fact, en, boss) in enumerate(S):
+for i, (eid, code, name, short, f, t, bg, grid, en, boss) in enumerate(S):
     k = 1 + 0.32 * i
     sp = 1 + 0.02 * i
     base = [
@@ -182,7 +166,7 @@ for i, (eid, code, name, short, f, t, bg, grid, fact, en, boss) in enumerate(S):
     ids = [x[0] for x in en]
     h = HEIGHT_EARLY if early else HEIGHT_LATE
     e = {'id': eid, 'code': code, 'order': i + 1, 'phase': int(code[0]), 'phaseName': PHASES[int(code[0])],
-         'name': name, 'shortName': short, 'fromYear': f, 'toYear': t, 'facts': [fact] + FACTS[eid],
+         'name': name, 'shortName': short, 'fromYear': f, 'toYear': t, 'texts': TEXTS[eid],
          'background': bg, 'gridColor': grid, 'height': h, 'enemies': enemies,
          'waves': waves(ids, early, i == 0, h), 'ambient': ambient(ids, i == 0)}
     if boss:
@@ -196,7 +180,7 @@ for i, (eid, code, name, short, f, t, bg, grid, fact, en, boss) in enumerate(S):
 
 info = ('Stufen nach der Evolution (1.1–6.3). fromYear/toYear = Kalenderjahre (negativ = v. Chr. bzw. vor heute), '
         'innerhalb einer Stufe läuft die Zeit gleichmäßig mit der Höhe. height = Strecke bis zur Ziellinie; boss nur am Ende einer Hauptphase. '
-        'waves nach HÖHE: from/to/every als Anteil der Stufenhöhe (0–1); ambient nach Zeit in Sekunden (wenig). facts = Bodentexte (verteilt über die Stufe). behavior drift = treibt, harmlos. variants (optional): erste passende Variante ändert Name/Farben/Wellen.')
+        'waves nach HÖHE: from/to/every als Anteil der Stufenhöhe (0–1); ambient nach Zeit in Sekunden (wenig). texts = Bodentexte: beschreiben, was in der Stufe passiert (Anfang + Mitte). behavior drift = treibt, harmlos. variants (optional): erste passende Variante ändert Name/Farben/Wellen.')
 json.dump({'_info': info, 'epochs': epochs}, open(os.path.join(OUT, 'epochs.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
 # Evolution-Optionen: stage = Stufe, die man mit der Wahl betritt. real = so ist es in unserer Zeitlinie passiert.

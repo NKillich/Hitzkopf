@@ -32,7 +32,7 @@ export function validateData(d: GameData): string[] {
         if (!(typeof e.fromYear === 'number' && typeof e.toYear === 'number' && e.fromYear < e.toYear)) {
             errors.push(`epochs/${e.id}: fromYear muss vor toYear liegen`)
         }
-        if (!e.facts?.length || e.facts.some(f => !f?.trim())) errors.push(`epochs/${e.id}: facts fehlen`)
+        if (!e.texts?.length || e.texts.some(f => !f?.trim())) errors.push(`epochs/${e.id}: texts fehlen`)
         if (!e.shortName?.trim()) errors.push(`epochs/${e.id}: shortName fehlt`)
         if (!COLOR_RE.test(e.background) || !COLOR_RE.test(e.gridColor)) errors.push(`epochs/${e.id}: Farbe ungültig`)
         const enemyIds = new Set(e.enemies.map(x => x.id))

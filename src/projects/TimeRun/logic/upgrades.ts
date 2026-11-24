@@ -65,3 +65,18 @@ export function computeStats(base: BasePlayer, weapon: WeaponStats, all: Upgrade
     stats.cooldownMs = Math.max(80, stats.cooldownMs)
     return stats
 }
+
+/** Abkürzungen, nach denen kein Satz endet („+15 max. Leben“). */
+const ABBREV = /(?:^|\s)(?:max|min|ca|Mio|Mrd|bzw|z\.\s?B)$/
+
+/** „+30 % Sammelradius. Zellen bewegen sich …“ → Wirkung (1. Satz) + Fakt (Rest, evtl. leer). */
+export function splitDescription(desc: string): { effect: string; fact: string } {
+    const text = desc.trim()
+    const re = /\.\s+(?=\p{Lu})/gu
+    for (let m = re.exec(text); m; m = re.exec(text)) {
+        const before = text.slice(0, m.index)
+        if (ABBREV.test(before)) continue
+        return { effect: before + '.', fact: text.slice(m.index + m[0].length) }
+    }
+    return { effect: text, fact: '' }
+}

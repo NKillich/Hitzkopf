@@ -23,6 +23,9 @@ export interface HudState {
     maxHp: number
     level: number
     xpFrac: number
+    /** Erfahrung im aktuellen Level / bis zum nächsten Level */
+    xp: number
+    xpNeeded: number
     timeSec: number
     kills: number
     tags: string[]
@@ -35,11 +38,23 @@ export interface HudState {
     enemies: number
 }
 
-export interface UpgradeCard { name: string; desc: string; rarity: Rarity; levelText: string; icon: IconKey }
+export interface UpgradeCard {
+    name: string
+    /** Wirkung (erster Satz der Beschreibung) */
+    effect: string
+    /** Rest der Beschreibung (Fakt), evtl. leer */
+    fact: string
+    rarity: Rarity
+    icon: IconKey
+    /** bisheriges Level (0 = neu) und höchstes Level */
+    level: number
+    maxLevel: number
+    kind: 'weapon' | 'passive'
+}
 export interface EvolutionCard { name: string; desc: string; grants: string[]; real: boolean; general: boolean; icon: IconKey }
 
 export type Overlay =
-    | { type: 'levelup'; level: number; choices: UpgradeCard[]; rerolls: number; skills: { name: string; level: number }[] }
+    | { type: 'levelup'; level: number; choices: UpgradeCard[]; rerolls: number }
     | {
         type: 'evolution'; fromName: string; toCode: string; toName: string; range: string; future: boolean
         options: EvolutionCard[]; tags: string[]; path: string[]
@@ -54,6 +69,18 @@ export type Overlay =
 /** Teleporter (nur Debug): Stufen, zu denen man springen kann */
 export interface TeleportStage { id: string; code: string; name: string; phase: number; boss: boolean }
 
+/** Text auf dem Boden der Spielwelt (y = Weltkoordinate). Liegt als HTML über dem Spiel, damit er scharf bleibt. */
+export interface FloorItem {
+    id: string
+    y: number
+    kind: 'title' | 'text' | 'year'
+    text: string
+    /** zweite Zeile (beim Titel: Zeitraum) */
+    sub?: string
+    /** heller Boden → dunkle Schrift */
+    light: boolean
+}
+
 export interface BestRun { stageIndex: number; stageCount: number; code: string; name: string }
 
 export interface UiState {
@@ -61,6 +88,8 @@ export interface UiState {
     ready: boolean
     error: string | null
     hud: HudState | null
+    /** Bodentexte der aktuellen und der vorigen Stufe */
+    floor: FloorItem[]
     overlay: Overlay | null
     /** Zeitpunkt (performance.now) des letzten Öffnens – kurze Klicksperre gegen versehentliches Wählen */
     overlayAt: number
@@ -104,7 +133,7 @@ export class UiBridge {
 
     constructor(debug = false) {
         this.state = {
-            screen: 'start', ready: false, error: null, hud: null, overlay: null, overlayAt: 0,
+            screen: 'start', ready: false, error: null, hud: null, floor: [], overlay: null, overlayAt: 0,
             banner: null, best: loadBest(), debug,
         }
     }
@@ -119,6 +148,23 @@ export class UiBridge {
     set(patch: Partial<UiState>) {
         this.state = { ...this.state, ...patch }
         for (const fn of this.listeners) fn()
+    }
+
+    /** Ebene der Bodentexte (setzt die React-Oberfläche) – wird jedes Bild direkt verschoben, ohne React neu zu zeichnen. */
+    floorEl: HTMLElement | null = null
+    private floorY = NaN
+
+    setFloorScroll(scrollY: number) {
+        const y = Math.round(scrollY)
+        if (y === this.floorY || !this.floorEl) return
+        this.floorY = y
+        this.floorEl.style.transform = `translate3d(0, ${-y}px, 0)`
+    }
+
+    /** Neue Ebene (z. B. nach dem Neuladen der Oberfläche) → Position beim nächsten Bild neu setzen. */
+    attachFloor(el: HTMLElement | null) {
+        this.floorEl = el
+        this.floorY = NaN
     }
 
     setOverlay(overlay: Overlay | null) {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { rawData, validateData } from './data'
 import { availableEvolutions, applyEvolution } from './evolution'
-import { pickUpgrades, computeStats, eligibleUpgrades } from './upgrades'
+import { pickUpgrades, computeStats, eligibleUpgrades, splitDescription } from './upgrades'
 import { spawnsDue, xpForLevel } from './waves'
 import {
     buildTimeline, firstPlayable, heightProgress, isPlayable, nextPlayable, resolveEpoch, sortedEpochs, transitionStage,
@@ -431,5 +431,35 @@ describe('Tempo, ruhiger Start, Teleporter', () => {
             // bis heute nur echte Wahlen
             for (const o of r!.path) if (d.epochs.find(x => x.id === o.stage)!.fromYear < 2026) expect(o.real, o.id).toBe(true)
         })
+    })
+})
+
+describe('Bodentexte und Upgrade-Texte', () => {
+    it('jede Stufe hat 2 Beschreibungstexte (kurz genug für 3–4 Zeilen), keine „Wusstest du“-Fakten', () => {
+        for (const e of rawData().epochs) {
+            expect(e.texts, e.id).toHaveLength(2)
+            for (const t of e.texts) {
+                expect(t.length, `${e.id}: ${t}`).toBeLessThanOrEqual(140)
+                expect(t).not.toMatch(/wusstest/i)
+            }
+        }
+    })
+
+    it('Zukunftsstufen sagen klar, dass es Zukunft ist', () => {
+        for (const e of rawData().epochs.filter(x => x.fromYear >= 2026)) {
+            for (const t of e.texts) expect(t, e.id).toMatch(/^Zukunft:/)
+        }
+    })
+
+    it('Upgrade-Beschreibung wird in Wirkung und Fakt geteilt, Abkürzungen bleiben ganz', () => {
+        expect(splitDescription('+30 % Sammelradius. Zellen bewegen sich zu Nährstoffen hin.'))
+            .toEqual({ effect: '+30 % Sammelradius.', fact: 'Zellen bewegen sich zu Nährstoffen hin.' })
+        expect(splitDescription('+15 max. Leben. Die Zellwand schützt vor dem Platzen.'))
+            .toEqual({ effect: '+15 max. Leben.', fact: 'Die Zellwand schützt vor dem Platzen.' })
+        expect(splitDescription('+20 max. Leben.')).toEqual({ effect: '+20 max. Leben.', fact: '' })
+        for (const u of rawData().upgrades) {
+            const { effect } = splitDescription(u.description)
+            expect(effect.length, u.id).toBeLessThanOrEqual(45)
+        }
     })
 })
