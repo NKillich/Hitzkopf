@@ -67,7 +67,7 @@ S = [
  ('zivilisation', '5.3', 'Sesshaftigkeit, Schrift & Industrie/Digitaltechnik', 'Sesshaftigkeit & Industrie', -10000, 1957, '#24231f', '#3a382f',
   'Ab ca. 9.500 v. Chr. begann im Fruchtbaren Halbmond die Landwirtschaft. Schrift gibt es seit ca. 3.300 v. Chr. (Mesopotamien), Dampfmaschinen seit dem 18. Jahrhundert.',
   [('hausratte', 'Hausratte', '#8a8378'), ('heuschrecken', 'Heuschreckenschwarm', '#b5b04a'), ('auerochse', 'Auerochse', '#5a4030')],
-  ('pest', 'Schwarzer Tod (Pest)', '#3a3f4a')),
+  ('pest', 'Schwarzer Tod (Pest)', '#7a8a5a')),
  ('erdorbit', '6.1', 'Erdorbit & unbemannte Erkundung', 'Erdorbit', 1957, 2026, '#0c0f1e', '#171c33',
   'Am 4. Oktober 1957 startete Sputnik 1, der erste Satellit. 1969 betraten Menschen den Mond, seit dem Jahr 2000 ist die ISS dauerhaft bewohnt.',
   [('mikrometeoroid', 'Mikrometeoroid', '#c8c8d8'), ('weltraumschrott', 'Weltraumschrott', '#9aa0aa'), ('raketenstufe', 'Ausgebrannte Raketenstufe', '#d0d4dc')], None),
@@ -164,8 +164,8 @@ for i, (eid, code, name, short, f, t, bg, grid, fact, en, boss) in enumerate(S):
             # Paket 1: farbige Pixel-Figur + doppelte Größe (Hauptfigur 32 px)
             x['art'] = ART[xid]
             x['size'] = [20, 34, 46][j]
-        elif int(code[0]) <= 4:
-            # Paket 2: Tiere von Kambrium bis Primaten
+        else:
+            # Paket 2/3: Tiere, Plagen, Gefahren im All
             x['art'] = ART[xid]
             x['size'] = [22, 32, 44][j]
         enemies.append(x)
@@ -180,7 +180,7 @@ for i, (eid, code, name, short, f, t, bg, grid, fact, en, boss) in enumerate(S):
         # harmlos wie in Wirklichkeit: Stromatolith steht still, Dickinsonia hatte keinen Mund
         if boss[0] == 'stromatolith': e['boss'].update(speed=0, damage=0)
         if boss[0] == 'dickinsonia': e['boss'].update(speed=6, damage=0)
-        if int(code[0]) <= 4: e['boss'].update(art=ART[boss[0]], size=84)
+        e['boss'].update(art=ART[boss[0]], size=84)
     epochs.append(e)
 
 info = ('Stufen nach der Evolution (1.1–6.3). fromYear/toYear = Kalenderjahre (negativ = v. Chr. bzw. vor heute), '

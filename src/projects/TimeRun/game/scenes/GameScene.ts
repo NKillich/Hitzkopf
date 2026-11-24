@@ -19,7 +19,7 @@ import { saveBest, type IconKey, type UiBridge } from '../bridge'
 import { bodyFor, groundFor, outfitFor, PLAYER_TINT, type Shape } from '../../logic/appearance'
 import { outfitKey, shapeKey } from '../sprites'
 import { HERO_BODY_KEYS, heroKey, mobKey } from '../art/microbes'
-import { hasStageArt, propCount, propKey, tileKey } from '../art/backgrounds'
+import { hasStageArt, isLightStage, propCount, propKey, tileKey } from '../art/backgrounds'
 
 class Enemy extends Phaser.Physics.Arcade.Image {
     declare body: Phaser.Physics.Arcade.Body
@@ -361,27 +361,33 @@ export class GameScene extends Phaser.Scene {
         const h = e.height ?? 5000
         const bottom = this.epochStartY
         const font = '"Pixelify Sans", ui-monospace, monospace'
+        // Auf hellem Boden (Schnee) dunkle Schrift, sonst helle
+        const light = isLightStage(e.id)
+        const ink = light ? '#1a1f24' : '#F4EEDC'
+        const inkNum = light ? 0x1a1f24 : 0xf4eedc
+        const gold = light ? '#6a3a10' : '#FFD27A'
+        const mint = light ? '#1e5a4a' : '#A6F7DA'
         const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => { this.worldObjs.push(o); return o }
 
         const g = add(this.add.graphics().setDepth(-6))
-        g.fillStyle(0xf4eedc, 0.16).fillRect(6, bottom - h, 2, h)
+        g.fillStyle(inkNum, 0.16).fillRect(6, bottom - h, 2, h)
         for (let i = 0; i <= 20; i++) {
             const y = bottom - (h * i) / 20
             const major = i % 5 === 0
-            g.fillStyle(0xf4eedc, major ? 0.32 : 0.18).fillRect(6, y - 1, major ? 12 : 6, 2)
+            g.fillStyle(inkNum, major ? 0.32 : 0.18).fillRect(6, y - 1, major ? 12 : 6, 2)
             if (major && i < 20) {
                 add(this.add.text(22, y, formatYear(yearAt(e.fromYear, e.toYear, i / 20)), {
-                    fontFamily: font, fontSize: '11px', color: '#F4EEDC', resolution: 2,
+                    fontFamily: font, fontSize: '11px', color: ink, resolution: 2,
                 }).setOrigin(0, 0.5).setAlpha(0.4).setDepth(-4))
             }
         }
 
         // Stufenname kurz über dem Start
         add(this.add.text(WIDTH / 2, bottom - 150, `${e.code} ${e.name}`, {
-            fontFamily: font, fontSize: '18px', fontStyle: 'bold', color: '#FFD27A', align: 'center', wordWrap: { width: 300 }, resolution: 2,
+            fontFamily: font, fontSize: '18px', fontStyle: 'bold', color: gold, align: 'center', wordWrap: { width: 300 }, resolution: 2,
         }).setOrigin(0.5, 1).setAlpha(0.55).setDepth(-4))
         add(this.add.text(WIDTH / 2, bottom - 144, formatRange(e.fromYear, e.toYear), {
-            fontFamily: font, fontSize: '12px', color: '#A6F7DA', align: 'center', resolution: 2,
+            fontFamily: font, fontSize: '12px', color: mint, align: 'center', resolution: 2,
         }).setOrigin(0.5, 0).setAlpha(0.5).setDepth(-4))
 
         // Fakten gleichmäßig über die Stufe verteilt
@@ -390,10 +396,10 @@ export class GameScene extends Phaser.Scene {
             // nicht auf den Hauptstrichen des Lineals (0/25/50/75 %)
             const y = bottom - h * (0.12 + (0.6 * i) / Math.max(1, n - 1))
             add(this.add.text(WIDTH / 2 + 6, y - 6, 'Wusstest du?', {
-                fontFamily: font, fontSize: '11px', color: '#FFD27A', resolution: 2,
+                fontFamily: font, fontSize: '11px', color: gold, resolution: 2,
             }).setOrigin(0.5, 1).setAlpha(0.45).setDepth(-4))
             add(this.add.text(WIDTH / 2 + 6, y, fact, {
-                fontFamily: font, fontSize: '14px', color: '#F4EEDC', align: 'center', wordWrap: { width: 300 }, lineSpacing: 3, resolution: 2,
+                fontFamily: font, fontSize: '14px', color: ink, align: 'center', wordWrap: { width: 300 }, lineSpacing: 3, resolution: 2,
             }).setOrigin(0.5, 0).setAlpha(0.55).setDepth(-4))
         })
         // Deko passend zur Stufe (Steine, Pflanzen, Schlote …), dezent im Hintergrund
@@ -410,11 +416,13 @@ export class GameScene extends Phaser.Scene {
         smoothTexts(this.worldObjs)
     }
 
-    /** Hauptfigur mit Gesicht + gelben Fühlern: Mikrobe (Phase 1–2), danach Körper je Evolution (bis Phase 4) */
+    /** Hauptfigur mit Gesicht + gelben Fühlern: Mikrobe (Phase 1–2), danach Körper je Evolution, ab 5.2 mit Ausrüstung. */
     private heroBody(): string | null {
-        const phase = this.baseEpoch.phase
-        if (phase <= 2) return 'microbe'
-        return phase <= 4 && HERO_BODY_KEYS.includes(this.body_) ? this.body_ : null
+        const e = this.baseEpoch
+        if (e.phase <= 2) return 'microbe'
+        const body = HERO_BODY_KEYS.includes(this.body_) ? this.body_ : 'mammal'
+        const outfit = outfitFor(e.code)
+        return outfit === 'none' ? body : `${body}-${outfit}`
     }
 
     private isHero(): boolean {
@@ -436,7 +444,7 @@ export class GameScene extends Phaser.Scene {
         this.player.setDisplaySize(this.playerSz, this.playerSz)
         const outfit = outfitFor(e.code)
         const key = outfitKey(this.body_, outfit)
-        const has = outfit !== 'none' && this.textures.exists(key)
+        const has = !this.isHero() && outfit !== 'none' && this.textures.exists(key)
         this.outfitImg.setVisible(has)
         if (has) this.outfitImg.setTexture(key)
     }

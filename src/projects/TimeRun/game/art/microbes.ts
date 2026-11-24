@@ -3,7 +3,13 @@
 // W = weiß, K = schwarz, Y = gelb, A = Akzent, M = Mund, . = leer.
 // Die Hauptfigur hat feste Farben, Gegner leiten ihre Töne aus der Datenfarbe ab.
 import type Phaser from 'phaser'
-import { ANIMAL_ART, HERO_BODIES, type Grid, type Motion } from './animals'
+import { ANIMAL_ART, HERO_BODIES as ANIMAL_BODIES, type Grid, type Motion } from './animals'
+import { HERO_ANCHORS, HERO_HUMAN, MODERN_ART } from './modern'
+
+const HERO_BODIES: Record<string, { grid: Grid; motion: Motion }> = { ...ANIMAL_BODIES, human: HERO_HUMAN }
+const MOB_ART: Record<string, { grid: Grid; motion: Motion }> = { ...ANIMAL_ART, ...MODERN_ART }
+/** Ausrüstung der Epoche (5.2 Fell, 5.3 Kleidung, 6.x Raumanzug) */
+export const OUTFITS = ['cloak', 'tunic', 'suit'] as const
 
 const OUTLINE = 0x14202e
 
@@ -175,11 +181,29 @@ function drawFrame(g: Phaser.GameObjects.Graphics, grid: Grid, colors: Record<st
     else drawGrid(g, grid, colors, -1)
 }
 
-/** Hauptfigur: „microbe“ (Phase 1–2) oder ein Körper aus Paket 2 (fish, arthropod, tetrapod, reptile, mammal, bird). */
+/** Umhang (Fell), Kleidung (mit Gürtel) oder Raumanzug (weiß + Helm) über den Körper legen. */
+function drawOutfit(
+    g: Phaser.GameObjects.Graphics, a: { torso: [number, number, number, number]; head: [number, number, number] },
+    outfit: typeof OUTFITS[number], dy: number,
+) {
+    const [tx, ty, tw, th] = a.torso
+    const y = ty + dy
+    if (outfit === 'cloak') { g.fillStyle(0x8a5a33, 1).fillRect(tx, y, tw, th); g.fillStyle(0x5e3c22, 1).fillRect(tx, y + th - 1, tw, 1) }
+    if (outfit === 'tunic') { g.fillStyle(0x4e6fa8, 1).fillRect(tx, y, tw, th); g.fillStyle(0xffd27a, 1).fillRect(tx, y + 1, tw, 1) }
+    if (outfit === 'suit') {
+        g.fillStyle(0xedf2f7, 1).fillRect(tx, y, tw, th)
+        g.fillStyle(0xe8603b, 1).fillRect(tx + 1, y + 1, 2, 1)
+        const [hx, hy, hr] = a.head
+        g.fillStyle(0x4ea8ff, 0.3).fillCircle(hx, hy + dy, hr)
+        g.lineStyle(1, 0xffffff, 0.95).strokeCircle(hx, hy + dy, hr)
+    }
+}
+
+/** Hauptfigur: „microbe“ (Phase 1–2) oder ein Körper (fish … human), mit Ausrüstung als „human-suit“ usw. */
 export const heroKey = (body: string, frame: number) => `hero_${body}_${frame}`
 export const HERO_BODY_KEYS = ['microbe', ...Object.keys(HERO_BODIES)]
 export const mobKey = (id: string, frame: number) => `mob_${id}_${frame}`
-export const ART_KEYS = [...Object.keys(ART), ...Object.keys(ANIMAL_ART)]
+export const ART_KEYS = [...Object.keys(ART), ...Object.keys(MOB_ART)]
 
 /** Hauptfigur(en) + alle Gegner mit `art` als Texturen (je 2 Bilder). */
 export function generateMicrobeArt(scene: Phaser.Scene, mobs: { id: string; art: string; color: string }[]) {
@@ -189,9 +213,17 @@ export function generateMicrobeArt(scene: Phaser.Scene, mobs: { id: string; art:
     })
     for (const [body, { grid, motion }] of Object.entries(HERO_BODIES)) {
         for (const f of [0, 1]) { g.clear(); drawFrame(g, grid, HERO_COLORS, motion, f); g.generateTexture(heroKey(body, f), 16, 16) }
+        const a = HERO_ANCHORS[body]
+        if (!a) continue
+        for (const outfit of OUTFITS) {
+            for (const f of [0, 1]) {
+                g.clear(); drawFrame(g, grid, HERO_COLORS, motion, f); drawOutfit(g, a, outfit, f && motion === 'bob' ? -1 : 0)
+                g.generateTexture(heroKey(`${body}-${outfit}`, f), 16, 16)
+            }
+        }
     }
     for (const m of mobs) {
-        const animal = ANIMAL_ART[m.art]
+        const animal = MOB_ART[m.art]
         const grid = animal?.grid ?? ART[m.art]
         if (!grid) continue
         const motion: Motion = animal?.motion ?? (STATIC.has(m.art) ? 'static' : 'bob')

@@ -365,23 +365,23 @@ describe('Aussehen', () => {
     })
 })
 
-describe('Paket 1+2: Figuren Phase 1–4', () => {
-    it('jeder Gegner und Boss in Phase 1–4 hat eine vorhandene Figur', () => {
-        for (const e of rawData().epochs.filter(x => x.phase <= 4)) {
+describe('Pakete 1–3: Figuren aller Phasen', () => {
+    it('jeder Gegner und Boss hat eine vorhandene Figur', () => {
+        for (const e of rawData().epochs) {
             for (const x of [...e.enemies, ...(e.boss ? [e.boss] : [])]) expect(ART_KEYS, `${e.id}/${x.id}`).toContain(x.art)
         }
     })
 
-    it('jede Stufe in Phase 1–4 hat einen eigenen Hintergrund mit Deko', () => {
-        for (const e of rawData().epochs.filter(x => x.phase <= 4)) {
+    it('jede der 18 Stufen hat einen eigenen Hintergrund mit Deko', () => {
+        for (const e of rawData().epochs) {
             expect(hasStageArt(e.id), e.id).toBe(true)
             expect(propCount(e.id), e.id).toBeGreaterThanOrEqual(2)
         }
     })
 
     it('für jeden Körper in Phase 3–4 gibt es eine Hauptfigur mit Gesicht', () => {
-        const tagsList = [[], ['gliederfüsser'], ['vierbeiner'], ['vierbeiner', 'reptil'], ['vierbeiner', 'säuger'], ['dinosaurier', 'vogel'], ['fisch', 'wasser']]
-        for (const [phase, code] of [[3, '3.1'], [3, '3.3'], [4, '4.1'], [4, '4.3']] as const) {
+        const tagsList = [[], ['gliederfüsser'], ['vierbeiner'], ['vierbeiner', 'reptil'], ['vierbeiner', 'säuger'], ['dinosaurier', 'vogel'], ['fisch', 'wasser'], ['säuger', 'primat']]
+        for (const [phase, code] of [[3, '3.1'], [3, '3.3'], [4, '4.1'], [4, '4.3'], [5, '5.2'], [6, '6.3']] as const) {
             for (const t of tagsList) expect(HERO_BODY_KEYS, `${code} ${t}`).toContain(bodyFor(phase, code, new Set(t)))
         }
     })

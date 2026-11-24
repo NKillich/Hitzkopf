@@ -159,10 +159,76 @@ const STAGES: Record<string, StageArt> = {
             g => { px(g, 3, 9, 0x5a5448, 1, 9, 4); px(g, 5, 8, 0x6a6458, 1, 5, 1) },                                                         // Stein
         ],
     },
+    // 5.1 Savanne in Afrika: Akazien, Termitenhügel, Geröllgeräte
+    hominiden: {
+        tile: (g, r) => { fill(g, 0x4a3f22); specks(g, r, 70, 0x5e5230); streaks(g, r, 12, 0x6a5c34); specks(g, r, 8, 0x3a3018, 2) },
+        props: [
+            g => { px(g, 7, 7, 0x4a3420, 1, 2, 9); px(g, 5, 9, 0x4a3420, 1, 2, 1); px(g, 1, 3, 0x4a6a2a, 1, 14, 3); px(g, 3, 2, 0x5a7a32, 1, 10, 1); px(g, 2, 6, 0x3a5a22, 1, 12, 1) }, // Akazie
+            g => { px(g, 6, 3, 0x8a6a3a, 1, 4, 12); px(g, 5, 8, 0x8a6a3a, 1, 6, 7); px(g, 7, 2, 0x9a7a4a, 1, 2, 1); px(g, 4, 14, 0x6a5028, 1, 8, 1) },          // Termitenhügel
+            g => { for (const x of [3, 6, 9, 12]) px(g, x, 8, 0x8a8a4a, 1, 1, 7); px(g, 5, 6, 0x9a9a5a, 1, 1, 3); px(g, 10, 6, 0x9a9a5a, 1, 1, 3) },             // Grasbüschel
+            g => { px(g, 5, 8, 0x7a7468, 1, 6, 4); px(g, 6, 7, 0x9a948a, 1, 3, 1); px(g, 9, 9, 0x5a554c, 1, 2, 2) },                                             // Geröllgerät
+        ],
+    },
+    // 5.2 Eiszeit-Steppe: Schnee, Feuerstelle, Mammutknochen
+    'jaeger-sammler': {
+        tile: (g, r) => { fill(g, 0x8a959a); specks(g, r, 70, 0xa4aeb2); specks(g, r, 30, 0x6f7a7e); specks(g, r, 8, 0x5a6a5a, 2) },
+        props: [
+            g => { px(g, 4, 11, 0x5a4030, 1, 8, 2); px(g, 6, 7, 0xe8603b, 1, 4, 4); px(g, 7, 5, 0xf2c94c, 1, 2, 3); px(g, 5, 10, 0x3a2a20, 1, 6, 1) },             // Feuerstelle
+            g => { px(g, 2, 9, 0xe8e0d0, 1, 12, 2); px(g, 1, 8, 0xe8e0d0, 1, 2, 4); px(g, 13, 8, 0xe8e0d0, 1, 2, 4); px(g, 4, 5, 0xd8d0c0, 1, 2, 4) },          // Mammutknochen
+            g => { px(g, 7, 12, 0x5a4a2a, 1, 2, 4); for (let y = 2; y < 12; y++) { const w = Math.min(10, 2 + y); px(g, 8 - Math.floor(w / 2), y, y % 3 ? 0x2e4a3a : 0xe8eef0, 1, w, 1) } }, // verschneiter Nadelbaum
+            g => { px(g, 3, 8, 0x5a6066, 1, 10, 5); px(g, 4, 7, 0xe8eef0, 1, 8, 2) },                                                                         // Fels mit Schnee
+        ],
+    },
+    // 5.3 Sesshaftigkeit: Felder, Häuser, Wege, Fabrikschlot
+    zivilisation: {
+        tile: (g, r) => { fill(g, 0x3a3424); for (let y = 0; y < T; y += 6) px(g, 0, y, 0x4a4430, 1, T, 2); specks(g, r, 30, 0x2e2a1c) },
+        props: [
+            g => { for (let x = 2; x < 14; x += 2) px(g, x, 4, 0xd8b84a, 1, 1, 10); px(g, 1, 14, 0x6a5a2a, 1, 14, 1) },                                    // Getreidefeld
+            g => { px(g, 3, 7, 0xd8c8a8, 1, 10, 7); px(g, 2, 5, 0x8a3a2a, 1, 12, 2); px(g, 4, 4, 0x8a3a2a, 1, 8, 1); px(g, 7, 10, 0x5a4030, 1, 2, 4); px(g, 4, 9, 0x6a8aa8, 1, 2, 2) }, // Haus
+            g => { px(g, 6, 2, 0x7a4a3a, 1, 4, 12); px(g, 5, 14, 0x5a3a2a, 1, 6, 2); px(g, 6, 0, 0x8a8a90, 0.7, 3, 2); px(g, 8, 0, 0x6a6a70, 0.5, 3, 1) },     // Fabrikschlot
+            g => { px(g, 0, 7, 0x6a6458, 1, 16, 3); px(g, 0, 8, 0x8a8478, 1, 16, 1) },                                                                         // Weg
+        ],
+    },
+    // 6.1 Erdorbit: Sterne, die Erde, Satelliten
+    erdorbit: {
+        tile: (g, r) => { fill(g, 0x06070f); specks(g, r, 40, 0x2a2e4a); specks(g, r, 10, 0xc8cce0); specks(g, r, 3, 0xffffff, 2) },
+        props: [
+            g => { g.fillStyle(0x2a6ab8, 1).fillCircle(8, 8, 7); px(g, 4, 5, 0x3a8a4a, 1, 4, 3); px(g, 9, 9, 0x3a8a4a, 1, 3, 3); px(g, 6, 2, 0xf4f4f4, 0.8, 5, 1); px(g, 3, 11, 0xf4f4f4, 0.6, 4, 1) }, // Erde
+            g => { px(g, 6, 6, 0xc8ccd8, 1, 4, 4); px(g, 0, 7, 0x3a5a9a, 1, 6, 2); px(g, 10, 7, 0x3a5a9a, 1, 6, 2); px(g, 7, 3, 0x9a9aa8, 1, 1, 3) },             // Satellit
+            g => { px(g, 2, 7, 0xd8dce8, 1, 12, 3); px(g, 6, 3, 0x3a5a9a, 1, 1, 11); px(g, 9, 3, 0x3a5a9a, 1, 1, 11); px(g, 0, 8, 0x8a8a98, 1, 16, 1) },          // Raumstation
+            g => { px(g, 7, 4, 0xffffff, 1, 1, 7); px(g, 4, 7, 0xffffff, 1, 7, 1); px(g, 7, 7, 0xfff0c0, 1, 1, 1) },                                           // funkelnder Stern
+        ],
+    },
+    // 6.2 Mond & Mars: roter Boden, Krater, Kuppel-Station
+    'mond-mars': {
+        tile: (g, r) => { fill(g, 0x6a2e1e); specks(g, r, 70, 0x7e3a26); specks(g, r, 30, 0x55241a); specks(g, r, 8, 0x8e4a30, 2) },
+        props: [
+            g => { ring(g, 8, 8, 5, 0x4a1c12); ring(g, 8, 8, 4, 0x9a5a3a); px(g, 6, 6, 0x55241a, 1, 5, 5) },                                                // Krater
+            g => { g.fillStyle(0xd8e0e8, 0.9).fillCircle(8, 11, 6); px(g, 2, 11, 0x8a5a4a, 1, 13, 4); px(g, 6, 8, 0x4ea8ff, 0.6, 3, 2); px(g, 13, 9, 0xd8e0e8, 1, 2, 3) }, // Kuppel-Station
+            g => { px(g, 4, 9, 0x4a2014, 1, 8, 4); px(g, 5, 8, 0x8e4a30, 1, 5, 1) },                                                                         // Felsbrocken
+            g => { for (let y = 0; y < 16; y += 3) { px(g, 4, y, 0x55241a, 1, 2, 2); px(g, 10, y + 1, 0x55241a, 1, 2, 2) } },                                  // Rover-Spuren
+        ],
+    },
+    // 6.3 Tiefe Raumfahrt: Nebel, ferne Galaxien, Ringplanet
+    tiefraum: {
+        tile: (g, r) => { fill(g, 0x07071a); specks(g, r, 30, 0x1c1c48); specks(g, r, 14, 0x3a2a6a, 2); specks(g, r, 12, 0xd8d8ff) },
+        props: [
+            g => { g.fillStyle(0x6a3aa8, 0.35).fillCircle(8, 8, 7); g.fillStyle(0xc85a9a, 0.3).fillCircle(5, 6, 4); g.fillStyle(0x4a8ad8, 0.3).fillCircle(11, 10, 4) }, // Nebel
+            g => { g.fillStyle(0xe8d8a8, 1).fillCircle(8, 8, 2); for (let i = 0; i < 12; i++) { const t = i * 0.6; px(g, Math.round(8 + Math.cos(t) * (1 + i * 0.5)), Math.round(8 + Math.sin(t) * (1 + i * 0.5)), 0xb8b0e0, 0.8) } }, // Galaxie
+            g => { g.fillStyle(0xc8a86a, 1).fillCircle(8, 8, 4); px(g, 1, 8, 0xe8d8b0, 1, 14, 1); px(g, 3, 7, 0xe8d8b0, 0.6, 10, 1) },                       // Ringplanet
+            g => { px(g, 7, 4, 0xd8d8ff, 1, 1, 7); px(g, 4, 7, 0xd8d8ff, 1, 7, 1) },                                                                         // Stern
+        ],
+    },
 }
 
 export const tileKey = (stageId: string) => `tile_${stageId}`
 export const propKey = (stageId: string, i: number) => `prop_${stageId}_${i}`
+
+/** Helle Böden (Schnee) – dort werden Bodentexte und Lineal dunkel gezeichnet. */
+const LIGHT = new Set(['jaeger-sammler'])
+export function isLightStage(stageId: string): boolean {
+    return LIGHT.has(stageId)
+}
 
 export function hasStageArt(stageId: string): boolean {
     return stageId in STAGES
