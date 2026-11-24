@@ -38,3 +38,10 @@ export function formatRange(fromYear: number, toYear: number): string {
     if (ma && mb && ma[2] === mb[2]) return `vor ${ma[1]} – ${mb[1]} ${ma[2]}`
     return `${a} – ${b}`
 }
+
+/** Kurz für Schilder: „3,80 Mrd.“, „66 Mio.“, „12.000“, „1957“. */
+export function shortYear(year: number): string {
+    const f = formatYear(year)
+    const m = /^vor (.+?) (?:(Mrd\.|Mio\.) )?Jahren$/.exec(f)
+    return m ? (m[2] ? `${m[1]} ${m[2]}` : m[1]) : f
+}

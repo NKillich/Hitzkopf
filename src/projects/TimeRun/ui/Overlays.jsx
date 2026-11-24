@@ -168,6 +168,35 @@ export function Evolution({ state, bridge }) {
     )
 }
 
+/** „Tada“ nach der Evolution: alte → neue Form, neues Merkmal und die Durchbruch-Boni. */
+export function Evolved({ state, bridge }) {
+    const o = state.overlay
+    return (
+        <div className="tr-screen tr-evo">
+            <div className="tr-evo-rays" aria-hidden="true" />
+            <div className="tr-evo-card">
+                <span className="tr-num tr-evo-kicker">EVOLUTION!</span>
+                <h1>{o.code} {o.stageName}</h1>
+                <div className="tr-evo-forms">
+                    {o.oldImg && <img src={o.oldImg} alt="bisherige Form" className="tr-evo-old" />}
+                    <svg width="36" height="12" viewBox="0 0 12 4" shapeRendering="crispEdges" fill="#FFB547" aria-hidden="true"><path d="M0 1h9V0h1v1h1v1h1v1h-1v1h-1V3H9V2H0z" /></svg>
+                    {o.newImg && <img src={o.newImg} alt="neue Form" className="tr-evo-new" />}
+                </div>
+                <div className="tr-evo-trait">
+                    <span className="tr-evo-label">Neu</span>
+                    <span className="tr-evo-name">{o.trait}{o.real && <span className="tr-num tr-evo-real">★ ECHT</span>}</span>
+                    <span className="tr-evo-desc">{o.desc}</span>
+                </div>
+                <div className="tr-evo-bonus">
+                    <span className="tr-evo-label">Durchbruch</span>
+                    {o.bonuses.map(b => <span key={b} className="tr-evo-b">▲ {b}</span>)}
+                </div>
+                <button type="button" className="tr-bt tr-evo-go" onClick={guarded(state, () => bridge.call('continueEvolution'))}>Weiter</button>
+            </div>
+        </div>
+    )
+}
+
 export function PauseMenu({ state, bridge }) {
     const hud = state.hud
     return (

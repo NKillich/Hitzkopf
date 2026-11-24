@@ -463,3 +463,44 @@ describe('Bodentexte und Upgrade-Texte', () => {
         }
     })
 })
+
+describe('Schritte: Urknall, Durchbruch, Formen', () => {
+    it('Urknall-Reise: Jahre laufen mit der Tiefe stetig zurück bis 13,8 Mrd.', async () => {
+        const { bigBangYear, BIGBANG_DEPTH, BIGBANG_STATIONS } = await import('./bigbang')
+        expect(formatYear(bigBangYear(0))).toBe('vor 4,00 Mrd. Jahren')
+        expect(formatYear(bigBangYear(BIGBANG_DEPTH))).toBe('vor 13,80 Mrd. Jahren')
+        expect(formatYear(bigBangYear(BIGBANG_DEPTH + 500))).toBe('vor 13,80 Mrd. Jahren')
+        let last = Infinity
+        for (let d = 0; d <= BIGBANG_DEPTH; d += 50) {
+            const y = bigBangYear(d)
+            expect(y).toBeLessThanOrEqual(last)
+            last = y
+        }
+        for (let i = 1; i < BIGBANG_STATIONS.length; i++) {
+            expect(BIGBANG_STATIONS[i].depth).toBeGreaterThan(BIGBANG_STATIONS[i - 1].depth)
+            expect(BIGBANG_STATIONS[i].ago).toBeGreaterThan(BIGBANG_STATIONS[i - 1].ago)
+        }
+    })
+
+    it('kurze Jahresangabe für das Schild', async () => {
+        const { shortYear } = await import('./time')
+        expect(shortYear(-3.8e9 + 2026)).toBe('3,80 Mrd.')
+        expect(shortYear(1957)).toBe('1957')
+    })
+
+    it('Durchbruch: +20 % Schaden und +10 % Leben je Evolution', async () => {
+        const { applyBreakthroughs } = await import('./upgrades')
+        expect(applyBreakthroughs({ damage: 10, maxHp: 50 }, 0)).toEqual({ damage: 10, maxHp: 50 })
+        expect(applyBreakthroughs({ damage: 10, maxHp: 50 }, 2)).toEqual({ damage: 14, maxHp: 60 })
+    })
+
+    it('Stufenformen der Hauptfigur passen ins 16×16-Raster und nutzen bekannte Körper', async () => {
+        const { HERO_STAGE_FORMS, HERO_BODIES } = await import('../game/art/animals')
+        for (const [id, f] of Object.entries(HERO_STAGE_FORMS)) {
+            expect(rawData().epochs.some(e => e.id === id), id).toBe(true)
+            expect(Object.keys(HERO_BODIES)).toContain(f.body)
+            expect(f.grid.length, id).toBeLessThanOrEqual(16)
+            for (const row of f.grid) expect(row.length, `${id}: ${row}`).toBe(16)
+        }
+    })
+})
