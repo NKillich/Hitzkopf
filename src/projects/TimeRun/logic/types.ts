@@ -15,6 +15,8 @@ export interface EnemyType {
     behavior?: 'chase' | 'drift'
     /** Pixel-Form (siehe logic/appearance.ts SHAPES) */
     shape?: string
+    /** farbige Pixel-Figur (game/art/microbes.ts) – hat Vorrang vor shape */
+    art?: string
 }
 
 /** Ab Sekunde `from` bis vor `to` erscheinen alle `every` Sekunden `count` Gegner vom Typ `enemy`. */

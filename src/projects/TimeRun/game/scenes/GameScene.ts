@@ -18,6 +18,8 @@ import { Joystick } from '../Joystick'
 import { saveBest, type IconKey, type UiBridge } from '../bridge'
 import { bodyFor, groundFor, outfitFor, PLAYER_TINT, type Shape } from '../../logic/appearance'
 import { outfitKey, shapeKey } from '../sprites'
+import { heroKey, mobKey } from '../art/microbes'
+import { hasStageArt, propCount, propKey, tileKey } from '../art/backgrounds'
 
 class Enemy extends Phaser.Physics.Arcade.Image {
     declare body: Phaser.Physics.Arcade.Body
@@ -27,6 +29,8 @@ class Enemy extends Phaser.Physics.Arcade.Image {
     isBoss = false
     /** Phase für das seitliche Schlingern treibender Gegner */
     wobble = 0
+    /** farbige Figur (kein Tint) – zeigt Bild 0/1 */
+    animFrame = -1
 }
 
 class Shot extends Phaser.Physics.Arcade.Image {
@@ -92,6 +96,11 @@ export class GameScene extends Phaser.Scene {
     private hpBarBg!: Phaser.GameObjects.Image
     private hpBarFill!: Phaser.GameObjects.Image
     private bg!: Phaser.GameObjects.TileSprite
+    /** Hintergrund der nächsten Stufe – wird am Ende der Stufe eingeblendet */
+    private bgNext!: Phaser.GameObjects.TileSprite
+    /** Hauptfigur (Phase 1–2): Bild 0/1 */
+    private heroFrame = 0
+    private heroFrameAt = 0
     private finishLine!: Phaser.GameObjects.TileSprite
     private finishText!: Phaser.GameObjects.Text
     private joystick!: Joystick
@@ -183,6 +192,7 @@ export class GameScene extends Phaser.Scene {
         const cam = this.cameras.main
         cam.setBounds(0, -1e8, WIDTH, 2e8)
         this.bg = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0).setDepth(-10)
+        this.bgNext = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0).setDepth(-9.5).setAlpha(0)
         this.finishLine = this.add.tileSprite(0, 0, WIDTH, 8, 'finish').setOrigin(0, 1).setDepth(-5)
         this.finishText = this.add.text(WIDTH / 2, 0, '', {
             fontFamily: '"Pixelify Sans", ui-monospace, monospace', fontSize: '13px', color: '#ffffff', resolution: 2,
@@ -311,7 +321,10 @@ export class GameScene extends Phaser.Scene {
 
         const cam = this.cameras.main
         cam.setBackgroundColor(this.epoch.background)
-        this.bg.setTexture(groundFor(base.phase, base.code)).setTint(hexToInt(this.epoch.gridColor))
+        this.applyBackground(this.bg, base)
+        const following = nextPlayable(this.gd.epochs, base.id)
+        if (following) this.applyBackground(this.bgNext, resolveEpoch(following, this.tags))
+        this.bgNext.setAlpha(0)
 
         // Waffe nimmt die Form der Stufe an (gilt bis zur nächsten Form)
         this.form = activeForm(this.gene, this.gd.epochs, base.id)
@@ -323,9 +336,10 @@ export class GameScene extends Phaser.Scene {
         this.epochStartY = this.player.y
         this.endY = this.epochStartY - (this.epoch.height ?? 5000)
         this.physics.world.setBounds(0, -1e8, WIDTH, 2e8)
-        this.finishLine.setPosition(0, this.endY).setVisible(true)
+        // keine sichtbare Ziellinie mehr – der Hintergrund blendet am Ende in die nächste Stufe über
+        this.finishLine.setPosition(0, this.endY).setVisible(false)
         const goal = this.epoch.boss ? `Boss: ${this.epoch.boss.name}` : `Ende ${this.epoch.code}`
-        this.finishText.setPosition(WIDTH / 2, this.endY + 6).setText(`▲ ${goal} · ${formatYear(this.epoch.toYear)}`).setVisible(true)
+        this.finishText.setPosition(WIDTH / 2, this.endY + 6).setText(`▲ ${goal} · ${formatYear(this.epoch.toYear)}`).setVisible(false)
         this.climbMax = 0
         this.buildStageWorld()
 
@@ -382,14 +396,37 @@ export class GameScene extends Phaser.Scene {
                 fontFamily: font, fontSize: '14px', color: '#F4EEDC', align: 'center', wordWrap: { width: 300 }, lineSpacing: 3, resolution: 2,
             }).setOrigin(0.5, 0).setAlpha(0.55).setDepth(-4))
         })
+        // Deko passend zur Stufe (Steine, Pflanzen, Schlote …), dezent im Hintergrund
+        const props = propCount(e.id)
+        if (props > 0) {
+            const count = Math.floor(h / 85)
+            for (let i = 0; i < count; i++) {
+                const y = bottom - Math.random() * h
+                const x = 18 + Math.random() * (WIDTH - 36)
+                add(this.add.image(x, y, propKey(e.id, Math.floor(Math.random() * props)))
+                    .setScale(2).setAlpha(0.75).setDepth(-8).setFlipX(Math.random() < 0.5))
+            }
+        }
         smoothTexts(this.worldObjs)
+    }
+
+    /** Phase 1–2: die Mikrobe nach der Vorlage */
+    private isHero(): boolean {
+        return this.baseEpoch.phase <= 2
+    }
+
+    /** Eigene Kachel der Stufe (farbig, doppelt groß) oder Bodenmuster in der Epochenfarbe. */
+    private applyBackground(ts: Phaser.GameObjects.TileSprite, e: Epoch) {
+        if (hasStageArt(e.id)) ts.setTexture(tileKey(e.id)).setTint(0xffffff).setTileScale(2, 2)
+        else ts.setTexture(groundFor(e.phase, e.code)).setTint(hexToInt(e.gridColor)).setTileScale(1, 1)
     }
 
     /** Körper nach Phase/Evolution, Ausrüstung nach Epoche. */
     private refreshAppearance() {
         const e = this.baseEpoch
         this.body_ = bodyFor(e.phase, e.code, this.tags)
-        this.player.setTexture(shapeKey(this.body_)).setTint(PLAYER_TINT[this.body_] ?? 0x3dcf9e)
+        if (this.isHero()) this.player.setTexture(heroKey(this.heroFrame)).setTint(0xffffff)
+        else this.player.setTexture(shapeKey(this.body_)).setTint(PLAYER_TINT[this.body_] ?? 0x3dcf9e)
         this.player.setDisplaySize(this.playerSz, this.playerSz)
         const outfit = outfitFor(e.code)
         const key = outfitKey(this.body_, outfit)
@@ -434,6 +471,12 @@ export class GameScene extends Phaser.Scene {
         this.player.setVelocity(this.move.x * stats.moveSpeed, this.move.y * stats.moveSpeed)
         if (stats.regen > 0) this.run.hp = Math.min(stats.maxHp, this.run.hp + stats.regen * dt)
         this.player.setAlpha(now < this.invulnUntil ? 0.55 : 1)
+        if (this.isHero() && now >= this.heroFrameAt) {
+            // Schwimmen: schneller wechseln, wenn man sich bewegt
+            this.heroFrame = 1 - this.heroFrame
+            this.heroFrameAt = now + (this.move.lengthSq() > 0.05 ? 160 : 420)
+            this.player.setTexture(heroKey(this.heroFrame))
+        }
         if (this.move.x < -0.1) this.player.setFlipX(true)
         else if (this.move.x > 0.1) this.player.setFlipX(false)
         const px = this.player.x
@@ -446,11 +489,14 @@ export class GameScene extends Phaser.Scene {
         this.hpBarFill.setPosition(px - 10, py - this.playerSz / 2 - 6).setDisplaySize(20 * Math.max(0, this.run.hp / stats.maxHp), 3)
 
         const cam = this.cameras.main
-        this.bg.tilePositionY = cam.scrollY
+        this.bg.tilePositionY = cam.scrollY / this.bg.tileScaleY
+        this.bgNext.tilePositionY = cam.scrollY / this.bgNext.tileScaleY
 
         // Höhe → Boss
         this.run.progress = this.run.phase === 'climb' ? heightProgress(this.epochStartY, py, this.epoch.height ?? 5000) : 1
         this.run.year = yearAt(this.epoch.fromYear, this.epoch.toYear, this.run.progress)
+        // Übergang: in den letzten 15 % der Höhe blendet der nächste Hintergrund ein
+        this.bgNext.setAlpha(Phaser.Math.Clamp((this.run.progress - 0.85) / 0.15, 0, 1))
         if (this.run.phase === 'climb') {
             // Ende einer Hauptphase: Boss vor der Linie; sonst geht es an der Linie direkt zur Evolutionswahl
             if (this.epoch.boss && py <= this.endY + BOSS_TRIGGER_DISTANCE) this.startBoss()
@@ -510,7 +556,12 @@ export class GameScene extends Phaser.Scene {
             else if (e.body.velocity.x > 4) e.setFlipX(false)
             if (e.flashUntil && now > e.flashUntil) {
                 e.flashUntil = 0
-                e.setTintMode(Phaser.TintModes.MULTIPLY).setTint(hexToInt(e.kind.color))
+                e.setTintMode(Phaser.TintModes.MULTIPLY).setTint(e.kind.art ? 0xffffff : hexToInt(e.kind.color))
+            }
+            if (e.kind.art) {
+                // zwei Bilder, leicht versetzt je Gegner, damit nicht alle im Gleichtakt wippen
+                const f = Math.floor((now + e.wobble * 200) / 300) % 2
+                if (f !== e.animFrame) { e.animFrame = f; e.setTexture(mobKey(e.kind.id, f)) }
             }
         }
         this.run.enemiesAlive = alive
@@ -706,8 +757,11 @@ export class GameScene extends Phaser.Scene {
         e.flashUntil = 0
         e.isBoss = false
         e.wobble = Math.random() * Math.PI * 2
-        e.setTexture(shapeKey((type.shape as Shape | undefined) ?? 'blob'))
-        e.setDisplaySize(type.size, type.size).setTintMode(Phaser.TintModes.MULTIPLY).setTint(hexToInt(type.color)).setDepth(6)
+        e.animFrame = -1
+        if (type.art) e.setTexture(mobKey(type.id, 0))
+        else e.setTexture(shapeKey((type.shape as Shape | undefined) ?? 'blob'))
+        e.setDisplaySize(type.size, type.size).setTintMode(Phaser.TintModes.MULTIPLY)
+            .setTint(type.art ? 0xffffff : hexToInt(type.color)).setDepth(6)
         return e
     }
 

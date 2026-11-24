@@ -9,6 +9,8 @@ import {
 import { formatRange, formatYear, yearAt } from './time'
 import { activeForm, applyForm, canEat, canEatEnemy, playerSize, rangedActive, weaponKind, weaponLabel } from './weapon'
 import { bodyFor, groundFor, outfitFor, SHAPES } from './appearance'
+import { ART_KEYS } from '../game/art/microbes'
+import { hasStageArt, propCount } from '../game/art/backgrounds'
 import type { EvolutionOption, Upgrade, Wave } from './types'
 
 describe('Daten', () => {
@@ -292,12 +294,13 @@ describe('Waffen je Stufe & Fressen', () => {
     })
 
     it('man wächst mit dem Level und frisst nur Kleinere, nie Bosse', () => {
-        expect(playerSize(1, true)).toBe(13)
-        expect(playerSize(50, true)).toBe(34)
+        expect(playerSize(1, true)).toBe(32)
+        expect(playerSize(50, true)).toBe(48)
         expect(playerSize(5, false)).toBe(20)
-        expect(canEatEnemy(13, 10, false)).toBe(true)
-        expect(canEatEnemy(13, 15, false)).toBe(false)
-        expect(canEatEnemy(34, 24, true)).toBe(false)
+        expect(canEatEnemy(32, 20, false)).toBe(true)
+        expect(canEatEnemy(32, 34, false)).toBe(false)
+        expect(canEatEnemy(48, 46, false)).toBe(true)
+        expect(canEatEnemy(48, 84, true)).toBe(false)
     })
 
     it('Faktoren der Form wirken auf die Werte', () => {
@@ -359,5 +362,28 @@ describe('Aussehen', () => {
         for (const e of rawData().epochs) {
             for (const x of [...e.enemies, ...(e.boss ? [e.boss] : [])]) expect(SHAPES, x.id).toContain(x.shape)
         }
+    })
+})
+
+describe('Paket 1: Figuren Phase 1–2', () => {
+    it('jeder Gegner und Boss in Phase 1–2 hat eine vorhandene Figur', () => {
+        for (const e of rawData().epochs.filter(x => x.phase <= 2)) {
+            for (const x of [...e.enemies, ...(e.boss ? [e.boss] : [])]) expect(ART_KEYS, `${e.id}/${x.id}`).toContain(x.art)
+        }
+    })
+
+    it('jede Stufe in Phase 1–2 hat einen eigenen Hintergrund mit Deko', () => {
+        for (const e of rawData().epochs.filter(x => x.phase <= 2)) {
+            expect(hasStageArt(e.id), e.id).toBe(true)
+            expect(propCount(e.id), e.id).toBeGreaterThanOrEqual(2)
+        }
+    })
+
+    it('Hauptfigur frisst am Anfang nur die Kleinen, Mittlere ab Level 3', () => {
+        const [small, mid, big] = rawData().epochs[0].enemies.map(x => x.size)
+        expect(canEatEnemy(playerSize(1, true), small, false)).toBe(true)
+        expect(canEatEnemy(playerSize(1, true), mid, false)).toBe(false)
+        expect(canEatEnemy(playerSize(3, true), mid, false)).toBe(true)
+        expect(canEatEnemy(playerSize(1, true), big, false)).toBe(false)
     })
 })
