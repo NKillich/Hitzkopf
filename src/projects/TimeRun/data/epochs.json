@@ -1404,34 +1404,37 @@
      "id": "pachycrocuta",
      "name": "Riesenhyäne (Pachycrocuta)",
      "color": "#b0a07a",
-     "size": 10,
+     "size": 22,
      "hp": 14.5,
      "speed": 84,
      "damage": 10.9,
      "xp": 3,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "hyena"
     },
     {
      "id": "dinofelis",
      "name": "Dinofelis",
      "color": "#d0a04a",
-     "size": 15,
+     "size": 32,
      "hp": 38.7,
      "speed": 55,
      "damage": 18.2,
      "xp": 6,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "cat"
     },
     {
      "id": "homotherium",
      "name": "Homotherium",
      "color": "#a0804a",
-     "size": 24,
+     "size": 44,
      "hp": 96.8,
      "speed": 33,
      "damage": 32.8,
      "xp": 14,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "sabertooth"
     }
    ],
    "waves": [
@@ -1511,34 +1514,37 @@
      "id": "hoehlenhyaene",
      "name": "Höhlenhyäne",
      "color": "#a9a088",
-     "size": 10,
+     "size": 22,
      "hp": 15.5,
      "speed": 86,
      "damage": 11.6,
      "xp": 3,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "hyena"
     },
     {
      "id": "hoehlenbaer",
      "name": "Höhlenbär",
      "color": "#6e4a32",
-     "size": 15,
+     "size": 32,
      "hp": 41.3,
      "speed": 55,
      "damage": 19.3,
      "xp": 6,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "bear"
     },
     {
      "id": "wollnashorn",
      "name": "Wollnashorn",
      "color": "#8a7660",
-     "size": 24,
+     "size": 44,
      "hp": 103.2,
      "speed": 34,
      "damage": 34.7,
      "xp": 15,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "rhino"
     }
    ],
    "waves": [
@@ -1618,34 +1624,37 @@
      "id": "hausratte",
      "name": "Hausratte",
      "color": "#8a8378",
-     "size": 10,
+     "size": 22,
      "hp": 16.4,
      "speed": 87,
      "damage": 12.2,
      "xp": 3,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "rat"
     },
     {
      "id": "heuschrecken",
      "name": "Heuschreckenschwarm",
      "color": "#b5b04a",
-     "size": 15,
+     "size": 32,
      "hp": 43.8,
      "speed": 56,
      "damage": 20.4,
      "xp": 6,
-     "shape": "swarm"
+     "shape": "swarm",
+     "art": "locusts"
     },
     {
      "id": "auerochse",
      "name": "Auerochse",
      "color": "#5a4030",
-     "size": 24,
+     "size": 44,
      "hp": 109.6,
      "speed": 35,
      "damage": 36.7,
      "xp": 16,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "aurochs"
     }
    ],
    "waves": [
@@ -1704,13 +1713,14 @@
    "boss": {
     "id": "pest",
     "name": "Schwarzer Tod (Pest)",
-    "color": "#3a3f4a",
-    "size": 60,
+    "color": "#7a8a5a",
+    "size": 84,
     "shape": "swarm",
     "hp": 1644,
     "speed": 41,
     "damage": 57,
-    "xp": 156
+    "xp": 156,
+    "art": "plague"
    }
   },
   {
@@ -1736,34 +1746,37 @@
      "id": "mikrometeoroid",
      "name": "Mikrometeoroid",
      "color": "#c8c8d8",
-     "size": 10,
+     "size": 22,
      "hp": 17.4,
      "speed": 88,
      "damage": 12.9,
      "xp": 3,
-     "shape": "rock"
+     "shape": "rock",
+     "art": "meteoroid"
     },
     {
      "id": "weltraumschrott",
      "name": "Weltraumschrott",
      "color": "#9aa0aa",
-     "size": 15,
+     "size": 32,
      "hp": 46.4,
      "speed": 57,
      "damage": 21.5,
      "xp": 6,
-     "shape": "debris"
+     "shape": "debris",
+     "art": "debris"
     },
     {
      "id": "raketenstufe",
      "name": "Ausgebrannte Raketenstufe",
      "color": "#d0d4dc",
-     "size": 24,
+     "size": 44,
      "hp": 116.0,
      "speed": 35,
      "damage": 38.7,
      "xp": 16,
-     "shape": "debris"
+     "shape": "debris",
+     "art": "rocketstage"
     }
    ],
    "waves": [
@@ -1843,34 +1856,37 @@
      "id": "mondstaub",
      "name": "Mondstaub",
      "color": "#c8c0b0",
-     "size": 10,
+     "size": 22,
      "hp": 18.4,
      "speed": 90,
      "damage": 13.6,
      "xp": 3,
-     "shape": "swarm"
+     "shape": "swarm",
+     "art": "dust"
     },
     {
      "id": "staubteufel",
      "name": "Marsstaubteufel",
      "color": "#c0603a",
-     "size": 15,
+     "size": 32,
      "hp": 49.0,
      "speed": 58,
      "damage": 22.6,
      "xp": 7,
-     "shape": "swarm"
+     "shape": "swarm",
+     "art": "dustdevil"
     },
     {
      "id": "sonnensturm",
      "name": "Sonnensturm-Teilchen",
      "color": "#ffd060",
-     "size": 24,
+     "size": 44,
      "hp": 122.4,
      "speed": 36,
      "damage": 40.7,
      "xp": 17,
-     "shape": "swarm"
+     "shape": "swarm",
+     "art": "solarparticle"
     }
    ],
    "waves": [
@@ -1950,34 +1966,37 @@
      "id": "kosmische-strahlung",
      "name": "Kosmische Strahlung",
      "color": "#a0e0ff",
-     "size": 10,
+     "size": 22,
      "hp": 19.3,
      "speed": 91,
      "damage": 14.2,
      "xp": 4,
-     "shape": "swarm"
+     "shape": "swarm",
+     "art": "cosmicray"
     },
     {
      "id": "kometenbrocken",
      "name": "Kometenbrocken",
      "color": "#d8f0ff",
-     "size": 15,
+     "size": 32,
      "hp": 51.5,
      "speed": 59,
      "damage": 23.7,
      "xp": 7,
-     "shape": "rock"
+     "shape": "rock",
+     "art": "comet"
     },
     {
      "id": "eisasteroid",
      "name": "Eisasteroid",
      "color": "#90a8c0",
-     "size": 24,
+     "size": 44,
      "hp": 128.8,
      "speed": 36,
      "damage": 42.7,
      "xp": 18,
-     "shape": "rock"
+     "shape": "rock",
+     "art": "asteroid"
     }
    ],
    "waves": [
@@ -2037,12 +2056,13 @@
     "id": "asteroid",
     "name": "Erdnaher Asteroid",
     "color": "#7a6a5a",
-    "size": 60,
+    "size": 84,
     "shape": "rock",
     "hp": 1932,
     "speed": 43,
     "damage": 66,
-    "xp": 183
+    "xp": 183,
+    "art": "asteroid"
    }
   }
  ]

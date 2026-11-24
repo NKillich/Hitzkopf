@@ -34,4 +34,11 @@ ART = {
  'compsognathus':'raptor','velociraptor':'raptor','triceratops':'triceratops',
  'purgatorius':'smallmammal','gastornis':'bigbird','titanoboa':'snake',
  'hyaenodon':'hyaenodon','entelodont':'entelodont','deinotherium':'deinotherium','andrewsarchus':'andrewsarchus',
+ # Paket 3 (Phase 5–6) – Schlüssel aus src/projects/TimeRun/game/art/modern.ts
+ 'pachycrocuta':'hyena','dinofelis':'cat','homotherium':'sabertooth',
+ 'hoehlenhyaene':'hyena','hoehlenbaer':'bear','wollnashorn':'rhino',
+ 'hausratte':'rat','heuschrecken':'locusts','auerochse':'aurochs','pest':'plague',
+ 'mikrometeoroid':'meteoroid','weltraumschrott':'debris','raketenstufe':'rocketstage',
+ 'mondstaub':'dust','staubteufel':'dustdevil','sonnensturm':'solarparticle',
+ 'kosmische-strahlung':'cosmicray','kometenbrocken':'comet','eisasteroid':'asteroid','asteroid':'asteroid',
 }
