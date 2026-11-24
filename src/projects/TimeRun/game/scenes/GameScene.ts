@@ -18,8 +18,11 @@ import { Joystick } from '../Joystick'
 import { saveBest, type IconKey, type UiBridge } from '../bridge'
 import { bodyFor, groundFor, outfitFor, PLAYER_TINT, type Shape } from '../../logic/appearance'
 import { outfitKey, shapeKey } from '../sprites'
-import { HERO_BODY_KEYS, heroKey, mobKey } from '../art/microbes'
-import { hasStageArt, isLightStage, propCount, propKey, tileKey } from '../art/backgrounds'
+import { HERO_BODY_KEYS, heroKey, microbeBody, mobKey } from '../art/microbes'
+import {
+    hasStageArt, isLightStage, PARTICLE_DRIFT, particleKey, particleKindFor, propCount, propKey, tileFactorFor, tileKey, type ParticleKind,
+} from '../art/backgrounds'
+import { realPathTo, teleportLevel } from '../../logic/teleport'
 
 class Enemy extends Phaser.Physics.Arcade.Image {
     declare body: Phaser.Physics.Arcade.Body
@@ -98,6 +101,13 @@ export class GameScene extends Phaser.Scene {
     private bg!: Phaser.GameObjects.TileSprite
     /** Hintergrund der nächsten Stufe – wird am Ende der Stufe eingeblendet */
     private bgNext!: Phaser.GameObjects.TileSprite
+    /** Parallax: Schwebeteilchen nah über dem Boden (1,35×) und ganz vorn (1,8×) */
+    private nearA!: Phaser.GameObjects.TileSprite
+    private nearB!: Phaser.GameObjects.TileSprite
+    private particleKind: ParticleKind = 'water'
+    /** wie schnell die Bodenkachel mitzieht (1 = fest mit der Welt, im All langsamer) */
+    private bgFactor = 1
+    private bgNextFactor = 1
     /** Hauptfigur (Phase 1–2): Bild 0/1 */
     private heroFrame = 0
     private heroFrameAt = 0
@@ -193,6 +203,8 @@ export class GameScene extends Phaser.Scene {
         cam.setBounds(0, -1e8, WIDTH, 2e8)
         this.bg = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0).setDepth(-10)
         this.bgNext = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0).setDepth(-9.5).setAlpha(0)
+        this.nearA = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'px').setOrigin(0).setScrollFactor(0).setDepth(3).setAlpha(0.55)
+        this.nearB = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'px').setOrigin(0).setScrollFactor(0).setDepth(20).setAlpha(0.22)
         this.finishLine = this.add.tileSprite(0, 0, WIDTH, 8, 'finish').setOrigin(0, 1).setDepth(-5)
         this.finishText = this.add.text(WIDTH / 2, 0, '', {
             fontFamily: '"Pixelify Sans", ui-monospace, monospace', fontSize: '13px', color: '#ffffff', resolution: 2,
@@ -261,6 +273,7 @@ export class GameScene extends Phaser.Scene {
         b.actions.toMenu = () => this.toMenu()
         b.actions.debugBurst = () => this.spawnBurst(300)
         b.actions.debugGoal = () => this.skipToGoal()
+        b.actions.teleport = (id: string, at: number) => this.teleport(id, at)
     }
 
     private publishHud() {
@@ -296,7 +309,11 @@ export class GameScene extends Phaser.Scene {
         this.joystick.release()
         this.scene.pause()
         this.publishHud()
-        this.bridge.setOverlay({ type: 'pause' })
+        const stages = this.bridge.getState().debug
+            ? sortedEpochs(this.gd.epochs).filter(e => e.enemies.length > 0)
+                .map(e => ({ id: e.id, code: e.code, name: e.shortName, phase: e.phase, boss: !!e.boss }))
+            : undefined
+        this.bridge.setOverlay({ type: 'pause', stages })
     }
 
     private resumeRun() {
@@ -322,8 +339,13 @@ export class GameScene extends Phaser.Scene {
         const cam = this.cameras.main
         cam.setBackgroundColor(this.epoch.background)
         this.applyBackground(this.bg, base)
+        this.bgFactor = tileFactorFor(base.id)
         const following = nextPlayable(this.gd.epochs, base.id)
         if (following) this.applyBackground(this.bgNext, resolveEpoch(following, this.tags))
+        this.bgNextFactor = following ? tileFactorFor(following.id) : 1
+        this.particleKind = particleKindFor(base.id)
+        this.nearA.setTexture(particleKey(this.particleKind, 0)).setTileScale(2, 2)
+        this.nearB.setTexture(particleKey(this.particleKind, 1)).setTileScale(4, 4)
         this.bgNext.setAlpha(0)
 
         // Waffe nimmt die Form der Stufe an (gilt bis zur nächsten Form)
@@ -419,7 +441,7 @@ export class GameScene extends Phaser.Scene {
     /** Hauptfigur mit Gesicht + gelben Fühlern: Mikrobe (Phase 1–2), danach Körper je Evolution, ab 5.2 mit Ausrüstung. */
     private heroBody(): string | null {
         const e = this.baseEpoch
-        if (e.phase <= 2) return 'microbe'
+        if (e.phase <= 2) return microbeBody(e.id)
         const body = HERO_BODY_KEYS.includes(this.body_) ? this.body_ : 'mammal'
         const outfit = outfitFor(e.code)
         return outfit === 'none' ? body : `${body}-${outfit}`
@@ -503,8 +525,15 @@ export class GameScene extends Phaser.Scene {
         this.hpBarFill.setPosition(px - 10, py - this.playerSz / 2 - 6).setDisplaySize(20 * Math.max(0, this.run.hp / stats.maxHp), 3)
 
         const cam = this.cameras.main
-        this.bg.tilePositionY = cam.scrollY / this.bg.tileScaleY
-        this.bgNext.tilePositionY = cam.scrollY / this.bgNext.tileScaleY
+        // Parallax: Boden fest (im All ferner Himmel langsamer), Teilchen davor schneller → Tiefe
+        this.bg.tilePositionY = (cam.scrollY * this.bgFactor) / this.bg.tileScaleY
+        this.bgNext.tilePositionY = (cam.scrollY * this.bgNextFactor) / this.bgNext.tileScaleY
+        const drift = PARTICLE_DRIFT[this.particleKind]
+        const t = now / 1000
+        this.nearA.tilePositionX = (drift.x * t + Math.sin(t * 0.5) * 6) / 2
+        this.nearA.tilePositionY = (cam.scrollY * 1.35 + drift.y * t) / 2
+        this.nearB.tilePositionX = (drift.x * 1.6 * t + Math.sin(t * 0.35) * 10) / 4
+        this.nearB.tilePositionY = (cam.scrollY * 1.8 + drift.y * 1.6 * t) / 4
 
         // Höhe → Boss
         this.run.progress = this.run.phase === 'climb' ? heightProgress(this.epochStartY, py, this.epoch.height ?? 5000) : 1
@@ -792,6 +821,59 @@ export class GameScene extends Phaser.Scene {
     skipToGoal() {
         if (this.run.phase !== 'climb') return
         this.player.body.reset(this.player.x, this.endY + (this.epoch.boss ? BOSS_TRIGGER_DISTANCE : 0) + 120)
+    }
+
+    /**
+     * Debug-Teleporter: zu einer Stufe springen, als hätte man immer die echte Zeitlinie gewählt.
+     * Level und Upgrades werden passend zur Stufe gesetzt; at = Anteil der Höhe (1 = vor Ende/Boss).
+     */
+    teleport(id: string, at: number) {
+        const target = this.gd.epochs.find(e => e.id === id)
+        const route = target && realPathTo(this.gd.epochs, this.gd.evolutionOptions, id)
+        if (!target || !route) return
+        // alles Laufende abräumen
+        for (const e of this.enemies) if (e.active) { e.isBoss = false; e.disableBody(true, true) }
+        for (const s of this.shots) if (s.active) s.disableBody(true, true)
+        for (const g of this.gems) if (g.active) g.setActive(false).setVisible(false)
+        for (const o of [...this.prevWorldObjs, ...this.worldObjs]) o.destroy()
+        this.prevWorldObjs = []
+        this.worldObjs = []
+        this.effects = []
+        this.boss = null
+
+        // Weg, Tags und Level wie nach einem echten Run bis hierher
+        this.tags = route.tags
+        this.visited = route.visited
+        this.choices = Object.fromEntries(route.path.map(o => [o.stage, o]))
+        this.run.path = route.path
+        this.owned = {}
+        const level = teleportLevel(route.visited.length)
+        for (let l = 1; l < level; l++) {
+            const [u] = pickUpgrades(this.gd.upgrades, this.owned, this.tags, Math.random, 1, target.phase)
+            if (!u) break
+            this.owned[u.id] = (this.owned[u.id] ?? 0) + 1
+            for (const t of u.grants ?? []) this.tags.add(t)
+        }
+        this.run.stats = computeStats(PLAYER_BASE, this.gene.base, this.gd.upgrades, this.owned)
+        this.run.level = level
+        this.run.xp = 0
+        this.run.xpNeeded = xpForLevel(level)
+        this.run.hp = this.run.stats.maxHp
+        this.run.dead = false
+        this.pendingLevelUps = 0
+        this.choosing = false
+        this.invulnUntil = this.timeMs + 1500
+
+        this.startEpoch(target)
+        const h = this.epoch.height ?? 5000
+        // „vor Ende“: kurz vor den Boss bzw. die Linie
+        const rise = at >= 1 ? Math.max(0, h - (this.epoch.boss ? BOSS_TRIGGER_DISTANCE : 0) - 160) : h * at
+        this.player.body.reset(WIDTH / 2, this.epochStartY - rise)
+        this.climbMax = rise
+        this.cameras.main.centerOn(this.player.x, this.player.y - HEIGHT * 0.18)
+        this.bridge.setOverlay(null)
+        this.scene.resume()
+        this.publishHud()
     }
 
     private nearestEnemy(x: number, y: number, range: number): Enemy | null {

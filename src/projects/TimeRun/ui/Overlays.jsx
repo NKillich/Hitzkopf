@@ -137,7 +137,7 @@ export function PauseMenu({ state, bridge }) {
     const hud = state.hud
     return (
         <div className="tr-screen tr-dim" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <div className="tr-pp" style={{ width: '100%', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 14, textAlign: 'center' }}>
+            <div className="tr-pp tr-pause" style={{ width: '100%', maxHeight: '100%', overflowY: 'auto', boxSizing: 'border-box', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 14, textAlign: 'center' }}>
                 <h1 style={{ fontSize: 40, color: '#FFD27A', textShadow: '4px 4px 0 #0D0A12' }}>Pause</h1>
                 {hud && (
                     <p style={{ fontSize: 15, color: '#D9CFEA' }}>
@@ -148,7 +148,29 @@ export function PauseMenu({ state, bridge }) {
                 <button type="button" className="tr-bt" style={{ height: 64, fontSize: 23, fontWeight: 700, color: '#0D0A12', marginTop: 6 }} onClick={() => bridge.call('resume')}>WEITER</button>
                 <button type="button" className="tr-bg" style={{ height: 56, fontSize: 19, fontWeight: 600 }} onClick={() => bridge.call('restart')}>Neu starten</button>
                 <button type="button" className="tr-bg" style={{ height: 56, fontSize: 19, fontWeight: 600 }} onClick={() => bridge.call('toMenu')}>Zum Startbildschirm</button>
+                {state.overlay?.stages && <Teleporter stages={state.overlay.stages} current={hud?.code} bridge={bridge} />}
             </div>
+        </div>
+    )
+}
+
+/** Entwickler-Werkzeug (nur #timerun/debug): an Start, Mitte oder Ende jeder Stufe springen. */
+function Teleporter({ stages, current, bridge }) {
+    const spots = [[0, 'Start'], [0.5, 'Mitte']]
+    return (
+        <div className="tr-tp">
+            <h2>Teleporter</h2>
+            <p>Echte Zeitlinie, Level passend zur Stufe</p>
+            {stages.map(s => (
+                <div key={s.id} className={`tr-tp-row${s.code === current ? ' tr-tp-cur' : ''}`}>
+                    <span className="tr-num tr-tp-code">{s.code}</span>
+                    <span className="tr-tp-name">{s.name}</span>
+                    {spots.map(([at, label]) => (
+                        <button key={label} type="button" className="tr-tp-go" onClick={() => bridge.call('teleport', s.id, at)}>{label}</button>
+                    ))}
+                    <button type="button" className="tr-tp-go" onClick={() => bridge.call('teleport', s.id, 1)}>{s.boss ? 'Boss' : 'Ende'}</button>
+                </div>
+            ))}
         </div>
     )
 }

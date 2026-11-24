@@ -44,12 +44,15 @@ export type Overlay =
         type: 'evolution'; fromName: string; toCode: string; toName: string; range: string; future: boolean
         options: EvolutionCard[]; tags: string[]; path: string[]
     }
-    | { type: 'pause' }
+    | { type: 'pause'; stages?: TeleportStage[] }
     | {
         type: 'end'; won: boolean; reachedCode: string; reachedName: string; year: string
         stageIndex: number; stageCount: number; timeSec: number; kills: number; level: number
         realCount: number; pastCount: number; badge: boolean; path: { name: string; real: boolean }[]; newRecord: boolean
     }
+
+/** Teleporter (nur Debug): Stufen, zu denen man springen kann */
+export interface TeleportStage { id: string; code: string; name: string; phase: number; boss: boolean }
 
 export interface BestRun { stageIndex: number; stageCount: number; code: string; name: string }
 
@@ -77,6 +80,8 @@ export interface UiActions {
     toMenu(): void
     debugBurst(): void
     debugGoal(): void
+    /** Debug: zu Stufe `id` springen, `at` = Anteil der Höhe (0 = Start, 0.5 = Mitte, 1 = vor Ende/Boss) */
+    teleport(id: string, at: number): void
 }
 
 const BEST_KEY = 'ages_up_best_v1'

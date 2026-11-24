@@ -167,3 +167,16 @@
     .trRoot .trUi .tr-stageCard { animation-duration: 6.5s; animation-timing-function: steps(1); }
     .trRoot .trUi .tr-banner { animation-timing-function: steps(1); }
 }
+
+/* Teleporter (nur Debug) */
+.trRoot .trUi .tr-pause > * { flex-shrink: 0; }
+.trRoot .trUi .tr-tp { margin-top: 8px; border-top: 2px dashed #4A3D66; padding-top: 12px; text-align: left; display: flex; flex-direction: column; gap: 4px; }
+.trRoot .trUi .tr-tp h2 { font-size: 20px; color: #FFD27A; margin: 0; }
+.trRoot .trUi .tr-tp p { font-size: 12px; color: #B8AECB; margin: 0 0 4px; }
+.trRoot .trUi .tr-tp-row { display: flex; align-items: center; gap: 4px; padding: 2px 4px; }
+.trRoot .trUi .tr-tp-cur { background: #3A2E58; }
+.trRoot .trUi .tr-tp-code { font-size: 12px; color: #A6F7DA; width: 28px; flex: none; }
+.trRoot .trUi .tr-tp-name { font-size: 13px; color: #F4EEDC; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trRoot .trUi button.tr-tp-go { flex: none; height: 30px; min-width: 46px; padding: 0 6px; font-size: 12px; font-family: inherit;
+    background: #4A3D66; color: #F4EEDC; border: 0; border-radius: 0; box-shadow: inset -2px -2px 0 #2A2140; cursor: pointer; }
+.trRoot .trUi button.tr-tp-go:active { background: #FFD27A; color: #0D0A12; }

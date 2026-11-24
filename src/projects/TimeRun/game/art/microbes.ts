@@ -54,8 +54,67 @@ const HERO: [Grid, Grid] = [
 ]
 
 const HERO_COLORS: Record<string, number> = {
-    O: OUTLINE, B: 0x2fa89a, L: 0x6fdcc4, D: 0x1f6f86, S: 0x1c5e6b, W: 0xf4f4f4, K: 0x0d0a12, Y: 0xf2c94c, M: 0x3a1622,
+    O: OUTLINE, B: 0x2fa89a, L: 0x6fdcc4, D: 0x1f6f86, S: 0x1c5e6b, W: 0xf4f4f4, K: 0x0d0a12, Y: 0xf2c94c, M: 0x3a1622, A: 0xa6f7da,
 }
+
+/**
+ * Hauptfigur je Stufe in Phase 1–2 – jede Stufe sieht anders aus (gleiche Farben, Gesicht + gelbe Fühler).
+ * 1.1 Protozelle (Bläschen) → 1.2 Urzelle/Archaee mit Geißel → 1.3 Sauerstoff-Überlebender mit Schutzhülle
+ * → 2.1 Zelle mit Scheinfüßchen (Vorlage; frisst wie eine Amöbe – so wurden Mitochondrien aufgenommen)
+ * → 2.2 Zellkolonie (Kragengeißeltiere) → 2.3 frühes Tier mit Gewebe (wurmförmig).
+ */
+const MICROBE_FORMS: Record<string, { frames: [Grid] | [Grid, Grid]; motion: Motion }> = {
+    urzellen: {
+        motion: 'bob',
+        frames: [[
+            '................', '....Y......Y....', '....D......D....', '.....D....D.....', '.....OOOOOO.....', '....OLLBBBBO....',
+            '...OLBBBBBBBO...', '...OBWWBBWWBO...', '...OBWKBBWKBO...', '...OBBBMMBBBO...', '...OBSBBBBSBO...', '...ODBBBBBBDO...',
+            '....ODDDDDDO....', '.....OOOOOO.....',
+        ]],
+    },
+    stoffwechsel: {
+        motion: 'static',
+        frames: [
+            [
+                '................', '................', '..........Y.Y...', '..........D.D...', '..........D.D...', '....OOOOOOOOO...',
+                '...OLLBBBBWWBO..', 'D.OLBBSBBBWKBBO.', '.DOBBBBBSBBBBMO.', 'D.ODBBBBBBBBMWO.', '...ODDBSBBBDDO..', '....OOOOOOOOO...',
+            ],
+            [
+                '................', '................', '..........Y.Y...', '..........D.D...', '..........D.D...', '....OOOOOOOOO...',
+                '...OLLBBBBWWBO..', '.DOLBBSBBBWKBBO.', 'D.OBBBBBSBBBBMO.', '.DODBBBBBBBBMWO.', '...ODDBSBBBDDO..', '....OOOOOOOOO...',
+            ],
+        ],
+    },
+    photosynthese: {
+        motion: 'bob',
+        frames: [[
+            '................', '..........Y.Y...', '..........D.D...', '..........D.D...', '....AAAAAAAAA...', '...AOOOOOOOOOA..',
+            '..AOLLBBBBWWBOA.', '.AOLBBSBBBWKBBOA', '.AOBBBBBSBBBBMOA', '.AODBBBBBBBBMWOA', '..AODDBSBBBDDOA.', '...AOOOOOOOOOA..',
+            '....AAAAAAAAA...',
+        ]],
+    },
+    kolonien: {
+        motion: 'bob',
+        frames: [[
+            '....Y......Y....', '....D......D....', '.....D....D.....', '.....OOOOOO.....', '....OLLBBBBO....', '...OLBWWBWWBO...',
+            '...OBBWKBWKBO...', '.OOOBBBMMBBBOOO.', 'OLBOBSBBBBSBOLBO', 'OBBOBBBBBBBBOBBO', 'ODDOODDDDDDOODDO', '.OOOOOOOOOOOOOO.',
+            '..OLBO....OLBO..', '..OBDO....OBDO..', '...OO......OO...',
+        ]],
+    },
+    mehrzeller: {
+        motion: 'walk',
+        frames: [[
+            '................', '................', '................', '...........Y.Y..', '...........D.D..', '..........OOOOO.',
+            '..OOOOOOOOLBWWBO', '.OLBDLBDLBBBWKBO', 'OBBDBBDBBDBBBBMO', 'OBSDBSDBSDBBBMWO', '.ODDDDDDDDDDDDO.', '..OOOOOOOOOOOO..',
+        ]],
+    },
+}
+
+/** Textur-Name der Hauptfigur in Phase 1–2 (je Stufe eigene Form; 2.1 = Vorlage „microbe“). */
+export function microbeBody(stageId: string): string {
+    return MICROBE_FORMS[stageId] ? `microbe-${stageId}` : 'microbe'
+}
+export const MICROBE_STAGES = Object.keys(MICROBE_FORMS)
 
 /** Gegner-Figuren (ein Bild; das zweite entsteht durch Wippen). */
 const ART: Record<string, Grid> = {
@@ -211,6 +270,14 @@ export function generateMicrobeArt(scene: Phaser.Scene, mobs: { id: string; art:
     HERO.forEach((grid, f) => {
         g.clear(); drawGrid(g, grid, HERO_COLORS); g.generateTexture(heroKey('microbe', f), 16, 16)
     })
+    for (const [id, { frames, motion }] of Object.entries(MICROBE_FORMS)) {
+        for (const f of [0, 1]) {
+            g.clear()
+            if (frames.length === 2) drawGrid(g, frames[f], HERO_COLORS)
+            else drawFrame(g, frames[0], HERO_COLORS, motion, f)
+            g.generateTexture(heroKey(`microbe-${id}`, f), 16, 16)
+        }
+    }
     for (const [body, { grid, motion }] of Object.entries(HERO_BODIES)) {
         for (const f of [0, 1]) { g.clear(); drawFrame(g, grid, HERO_COLORS, motion, f); g.generateTexture(heroKey(body, f), 16, 16) }
         const a = HERO_ANCHORS[body]

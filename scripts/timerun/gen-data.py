@@ -80,27 +80,37 @@ S = [
   ('asteroid', 'Erdnaher Asteroid', '#7a6a5a')),
 ]
 
-HEIGHT = 4000
+# Höhe je Stufe: Phase 1–2 kürzer (Einzeller sollen nicht ewig dauern), danach etwas länger.
+# Die Jahreszahlen hängen an der Höhe – kürzere Stufen raffen nur die Zeit, die Fakten bleiben gleich.
+HEIGHT_EARLY = 2000
+HEIGHT_LATE = 2500
 
-def px(v):
-    return round(v / HEIGHT, 4)
+def px(v, h):
+    return round(v / h, 4)
 
-def waves(ids, early):
+def waves(ids, early, first, h):
     # nach HÖHE: from/to/every als Anteil der Stufenhöhe (0…1). Wer stehen bleibt, bekommt keine neuen Wellen.
+    # Ruhiger Aufbau: erst nur Kleine/Beute, ab 25 % Mittlere, ab 60 % Jäger. Die erste Stufe bleibt ganz ohne Jäger.
     s, m, b = ids
     f = 1.4 if early else 1.0   # Phase 1–2 lichter
-    return [
-        {'enemy': s, 'from': 0, 'to': 1, 'every': px(200 if early else 280), 'count': 2},   # Beute/kleine Gegner
-        {'enemy': m, 'from': 0.12, 'to': 1, 'every': px(520 * f), 'count': 1},
-        {'enemy': s, 'from': 0.35, 'to': 1, 'every': px(150 if early else 190), 'count': 2},
-        {'enemy': b, 'from': 0.3, 'to': 1, 'every': px(800 * f), 'count': 1},
-        {'enemy': m, 'from': 0.55, 'to': 1, 'every': px(300 * f), 'count': 2},
-        {'enemy': s, 'from': 0.7, 'to': 1, 'every': px(140 * f), 'count': 2},
+    w = [
+        {'enemy': s, 'from': 0, 'to': 1, 'every': px(170 if early else 260, h), 'count': 2},   # Beute/kleine Gegner
+        {'enemy': s, 'from': 0.4, 'to': 1, 'every': px(160 if early else 200, h), 'count': 2},
+        {'enemy': m, 'from': 0.25, 'to': 1, 'every': px(420 * f, h), 'count': 1},
+        {'enemy': m, 'from': 0.6, 'to': 1, 'every': px(300 * f, h), 'count': 2},
     ]
+    if not first:
+        w += [
+            {'enemy': b, 'from': 0.6, 'to': 1, 'every': px(700 * f, h), 'count': 1},
+            {'enemy': s, 'from': 0.8, 'to': 1, 'every': px(150 * f, h), 'count': 2},
+        ]
+    return w
 
-def ambient(ids):
-    # nach ZEIT, nur wenig: ein großer Jäger ab und zu – Stehenbleiben ist nicht sicher, bringt aber kaum XP
-    return [{'enemy': ids[2], 'from': 6, 'to': 100000, 'every': 7, 'count': 1}]
+def ambient(ids, first):
+    # nach ZEIT, nur wenig: ab und zu ein großer Jäger – nicht in der ersten Stufe und erst nach einer ruhigen Weile
+    if first:
+        return []
+    return [{'enemy': ids[2], 'from': 20, 'to': 100000, 'every': 8, 'count': 1}]
 
 FACTS = {
  'urzellen': ['Die Erde ist rund 4,5 Mrd. Jahre alt. Winzige Zirkon-Kristalle aus Australien sind etwa 4,4 Mrd. Jahre alt und deuten auf frühe Ozeane hin.',
@@ -170,13 +180,14 @@ for i, (eid, code, name, short, f, t, bg, grid, fact, en, boss) in enumerate(S):
             x['size'] = [22, 32, 44][j]
         enemies.append(x)
     ids = [x[0] for x in en]
+    h = HEIGHT_EARLY if early else HEIGHT_LATE
     e = {'id': eid, 'code': code, 'order': i + 1, 'phase': int(code[0]), 'phaseName': PHASES[int(code[0])],
          'name': name, 'shortName': short, 'fromYear': f, 'toYear': t, 'facts': [fact] + FACTS[eid],
-         'background': bg, 'gridColor': grid, 'height': HEIGHT, 'enemies': enemies,
-         'waves': waves(ids, early), 'ambient': ambient(ids)}
+         'background': bg, 'gridColor': grid, 'height': h, 'enemies': enemies,
+         'waves': waves(ids, early, i == 0, h), 'ambient': ambient(ids, i == 0)}
     if boss:
         e['boss'] = {'id': boss[0], 'name': boss[1], 'color': boss[2], 'size': 60, 'shape': SHAPE[boss[0]],
-                     'hp': round(300 * k), 'speed': round(32 * sp), 'damage': round(14 * (1 + 0.22 * i)), 'xp': round(30 * (1 + 0.3 * i))}
+                     'hp': round(220 * k), 'speed': round(32 * sp), 'damage': round(14 * (1 + 0.22 * i)), 'xp': round(30 * (1 + 0.3 * i))}
         # harmlos wie in Wirklichkeit: Stromatolith steht still, Dickinsonia hatte keinen Mund
         if boss[0] == 'stromatolith': e['boss'].update(speed=0, damage=0)
         if boss[0] == 'dickinsonia': e['boss'].update(speed=6, damage=0)
