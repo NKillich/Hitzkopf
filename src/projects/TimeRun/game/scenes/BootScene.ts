@@ -4,6 +4,8 @@ import { loadData } from '../../logic/data'
 import { PLAYER_SIZE } from '../config'
 import type { UiBridge } from '../bridge'
 import { generateSprites } from '../sprites'
+import { generateMicrobeArt } from '../art/microbes'
+import { generateBackgrounds } from '../art/backgrounds'
 
 export class BootScene extends Phaser.Scene {
     constructor() { super('boot') }
@@ -44,6 +46,11 @@ export class BootScene extends Phaser.Scene {
         g.generateTexture('finish', 16, 8)
         g.destroy()
         generateSprites(this)
+        // Paket 1: farbige Figuren + eigene Hintergründe (Phase 1–2)
+        const mobs = data.epochs.flatMap(e => [...e.enemies, ...(e.boss ? [e.boss] : [])])
+            .filter(x => x.art).map(x => ({ id: x.id, art: x.art!, color: x.color }))
+        generateMicrobeArt(this, mobs)
+        generateBackgrounds(this)
 
         // Das Spiel startet erst mit „Run starten“ auf dem Startbildschirm (React)
         bridge.set({ ready: true })

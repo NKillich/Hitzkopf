@@ -24,36 +24,39 @@
      "id": "aminosaeure",
      "name": "Aminosäure",
      "color": "#9fe3c8",
-     "size": 10,
+     "size": 20,
      "hp": 3.0,
      "speed": 68,
      "damage": 3.0,
      "xp": 1,
      "behavior": "drift",
-     "shape": "blob"
+     "shape": "blob",
+     "art": "molecule"
     },
     {
      "id": "rna-strang",
      "name": "RNA-Strang",
      "color": "#f2c46b",
-     "size": 15,
+     "size": 34,
      "hp": 8.0,
      "speed": 44,
      "damage": 5.0,
      "xp": 2,
      "behavior": "drift",
-     "shape": "worm"
+     "shape": "worm",
+     "art": "helix"
     },
     {
      "id": "protozelle",
      "name": "Protozelle",
      "color": "#7fc9e8",
-     "size": 24,
+     "size": 46,
      "hp": 20.0,
      "speed": 27,
      "damage": 9.0,
      "xp": 5,
-     "shape": "cell"
+     "shape": "cell",
+     "art": "vesicle"
     }
    ],
    "waves": [
@@ -133,36 +136,39 @@
      "id": "bakterium",
      "name": "Bakterium",
      "color": "#7ddf64",
-     "size": 10,
+     "size": 20,
      "hp": 4.0,
      "speed": 69,
      "damage": 3.7,
      "xp": 1,
      "behavior": "drift",
-     "shape": "rod"
+     "shape": "rod",
+     "art": "rod"
     },
     {
      "id": "archaee",
      "name": "Archaee",
      "color": "#e0905a",
-     "size": 15,
+     "size": 34,
      "hp": 10.6,
      "speed": 45,
      "damage": 6.1,
      "xp": 2,
      "behavior": "drift",
-     "shape": "blob"
+     "shape": "blob",
+     "art": "archaea"
     },
     {
      "id": "bakterienmatte",
      "name": "Bakterienmatte",
      "color": "#5f9e6e",
-     "size": 24,
+     "size": 46,
      "hp": 26.4,
      "speed": 28,
      "damage": 11.0,
      "xp": 6,
-     "shape": "colony"
+     "shape": "colony",
+     "art": "mat"
     }
    ],
    "waves": [
@@ -242,36 +248,39 @@
      "id": "sauerstoffradikal",
      "name": "Sauerstoff-Radikal",
      "color": "#ff6b6b",
-     "size": 10,
+     "size": 20,
      "hp": 4.9,
      "speed": 71,
      "damage": 4.3,
      "xp": 1,
      "behavior": "drift",
-     "shape": "blob"
+     "shape": "blob",
+     "art": "radical"
     },
     {
      "id": "purpurbakterium",
      "name": "Purpurbakterium",
      "color": "#c27ae0",
-     "size": 15,
+     "size": 34,
      "hp": 13.1,
      "speed": 46,
      "damage": 7.2,
      "xp": 3,
      "behavior": "drift",
-     "shape": "rod"
+     "shape": "rod",
+     "art": "rod"
     },
     {
      "id": "cyanokolonie",
      "name": "Cyanobakterien-Kolonie",
      "color": "#3fbf9f",
-     "size": 24,
+     "size": 46,
      "hp": 32.8,
      "speed": 28,
      "damage": 13.0,
      "xp": 6,
-     "shape": "colony"
+     "shape": "colony",
+     "art": "mat"
     }
    ],
    "waves": [
@@ -331,12 +340,13 @@
     "id": "stromatolith",
     "name": "Stromatolith",
     "color": "#8fae7a",
-    "size": 60,
+    "size": 84,
     "shape": "rock",
     "hp": 492,
     "speed": 0,
     "damage": 0,
-    "xp": 48
+    "xp": 48,
+    "art": "stromatolite"
    }
   },
   {
@@ -362,36 +372,39 @@
      "id": "alphaproteobakterium",
      "name": "Alphaproteobakterium",
      "color": "#ffb86b",
-     "size": 10,
+     "size": 20,
      "hp": 5.9,
      "speed": 72,
      "damage": 5.0,
      "xp": 1,
      "behavior": "drift",
-     "shape": "rod"
+     "shape": "rod",
+     "art": "rod"
     },
     {
      "id": "asgard-archaee",
      "name": "Asgard-Archaee",
      "color": "#d98cff",
-     "size": 15,
+     "size": 34,
      "hp": 15.7,
      "speed": 47,
      "damage": 8.3,
      "xp": 3,
      "behavior": "drift",
-     "shape": "blob"
+     "shape": "blob",
+     "art": "archaea"
     },
     {
      "id": "grypania",
      "name": "Grypania",
      "color": "#6bc4a6",
-     "size": 24,
+     "size": 46,
      "hp": 39.2,
      "speed": 29,
      "damage": 14.9,
      "xp": 7,
-     "shape": "worm"
+     "shape": "worm",
+     "art": "coil"
     }
    ],
    "waves": [
@@ -471,36 +484,39 @@
      "id": "kragengeisseltier",
      "name": "Kragengeißeltier",
      "color": "#a6e0ff",
-     "size": 10,
+     "size": 20,
      "hp": 6.8,
      "speed": 73,
      "damage": 5.6,
      "xp": 2,
      "behavior": "drift",
-     "shape": "cell"
+     "shape": "cell",
+     "art": "choano"
     },
     {
      "id": "bangiomorpha",
      "name": "Bangiomorpha (Rotalge)",
      "color": "#e06b8a",
-     "size": 15,
+     "size": 34,
      "hp": 18.2,
      "speed": 48,
      "damage": 9.4,
      "xp": 3,
      "behavior": "drift",
-     "shape": "worm"
+     "shape": "worm",
+     "art": "filament"
     },
     {
      "id": "tappania",
      "name": "Tappania",
      "color": "#c9b46b",
-     "size": 24,
+     "size": 46,
      "hp": 45.6,
      "speed": 29,
      "damage": 16.9,
      "xp": 8,
-     "shape": "colony"
+     "shape": "colony",
+     "art": "tappania"
     }
    ],
    "waves": [
@@ -580,36 +596,39 @@
      "id": "cloudina",
      "name": "Cloudina",
      "color": "#e8e2c8",
-     "size": 10,
+     "size": 20,
      "hp": 7.8,
      "speed": 75,
      "damage": 6.3,
      "xp": 2,
      "behavior": "drift",
-     "shape": "worm"
+     "shape": "worm",
+     "art": "tube"
     },
     {
      "id": "kimberella",
      "name": "Kimberella",
      "color": "#c98a5a",
-     "size": 15,
+     "size": 34,
      "hp": 20.8,
      "speed": 48,
      "damage": 10.5,
      "xp": 4,
      "behavior": "drift",
-     "shape": "blob"
+     "shape": "blob",
+     "art": "kimberella"
     },
     {
      "id": "charnia",
      "name": "Charnia",
      "color": "#8ac98a",
-     "size": 24,
+     "size": 46,
      "hp": 52.0,
      "speed": 30,
      "damage": 18.9,
      "xp": 9,
-     "shape": "frond"
+     "shape": "frond",
+     "art": "frond"
     }
    ],
    "waves": [
@@ -669,12 +688,13 @@
     "id": "dickinsonia",
     "name": "Dickinsonia",
     "color": "#d9a66b",
-    "size": 60,
+    "size": 84,
     "shape": "frond",
     "hp": 780,
     "speed": 6,
     "damage": 0,
-    "xp": 75
+    "xp": 75,
+    "art": "dickinsonia"
    }
   },
   {
