@@ -9,7 +9,8 @@ import {
 import { formatRange, formatYear, yearAt } from './time'
 import { activeForm, applyForm, canEat, canEatEnemy, playerSize, rangedActive, weaponKind, weaponLabel } from './weapon'
 import { bodyFor, groundFor, outfitFor, SHAPES } from './appearance'
-import { ART_KEYS, HERO_BODY_KEYS } from '../game/art/microbes'
+import { ART_KEYS, HERO_BODY_KEYS, MICROBE_STAGES } from '../game/art/microbes'
+import { realPathTo } from './teleport'
 import { hasStageArt, propCount } from '../game/art/backgrounds'
 import type { EvolutionOption, Upgrade, Wave } from './types'
 
@@ -392,5 +393,43 @@ describe('Pakete 1–3: Figuren aller Phasen', () => {
         expect(canEatEnemy(playerSize(1, true), mid, false)).toBe(false)
         expect(canEatEnemy(playerSize(3, true), mid, false)).toBe(true)
         expect(canEatEnemy(playerSize(1, true), big, false)).toBe(false)
+    })
+})
+
+describe('Tempo, ruhiger Start, Teleporter', () => {
+    const d = rawData()
+    const list = sortedEpochs(d.epochs).filter(isPlayable)
+
+    it('Stufen sind kurz: Phase 1–2 höchstens 2000, sonst höchstens 2500', () => {
+        for (const e of list) expect(e.height, e.code).toBeLessThanOrEqual(e.phase <= 2 ? 2000 : 2500)
+    })
+
+    it('die erste Stufe hat nur treibende Beute, keine Jäger', () => {
+        const first = list[0]
+        const ids = new Set([...first.waves, ...(first.ambient ?? [])].map(w => w.enemy))
+        for (const id of ids) expect(first.enemies.find(e => e.id === id)?.behavior, id).toBe('drift')
+        expect(first.ambient ?? []).toEqual([])
+    })
+
+    it('in jeder Stufe kommen im ersten Viertel nur die kleinsten Gegner', () => {
+        for (const e of list) {
+            const smallest = [...e.enemies].sort((a, b) => a.size - b.size)[0].id
+            for (const w of e.waves.filter(x => x.from < 0.25)) expect(w.enemy, e.code).toBe(smallest)
+        }
+    })
+
+    it('Hauptfigur hat in Phase 1–2 je Stufe eine eigene Form (2.1 = Vorlage)', () => {
+        const early = list.filter(e => e.phase <= 2).map(e => e.id)
+        expect(early.filter(id => !MICROBE_STAGES.includes(id))).toEqual(['endosymbiose'])
+    })
+
+    it('Teleporter erreicht jede Stufe über die echte Zeitlinie', () => {
+        list.forEach((e, i) => {
+            const r = realPathTo(d.epochs, d.evolutionOptions, e.id)
+            expect(r, e.code).not.toBeNull()
+            expect(r!.visited.length, e.code).toBe(i)
+            // bis heute nur echte Wahlen
+            for (const o of r!.path) if (d.epochs.find(x => x.id === o.stage)!.fromYear < 2026) expect(o.real, o.id).toBe(true)
+        })
     })
 })

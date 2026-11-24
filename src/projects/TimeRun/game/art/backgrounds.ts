@@ -238,6 +238,59 @@ export function propCount(stageId: string): number {
     return STAGES[stageId]?.props.length ?? 0
 }
 
+// ---- Parallax: Schwebeteilchen über dem Boden (nah = schneller als der Boden) ----
+
+export type ParticleKind = 'water' | 'spores' | 'snow' | 'ash' | 'stars' | 'dust'
+const PARTICLE_KINDS: ParticleKind[] = ['water', 'spores', 'snow', 'ash', 'stars', 'dust']
+
+const KIND_BY_STAGE: Record<string, ParticleKind> = {
+    urzellen: 'water', stoffwechsel: 'water', photosynthese: 'water', endosymbiose: 'water', kolonien: 'water', mehrzeller: 'water',
+    kambrium: 'water', landgang: 'spores', landwirbeltiere: 'spores', dinosaurier: 'spores', saeugetiere: 'spores', primaten: 'spores',
+    hominiden: 'spores', 'jaeger-sammler': 'snow', zivilisation: 'ash', erdorbit: 'stars', 'mond-mars': 'dust', tiefraum: 'stars',
+}
+export function particleKindFor(stageId: string): ParticleKind {
+    return KIND_BY_STAGE[stageId] ?? 'dust'
+}
+
+/** Eigenbewegung der Teilchen (px/s, Bildschirm): Bläschen steigen, Schnee fällt, Staub weht. */
+export const PARTICLE_DRIFT: Record<ParticleKind, { x: number; y: number }> = {
+    water: { x: 0, y: 14 }, spores: { x: 6, y: -4 }, snow: { x: 8, y: -22 }, ash: { x: 10, y: 6 }, stars: { x: 0, y: 0 }, dust: { x: 26, y: 0 },
+}
+
+/** Im All ist die Kachel ferner Sternenhimmel → zieht langsamer als die Welt (Tiefe). Sonst liegt der Boden fest (Texte stehen darauf). */
+const SKY = new Set(['erdorbit', 'tiefraum'])
+export function tileFactorFor(stageId: string): number {
+    return SKY.has(stageId) ? 0.35 : 1
+}
+
+export const particleKey = (kind: ParticleKind, layer: 0 | 1) => `parts_${kind}_${layer}`
+const P = 128   // Teilchen-Kachel (durchsichtig)
+
+function drawParticles(g: Phaser.GameObjects.Graphics, kind: ParticleKind, layer: 0 | 1, rnd: () => number) {
+    const n = layer === 0 ? 22 : 6
+    for (let i = 0; i < n; i++) {
+        // Abstand zum Rand, damit die Kachel nahtlos ist
+        const x = 4 + Math.floor(rnd() * (P - 8))
+        const y = 4 + Math.floor(rnd() * (P - 8))
+        const big = layer === 1 || rnd() < 0.25
+        if (kind === 'water') {
+            if (big) { g.lineStyle(1, 0xd8fff4, 0.9).strokeCircle(x, y, 2); px(g, x - 1, y - 1, 0xffffff, 0.9) }
+            else px(g, x, y, 0xbff5e6, 0.8)
+        } else if (kind === 'spores') {
+            px(g, x, y, 0xf2e08a, 0.85, big ? 2 : 1, big ? 2 : 1)
+        } else if (kind === 'snow') {
+            px(g, x, y, 0xffffff, 0.95, big ? 2 : 1, big ? 2 : 1)
+        } else if (kind === 'ash') {
+            px(g, x, y, 0x8a8a8a, 0.7, big ? 3 : 1, big ? 2 : 1)
+        } else if (kind === 'stars') {
+            px(g, x, y, 0xffffff, 0.9)
+            if (big) { px(g, x - 1, y, 0xb8c8ff, 0.6); px(g, x + 1, y, 0xb8c8ff, 0.6); px(g, x, y - 1, 0xb8c8ff, 0.6); px(g, x, y + 1, 0xb8c8ff, 0.6) }
+        } else {
+            px(g, x, y, 0xd89060, 0.75, big ? 3 : 2, 1)
+        }
+    }
+}
+
 /** Kacheln und Deko aller Stufen mit eigener Grafik anlegen. */
 export function generateBackgrounds(scene: Phaser.Scene) {
     const g = scene.add.graphics()
@@ -246,6 +299,11 @@ export function generateBackgrounds(scene: Phaser.Scene) {
         art.props.forEach((draw, i) => {
             g.clear(); draw(g, seeded(2000 + si * 10 + i)); g.generateTexture(propKey(id, i), 16, 16)
         })
+    })
+    PARTICLE_KINDS.forEach((kind, ki) => {
+        for (const layer of [0, 1] as const) {
+            g.clear(); drawParticles(g, kind, layer, seeded(3000 + ki * 10 + layer)); g.generateTexture(particleKey(kind, layer), P, P)
+        }
     })
     g.destroy()
 }

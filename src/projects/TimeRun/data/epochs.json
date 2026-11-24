@@ -18,7 +18,7 @@
    ],
    "background": "#0b2427",
    "gridColor": "#123a3d",
-   "height": 4000,
+   "height": 2000,
    "enemies": [
     {
      "id": "aminosaeure",
@@ -64,54 +64,32 @@
      "enemy": "aminosaeure",
      "from": 0,
      "to": 1,
-     "every": 0.05,
-     "count": 2
-    },
-    {
-     "enemy": "rna-strang",
-     "from": 0.12,
-     "to": 1,
-     "every": 0.182,
-     "count": 1
-    },
-    {
-     "enemy": "aminosaeure",
-     "from": 0.35,
-     "to": 1,
-     "every": 0.0375,
-     "count": 2
-    },
-    {
-     "enemy": "protozelle",
-     "from": 0.3,
-     "to": 1,
-     "every": 0.28,
-     "count": 1
-    },
-    {
-     "enemy": "rna-strang",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.105,
+     "every": 0.085,
      "count": 2
     },
     {
      "enemy": "aminosaeure",
-     "from": 0.7,
+     "from": 0.4,
      "to": 1,
-     "every": 0.049,
+     "every": 0.08,
+     "count": 2
+    },
+    {
+     "enemy": "rna-strang",
+     "from": 0.25,
+     "to": 1,
+     "every": 0.294,
+     "count": 1
+    },
+    {
+     "enemy": "rna-strang",
+     "from": 0.6,
+     "to": 1,
+     "every": 0.21,
      "count": 2
     }
    ],
-   "ambient": [
-    {
-     "enemy": "protozelle",
-     "from": 6,
-     "to": 100000,
-     "every": 7,
-     "count": 1
-    }
-   ]
+   "ambient": []
   },
   {
    "id": "stoffwechsel",
@@ -130,7 +108,7 @@
    ],
    "background": "#0d2b2a",
    "gridColor": "#164240",
-   "height": 4000,
+   "height": 2000,
    "enemies": [
     {
      "id": "bakterium",
@@ -176,51 +154,51 @@
      "enemy": "bakterium",
      "from": 0,
      "to": 1,
-     "every": 0.05,
+     "every": 0.085,
+     "count": 2
+    },
+    {
+     "enemy": "bakterium",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "archaee",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.182,
+     "every": 0.294,
      "count": 1
     },
     {
-     "enemy": "bakterium",
-     "from": 0.35,
+     "enemy": "archaee",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0375,
+     "every": 0.21,
      "count": 2
     },
     {
      "enemy": "bakterienmatte",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.28,
+     "every": 0.49,
      "count": 1
     },
     {
-     "enemy": "archaee",
-     "from": 0.55,
+     "enemy": "bakterium",
+     "from": 0.8,
      "to": 1,
      "every": 0.105,
-     "count": 2
-    },
-    {
-     "enemy": "bakterium",
-     "from": 0.7,
-     "to": 1,
-     "every": 0.049,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "bakterienmatte",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -242,7 +220,7 @@
    ],
    "background": "#0e2e24",
    "gridColor": "#17473a",
-   "height": 4000,
+   "height": 2000,
    "enemies": [
     {
      "id": "sauerstoffradikal",
@@ -288,51 +266,51 @@
      "enemy": "sauerstoffradikal",
      "from": 0,
      "to": 1,
-     "every": 0.05,
+     "every": 0.085,
+     "count": 2
+    },
+    {
+     "enemy": "sauerstoffradikal",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "purpurbakterium",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.182,
+     "every": 0.294,
      "count": 1
     },
     {
-     "enemy": "sauerstoffradikal",
-     "from": 0.35,
+     "enemy": "purpurbakterium",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0375,
+     "every": 0.21,
      "count": 2
     },
     {
      "enemy": "cyanokolonie",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.28,
+     "every": 0.49,
      "count": 1
     },
     {
-     "enemy": "purpurbakterium",
-     "from": 0.55,
+     "enemy": "sauerstoffradikal",
+     "from": 0.8,
      "to": 1,
      "every": 0.105,
-     "count": 2
-    },
-    {
-     "enemy": "sauerstoffradikal",
-     "from": 0.7,
-     "to": 1,
-     "every": 0.049,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "cyanokolonie",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ],
@@ -342,7 +320,7 @@
     "color": "#8fae7a",
     "size": 84,
     "shape": "rock",
-    "hp": 492,
+    "hp": 361,
     "speed": 0,
     "damage": 0,
     "xp": 48,
@@ -366,7 +344,7 @@
    ],
    "background": "#102a3a",
    "gridColor": "#1a3d52",
-   "height": 4000,
+   "height": 2000,
    "enemies": [
     {
      "id": "alphaproteobakterium",
@@ -412,51 +390,51 @@
      "enemy": "alphaproteobakterium",
      "from": 0,
      "to": 1,
-     "every": 0.05,
+     "every": 0.085,
+     "count": 2
+    },
+    {
+     "enemy": "alphaproteobakterium",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "asgard-archaee",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.182,
+     "every": 0.294,
      "count": 1
     },
     {
-     "enemy": "alphaproteobakterium",
-     "from": 0.35,
+     "enemy": "asgard-archaee",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0375,
+     "every": 0.21,
      "count": 2
     },
     {
      "enemy": "grypania",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.28,
+     "every": 0.49,
      "count": 1
     },
     {
-     "enemy": "asgard-archaee",
-     "from": 0.55,
+     "enemy": "alphaproteobakterium",
+     "from": 0.8,
      "to": 1,
      "every": 0.105,
-     "count": 2
-    },
-    {
-     "enemy": "alphaproteobakterium",
-     "from": 0.7,
-     "to": 1,
-     "every": 0.049,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "grypania",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -478,7 +456,7 @@
    ],
    "background": "#0f2638",
    "gridColor": "#1b3a54",
-   "height": 4000,
+   "height": 2000,
    "enemies": [
     {
      "id": "kragengeisseltier",
@@ -524,51 +502,51 @@
      "enemy": "kragengeisseltier",
      "from": 0,
      "to": 1,
-     "every": 0.05,
+     "every": 0.085,
+     "count": 2
+    },
+    {
+     "enemy": "kragengeisseltier",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "bangiomorpha",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.182,
+     "every": 0.294,
      "count": 1
     },
     {
-     "enemy": "kragengeisseltier",
-     "from": 0.35,
+     "enemy": "bangiomorpha",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0375,
+     "every": 0.21,
      "count": 2
     },
     {
      "enemy": "tappania",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.28,
+     "every": 0.49,
      "count": 1
     },
     {
-     "enemy": "bangiomorpha",
-     "from": 0.55,
+     "enemy": "kragengeisseltier",
+     "from": 0.8,
      "to": 1,
      "every": 0.105,
-     "count": 2
-    },
-    {
-     "enemy": "kragengeisseltier",
-     "from": 0.7,
-     "to": 1,
-     "every": 0.049,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "tappania",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -590,7 +568,7 @@
    ],
    "background": "#13263a",
    "gridColor": "#213b55",
-   "height": 4000,
+   "height": 2000,
    "enemies": [
     {
      "id": "cloudina",
@@ -636,51 +614,51 @@
      "enemy": "cloudina",
      "from": 0,
      "to": 1,
-     "every": 0.05,
+     "every": 0.085,
+     "count": 2
+    },
+    {
+     "enemy": "cloudina",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "kimberella",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.182,
+     "every": 0.294,
      "count": 1
     },
     {
-     "enemy": "cloudina",
-     "from": 0.35,
+     "enemy": "kimberella",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0375,
+     "every": 0.21,
      "count": 2
     },
     {
      "enemy": "charnia",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.28,
+     "every": 0.49,
      "count": 1
     },
     {
-     "enemy": "kimberella",
-     "from": 0.55,
+     "enemy": "cloudina",
+     "from": 0.8,
      "to": 1,
      "every": 0.105,
-     "count": 2
-    },
-    {
-     "enemy": "cloudina",
-     "from": 0.7,
-     "to": 1,
-     "every": 0.049,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "charnia",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ],
@@ -690,7 +668,7 @@
     "color": "#d9a66b",
     "size": 84,
     "shape": "frond",
-    "hp": 780,
+    "hp": 572,
     "speed": 6,
     "damage": 0,
     "xp": 75,
@@ -714,7 +692,7 @@
    ],
    "background": "#0c2340",
    "gridColor": "#16365e",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "hallucigenia",
@@ -758,51 +736,51 @@
      "enemy": "hallucigenia",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "hallucigenia",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "trilobit",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "hallucigenia",
-     "from": 0.35,
+     "enemy": "trilobit",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "anomalocaris",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "trilobit",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "hallucigenia",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "anomalocaris",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -824,7 +802,7 @@
    ],
    "background": "#1d2a17",
    "gridColor": "#2c4022",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "rhyniella",
@@ -868,51 +846,51 @@
      "enemy": "rhyniella",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "rhyniella",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "pneumodesmus",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "rhyniella",
-     "from": 0.35,
+     "enemy": "pneumodesmus",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "eurypterus",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "pneumodesmus",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "rhyniella",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "eurypterus",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -934,7 +912,7 @@
    ],
    "background": "#1a2814",
    "gridColor": "#2a3e1f",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "acanthostega",
@@ -978,51 +956,51 @@
      "enemy": "acanthostega",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "acanthostega",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "pulmonoscorpius",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "acanthostega",
-     "from": 0.35,
+     "enemy": "pulmonoscorpius",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "arthropleura",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "pulmonoscorpius",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "acanthostega",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "arthropleura",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ],
@@ -1032,7 +1010,7 @@
     "color": "#6b7f99",
     "size": 84,
     "shape": "fish",
-    "hp": 1068,
+    "hp": 783,
     "speed": 37,
     "damage": 39,
     "xp": 102,
@@ -1056,7 +1034,7 @@
    ],
    "background": "#24261a",
    "gridColor": "#383b26",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "compsognathus",
@@ -1100,51 +1078,51 @@
      "enemy": "compsognathus",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "compsognathus",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "velociraptor",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "compsognathus",
-     "from": 0.35,
+     "enemy": "velociraptor",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "triceratops",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "velociraptor",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "compsognathus",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "triceratops",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -1166,7 +1144,7 @@
    ],
    "background": "#26221a",
    "gridColor": "#3b3426",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "purgatorius",
@@ -1210,51 +1188,51 @@
      "enemy": "purgatorius",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "purgatorius",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "gastornis",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "purgatorius",
-     "from": 0.35,
+     "enemy": "gastornis",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "titanoboa",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "gastornis",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "purgatorius",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "titanoboa",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -1276,7 +1254,7 @@
    ],
    "background": "#1c2a1a",
    "gridColor": "#2c4128",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "hyaenodon",
@@ -1320,51 +1298,51 @@
      "enemy": "hyaenodon",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "hyaenodon",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "entelodont",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "hyaenodon",
-     "from": 0.35,
+     "enemy": "entelodont",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "deinotherium",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "entelodont",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "hyaenodon",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "deinotherium",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ],
@@ -1374,7 +1352,7 @@
     "color": "#6a4a3a",
     "size": 84,
     "shape": "mammal",
-    "hp": 1356,
+    "hp": 994,
     "speed": 39,
     "damage": 48,
     "xp": 129,
@@ -1398,7 +1376,7 @@
    ],
    "background": "#2b2419",
    "gridColor": "#403526",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "pachycrocuta",
@@ -1442,51 +1420,51 @@
      "enemy": "pachycrocuta",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "pachycrocuta",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "dinofelis",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "pachycrocuta",
-     "from": 0.35,
+     "enemy": "dinofelis",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "homotherium",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "dinofelis",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "pachycrocuta",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "homotherium",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -1508,7 +1486,7 @@
    ],
    "background": "#2b2119",
    "gridColor": "#3f3126",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "hoehlenhyaene",
@@ -1552,51 +1530,51 @@
      "enemy": "hoehlenhyaene",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "hoehlenhyaene",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "hoehlenbaer",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "hoehlenhyaene",
-     "from": 0.35,
+     "enemy": "hoehlenbaer",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "wollnashorn",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "hoehlenbaer",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "hoehlenhyaene",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "wollnashorn",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -1618,7 +1596,7 @@
    ],
    "background": "#24231f",
    "gridColor": "#3a382f",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "hausratte",
@@ -1662,51 +1640,51 @@
      "enemy": "hausratte",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "hausratte",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "heuschrecken",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "hausratte",
-     "from": 0.35,
+     "enemy": "heuschrecken",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "auerochse",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "heuschrecken",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "hausratte",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "auerochse",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ],
@@ -1716,7 +1694,7 @@
     "color": "#7a8a5a",
     "size": 84,
     "shape": "swarm",
-    "hp": 1644,
+    "hp": 1206,
     "speed": 41,
     "damage": 57,
     "xp": 156,
@@ -1740,7 +1718,7 @@
    ],
    "background": "#0c0f1e",
    "gridColor": "#171c33",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "mikrometeoroid",
@@ -1784,51 +1762,51 @@
      "enemy": "mikrometeoroid",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "mikrometeoroid",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "weltraumschrott",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "mikrometeoroid",
-     "from": 0.35,
+     "enemy": "weltraumschrott",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "raketenstufe",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "weltraumschrott",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "mikrometeoroid",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "raketenstufe",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -1850,7 +1828,7 @@
    ],
    "background": "#1a1010",
    "gridColor": "#2e1c1a",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "mondstaub",
@@ -1894,51 +1872,51 @@
      "enemy": "mondstaub",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "mondstaub",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "staubteufel",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "mondstaub",
-     "from": 0.35,
+     "enemy": "staubteufel",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "sonnensturm",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "staubteufel",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "mondstaub",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "sonnensturm",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ]
@@ -1960,7 +1938,7 @@
    ],
    "background": "#07071a",
    "gridColor": "#14143a",
-   "height": 4000,
+   "height": 2500,
    "enemies": [
     {
      "id": "kosmische-strahlung",
@@ -2004,51 +1982,51 @@
      "enemy": "kosmische-strahlung",
      "from": 0,
      "to": 1,
-     "every": 0.07,
+     "every": 0.104,
+     "count": 2
+    },
+    {
+     "enemy": "kosmische-strahlung",
+     "from": 0.4,
+     "to": 1,
+     "every": 0.08,
      "count": 2
     },
     {
      "enemy": "kometenbrocken",
-     "from": 0.12,
+     "from": 0.25,
      "to": 1,
-     "every": 0.13,
+     "every": 0.168,
      "count": 1
     },
     {
-     "enemy": "kosmische-strahlung",
-     "from": 0.35,
+     "enemy": "kometenbrocken",
+     "from": 0.6,
      "to": 1,
-     "every": 0.0475,
+     "every": 0.12,
      "count": 2
     },
     {
      "enemy": "eisasteroid",
-     "from": 0.3,
+     "from": 0.6,
      "to": 1,
-     "every": 0.2,
+     "every": 0.28,
      "count": 1
     },
     {
-     "enemy": "kometenbrocken",
-     "from": 0.55,
-     "to": 1,
-     "every": 0.075,
-     "count": 2
-    },
-    {
      "enemy": "kosmische-strahlung",
-     "from": 0.7,
+     "from": 0.8,
      "to": 1,
-     "every": 0.035,
+     "every": 0.06,
      "count": 2
     }
    ],
    "ambient": [
     {
      "enemy": "eisasteroid",
-     "from": 6,
+     "from": 20,
      "to": 100000,
-     "every": 7,
+     "every": 8,
      "count": 1
     }
    ],
@@ -2058,7 +2036,7 @@
     "color": "#7a6a5a",
     "size": 84,
     "shape": "rock",
-    "hp": 1932,
+    "hp": 1417,
     "speed": 43,
     "damage": 66,
     "xp": 183,
