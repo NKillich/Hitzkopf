@@ -334,7 +334,7 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
 
 
 
-  `code`, `phase` (1–6), `fromYear`/`toYear` (Kalenderjahr, negativ = vor heute), `shortName`, `fact` (belegbare Info) und
+  `code`, `phase` (1–6), `fromYear`/`toYear` (Kalenderjahr, negativ = vor heute), `shortName`, `texts` (Beschreibung der Stufe) und
 
 
 
@@ -428,7 +428,11 @@ Identify hat zwei Modi (Seite „Spiel einrichten“): **Quick** (nur Schnipsel 
 
 
 
-  am Start, `facts` (3 je Stufe, belegbar) als Bodentexte bei 12/42/72 % der Höhe. Daten werden mit einem Skript erzeugt
+  am Start, `texts` (2 je Stufe: beschreiben, was passiert – **keine Fun-Facts**, Zukunft mit „Zukunft:“) als Bodentexte
+  (140 px / 300 px über dem Start und bei 62 %). **Bodentexte sind HTML** (`ui/Floor.jsx`, `FloorItem` über die Brücke),
+  verschoben per `bridge.setFloorScroll` nach jedem Bild – im 390-px-Phaser-Bild wären sie unscharf. Boden gedämpft (`BG_ALPHA`).
+  HUD nach Vorlage: Stufe/Zeit/Pause, darunter volle Breite Leben + LV + XP-Zahl, dann 18 Fortschritts-Kästchen; Waffe/Tags im
+  Pausenmenü. Level-up nach Entwurf „03 Level-up“: 3 Karten nebeneinander, Antippen wählt aus, grüner Knopf übernimmt. Daten werden mit einem Skript erzeugt
 
 
 

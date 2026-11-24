@@ -7,6 +7,7 @@ import '@fontsource/silkscreen/400.css'
 import './TimeRun.css'
 import './ui/ui.css'
 import { UiBridge } from './game/bridge'
+import { Floor } from './ui/Floor'
 import { Hud } from './ui/Hud'
 import { StartScreen } from './ui/StartScreen'
 import { EndScreen, Evolution, LevelUp, PauseMenu } from './ui/Overlays'
@@ -69,6 +70,7 @@ export default function TimeRun({ onBack, param }) {
         <div className="trRoot" ref={rootRef}>
             <div className="trHost" ref={hostRef} />
             <div className="trUi" style={{ transform: `translate(${fit.left}px, ${fit.top}px) scale(${fit.scale})` }}>
+                {run && <Floor state={state} bridge={bridge} />}
                 {run && <Hud state={state} bridge={bridge} />}
                 {run && ov?.type === 'levelup' && <LevelUp state={state} bridge={bridge} />}
                 {run && ov?.type === 'evolution' && <Evolution state={state} bridge={bridge} />}

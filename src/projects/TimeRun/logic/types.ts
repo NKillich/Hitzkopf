@@ -53,8 +53,8 @@ export interface Epoch {
     /** Zeitraum als Kalenderjahr (negativ = v. Chr. / vor heute) */
     fromYear: number
     toYear: number
-    /** kurze, belegbare Infos – stehen als Text auf dem Boden, über die Stufe verteilt */
-    facts: string[]
+    /** Bodentexte: beschreiben, was in der Stufe passiert (Anfang + Mitte) */
+    texts: string[]
     background: string
     gridColor: string
     enemies: EnemyType[]

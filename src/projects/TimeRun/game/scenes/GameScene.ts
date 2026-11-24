@@ -2,7 +2,7 @@
 // Höhe pro Epoche → Boss am oberen Ende → Evolutionswahl → nächste Epoche.
 import Phaser from 'phaser'
 import type { EnemyType, Epoch, EvolutionOption, Gene, GameData, GeneForm, PlayerStats, Stat, Upgrade, WeaponKind } from '../../logic/types'
-import { computeStats, pickUpgrades, type OwnedUpgrades } from '../../logic/upgrades'
+import { computeStats, pickUpgrades, splitDescription, type OwnedUpgrades } from '../../logic/upgrades'
 import { spawnsDue, xpForLevel } from '../../logic/waves'
 import { availableEvolutions, applyEvolution } from '../../logic/evolution'
 import { formatRange, formatYear, PRESENT_YEAR, yearAt } from '../../logic/time'
@@ -15,7 +15,7 @@ import {
     PLAYER_BASE, PLAYER_SIZE, RECYCLE_BELOW, WIDTH, hexToInt, smoothTexts,
 } from '../config'
 import { Joystick } from '../Joystick'
-import { saveBest, type IconKey, type UiBridge } from '../bridge'
+import { saveBest, type FloorItem, type IconKey, type UiBridge } from '../bridge'
 import { bodyFor, groundFor, outfitFor, PLAYER_TINT, type Shape } from '../../logic/appearance'
 import { outfitKey, shapeKey } from '../sprites'
 import { HERO_BODY_KEYS, heroKey, microbeBody, mobKey } from '../art/microbes'
@@ -48,9 +48,16 @@ const ICON_BY_STAT: Record<Stat, IconKey> = {
     moveSpeed: 'speed', maxHp: 'heart', damage: 'damage', cooldown: 'cooldown', range: 'range', projectileSpeed: 'range',
     xpGain: 'xp', projectiles: 'multi', pierce: 'pierce', regen: 'regen', pickupRadius: 'magnet',
 }
+/** Upgrades mit diesen Werten zählen als „Waffe“, alle anderen als „Passiv“. */
+const WEAPON_STATS = new Set<Stat>(['damage', 'cooldown', 'range', 'projectileSpeed', 'projectiles', 'pierce'])
 const ICON_BY_PHASE: IconKey[] = ['cell', 'colony', 'fish', 'paw', 'tool', 'rocket']
 /** So oft pro Sekunde bekommt der HUD neue Werte (React muss nicht jedes Bild neu zeichnen). */
 const HUD_INTERVAL_MS = 100
+/** Sichtbarkeit der Bodenkachel (Rest = dunkle Grundfarbe der Stufe) */
+const BG_ALPHA = 0.5
+/** Abstand (px) über dem Stufenstart: Unterkante des Stufennamens bzw. des ersten Textes */
+const FLOOR_TITLE_ABOVE = 140
+const FLOOR_TEXT1_ABOVE = 300
 
 class Gem extends Phaser.GameObjects.Image {
     value = 0
@@ -152,6 +159,9 @@ export class GameScene extends Phaser.Scene {
     /** Lineal + Bodentexte der aktuellen und der vorigen Stufe */
     private worldObjs: Phaser.GameObjects.GameObject[] = []
     private prevWorldObjs: Phaser.GameObjects.GameObject[] = []
+    /** Bodentexte (als HTML über dem Spiel, damit sie scharf bleiben) der aktuellen und der vorigen Stufe */
+    private floorItems: FloorItem[] = []
+    private prevFloorItems: FloorItem[] = []
     /** Effekte für Nahkampf/Strahl (werden pro Bild neu gezeichnet) */
     private fx!: Phaser.GameObjects.Graphics
     private effects: { kind: 'ring' | 'line'; x: number; y: number; x2: number; y2: number; r: number; until: number; color: number }[] = []
@@ -187,6 +197,8 @@ export class GameScene extends Phaser.Scene {
         this.eatReadyAt = 0
         this.worldObjs = []
         this.prevWorldObjs = []
+        this.floorItems = []
+        this.prevFloorItems = []
         this.lastHudAt = -Infinity
         this.offeredUpgrades = []
         this.offeredEvos = []
@@ -201,10 +213,11 @@ export class GameScene extends Phaser.Scene {
         this.physics.resume()   // nach Neustart war die Welt evtl. noch angehalten
         const cam = this.cameras.main
         cam.setBounds(0, -1e8, WIDTH, 2e8)
-        this.bg = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0).setDepth(-10)
+        // Boden gedämpft: blendet zur dunklen Grundfarbe der Stufe hin, damit sich Gegner gut abheben
+        this.bg = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0).setDepth(-10).setAlpha(BG_ALPHA)
         this.bgNext = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'grid').setOrigin(0).setScrollFactor(0).setDepth(-9.5).setAlpha(0)
-        this.nearA = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'px').setOrigin(0).setScrollFactor(0).setDepth(3).setAlpha(0.55)
-        this.nearB = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'px').setOrigin(0).setScrollFactor(0).setDepth(20).setAlpha(0.22)
+        this.nearA = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'px').setOrigin(0).setScrollFactor(0).setDepth(3).setAlpha(0.35)
+        this.nearB = this.add.tileSprite(0, 0, WIDTH, HEIGHT, 'px').setOrigin(0).setScrollFactor(0).setDepth(20).setAlpha(0.14)
         this.finishLine = this.add.tileSprite(0, 0, WIDTH, 8, 'finish').setOrigin(0, 1).setDepth(-5)
         this.finishText = this.add.text(WIDTH / 2, 0, '', {
             fontFamily: '"Pixelify Sans", ui-monospace, monospace', fontSize: '13px', color: '#ffffff', resolution: 2,
@@ -251,7 +264,14 @@ export class GameScene extends Phaser.Scene {
         this.startEpoch(first)
         cam.centerOn(this.player.x, this.player.y - HEIGHT * 0.18)
 
-        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.joystick.destroy())
+        // Bodentexte nach dem Zeichnen mitschieben (erst dann steht die Kamera fürs Bild fest)
+        const syncFloor = () => this.bridge.setFloorScroll(this.cameras.main.scrollY)
+        this.game.events.on(Phaser.Core.Events.POST_RENDER, syncFloor)
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.joystick.destroy()
+            this.game.events.off(Phaser.Core.Events.POST_RENDER, syncFloor)
+            this.bridge.set({ floor: [] })
+        })
         this.registerActions()
         this.bridge.set({ screen: 'run', overlay: null, banner: null })
         this.publishHud()
@@ -290,6 +310,8 @@ export class GameScene extends Phaser.Scene {
                 maxHp: this.run.stats.maxHp,
                 level: this.run.level,
                 xpFrac: Math.min(1, this.run.xp / this.run.xpNeeded),
+                xp: Math.floor(this.run.xp),
+                xpNeeded: this.run.xpNeeded,
                 timeSec: this.run.timeSec,
                 kills: this.run.kills,
                 tags: [...this.tags].slice(-4),
@@ -372,58 +394,43 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * Boden der Stufe: Zeitstrahl als Lineal am linken Rand (Striche + Jahresangaben),
-     * Stufenname am Anfang und die Fakten als Inschriften, über die Höhe verteilt.
+     * Boden der Stufe: Zeitstrahl als Lineal am linken Rand (Striche hier, Jahresangaben als HTML),
+     * Stufenname am Anfang und die Beschreibungstexte (Anfang + Mitte). Texte liegen als HTML über
+     * dem Spiel (`FloorItem`) – im Phaser-Bild (390 px breit, hochskaliert) wären sie unscharf.
      */
     private buildStageWorld() {
         for (const o of this.prevWorldObjs) o.destroy()
         this.prevWorldObjs = this.worldObjs
         this.worldObjs = []
+        this.prevFloorItems = this.floorItems
         const e = this.epoch
         const h = e.height ?? 5000
-        const bottom = this.epochStartY
-        const font = '"Pixelify Sans", ui-monospace, monospace'
-        // Auf hellem Boden (Schnee) dunkle Schrift, sonst helle
+        const bottom = Math.round(this.epochStartY)
         const light = isLightStage(e.id)
-        const ink = light ? '#1a1f24' : '#F4EEDC'
         const inkNum = light ? 0x1a1f24 : 0xf4eedc
-        const gold = light ? '#6a3a10' : '#FFD27A'
-        const mint = light ? '#1e5a4a' : '#A6F7DA'
         const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => { this.worldObjs.push(o); return o }
+        const items: FloorItem[] = []
+        const key = `${e.id}-${bottom}`
 
         const g = add(this.add.graphics().setDepth(-6))
         g.fillStyle(inkNum, 0.16).fillRect(6, bottom - h, 2, h)
         for (let i = 0; i <= 20; i++) {
-            const y = bottom - (h * i) / 20
+            const y = Math.round(bottom - (h * i) / 20)
             const major = i % 5 === 0
             g.fillStyle(inkNum, major ? 0.32 : 0.18).fillRect(6, y - 1, major ? 12 : 6, 2)
             if (major && i < 20) {
-                add(this.add.text(22, y, formatYear(yearAt(e.fromYear, e.toYear, i / 20)), {
-                    fontFamily: font, fontSize: '11px', color: ink, resolution: 2,
-                }).setOrigin(0, 0.5).setAlpha(0.4).setDepth(-4))
+                items.push({ id: `${key}-y${i}`, y, kind: 'year', text: formatYear(yearAt(e.fromYear, e.toYear, i / 20)), light })
             }
         }
-
-        // Stufenname kurz über dem Start
-        add(this.add.text(WIDTH / 2, bottom - 150, `${e.code} ${e.name}`, {
-            fontFamily: font, fontSize: '18px', fontStyle: 'bold', color: gold, align: 'center', wordWrap: { width: 300 }, resolution: 2,
-        }).setOrigin(0.5, 1).setAlpha(0.55).setDepth(-4))
-        add(this.add.text(WIDTH / 2, bottom - 144, formatRange(e.fromYear, e.toYear), {
-            fontFamily: font, fontSize: '12px', color: mint, align: 'center', resolution: 2,
-        }).setOrigin(0.5, 0).setAlpha(0.5).setDepth(-4))
-
-        // Fakten gleichmäßig über die Stufe verteilt
-        const n = e.facts.length
-        e.facts.forEach((fact, i) => {
-            // nicht auf den Hauptstrichen des Lineals (0/25/50/75 %)
-            const y = bottom - h * (0.12 + (0.6 * i) / Math.max(1, n - 1))
-            add(this.add.text(WIDTH / 2 + 6, y - 6, 'Wusstest du?', {
-                fontFamily: font, fontSize: '11px', color: gold, resolution: 2,
-            }).setOrigin(0.5, 1).setAlpha(0.45).setDepth(-4))
-            add(this.add.text(WIDTH / 2 + 6, y, fact, {
-                fontFamily: font, fontSize: '14px', color: ink, align: 'center', wordWrap: { width: 300 }, lineSpacing: 3, resolution: 2,
-            }).setOrigin(0.5, 0).setAlpha(0.55).setDepth(-4))
+        // Stufenname + Zeitraum kurz über dem Start, darüber mit Abstand der erste Text, der zweite etwa in der Mitte
+        items.push({ id: `${key}-t`, y: bottom - FLOOR_TITLE_ABOVE, kind: 'title', text: `${e.code} ${e.name}`, sub: formatRange(e.fromYear, e.toYear), light })
+        e.texts.forEach((text, i) => {
+            const y = i === 0 ? bottom - FLOOR_TEXT1_ABOVE : Math.round(bottom - h * (0.62 + 0.2 * (i - 1)))
+            items.push({ id: `${key}-x${i}`, y, kind: 'text', text, light })
         })
+        this.floorItems = items
+        this.bridge.set({ floor: [...this.prevFloorItems, ...items] })
+
         // Deko passend zur Stufe (Steine, Pflanzen, Schlote …), dezent im Hintergrund
         const props = propCount(e.id)
         if (props > 0) {
@@ -432,10 +439,9 @@ export class GameScene extends Phaser.Scene {
                 const y = bottom - Math.random() * h
                 const x = 18 + Math.random() * (WIDTH - 36)
                 add(this.add.image(x, y, propKey(e.id, Math.floor(Math.random() * props)))
-                    .setScale(2).setAlpha(0.75).setDepth(-8).setFlipX(Math.random() < 0.5))
+                    .setScale(2).setAlpha(0.35).setDepth(-8).setFlipX(Math.random() < 0.5))
             }
         }
-        smoothTexts(this.worldObjs)
     }
 
     /** Hauptfigur mit Gesicht + gelben Fühlern: Mikrobe (Phase 1–2), danach Körper je Evolution, ab 5.2 mit Ausrüstung. */
@@ -539,7 +545,7 @@ export class GameScene extends Phaser.Scene {
         this.run.progress = this.run.phase === 'climb' ? heightProgress(this.epochStartY, py, this.epoch.height ?? 5000) : 1
         this.run.year = yearAt(this.epoch.fromYear, this.epoch.toYear, this.run.progress)
         // Übergang: in den letzten 15 % der Höhe blendet der nächste Hintergrund ein
-        this.bgNext.setAlpha(Phaser.Math.Clamp((this.run.progress - 0.85) / 0.15, 0, 1))
+        this.bgNext.setAlpha(BG_ALPHA * Phaser.Math.Clamp((this.run.progress - 0.85) / 0.15, 0, 1))
         if (this.run.phase === 'climb') {
             // Ende einer Hauptphase: Boss vor der Linie; sonst geht es an der Linie direkt zur Evolutionswahl
             if (this.epoch.boss && py <= this.endY + BOSS_TRIGGER_DISTANCE) this.startBoss()
@@ -838,6 +844,8 @@ export class GameScene extends Phaser.Scene {
         for (const o of [...this.prevWorldObjs, ...this.worldObjs]) o.destroy()
         this.prevWorldObjs = []
         this.worldObjs = []
+        this.floorItems = []
+        this.prevFloorItems = []
         this.effects = []
         this.boss = null
 
@@ -1130,12 +1138,13 @@ export class GameScene extends Phaser.Scene {
             type: 'levelup',
             level: this.run.level,
             rerolls: this.rerolls,
-            skills: Object.entries(this.owned).map(([id, level]) => ({ name: this.gd.upgrades.find(u => u.id === id)?.name ?? id, level })),
             choices: choices.map(u => {
-                const lvl = this.owned[u.id] ?? 0
+                const { effect, fact } = splitDescription(u.description)
+                const weapon = !!u.grants?.includes('toxin') || u.effects.some(f => WEAPON_STATS.has(f.stat))
                 return {
-                    name: u.name, desc: u.description, rarity: u.rarity,
-                    levelText: lvl ? `Stufe ${lvl} → ${lvl + 1}` : 'Neu',
+                    name: u.name, effect, fact, rarity: u.rarity,
+                    level: this.owned[u.id] ?? 0, maxLevel: u.maxLevel,
+                    kind: weapon ? 'weapon' : 'passive',
                     icon: u.grants?.includes('toxin') ? 'toxin' : ICON_BY_STAT[u.effects[0]?.stat ?? 'damage'],
                 }
             }),
