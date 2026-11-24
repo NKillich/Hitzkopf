@@ -3,8 +3,7 @@
 // W = weiß, K = schwarz, Y = gelb, A = Akzent, M = Mund, . = leer.
 // Die Hauptfigur hat feste Farben, Gegner leiten ihre Töne aus der Datenfarbe ab.
 import type Phaser from 'phaser'
-
-type Grid = string[]
+import { ANIMAL_ART, HERO_BODIES, type Grid, type Motion } from './animals'
 
 const OUTLINE = 0x14202e
 
@@ -151,35 +150,53 @@ export function paletteFrom(base: number): Record<string, number> {
     }
 }
 
-function drawGrid(g: Phaser.GameObjects.Graphics, grid: Grid, colors: Record<string, number>, dy = 0) {
+/**
+ * Raster zeichnen. dy = -1 → Inhalt 1 px nach oben (Wippen);
+ * legs = true → die untersten zwei Zeilen 1 px versetzt (Laufen).
+ */
+function drawGrid(g: Phaser.GameObjects.Graphics, grid: Grid, colors: Record<string, number>, dy = 0, legs = false) {
+    let last = 0
+    grid.forEach((row, y) => { if (/[^.]/.test(row)) last = y })
     for (let y = 0; y < 16; y++) {
-        const src = y - dy   // dy = -1 → Inhalt 1 px nach oben
+        const src = y - dy
         if (src < 0 || src > 15) continue
         const row = grid[src] ?? ''
+        const dx = legs && src >= last - 1 ? 1 : 0
         for (let x = 0; x < 16; x++) {
             const c = colors[row[x] ?? '.']
-            if (c !== undefined) g.fillStyle(c, 1).fillRect(x, y, 1, 1)
+            if (c !== undefined && x + dx < 16) g.fillStyle(c, 1).fillRect(x + dx, y, 1, 1)
         }
     }
 }
 
-export const heroKey = (frame: number) => `hero_${frame}`
-export const mobKey = (id: string, frame: number) => `mob_${id}_${frame}`
-export const ART_KEYS = Object.keys(ART)
+function drawFrame(g: Phaser.GameObjects.Graphics, grid: Grid, colors: Record<string, number>, motion: Motion, frame: number) {
+    if (frame === 0 || motion === 'static') drawGrid(g, grid, colors)
+    else if (motion === 'walk') drawGrid(g, grid, colors, 0, true)
+    else drawGrid(g, grid, colors, -1)
+}
 
-/** Hauptfigur + alle Gegner mit `art` als Texturen (je 2 Bilder). */
+/** Hauptfigur: „microbe“ (Phase 1–2) oder ein Körper aus Paket 2 (fish, arthropod, tetrapod, reptile, mammal, bird). */
+export const heroKey = (body: string, frame: number) => `hero_${body}_${frame}`
+export const HERO_BODY_KEYS = ['microbe', ...Object.keys(HERO_BODIES)]
+export const mobKey = (id: string, frame: number) => `mob_${id}_${frame}`
+export const ART_KEYS = [...Object.keys(ART), ...Object.keys(ANIMAL_ART)]
+
+/** Hauptfigur(en) + alle Gegner mit `art` als Texturen (je 2 Bilder). */
 export function generateMicrobeArt(scene: Phaser.Scene, mobs: { id: string; art: string; color: string }[]) {
     const g = scene.add.graphics()
     HERO.forEach((grid, f) => {
-        g.clear(); drawGrid(g, grid, HERO_COLORS); g.generateTexture(heroKey(f), 16, 16)
+        g.clear(); drawGrid(g, grid, HERO_COLORS); g.generateTexture(heroKey('microbe', f), 16, 16)
     })
+    for (const [body, { grid, motion }] of Object.entries(HERO_BODIES)) {
+        for (const f of [0, 1]) { g.clear(); drawFrame(g, grid, HERO_COLORS, motion, f); g.generateTexture(heroKey(body, f), 16, 16) }
+    }
     for (const m of mobs) {
-        const grid = ART[m.art]
+        const animal = ANIMAL_ART[m.art]
+        const grid = animal?.grid ?? ART[m.art]
         if (!grid) continue
+        const motion: Motion = animal?.motion ?? (STATIC.has(m.art) ? 'static' : 'bob')
         const colors = paletteFrom(parseInt(m.color.slice(1), 16))
-        g.clear(); drawGrid(g, grid, colors); g.generateTexture(mobKey(m.id, 0), 16, 16)
-        // zweites Bild: 1 px nach oben gewippt (Schwimmen) – festsitzende bleiben gleich
-        g.clear(); drawGrid(g, grid, colors, STATIC.has(m.art) ? 0 : -1); g.generateTexture(mobKey(m.id, 1), 16, 16)
+        for (const f of [0, 1]) { g.clear(); drawFrame(g, grid, colors, motion, f); g.generateTexture(mobKey(m.id, f), 16, 16) }
     }
     g.destroy()
 }

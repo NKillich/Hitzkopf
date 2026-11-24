@@ -27,4 +27,11 @@ ART = {
  'alphaproteobakterium':'rod','asgard-archaee':'archaea','grypania':'coil',
  'kragengeisseltier':'choano','bangiomorpha':'filament','tappania':'tappania',
  'cloudina':'tube','kimberella':'kimberella','charnia':'frond','dickinsonia':'dickinsonia',
+ # Paket 2 (Phase 3–4) – Schlüssel aus src/projects/TimeRun/game/art/animals.ts
+ 'hallucigenia':'hallucigenia','trilobit':'trilobite','anomalocaris':'anomalocaris',
+ 'rhyniella':'springtail','pneumodesmus':'millipede','eurypterus':'scorpion',
+ 'acanthostega':'acanthostega','pulmonoscorpius':'scorpion','arthropleura':'millipede','dunkleosteus':'dunkleosteus',
+ 'compsognathus':'raptor','velociraptor':'raptor','triceratops':'triceratops',
+ 'purgatorius':'smallmammal','gastornis':'bigbird','titanoboa':'snake',
+ 'hyaenodon':'hyaenodon','entelodont':'entelodont','deinotherium':'deinotherium','andrewsarchus':'andrewsarchus',
 }

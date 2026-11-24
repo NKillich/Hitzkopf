@@ -44,7 +44,7 @@ export function weaponKind(gene: Gene, form: GeneForm | undefined): WeaponKind {
 
 /** Größe des Spielers: in den Fress-Phasen wächst er mit dem Level, sonst fest. */
 export function playerSize(level: number, eating: boolean): number {
-    return eating ? Math.min(48, 30 + 2 * level) : 20
+    return eating ? Math.min(48, 30 + 2 * level) : 32
 }
 
 /** Kleinere Gegner kann man fressen (Bosse nie). */
