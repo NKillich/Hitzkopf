@@ -720,34 +720,37 @@
      "id": "hallucigenia",
      "name": "Hallucigenia",
      "color": "#ff9ab0",
-     "size": 10,
+     "size": 22,
      "hp": 8.8,
      "speed": 76,
      "damage": 7.0,
      "xp": 2,
-     "shape": "worm"
+     "shape": "worm",
+     "art": "hallucigenia"
     },
     {
      "id": "trilobit",
      "name": "Trilobit",
      "color": "#b89a6b",
-     "size": 15,
+     "size": 32,
      "hp": 23.4,
      "speed": 49,
      "damage": 11.6,
      "xp": 4,
-     "shape": "arthropod"
+     "shape": "arthropod",
+     "art": "trilobite"
     },
     {
      "id": "anomalocaris",
      "name": "Anomalocaris",
      "color": "#e0603a",
-     "size": 24,
+     "size": 44,
      "hp": 58.4,
      "speed": 30,
      "damage": 20.9,
      "xp": 10,
-     "shape": "arthropod"
+     "shape": "arthropod",
+     "art": "anomalocaris"
     }
    ],
    "waves": [
@@ -827,34 +830,37 @@
      "id": "rhyniella",
      "name": "Springschwanz (Rhyniella)",
      "color": "#d8d8a0",
-     "size": 10,
+     "size": 22,
      "hp": 9.7,
      "speed": 78,
      "damage": 7.6,
      "xp": 2,
-     "shape": "arthropod"
+     "shape": "arthropod",
+     "art": "springtail"
     },
     {
      "id": "pneumodesmus",
      "name": "Tausendfüßer (Pneumodesmus)",
      "color": "#a8643c",
-     "size": 15,
+     "size": 32,
      "hp": 25.9,
      "speed": 50,
      "damage": 12.7,
      "xp": 4,
-     "shape": "worm"
+     "shape": "worm",
+     "art": "millipede"
     },
     {
      "id": "eurypterus",
      "name": "Seeskorpion (Eurypterus)",
      "color": "#7a8a5a",
-     "size": 24,
+     "size": 44,
      "hp": 64.8,
      "speed": 31,
      "damage": 22.9,
      "xp": 10,
-     "shape": "arthropod"
+     "shape": "arthropod",
+     "art": "scorpion"
     }
    ],
    "waves": [
@@ -934,34 +940,37 @@
      "id": "acanthostega",
      "name": "Acanthostega",
      "color": "#8ab06b",
-     "size": 10,
+     "size": 22,
      "hp": 10.7,
      "speed": 79,
      "damage": 8.3,
      "xp": 2,
-     "shape": "tetrapod"
+     "shape": "tetrapod",
+     "art": "acanthostega"
     },
     {
      "id": "pulmonoscorpius",
      "name": "Riesenskorpion (Pulmonoscorpius)",
      "color": "#c08a4a",
-     "size": 15,
+     "size": 32,
      "hp": 28.5,
      "speed": 51,
      "damage": 13.8,
      "xp": 4,
-     "shape": "arthropod"
+     "shape": "arthropod",
+     "art": "scorpion"
     },
     {
      "id": "arthropleura",
      "name": "Arthropleura",
      "color": "#6b5a3a",
-     "size": 24,
+     "size": 44,
      "hp": 71.2,
      "speed": 31,
      "damage": 24.8,
      "xp": 11,
-     "shape": "worm"
+     "shape": "worm",
+     "art": "millipede"
     }
    ],
    "waves": [
@@ -1021,12 +1030,13 @@
     "id": "dunkleosteus",
     "name": "Dunkleosteus",
     "color": "#6b7f99",
-    "size": 60,
+    "size": 84,
     "shape": "fish",
     "hp": 1068,
     "speed": 37,
     "damage": 39,
-    "xp": 102
+    "xp": 102,
+    "art": "dunkleosteus"
    }
   },
   {
@@ -1052,34 +1062,37 @@
      "id": "compsognathus",
      "name": "Compsognathus",
      "color": "#a6c46b",
-     "size": 10,
+     "size": 22,
      "hp": 11.6,
      "speed": 80,
      "damage": 8.9,
      "xp": 2,
-     "shape": "reptile"
+     "shape": "reptile",
+     "art": "raptor"
     },
     {
      "id": "velociraptor",
      "name": "Velociraptor",
      "color": "#c9935a",
-     "size": 15,
+     "size": 32,
      "hp": 31.0,
      "speed": 52,
      "damage": 14.9,
      "xp": 5,
-     "shape": "reptile"
+     "shape": "reptile",
+     "art": "raptor"
     },
     {
      "id": "triceratops",
      "name": "Triceratops",
      "color": "#8a7a5a",
-     "size": 24,
+     "size": 44,
      "hp": 77.6,
      "speed": 32,
      "damage": 26.8,
      "xp": 12,
-     "shape": "reptile"
+     "shape": "reptile",
+     "art": "triceratops"
     }
    ],
    "waves": [
@@ -1159,34 +1172,37 @@
      "id": "purgatorius",
      "name": "Purgatorius",
      "color": "#b89a7a",
-     "size": 10,
+     "size": 22,
      "hp": 12.6,
      "speed": 82,
      "damage": 9.6,
      "xp": 2,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "smallmammal"
     },
     {
      "id": "gastornis",
      "name": "Gastornis",
      "color": "#7a6b8a",
-     "size": 15,
+     "size": 32,
      "hp": 33.6,
      "speed": 53,
      "damage": 16.0,
      "xp": 5,
-     "shape": "bird"
+     "shape": "bird",
+     "art": "bigbird"
     },
     {
      "id": "titanoboa",
      "name": "Titanoboa",
      "color": "#5a7a4a",
-     "size": 24,
+     "size": 44,
      "hp": 84.0,
      "speed": 32,
      "damage": 28.8,
      "xp": 12,
-     "shape": "worm"
+     "shape": "worm",
+     "art": "snake"
     }
    ],
    "waves": [
@@ -1266,34 +1282,37 @@
      "id": "hyaenodon",
      "name": "Hyaenodon",
      "color": "#9a8a6a",
-     "size": 10,
+     "size": 22,
      "hp": 13.6,
      "speed": 83,
      "damage": 10.3,
      "xp": 3,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "hyaenodon"
     },
     {
      "id": "entelodont",
      "name": "Entelodont",
      "color": "#7a5a4a",
-     "size": 15,
+     "size": 32,
      "hp": 36.2,
      "speed": 54,
      "damage": 17.1,
      "xp": 5,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "entelodont"
     },
     {
      "id": "deinotherium",
      "name": "Deinotherium",
      "color": "#8a8a8a",
-     "size": 24,
+     "size": 44,
      "hp": 90.4,
      "speed": 33,
      "damage": 30.8,
      "xp": 13,
-     "shape": "mammal"
+     "shape": "mammal",
+     "art": "deinotherium"
     }
    ],
    "waves": [
@@ -1353,12 +1372,13 @@
     "id": "andrewsarchus",
     "name": "Andrewsarchus",
     "color": "#6a4a3a",
-    "size": 60,
+    "size": 84,
     "shape": "mammal",
     "hp": 1356,
     "speed": 39,
     "damage": 48,
-    "xp": 129
+    "xp": 129,
+    "art": "andrewsarchus"
    }
   },
   {

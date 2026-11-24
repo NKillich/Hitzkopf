@@ -98,6 +98,67 @@ const STAGES: Record<string, StageArt> = {
             g => { for (let y = 4; y < 14; y += 2) px(g, 6, y, 0xd8d0b0, 1, 3, 1); px(g, 7, 14, 0xb8b090) },       // Cloudina-Röhre
         ],
     },
+    // 3.1 Kambrium: Riff im Meer mit Schwämmen und Archaeocyathiden
+    kambrium: {
+        tile: (g, r) => { fill(g, 0x0c2340); specks(g, r, 70, 0x16365e); specks(g, r, 10, 0x1f3f5e, 2); streaks(g, r, 8, 0x1a3a66) },
+        props: [
+            g => { px(g, 6, 4, 0xc9a86a, 1, 4, 10); px(g, 5, 3, 0xd8b878, 1, 6, 2); px(g, 7, 2, 0x8a6a3a, 1, 2, 1); px(g, 7, 6, 0x8a6a3a, 1, 2, 6) }, // Schwamm
+            g => { px(g, 5, 7, 0xd8c090, 1, 6, 6); px(g, 4, 6, 0xe8d0a0, 1, 8, 1); for (const x of [6, 8, 10]) px(g, x, 9, 0x8a7a5a); px(g, 7, 12, 0x8a7a5a, 1, 2, 2) }, // Archaeocyathide
+            g => { for (let y = 2; y < 15; y++) px(g, 7 + Math.round(Math.sin(y / 1.8) * 2), y, 0x3a8a5a, 1, 2, 1) },                       // Alge
+            g => { px(g, 3, 9, 0x3a4a5a, 1, 10, 5); px(g, 5, 7, 0x4a5a6a, 1, 6, 2) },                                                       // Fels
+        ],
+    },
+    // 3.2 Landgang: Ufer mit ersten Landpflanzen (Cooksonia) und Moos
+    landgang: {
+        tile: (g, r) => { fill(g, 0x1d2a17); specks(g, r, 60, 0x2c4022); specks(g, r, 10, 0x3a3020, 2); streaks(g, r, 8, 0x24361c) },
+        props: [
+            g => { px(g, 7, 6, 0x6a9a4a, 1, 1, 9); px(g, 5, 4, 0x6a9a4a, 1, 1, 3); px(g, 9, 3, 0x6a9a4a, 1, 1, 4); px(g, 6, 6, 0x6a9a4a, 1, 3, 1)
+                px(g, 4, 3, 0xc9a84a, 1, 2, 2); px(g, 9, 2, 0xc9a84a, 1, 2, 2) },                                                          // Cooksonia
+            g => { px(g, 4, 9, 0x4a7a3a, 1, 8, 4); px(g, 5, 8, 0x5a8a4a, 1, 6, 1); px(g, 6, 10, 0x6a9a5a, 1, 2, 1) },                         // Moospolster
+            g => { px(g, 3, 9, 0x5a5a4a, 1, 9, 4); px(g, 5, 8, 0x6a6a58, 1, 5, 1) },                                                         // Stein
+            g => { px(g, 3, 7, 0x2a4a5a, 1, 10, 4); px(g, 4, 6, 0x2a4a5a, 1, 8, 1); px(g, 5, 8, 0x4a6a7a, 1, 3, 1) },                         // Pfütze
+        ],
+    },
+    // 3.3 Karbon: Sumpfwald mit Schuppenbäumen, Farnen und Schachtelhalmen
+    landwirbeltiere: {
+        tile: (g, r) => { fill(g, 0x1a2814); specks(g, r, 60, 0x2a3e1f); specks(g, r, 10, 0x14301f, 2) },
+        props: [
+            g => { px(g, 6, 5, 0x5a4a2a, 1, 4, 11); for (let y = 6; y < 15; y += 2) px(g, 7, y, 0x3a2f1a, 1, 2, 1); px(g, 3, 1, 0x3a6a2a, 1, 10, 4); px(g, 5, 0, 0x4a7a3a, 1, 6, 1) }, // Schuppenbaum
+            g => { for (let i = 0; i < 5; i++) { px(g, 7, 3 + i * 2, 0x4a8a3a, 1, 1, 2); px(g, 3 + i, 4 + i * 2, 0x4a8a3a, 1, 4 - i, 1); px(g, 8, 4 + i * 2, 0x4a8a3a, 1, 4 - i, 1) } }, // Farn
+            g => { px(g, 7, 1, 0x6a9a4a, 1, 2, 14); for (let y = 3; y < 15; y += 3) { px(g, 6, y, 0x3a5a2a, 1, 4, 1); px(g, 4, y - 1, 0x6a9a4a, 1, 2, 1); px(g, 10, y - 1, 0x6a9a4a, 1, 2, 1) } }, // Schachtelhalm
+            g => { px(g, 1, 9, 0x4a3a22, 1, 14, 3); px(g, 2, 9, 0x6a5232, 1, 12, 1) },                                                       // umgestürzter Stamm
+        ],
+    },
+    // 4.1 Dinosaurier: Farne, Palmfarne, Nadelbäume
+    dinosaurier: {
+        tile: (g, r) => { fill(g, 0x24261a); specks(g, r, 60, 0x383b26); specks(g, r, 10, 0x2e3a1e, 2) },
+        props: [
+            g => { for (let i = 0; i < 5; i++) { px(g, 7, 3 + i * 2, 0x5a8a3a, 1, 1, 2); px(g, 3 + i, 4 + i * 2, 0x5a8a3a, 1, 4 - i, 1); px(g, 8, 4 + i * 2, 0x5a8a3a, 1, 4 - i, 1) } }, // Farn
+            g => { px(g, 6, 9, 0x6a5232, 1, 4, 6); px(g, 2, 6, 0x5a8a3a, 1, 5, 1); px(g, 9, 6, 0x5a8a3a, 1, 5, 1); px(g, 4, 4, 0x5a8a3a, 1, 2, 3); px(g, 10, 4, 0x5a8a3a, 1, 2, 3); px(g, 7, 3, 0x6a9a4a, 1, 2, 5) }, // Palmfarn
+            g => { px(g, 7, 13, 0x5a4a2a, 1, 2, 3); for (let y = 1; y < 13; y++) { const w = Math.min(12, 2 + y); px(g, 8 - Math.floor(w / 2), y, y % 3 ? 0x2e5a3a : 0x24482e, 1, w, 1) } }, // Nadelbaum
+            g => { px(g, 6, 8, 0x1a1c12, 1, 4, 3); px(g, 5, 5, 0x1a1c12, 1, 1, 3); px(g, 7, 4, 0x1a1c12, 1, 1, 4); px(g, 10, 5, 0x1a1c12, 1, 1, 3) }, // Fußspur
+        ],
+    },
+    // 4.2 Säugetier-Aufstieg: warme Wälder nach dem Einschlag
+    saeugetiere: {
+        tile: (g, r) => { fill(g, 0x26221a); specks(g, r, 60, 0x3b3426); specks(g, r, 10, 0x2e3a22, 2) },
+        props: [
+            g => { px(g, 7, 6, 0x6a5232, 1, 2, 10); px(g, 2, 3, 0x4a7a3a, 1, 6, 1); px(g, 9, 3, 0x4a7a3a, 1, 6, 1); px(g, 3, 4, 0x4a7a3a, 1, 2, 2); px(g, 11, 4, 0x4a7a3a, 1, 2, 2); px(g, 6, 2, 0x5a8a4a, 1, 4, 2) }, // Palme
+            g => { px(g, 3, 6, 0x3a6a3a, 1, 10, 7); px(g, 4, 5, 0x4a7a4a, 1, 7, 1); px(g, 5, 8, 0x2a5a2a, 1, 3, 2) },                        // Laubbusch
+            g => { px(g, 1, 9, 0x5a4030, 1, 14, 3); px(g, 2, 9, 0x7a5a40, 1, 12, 1); px(g, 13, 8, 0x5a4030, 1, 2, 1) },                     // Stamm
+            g => { px(g, 3, 9, 0x5a5448, 1, 9, 4); px(g, 5, 8, 0x6a6458, 1, 5, 1) },                                                         // Stein
+        ],
+    },
+    // 4.3 Primaten: Bäume und Früchte
+    primaten: {
+        tile: (g, r) => { fill(g, 0x1c2a1a); specks(g, r, 60, 0x2c4128); specks(g, r, 12, 0x34502c, 2) },
+        props: [
+            g => { px(g, 7, 10, 0x5a4030, 1, 2, 6); px(g, 2, 2, 0x2e5a2a, 1, 12, 8); px(g, 3, 1, 0x3a6a32, 1, 10, 1); px(g, 4, 3, 0x447a3a, 1, 4, 2); px(g, 9, 7, 0x24482a, 1, 4, 2) }, // Baum
+            g => { px(g, 3, 6, 0x3a6a3a, 1, 10, 7); px(g, 5, 8, 0xc94a3a); px(g, 9, 7, 0xc94a3a); px(g, 7, 10, 0xc94a3a) },                // Früchte-Busch
+            g => { for (const x of [4, 7, 10]) px(g, x, 8, 0x6a9a4a, 1, 1, 6); px(g, 3, 10, 0x6a9a4a, 1, 1, 4); px(g, 11, 10, 0x6a9a4a, 1, 1, 4) }, // Gras
+            g => { px(g, 3, 9, 0x5a5448, 1, 9, 4); px(g, 5, 8, 0x6a6458, 1, 5, 1) },                                                         // Stein
+        ],
+    },
 }
 
 export const tileKey = (stageId: string) => `tile_${stageId}`

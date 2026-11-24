@@ -9,7 +9,7 @@ import {
 import { formatRange, formatYear, yearAt } from './time'
 import { activeForm, applyForm, canEat, canEatEnemy, playerSize, rangedActive, weaponKind, weaponLabel } from './weapon'
 import { bodyFor, groundFor, outfitFor, SHAPES } from './appearance'
-import { ART_KEYS } from '../game/art/microbes'
+import { ART_KEYS, HERO_BODY_KEYS } from '../game/art/microbes'
 import { hasStageArt, propCount } from '../game/art/backgrounds'
 import type { EvolutionOption, Upgrade, Wave } from './types'
 
@@ -296,7 +296,7 @@ describe('Waffen je Stufe & Fressen', () => {
     it('man wächst mit dem Level und frisst nur Kleinere, nie Bosse', () => {
         expect(playerSize(1, true)).toBe(32)
         expect(playerSize(50, true)).toBe(48)
-        expect(playerSize(5, false)).toBe(20)
+        expect(playerSize(5, false)).toBe(32)
         expect(canEatEnemy(32, 20, false)).toBe(true)
         expect(canEatEnemy(32, 34, false)).toBe(false)
         expect(canEatEnemy(48, 46, false)).toBe(true)
@@ -365,17 +365,24 @@ describe('Aussehen', () => {
     })
 })
 
-describe('Paket 1: Figuren Phase 1–2', () => {
-    it('jeder Gegner und Boss in Phase 1–2 hat eine vorhandene Figur', () => {
-        for (const e of rawData().epochs.filter(x => x.phase <= 2)) {
+describe('Paket 1+2: Figuren Phase 1–4', () => {
+    it('jeder Gegner und Boss in Phase 1–4 hat eine vorhandene Figur', () => {
+        for (const e of rawData().epochs.filter(x => x.phase <= 4)) {
             for (const x of [...e.enemies, ...(e.boss ? [e.boss] : [])]) expect(ART_KEYS, `${e.id}/${x.id}`).toContain(x.art)
         }
     })
 
-    it('jede Stufe in Phase 1–2 hat einen eigenen Hintergrund mit Deko', () => {
-        for (const e of rawData().epochs.filter(x => x.phase <= 2)) {
+    it('jede Stufe in Phase 1–4 hat einen eigenen Hintergrund mit Deko', () => {
+        for (const e of rawData().epochs.filter(x => x.phase <= 4)) {
             expect(hasStageArt(e.id), e.id).toBe(true)
             expect(propCount(e.id), e.id).toBeGreaterThanOrEqual(2)
+        }
+    })
+
+    it('für jeden Körper in Phase 3–4 gibt es eine Hauptfigur mit Gesicht', () => {
+        const tagsList = [[], ['gliederfüsser'], ['vierbeiner'], ['vierbeiner', 'reptil'], ['vierbeiner', 'säuger'], ['dinosaurier', 'vogel'], ['fisch', 'wasser']]
+        for (const [phase, code] of [[3, '3.1'], [3, '3.3'], [4, '4.1'], [4, '4.3']] as const) {
+            for (const t of tagsList) expect(HERO_BODY_KEYS, `${code} ${t}`).toContain(bodyFor(phase, code, new Set(t)))
         }
     })
 

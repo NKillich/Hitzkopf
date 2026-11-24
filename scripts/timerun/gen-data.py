@@ -164,6 +164,10 @@ for i, (eid, code, name, short, f, t, bg, grid, fact, en, boss) in enumerate(S):
             # Paket 1: farbige Pixel-Figur + doppelte Größe (Hauptfigur 32 px)
             x['art'] = ART[xid]
             x['size'] = [20, 34, 46][j]
+        elif int(code[0]) <= 4:
+            # Paket 2: Tiere von Kambrium bis Primaten
+            x['art'] = ART[xid]
+            x['size'] = [22, 32, 44][j]
         enemies.append(x)
     ids = [x[0] for x in en]
     e = {'id': eid, 'code': code, 'order': i + 1, 'phase': int(code[0]), 'phaseName': PHASES[int(code[0])],
@@ -176,7 +180,7 @@ for i, (eid, code, name, short, f, t, bg, grid, fact, en, boss) in enumerate(S):
         # harmlos wie in Wirklichkeit: Stromatolith steht still, Dickinsonia hatte keinen Mund
         if boss[0] == 'stromatolith': e['boss'].update(speed=0, damage=0)
         if boss[0] == 'dickinsonia': e['boss'].update(speed=6, damage=0)
-        if early: e['boss'].update(art=ART[boss[0]], size=84)
+        if int(code[0]) <= 4: e['boss'].update(art=ART[boss[0]], size=84)
     epochs.append(e)
 
 info = ('Stufen nach der Evolution (1.1–6.3). fromYear/toYear = Kalenderjahre (negativ = v. Chr. bzw. vor heute), '

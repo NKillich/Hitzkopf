@@ -18,7 +18,7 @@ import { Joystick } from '../Joystick'
 import { saveBest, type IconKey, type UiBridge } from '../bridge'
 import { bodyFor, groundFor, outfitFor, PLAYER_TINT, type Shape } from '../../logic/appearance'
 import { outfitKey, shapeKey } from '../sprites'
-import { heroKey, mobKey } from '../art/microbes'
+import { HERO_BODY_KEYS, heroKey, mobKey } from '../art/microbes'
 import { hasStageArt, propCount, propKey, tileKey } from '../art/backgrounds'
 
 class Enemy extends Phaser.Physics.Arcade.Image {
@@ -410,9 +410,15 @@ export class GameScene extends Phaser.Scene {
         smoothTexts(this.worldObjs)
     }
 
-    /** Phase 1–2: die Mikrobe nach der Vorlage */
+    /** Hauptfigur mit Gesicht + gelben Fühlern: Mikrobe (Phase 1–2), danach Körper je Evolution (bis Phase 4) */
+    private heroBody(): string | null {
+        const phase = this.baseEpoch.phase
+        if (phase <= 2) return 'microbe'
+        return phase <= 4 && HERO_BODY_KEYS.includes(this.body_) ? this.body_ : null
+    }
+
     private isHero(): boolean {
-        return this.baseEpoch.phase <= 2
+        return this.heroBody() !== null
     }
 
     /** Eigene Kachel der Stufe (farbig, doppelt groß) oder Bodenmuster in der Epochenfarbe. */
@@ -425,7 +431,7 @@ export class GameScene extends Phaser.Scene {
     private refreshAppearance() {
         const e = this.baseEpoch
         this.body_ = bodyFor(e.phase, e.code, this.tags)
-        if (this.isHero()) this.player.setTexture(heroKey(this.heroFrame)).setTint(0xffffff)
+        if (this.isHero()) this.player.setTexture(heroKey(this.heroBody()!, this.heroFrame)).setTint(0xffffff)
         else this.player.setTexture(shapeKey(this.body_)).setTint(PLAYER_TINT[this.body_] ?? 0x3dcf9e)
         this.player.setDisplaySize(this.playerSz, this.playerSz)
         const outfit = outfitFor(e.code)
@@ -475,7 +481,7 @@ export class GameScene extends Phaser.Scene {
             // Schwimmen: schneller wechseln, wenn man sich bewegt
             this.heroFrame = 1 - this.heroFrame
             this.heroFrameAt = now + (this.move.lengthSq() > 0.05 ? 160 : 420)
-            this.player.setTexture(heroKey(this.heroFrame))
+            this.player.setTexture(heroKey(this.heroBody()!, this.heroFrame))
         }
         if (this.move.x < -0.1) this.player.setFlipX(true)
         else if (this.move.x > 0.1) this.player.setFlipX(false)
